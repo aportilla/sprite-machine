@@ -1,0 +1,19 @@
+{
+  "name": "sprite-machine",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Turn low-res pixel sprites (face views) into Three.js 3D objects.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  },
+  "dependencies": {
+    "three": "^0.171.0"
+  }
+}

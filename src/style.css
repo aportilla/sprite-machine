@@ -1,0 +1,234 @@
+:root {
+  color-scheme: dark;
+  --bg: #4a4a52;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  color: #e8e8ea;
+  overflow: hidden;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#viewport {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Keep upscaled pixels crisp, not blurred. */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* ---- control panel ---- */
+.panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 236px;
+  padding: 14px;
+  background: rgba(28, 28, 34, 0.82);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  user-select: none;
+}
+.panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.panel-sub {
+  color: #9a9aa6;
+  margin-bottom: 8px;
+}
+.label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 9px;
+  color: #8a8a96;
+  margin: 12px 0 5px;
+}
+.row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.chip {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #e8e8ea;
+  font: inherit;
+  cursor: pointer;
+}
+.chip:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.chip.active {
+  background: #c77dd6;
+  border-color: #c77dd6;
+  color: #201025;
+  font-weight: 600;
+}
+.dropzone {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.dropzone:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+.dropzone.drag {
+  border-color: #a9dcd6;
+  background: rgba(169, 220, 214, 0.12);
+}
+.atlas-preview {
+  image-rendering: pixelated;
+}
+.drop-hint {
+  position: absolute;
+  color: #8a8a96;
+  font-size: 10px;
+  text-align: center;
+  pointer-events: none;
+}
+.tile-row {
+  margin-top: 6px;
+}
+.tiny {
+  font-size: 10px;
+  color: #9a9aa6;
+}
+.found {
+  color: #a9dcd6;
+  margin-left: auto;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tile-in {
+  width: 42px;
+  padding: 3px 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  color: #e8e8ea;
+  font: inherit;
+  font-size: 11px;
+}
+.slots {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.slot.ro {
+  cursor: default;
+}
+.slot {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.slot.filled {
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.slot.drag {
+  border-color: #a9dcd6;
+  background: rgba(169, 220, 214, 0.12);
+}
+.thumb {
+  image-rendering: pixelated;
+  width: 40px;
+  height: 40px;
+}
+.slot-cap {
+  font-size: 8px;
+  color: #9a9aa6;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.slot-clear {
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  border: 0;
+  background: none;
+  color: #77777f;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+}
+.slot.filled .slot-clear:hover {
+  color: #e88;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+.val {
+  color: #a9dcd6;
+  min-width: 26px;
+  text-align: right;
+}
+input[type='range'] {
+  flex: 1;
+  accent-color: #c77dd6;
+}
+.stats {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.stat .k {
+  color: #8a8a96;
+}
+.stat .v {
+  color: #d8d8de;
+  text-align: right;
+}
+.warn {
+  color: #e8c07a;
+  margin-top: 6px;
+  font-size: 10px;
+}
