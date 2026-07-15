@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildVoxels } from './lib/pipeline.js';
 import { voxelMesh } from './lib/mesh.js';
+import { tileMesh } from './lib/tile-mesh.js';
 import { texturedBoxMesh } from './lib/textured-box.js';
 import { SAMPLES } from './lib/sprite-data.js';
 import { sliceAtlas } from './lib/atlas.js';
@@ -62,6 +63,7 @@ const state = {
   anyAlpha: false,
   mode: 'voxel', // 'voxel' | 'box'
   greedy: true, // merge coplanar same-color faces
+  lowpoly: false, // planar remesh: staircases -> flat angled facets
   transforms: {}, // per-view reorientation (rot/flip)
   autoRotate: true,
   atlasImage: null, // the current sprite sheet (ImageData)
@@ -122,7 +124,9 @@ function rebuild() {
       provided.length < 2 ? ['Box mode: fewer than 2 views — depth is a guess.'] : [];
   } else {
     const result = buildVoxels(rawViews, opts);
-    current = voxelMesh(result, { greedy: state.greedy });
+    current = state.lowpoly
+      ? tileMesh(result, { flat: new URLSearchParams(location.search).get('flat') === '1' })
+      : voxelMesh(result, { greedy: state.greedy });
     stats = {
       provided,
       dims: result.dims,
@@ -213,6 +217,7 @@ function tick() {
 // Boot with a sample (?sample=<index|name> overrides, handy for testing).
 const params = new URLSearchParams(location.search);
 if (params.get('mode') === 'box') state.mode = 'box';
+if (params.get('lowpoly') === '1') state.lowpoly = true;
 if (params.get('rotate') === '0') state.autoRotate = false;
 const q = params.get('sample');
 let startIndex = 0;

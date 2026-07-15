@@ -158,6 +158,14 @@ export function createUI({ samples, state, onSample, onAtlas, onTileSize, onOpti
   panel.appendChild(alphaRow);
 
   const toggleRow = el('div', 'row');
+  const lowpolyLab = el('label', 'check');
+  const lowpoly = el('input');
+  lowpoly.type = 'checkbox';
+  lowpoly.onchange = () => {
+    state.lowpoly = lowpoly.checked;
+    onOptionChange();
+  };
+  lowpolyLab.append(lowpoly, document.createTextNode(' low-poly'));
   const greedyLab = el('label', 'check');
   const greedy = el('input');
   greedy.type = 'checkbox';
@@ -171,7 +179,7 @@ export function createUI({ samples, state, onSample, onAtlas, onTileSize, onOpti
   rot.type = 'checkbox';
   rot.onchange = () => (state.autoRotate = rot.checked);
   rotLab.append(rot, document.createTextNode(' auto-rotate'));
-  toggleRow.append(greedyLab, rotLab);
+  toggleRow.append(lowpolyLab, greedyLab, rotLab);
   panel.appendChild(toggleRow);
 
   // --- stats ----------------------------------------------------------------
@@ -196,6 +204,7 @@ export function createUI({ samples, state, onSample, onAtlas, onTileSize, onOpti
     alpha.value = state.alphaThreshold;
     alphaVal.textContent = state.alphaThreshold;
     greedy.checked = state.greedy;
+    lowpoly.checked = state.lowpoly;
     rot.checked = state.autoRotate;
     voxelBtn.classList.toggle('active', state.mode === 'voxel');
     boxBtn.classList.toggle('active', state.mode === 'box');

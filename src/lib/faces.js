@@ -14,7 +14,7 @@ import { voxIndex, FACE_KEYS } from './carve.js';
 // Per-face geometry: outward normal, tangent axes, and a quad builder for a
 // rectangle spanning tangent voxel range [aMin..aMax]x[bMin..bMax] on slice s.
 // lo = min index, hi = max index + 1 (so a single voxel -> a unit quad).
-const FACE_GEO = {
+export const FACE_GEO = {
   px: {
     normal: [1, 0, 0],
     N: 'x', A: 'y', B: 'z',
