@@ -16,6 +16,14 @@
 >   (plain objects, not `ImageData`), so box mode threw for any sliced atlas.
 >   Fixed. Also: `LICENSE` skipped and Prettier left config-only, per your calls.
 
+> **⚠️ Partially superseded (2026-07-16).** A later UI/pipeline refactor removed
+> **box mode** (`textured-box.js` deleted), the **alpha-threshold** option
+> (sprites are now hard pixels — solid at `alpha >= 128`), and the **per-axis
+> mirror toggles** (mirror-fill is now always on for all three axes). Any item
+> below that references `texturedBoxMesh` / box mode, `alphaThreshold` /
+> `DEFAULT_ALPHA_THRESHOLD`, or the old `{x:true,y:false,z:false}` mirror default
+> is obsolete — kept for history, not action.
+
 Prioritized backlog from a codebase review of `src/`, `test/`, docs, and tooling.
 Each item is tagged **severity** (impact) / **effort** (S ≤30 min, M ≈½ day, L ≥1 day)
 and cites `file:line`. Findings were cross-checked against the actual code; three

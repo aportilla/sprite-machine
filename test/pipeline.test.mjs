@@ -4,12 +4,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildVoxels } from '../src/lib/pipeline.js';
-import { packRGBA, applyTransform } from '../src/lib/ingest.js';
+import { packRGBA, applyTransform, ingestSprite } from '../src/lib/ingest.js';
 import { voxIndex } from '../src/lib/carve.js';
 import { culledQuads, greedyQuads } from '../src/lib/faces.js';
-import { sliceAtlas, deriveTileSize } from '../src/lib/atlas.js';
+import { sliceAtlas, deriveTileSize, DEFAULT_ATLAS_LAYOUT } from '../src/lib/atlas.js';
 import { buildPalette, makeSnapper } from '../src/lib/colorize.js';
-import { VIEWS } from '../src/lib/views.js';
+import {
+  VIEWS,
+  VIEW_AXES,
+  VIEW_FRONT_EDGE,
+  VIEW_DISPLAY_ORDER,
+} from '../src/lib/views.js';
 import { eliminateTJunctions } from '../src/lib/t-junction.js';
 
 // --- tiny sprite builder: rows of chars -> ImageData-like -------------------
@@ -289,6 +294,36 @@ test('RIGHT view: object front pins to the left image column', () => {
   const d = { nx: 4, ny: 3, nz: 5 };
   assert.equal(VIEWS.right.project(0, 0, d.nz - 1, d).u, 0); // front -> left col
   assert.equal(VIEWS.right.project(0, 0, 0, d).u, d.nz - 1); // back  -> right col
+});
+
+// The UI marks the object's front edge on each face thumbnail. Pin that marker
+// to the actual projections so it can't drift from the coordinate conventions.
+test('VIEW_FRONT_EDGE agrees with where the object front (+z) projects', () => {
+  const d = { nx: 4, ny: 3, nz: 5 };
+  const frontZ = d.nz - 1;
+  for (const name of Object.keys(VIEWS)) {
+    const spec = VIEWS[name];
+    const [wAxis, hAxis] = VIEW_AXES[name];
+    const p = spec.project(0, 0, frontZ, d); // a voxel on the front plane
+    let edge = null; // front/back look along z -> no in-plane front edge
+    if (wAxis === 'nz') edge = p.u === 0 ? 'left' : 'right';
+    else if (hAxis === 'nz') edge = p.v === 0 ? 'top' : 'bottom';
+    assert.equal(VIEW_FRONT_EDGE[name], edge, `front edge of ${name}`);
+  }
+});
+
+// The faces preview grid must read in the same order as the atlas sheet.
+test('faces preview order matches the atlas layout', () => {
+  assert.deepEqual(VIEW_DISPLAY_ORDER, DEFAULT_ATLAS_LAYOUT.flat());
+});
+
+// Sprites are hard pixel art: solid at alpha >= 128, transparent below.
+test('ingest treats alpha >= 128 as solid, < 128 as transparent', () => {
+  const px = (a) => ({ width: 1, height: 1, data: new Uint8ClampedArray([200, 0, 0, a]) });
+  assert.notEqual(ingestSprite(px(255)), null);
+  assert.notEqual(ingestSprite(px(128)), null);
+  assert.equal(ingestSprite(px(127)), null); // dropped -> fully transparent
+  assert.equal(ingestSprite(px(0)), null);
 });
 
 // --- 9. Palette build + snap (colorize's "most likely to look wrong" unit) ---

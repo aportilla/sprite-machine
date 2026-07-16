@@ -4,13 +4,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildVoxels } from './lib/pipeline.js';
 import { voxelMesh } from './lib/mesh.js';
 import { wedgeMesh } from './lib/wedge-mesh.js';
-import { texturedBoxMesh } from './lib/textured-box.js';
 import { SAMPLES } from './lib/sprite-data.js';
 import { sliceAtlas } from './lib/atlas.js';
 import { VIEW_NAMES } from './lib/views.js';
 import { urlToImageData } from './image-io.js';
 import { createUI } from './ui.js';
-import { DEFAULT_MIRROR, DEFAULT_ALPHA_THRESHOLD } from './lib/constants.js';
 
 // --------------------------------------------------------------------------
 // Scene
@@ -59,17 +57,10 @@ scene.add(ground);
 // --------------------------------------------------------------------------
 const state = {
   views: {}, // name -> ImageData | null
-  mirror: { ...DEFAULT_MIRROR },
-  alphaThreshold: DEFAULT_ALPHA_THRESHOLD,
-  anyAlpha: false,
-  mode: 'voxel', // 'voxel' | 'box'
-  greedy: true, // merge coplanar same-color faces
-  lowpoly: false, // additive 45° wedges over same-color staircases
+  lowpoly: true, // additive 45° wedges over same-color staircases (default on)
   transforms: {}, // per-view reorientation (rot/flip)
   autoRotate: true,
   atlasImage: null, // the current sprite sheet (ImageData)
-  tileW: null, // null = auto-derive from image + layout
-  tileH: null,
   atlasWarnings: [],
 };
 
@@ -98,30 +89,21 @@ function frameObject(obj) {
 }
 
 function rebuild() {
-  const opts = {
-    mirror: state.mirror,
-    alphaThreshold: state.alphaThreshold,
-    anyAlpha: state.anyAlpha,
-    transforms: state.transforms,
-  };
+  const opts = { transforms: state.transforms };
   const provided = VIEW_NAMES.filter((n) => state.views[n]);
 
   if (current) {
     scene.remove(current);
+    // Free the GPU resources of the mesh we're replacing. Both builders emit a
+    // single vertex-colored MeshStandardMaterial (no textures to dispose).
     current.traverse?.((o) => {
       o.geometry?.dispose?.();
-      // Dispose materials AND their textures: Material.dispose() does NOT free
-      // .map, so box-mode CanvasTextures would leak on every rebuild otherwise.
-      const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
-      for (const m of mats) {
-        m.map?.dispose?.();
-        m.dispose?.();
-      }
+      o.material?.dispose?.();
     });
     current = null;
   }
 
-  let stats = { provided, dims: null, voxels: 0, triangles: 0, warnings: [] };
+  let stats = { dims: null, voxels: 0, triangles: 0, warnings: [] };
   if (provided.length === 0) {
     ui.setStats(stats);
     return;
@@ -131,24 +113,16 @@ function rebuild() {
   const rawViews = {};
   for (const n of VIEW_NAMES) rawViews[n] = state.views[n] || null;
 
-  if (state.mode === 'box') {
-    current = texturedBoxMesh(rawViews, opts);
-    stats.triangles = current.userData.triangles;
-    stats.warnings =
-      provided.length < 2 ? ['Box mode: fewer than 2 views — depth is a guess.'] : [];
-  } else {
-    const result = buildVoxels(rawViews, opts);
-    current = state.lowpoly
-      ? wedgeMesh(result, { flat: FLAT })
-      : voxelMesh(result, { greedy: state.greedy });
-    stats = {
-      provided,
-      dims: result.dims,
-      voxels: result.solidCount,
-      triangles: current.userData.triangles,
-      warnings: result.warnings,
-    };
-  }
+  const result = buildVoxels(rawViews, opts);
+  current = state.lowpoly
+    ? wedgeMesh(result, { flat: FLAT })
+    : voxelMesh(result, { greedy: true }); // greedy meshing is always on
+  stats = {
+    dims: result.dims,
+    voxels: result.solidCount,
+    triangles: current.userData.triangles,
+    warnings: result.warnings,
+  };
   stats.warnings = [...state.atlasWarnings, ...(stats.warnings || [])];
   if (DIAG && current?.geometry) {
     const geo = current.geometry; // captured: current may change before load resolves
@@ -167,10 +141,7 @@ function rebuild() {
 // Slice the current atlas into face views (with the current tile size) and build.
 function sliceAndBuild(reframe) {
   if (!state.atlasImage) return;
-  const sliced = sliceAtlas(state.atlasImage, {
-    tileW: state.tileW,
-    tileH: state.tileH,
-  });
+  const sliced = sliceAtlas(state.atlasImage);
   state.views = sliced.views;
   state.atlasWarnings = sliced.warnings;
   if (reframe) frameNext = true;
@@ -193,24 +164,14 @@ const ui = createUI({
       ui.setError(`Couldn't load sample "${sample.name}": ${err.message}`);
       return;
     }
-    state.tileW = null;
-    state.tileH = null;
     state.transforms = { ...(sample.transforms || {}) };
-    if (sample.mirror) state.mirror = { ...state.mirror, ...sample.mirror };
     ui.syncControls();
     sliceAndBuild(true);
   },
   onAtlas: (imageData) => {
     state.atlasImage = imageData;
-    state.tileW = null;
-    state.tileH = null;
     state.transforms = {};
     sliceAndBuild(true);
-  },
-  onTileSize: (w, h) => {
-    state.tileW = w;
-    state.tileH = h;
-    sliceAndBuild(false);
   },
   onOptionChange: () => rebuild(),
 });
@@ -244,8 +205,7 @@ function tick() {
 }
 
 // Boot with a sample (?sample=<index|name> overrides, handy for testing).
-if (params.get('mode') === 'box') state.mode = 'box';
-if (params.get('lowpoly') === '1') state.lowpoly = true;
+if (params.get('lowpoly') != null) state.lowpoly = params.get('lowpoly') === '1';
 if (params.get('rotate') === '0') state.autoRotate = false;
 const q = params.get('sample');
 let startIndex = 0;

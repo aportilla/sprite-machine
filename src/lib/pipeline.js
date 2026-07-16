@@ -11,8 +11,7 @@ import { VIEW_NAMES } from './views.js';
 
 /**
  * @param {Record<string, {width:number,height:number,data:ArrayLike<number>}|null>} rawViews
- * @param {{alphaThreshold?:number, anyAlpha?:boolean,
- *          transforms?:Record<string,{rot?:number,flipX?:boolean,flipY?:boolean}>,
+ * @param {{transforms?:Record<string,{rot?:number,flipX?:boolean,flipY?:boolean}>,
  *          mirror?:{x?:boolean,y?:boolean,z?:boolean}}} [opts]
  */
 export function buildVoxels(rawViews, opts = {}) {
@@ -23,7 +22,7 @@ export function buildVoxels(rawViews, opts = {}) {
     let img = rawViews[name];
     if (!img) continue;
     if (transforms[name]) img = applyTransform(img, transforms[name]);
-    const v = ingestSprite(img, opts);
+    const v = ingestSprite(img);
     if (v) cropped[name] = v;
   }
 
@@ -36,7 +35,7 @@ export function buildVoxels(rawViews, opts = {}) {
   const { surfaceMask, count } = extractSurface(solid, dims);
   const { faceColor, palette } = colorize(solid, surfaceMask, gviews, dims, opts);
   if (palette.length === 0 && Object.keys(cropped).length > 0) {
-    warnings.push('No opaque pixels found — try lowering the alpha threshold.');
+    warnings.push('No opaque pixels found — every provided sprite is fully transparent.');
   }
 
   let solidCount = 0;

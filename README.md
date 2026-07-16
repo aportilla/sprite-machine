@@ -14,8 +14,10 @@ npm run build    # static bundle in dist/
 ```
 
 Drop a **3×2 sprite sheet** onto the atlas zone, or pick a built-in sample.
-Toggle **voxel (3D)**, **low-poly** (45° wedges), or **box (fast)**, flip mirror
-axes, and tune the alpha threshold live.
+**Low-poly** (additive 45° wedges) is on by default and toggles live; greedy
+meshing is always on. Sprites are hard pixel art — every texel is fully opaque
+or fully transparent — and every face with no view of its own is mirror-filled
+from its opposite (and shown, derived, in the faces preview).
 
 ## Input: a 3×2 atlas
 
@@ -28,8 +30,8 @@ LEFT   BACK   BOTTOM
 ```
 
 The **tile size is auto-derived** from the image dimensions and the grid (a
-120×80 sheet ⇒ 40×40 tiles) and can be overridden in the UI. Each tile is
-auto-cropped to its content, so padding/centering doesn't matter.
+120×80 sheet ⇒ 40×40 tiles). Each tile is auto-cropped to its content, so
+padding/centering doesn't matter.
 
 **Tile orientation** (world: `+x` right, `+y` up, `+z` = front toward camera) —
 draw each tile this way for a zero-transform ingest:
@@ -42,8 +44,10 @@ draw each tile this way for a zero-transform ingest:
 | TOP | plan view, width horizontal | top edge | width × depth |
 | BOTTOM | plan from below, width horizontal | bottom edge | width × depth |
 
-Per-tile `rot`/`flip` transforms exist in the pipeline for sheets that don't
-follow the convention.
+The UI's **faces** preview lays the sliced tiles out like the sheet and marks
+this **Front points** edge in green on each thumbnail, so a mis-oriented tile is
+obvious at a glance. Per-tile `rot`/`flip` transforms exist in the pipeline for
+sheets that don't follow the convention.
 
 ---
 
@@ -83,13 +87,12 @@ any angle — 1 pixel = 1 voxel = 1 cube.
    flatShading })`. One draw call, real shadows, and `flatShading` lets the
    directional light separate top from sides for free.
 
-### Modes
+### Render modes
 
 | Mode | What it is | Use |
 |---|---|---|
-| **voxel (3D)** | Visual-hull voxel solid (above) | The real object |
-| **low-poly** | Voxel solid + 45° wedges over same-surface staircases | Softer silhouette, fewer hard steps |
-| **box (fast)** | One `BoxGeometry`, six cut-out face textures | Instant preview / <2 views |
+| **voxel (3D)** | Visual-hull voxel solid (above), greedy-meshed | The real object (low-poly off) |
+| **low-poly** | Voxel solid + 45° wedges over same-surface staircases | Softer silhouette, fewer hard steps (default) |
 
 ### Low-poly (additive wedges)
 
@@ -111,10 +114,12 @@ its color from that shared material. See `src/lib/wedge-mesh.js`.
 
 ### Missing faces
 
-Not every face has to be drawn. Per-axis **mirror** toggles fill the opposite
-face (default: `X` on — vehicles are usually left/right symmetric; `Y`/`Z` off).
-An un-mirrored missing view simply drops its carving constraint on that axis
-(fills to the bounding box) and warns.
+Not every face has to be drawn. **Mirror-fill is always on for all three axes:**
+a surface face with no view of its own takes its color from the mirrored
+opposite view, so a half-drawn sheet still colors every face — both built-in
+samples ship only RIGHT/FRONT/TOP and mirror-fill LEFT/BACK/BOTTOM. Mirroring is
+a *coloring* step; an axis with no view at all (neither side) is simply
+unconstrained for carving — the shape fills to the bounding box there and warns.
 
 ### Coordinate conventions
 
@@ -133,8 +138,8 @@ to gate the low-poly wedge engine (the Helium canvas-farbling regression).
 
 ```
 src/lib/
-  constants.js    shared default mirror / world-size / alpha-threshold (pure)
-  views.js        6 view definitions: normals, axes, projections, face metadata
+  constants.js    shared default mirror (all-on) / world-size (pure)
+  views.js        6 view definitions: normals, axes, projections, front-edge meta
   atlas.js        slice a 3x2 sheet -> named face tiles, auto tile size (pure)
   ingest.js       sprite -> occupancy/color arrays, auto-crop, resample, reorient
   carve.js        dim reconciliation, visual-hull AND, surface extraction
@@ -145,7 +150,6 @@ src/lib/
   mesh-util.js    shared vertex-color linearizer + mesh finishing (THREE)
   mesh.js         quads -> merged, vertex-colored THREE.Mesh    (voxel mode; THREE)
   wedge-mesh.js   voxel solid + additive 45° wedges             (low-poly mode; THREE)
-  textured-box.js fast box-with-decals mode                     (box mode; THREE)
   sprite-data.js  built-in samples (as atlases) + grid->ImageData helper
   diag.js         geometry watertightness self-check (dev only; ?diag=1)
 src/

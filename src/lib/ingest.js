@@ -7,7 +7,11 @@
 // tests). Output packs color as a Uint32 (bytes r,g,b,a, little-endian).
 // ---------------------------------------------------------------------------
 
-import { DEFAULT_ALPHA_THRESHOLD } from './constants.js';
+// Sprites are assumed to be HARD pixel art: every texel is either fully opaque
+// or fully transparent, no partial coverage. A pixel counts as solid at alpha
+// >= 128 — the 50%-coverage midpoint, robust to privacy-browser canvas farbling
+// that perturbs a 0/255 alpha by ±1 (see the wedge-mesh farbling note).
+const ALPHA_SOLID = 128;
 
 export const packRGBA = (r, g, b, a = 255) =>
   ((r & 255) | ((g & 255) << 8) | ((b & 255) << 16) | ((a & 255) << 24)) >>> 0;
@@ -73,13 +77,11 @@ export function applyTransform(img, t = {}) {
 
 /**
  * @param {{width:number,height:number,data:ArrayLike<number>}} img
- * @param {{alphaThreshold?:number, anyAlpha?:boolean}} [opts]
  * @returns {{w:number,h:number,occ:Uint8Array,rgb:Uint32Array,
  *            bbox:{x0:number,y0:number,x1:number,y1:number},
  *            srcW:number, srcH:number} | null}  null if fully transparent.
  */
-export function ingestSprite(img, opts = {}) {
-  const { alphaThreshold = DEFAULT_ALPHA_THRESHOLD, anyAlpha = false } = opts;
+export function ingestSprite(img) {
   const { width: W, height: H, data } = img;
   if (!(W > 0) || !(H > 0) || !data || data.length < W * H * 4) {
     throw new Error(
@@ -87,7 +89,7 @@ export function ingestSprite(img, opts = {}) {
         `${W}×${H} with ${data ? data.length : 'no'} bytes.`
     );
   }
-  const solid = (a) => (anyAlpha ? a > 0 : a >= alphaThreshold);
+  const solid = (a) => a >= ALPHA_SOLID;
 
   // Find the occupied bounding box.
   let x0 = W,

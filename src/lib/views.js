@@ -45,7 +45,7 @@ export const FACE_NORMAL = {
 };
 
 // Which world axis each face's outward normal lies on. Derived from
-// FACE_NORMAL so it can't drift; used by colorize (mirror-fill) & textured-box.
+// FACE_NORMAL so it can't drift; used by colorize for mirror-fill.
 export const FACE_AXIS = Object.fromEntries(
   Object.entries(FACE_NORMAL).map(([k, n]) => [k, n[0] ? 'x' : n[1] ? 'y' : 'z'])
 );
@@ -135,8 +135,45 @@ export const VIEWS = {
 export const VIEW_NAMES = Object.keys(VIEWS);
 
 // The six view names in the order the UI's face-preview grid lays them out
-// (a 3x2 arrangement). Kept here so the face-name vocabulary lives in one file.
-export const VIEW_DISPLAY_ORDER = ['top', 'left', 'front', 'right', 'back', 'bottom'];
+// (a 3x2 arrangement). Matches the atlas layout (atlas.js DEFAULT_ATLAS_LAYOUT:
+// RIGHT FRONT TOP / LEFT BACK BOTTOM) so the preview reads like the sheet.
+export const VIEW_DISPLAY_ORDER = ['right', 'front', 'top', 'left', 'back', 'bottom'];
+
+// Which image edge of a view's tile the object's FRONT (+z, the "nose") points
+// toward — used by the UI to mark orientation on each face thumbnail. Derived
+// from the projections in VIEWS: e.g. in RIGHT, front (z=nz-1) maps to u=0, the
+// left column. FRONT/BACK look straight down +z/-z, so their nose points out of
+// / into the screen — there is no in-plane front edge (null).
+export const VIEW_FRONT_EDGE = {
+  right: 'left',
+  left: 'right',
+  top: 'top',
+  bottom: 'bottom',
+  front: null,
+  back: null,
+};
+
+// Each view's opposite (the mirror-fill source when a view has no art of its own).
+export const VIEW_OPPOSITE = {
+  right: 'left',
+  left: 'right',
+  front: 'back',
+  back: 'front',
+  top: 'bottom',
+  bottom: 'top',
+};
+
+// To DISPLAY a mirror-derived face, flip its opposite view's tile along this
+// IMAGE axis. Follows the projections: the X/Z-plane pairs (left↔right,
+// front↔back) mirror horizontally; the Y pair (top↔bottom) mirrors vertically.
+export const VIEW_MIRROR_AXIS = {
+  right: 'x',
+  left: 'x',
+  front: 'x',
+  back: 'x',
+  top: 'y',
+  bottom: 'y',
+};
 
 // Which grid axes a view's (imgW, imgH) constrain. Used by dimension
 // reconciliation. Each entry: [axisForImgW, axisForImgH].
@@ -148,6 +185,3 @@ export const VIEW_AXES = {
   top: ['nx', 'nz'],
   bottom: ['nx', 'nz'],
 };
-
-// Face index in THREE.BoxGeometry group order: 0:+x 1:-x 2:+y 3:-y 4:+z 5:-z.
-export const FACE_INDEX = { px: 0, nx: 1, py: 2, ny: 3, pz: 4, nz: 5 };

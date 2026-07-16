@@ -5,7 +5,6 @@
 // ---------------------------------------------------------------------------
 
 import carAtlasUrl from '../assets/car-atlas.png';
-import { DEFAULT_MIRROR } from './constants.js';
 
 /** @returns {ImageData} */
 export function gridToImageData(rows, palette) {
@@ -47,15 +46,14 @@ function cubeAtlasImage() {
 
 export const CUBE_SAMPLE = {
   name: 'Cube',
-  mirror: { ...DEFAULT_MIRROR },
   atlas: { image: cubeAtlasImage() },
 };
 
 // --- Car: a real 40x40 3x2 atlas (RIGHT FRONT TOP / LEFT BACK BOTTOM) --------
-// Re-baked so every tile matches the pipeline conventions -> no transforms.
+// A taxi drawn to the pipeline conventions -> no transforms. LEFT is left blank
+// and mirror-filled from RIGHT.
 export const CAR_ATLAS_SAMPLE = {
   name: 'Car',
-  mirror: { ...DEFAULT_MIRROR },
   atlas: { url: carAtlasUrl }, // layout + 40x40 tiles auto-derived from 120x80
 };
 

@@ -1,11 +1,25 @@
 // ---------------------------------------------------------------------------
-// UI panel: sample picker, a single atlas dropzone (with editable tile size),
-// a read-only preview of the sliced faces, and mode/mirror/alpha/mesh controls
-// plus a live stats readout. Pure DOM; talks to main.js via callbacks.
+// UI panel: sample picker, a single atlas dropzone, a read-only preview of the
+// faces we actually render (laid out like the sheet — provided tiles plus the
+// mirror-derived ones, with the object's front edge marked beside each), and
+// low-poly / auto-rotate toggles plus a live stats readout. Pure DOM; talks to
+// main.js via callbacks.
 // ---------------------------------------------------------------------------
 
 import { fileToImageData } from './image-io.js';
-import { VIEW_DISPLAY_ORDER as SLOT_ORDER } from './lib/views.js';
+import {
+  VIEW_DISPLAY_ORDER as SLOT_ORDER,
+  VIEW_FRONT_EDGE,
+  VIEW_OPPOSITE,
+  VIEW_MIRROR_AXIS,
+} from './lib/views.js';
+
+// Accent for the front-edge orientation marker on face thumbnails.
+const FRONT_EDGE_COLOR = '#7ee787';
+// Thumbnail canvas size and the box the sprite is fit into — the gap between
+// them guarantees margin for the front-edge line to sit beside (not over) art.
+const THUMB = 48;
+const THUMB_FIT = 40;
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -14,10 +28,13 @@ function el(tag, cls, text) {
   return n;
 }
 
+// Draw a pixel-art tile centered in the canvas, fit within a boxW×boxH area.
+// Returns the drawn rectangle {ox, oy, w, h} so callers can place a marker
+// beside the sprite (or null when there's nothing to draw).
 function drawPixels(canvas, img, boxW, boxH) {
   const g = canvas.getContext('2d');
   g.clearRect(0, 0, canvas.width, canvas.height);
-  if (!img) return;
+  if (!img) return null;
   const id =
     img instanceof ImageData
       ? img
@@ -29,11 +46,53 @@ function drawPixels(canvas, img, boxW, boxH) {
   const scale = Math.max(1, Math.floor(Math.min(boxW / img.width, boxH / img.height)));
   const w = img.width * scale;
   const h = img.height * scale;
+  const ox = Math.floor((canvas.width - w) / 2);
+  const oy = Math.floor((canvas.height - h) / 2);
   g.imageSmoothingEnabled = false;
-  g.drawImage(tmp, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+  g.drawImage(tmp, ox, oy, w, h);
+  return { ox, oy, w, h };
 }
 
-export function createUI({ samples, state, onSample, onAtlas, onTileSize, onOptionChange }) {
+// Mirror a tile for display (an axis-flip in image space), so a mirror-derived
+// face shows the way we actually render it. `axis` is 'x' (horizontal) or 'y'.
+function mirrorImage(img, axis) {
+  const { width: W, height: H, data } = img;
+  const out = new Uint8ClampedArray(W * H * 4);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const sx = axis === 'x' ? W - 1 - x : x;
+      const sy = axis === 'y' ? H - 1 - y : y;
+      const s = (sy * W + sx) * 4;
+      const d = (y * W + x) * 4;
+      out[d] = data[s];
+      out[d + 1] = data[s + 1];
+      out[d + 2] = data[s + 2];
+      out[d + 3] = data[s + 3];
+    }
+  }
+  return { width: W, height: H, data: out };
+}
+
+// Draw a thin line just OUTSIDE the sprite's drawn rect, on the edge the
+// object's front (+z) points toward — so the tile orientation is unambiguous
+// without painting over the art. `edge` is left/right/top/bottom (null =
+// front/back, which face the camera and have no in-plane front edge).
+function drawFrontEdge(canvas, edge, rect) {
+  if (!edge || !rect) return;
+  const g = canvas.getContext('2d');
+  const { ox, oy, w, h } = rect;
+  const W = canvas.width;
+  const H = canvas.height;
+  const T = 2; // line thickness (px)
+  const GAP = 1; // clearance between line and sprite
+  g.fillStyle = FRONT_EDGE_COLOR;
+  if (edge === 'left') g.fillRect(Math.max(0, ox - GAP - T), oy, T, h);
+  else if (edge === 'right') g.fillRect(Math.min(W - T, ox + w + GAP), oy, T, h);
+  else if (edge === 'top') g.fillRect(ox, Math.max(0, oy - GAP - T), w, T);
+  else if (edge === 'bottom') g.fillRect(ox, Math.min(H - T, oy + h + GAP), w, T);
+}
+
+export function createUI({ samples, state, onSample, onAtlas, onOptionChange }) {
   const app = document.getElementById('app');
   const panel = el('div', 'panel');
   app.appendChild(panel);
@@ -53,8 +112,13 @@ export function createUI({ samples, state, onSample, onAtlas, onTileSize, onOpti
   });
   panel.appendChild(sampleRow);
 
-  // --- atlas dropzone -------------------------------------------------------
-  panel.appendChild(el('div', 'label', 'atlas (3×2 sheet: RIGHT FRONT TOP / LEFT BACK BOTTOM)'));
+  // --- atlas dropzone (section label carries the derived tile size) ---------
+  const atlasLabel = el('div', 'label label-row');
+  atlasLabel.appendChild(el('span', null, 'atlas dropzone'));
+  const tileText = el('span', 'tile-val', '—');
+  atlasLabel.appendChild(tileText);
+  panel.appendChild(atlasLabel);
+
   const drop = el('div', 'dropzone');
   const dropCanvas = el('canvas', 'atlas-preview');
   dropCanvas.width = 204;
@@ -96,77 +160,29 @@ export function createUI({ samples, state, onSample, onAtlas, onTileSize, onOpti
   }
   panel.appendChild(drop);
 
-  // tile size (auto-derived, editable)
-  const tileRow = el('div', 'row tile-row');
-  tileRow.append(el('span', 'tiny', 'tile'));
-  const tileW = el('input', 'tile-in');
-  const tileH = el('input', 'tile-in');
-  for (const t of [tileW, tileH]) {
-    t.type = 'number';
-    t.min = 1;
-    t.onchange = () => onTileSize(+tileW.value || 1, +tileH.value || 1);
-  }
-  tileRow.append(tileW, el('span', 'tiny', '×'), tileH, el('span', 'tiny', 'px'));
-  const foundLine = el('span', 'tiny found', '');
-  tileRow.appendChild(foundLine);
-  panel.appendChild(tileRow);
-
-  // --- read-only sliced-face preview ---------------------------------------
+  // --- read-only face preview (laid out like the sheet) --------------------
   panel.appendChild(el('div', 'label', 'faces'));
   const slotGrid = el('div', 'slots');
   const slotEls = {};
   for (const name of SLOT_ORDER) {
     const slot = el('div', 'slot ro');
     const cv = el('canvas', 'thumb');
-    cv.width = cv.height = 40;
+    cv.width = cv.height = THUMB;
     slot.append(cv, el('div', 'slot-cap', name));
     slotGrid.appendChild(slot);
     slotEls[name] = { slot, cv };
   }
   panel.appendChild(slotGrid);
+  const legendRow = (swatchCls, text) => {
+    const l = el('div', 'legend');
+    l.append(el('span', swatchCls), el('span', 'tiny', text));
+    return l;
+  };
+  panel.appendChild(legendRow('legend-swatch', 'front-facing edge'));
+  panel.appendChild(legendRow('legend-derived', 'mirror-derived face'));
 
   // --- options --------------------------------------------------------------
-  panel.appendChild(el('div', 'label', 'mode'));
-  const modeRow = el('div', 'row');
-  const voxelBtn = el('button', 'chip', 'voxel (3D)');
-  const boxBtn = el('button', 'chip', 'box (fast)');
-  voxelBtn.onclick = () => setMode('voxel');
-  boxBtn.onclick = () => setMode('box');
-  modeRow.append(voxelBtn, boxBtn);
-  panel.appendChild(modeRow);
-
-  panel.appendChild(el('div', 'label', 'mirror missing faces'));
-  const mirrorRow = el('div', 'row');
-  const mirrorBoxes = {};
-  for (const ax of ['x', 'y', 'z']) {
-    const lab = el('label', 'check');
-    const cb = el('input');
-    cb.type = 'checkbox';
-    cb.onchange = () => {
-      state.mirror[ax] = cb.checked;
-      onOptionChange();
-    };
-    lab.append(cb, document.createTextNode(` ${ax.toUpperCase()}`));
-    mirrorRow.appendChild(lab);
-    mirrorBoxes[ax] = cb;
-  }
-  panel.appendChild(mirrorRow);
-
-  panel.appendChild(el('div', 'label', 'alpha threshold'));
-  const alphaRow = el('div', 'row');
-  const alpha = el('input');
-  alpha.type = 'range';
-  alpha.min = 1;
-  alpha.max = 255;
-  alpha.oninput = () => {
-    state.alphaThreshold = +alpha.value;
-    alphaVal.textContent = alpha.value;
-    onOptionChange();
-  };
-  const alphaVal = el('span', 'val', '128');
-  alphaRow.append(alpha, alphaVal);
-  panel.appendChild(alphaRow);
-
+  panel.appendChild(el('div', 'label', 'options'));
   const toggleRow = el('div', 'row');
   const lowpolyLab = el('label', 'check');
   const lowpoly = el('input');
@@ -176,20 +192,12 @@ export function createUI({ samples, state, onSample, onAtlas, onTileSize, onOpti
     onOptionChange();
   };
   lowpolyLab.append(lowpoly, document.createTextNode(' low-poly'));
-  const greedyLab = el('label', 'check');
-  const greedy = el('input');
-  greedy.type = 'checkbox';
-  greedy.onchange = () => {
-    state.greedy = greedy.checked;
-    onOptionChange();
-  };
-  greedyLab.append(greedy, document.createTextNode(' greedy mesh'));
   const rotLab = el('label', 'check');
   const rot = el('input');
   rot.type = 'checkbox';
   rot.onchange = () => (state.autoRotate = rot.checked);
   rotLab.append(rot, document.createTextNode(' auto-rotate'));
-  toggleRow.append(lowpolyLab, greedyLab, rotLab);
+  toggleRow.append(lowpolyLab, rotLab);
   panel.appendChild(toggleRow);
 
   // --- stats ----------------------------------------------------------------
@@ -197,27 +205,14 @@ export function createUI({ samples, state, onSample, onAtlas, onTileSize, onOpti
   panel.appendChild(stats);
 
   // --- methods --------------------------------------------------------------
-  function setMode(m) {
-    state.mode = m;
-    voxelBtn.classList.toggle('active', m === 'voxel');
-    boxBtn.classList.toggle('active', m === 'box');
-    onOptionChange();
-  }
-
   function selectSample(i) {
     sampleBtns.forEach((b, j) => b.classList.toggle('active', j === i));
     onSample(samples[i]);
   }
 
   function syncControls() {
-    for (const ax of ['x', 'y', 'z']) mirrorBoxes[ax].checked = state.mirror[ax];
-    alpha.value = state.alphaThreshold;
-    alphaVal.textContent = state.alphaThreshold;
-    greedy.checked = state.greedy;
     lowpoly.checked = state.lowpoly;
     rot.checked = state.autoRotate;
-    voxelBtn.classList.toggle('active', state.mode === 'voxel');
-    boxBtn.classList.toggle('active', state.mode === 'box');
   }
 
   function setAtlasPreview(img) {
@@ -225,30 +220,38 @@ export function createUI({ samples, state, onSample, onAtlas, onTileSize, onOpti
     dropHint.style.display = img ? 'none' : 'block';
   }
 
-  function setAtlasInfo({ tileW: tw, tileH: th, views }) {
-    tileW.value = tw;
-    tileH.value = th;
-    const found = SLOT_ORDER.filter((n) => views && views[n]);
-    foundLine.textContent = found.length ? found.join(' ') : 'none';
+  function setAtlasInfo({ tileW: tw, tileH: th }) {
+    tileText.textContent = `${tw} × ${th} px`;
   }
 
   function setThumbnails(views) {
     for (const name of SLOT_ORDER) {
       const { slot, cv } = slotEls[name];
-      const img = views && views[name];
-      slot.classList.toggle('filled', !!img);
-      drawPixels(cv, img, 40, 40);
+      let img = views && views[name];
+      let derived = false;
+      // No art of its own? Show the mirror-derived face we actually render, so
+      // the preview matches the rendered object rather than leaving a gap.
+      if (!img) {
+        const opp = views && views[VIEW_OPPOSITE[name]];
+        if (opp) {
+          img = mirrorImage(opp, VIEW_MIRROR_AXIS[name]);
+          derived = true;
+        }
+      }
+      slot.classList.toggle('filled', !!img && !derived);
+      slot.classList.toggle('derived', derived);
+      const rect = drawPixels(cv, img, THUMB_FIT, THUMB_FIT);
+      drawFrontEdge(cv, VIEW_FRONT_EDGE[name], rect);
     }
   }
 
-  function setStats({ provided, dims, voxels, triangles, warnings }) {
+  function setStats({ dims, voxels, triangles, warnings }) {
     stats.innerHTML = '';
     const line = (k, v) => {
       const r = el('div', 'stat');
       r.append(el('span', 'k', k), el('span', 'v', String(v)));
       stats.appendChild(r);
     };
-    line('views', provided && provided.length ? provided.join(', ') : '—');
     if (dims) line('grid', `${dims.nx}×${dims.ny}×${dims.nz}`);
     if (voxels) line('voxels', voxels);
     if (triangles) line('tris', triangles);
@@ -268,7 +271,6 @@ export function createUI({ samples, state, onSample, onAtlas, onTileSize, onOpti
     setThumbnails,
     setStats,
     setError,
-    setMode,
     setAtlasPreview,
     setAtlasInfo,
   };

@@ -11,8 +11,8 @@
 //      is the first solid hit marching from that view inward — i.e. nothing
 //      solid lies beyond the face along +n. This is what prevents a recessed
 //      step wall from being painted with the protruding front pixel's color.
-//   2. Else, if the per-axis mirror toggle is on and the OPPOSITE view exists,
-//      sample the opposite view mirrored (symmetry assumption).
+//   2. Else, if mirror-fill is enabled for this face's axis (on by default for
+//      all axes) and the OPPOSITE view exists, sample it mirrored (symmetry).
 //   3. Else relax: average already-assigned neighbor face colors.
 //   4. Else: the object's dominant body color.
 // Every sampled color is snapped to the sprite palette so AA fringe never
