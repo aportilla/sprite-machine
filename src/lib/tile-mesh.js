@@ -129,13 +129,16 @@ export function tileMesh(result, opts = {}) {
   };
 
   // sweep along z: cross-sections at cell centers, loft consecutive slabs.
+  let loftCount = 0, capCount = 0, nullCount = 0;
   let zmin = 0; while (zmin < nz && !bounds[zmin]) zmin++;
   let zmax = nz - 1; while (zmax >= 0 && !bounds[zmax]) zmax--;
   let prev = sectionAt(zmin);
   cap(prev && prev.poly, zmin + 0.5, false);
   for (let z = zmin + 1; z <= zmax; z++) {
     const cur = sectionAt(z);
+    if (!prev || !cur) nullCount++;
     if (prev && cur && sameSig(prev.poly, prev.box, cur.poly, cur.box)) {
+      loftCount++;
       const p0 = prev.poly, p1 = cur.poly, m = p0.length;
       for (let i = 0; i < m; i++) {
         const a = V(p0[i], z - 0.5), b = V(p0[(i + 1) % m], z - 0.5);
@@ -143,6 +146,7 @@ export function tileMesh(result, opts = {}) {
         pushTri(a, b, c); pushTri(a, c, d);
       }
     } else {
+      capCount++;
       cap(prev && prev.poly, (z - 1) + 0.5, true); // close previous slab
       cap(cur && cur.poly, z + 0.5, false);        // open next
     }
@@ -165,5 +169,6 @@ export function tileMesh(result, opts = {}) {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   mesh.userData.triangles = geo.index ? geo.index.count / 3 : pos.length / 9;
+  mesh.userData.sweep = { lofts: loftCount, caps: capCount, nulls: nullCount, zmin, zmax, span: zmax - zmin };
   return mesh;
 }
