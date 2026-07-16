@@ -40,8 +40,8 @@ const wedgeCount = (views) => wedgeMesh(buildVoxels(views)).userData.wedges;
 
 // Count undirected edges used an ODD number of times. A closed (watertight)
 // welded surface uses every edge an even number of times, so 0 == watertight.
-// This is why base faces are emitted per voxel, not greedy-merged: a greedy
-// rect abutting a wedge's unit-scale edge would leave a boundary edge here.
+// Guards the greedy base-face merge + T-junction repair: a greedy rect abutting
+// a wedge's unit-scale edge would leave boundary edges here without the repair.
 function oddEdges(mesh) {
   const geo = mesh.geometry;
   const pos = geo.attributes.position.array;

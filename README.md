@@ -141,6 +141,7 @@ src/lib/
   colorize.js     depth-aware first-hit surface coloring + palette snap
   faces.js        surface voxels -> quads: greedy-merged or culled (pure)
   pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
+  t-junction.js   lattice-exact T-junction repair for merged+wedge meshes (pure)
   mesh-util.js    shared vertex-color linearizer + mesh finishing (THREE)
   mesh.js         quads -> merged, vertex-colored THREE.Mesh    (voxel mode; THREE)
   wedge-mesh.js   voxel solid + additive 45° wedges             (low-poly mode; THREE)
@@ -161,11 +162,11 @@ src/
   handles depth.
 - **Low-poly scope** — wedges are **additive only**: a convex staircase (a hood
   sloping down-and-out) still steps, and where two wedge ridges meet at a true
-  3-D corner it degrades to a step rather than a corner tile. Its base voxel
-  faces are emitted per voxel rather than greedy-merged — a greedy rectangle
-  abutting a wedge's unit edge would leave a T-junction and break the watertight
-  weld (there's a regression test) — so low-poly's triangle count runs a little
-  higher than voxel mode's.
+  3-D corner it degrades to a step rather than a corner tile. Base faces **are**
+  greedy-merged like voxel mode; the T-junctions that merging leaves against the
+  unit-scale wedge edges are stitched out by a lattice-exact repair pass
+  (`t-junction.js`), so the result stays watertight (a regression test asserts
+  zero boundary edges).
 - **Perf** — hidden-face culling + greedy meshing (both on) keep it to one draw
   call and a handful of triangles; for a scene of *many* objects, batch identical
   ones with an object-level `InstancedMesh`, and move `buildVoxels` to a Web

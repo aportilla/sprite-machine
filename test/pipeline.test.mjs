@@ -10,6 +10,7 @@ import { culledQuads, greedyQuads } from '../src/lib/faces.js';
 import { sliceAtlas, deriveTileSize } from '../src/lib/atlas.js';
 import { buildPalette, makeSnapper } from '../src/lib/colorize.js';
 import { VIEWS } from '../src/lib/views.js';
+import { eliminateTJunctions } from '../src/lib/t-junction.js';
 
 // --- tiny sprite builder: rows of chars -> ImageData-like -------------------
 const C = {
@@ -281,4 +282,45 @@ test('buildVoxels with no views yields one voxel and warns', () => {
   assert.deepEqual(r.dims, { nx: 1, ny: 1, nz: 1 });
   assert.equal(r.solidCount, 1);
   assert.ok(r.warnings.some((w) => /no usable views/i.test(w)));
+});
+
+// --- 11. T-junction elimination (used by low-poly greedy base faces) ---------
+// A vertex is a T-junction if it lies strictly interior to some triangle edge.
+function hasTJunction(tris) {
+  const seen = new Set(), verts = [];
+  for (const t of tris)
+    for (const v of [t.a, t.b, t.c]) {
+      const k = v.join(',');
+      if (!seen.has(k)) (seen.add(k), verts.push(v));
+    }
+  const interior = (p, q, v) => {
+    const d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+    const e = [v[0] - p[0], v[1] - p[1], v[2] - p[2]];
+    const cx = d[1] * e[2] - d[2] * e[1];
+    const cy = d[2] * e[0] - d[0] * e[2];
+    const cz = d[0] * e[1] - d[1] * e[0];
+    if (cx || cy || cz) return false; // not collinear
+    const dot = d[0] * e[0] + d[1] * e[1] + d[2] * e[2];
+    const len2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+    return dot > 0 && dot < len2; // strictly between the endpoints
+  };
+  for (const t of tris)
+    for (const [p, q] of [[t.a, t.b], [t.b, t.c], [t.c, t.a]])
+      for (const v of verts) if (interior(p, q, v)) return true;
+  return false;
+}
+
+test('eliminateTJunctions splits edges at interior lattice vertices', () => {
+  const N = [0, 0, 1];
+  const tris = [
+    // a merged rect (two tris) spanning x=0..4 along its bottom edge
+    { a: [0, 0, 0], b: [4, 0, 0], c: [4, 2, 0], normal: N, color: 1 },
+    { a: [0, 0, 0], b: [4, 2, 0], c: [0, 2, 0], normal: N, color: 1 },
+    // a neighbor introducing a vertex at (2,0,0) mid the rect's bottom edge
+    { a: [2, 0, 0], b: [2, -2, 0], c: [0, -2, 0], normal: N, color: 1 },
+  ];
+  assert.ok(hasTJunction(tris), 'setup must contain a T-junction at (2,0,0)');
+  const out = eliminateTJunctions(tris);
+  assert.ok(!hasTJunction(out), 'repaired mesh has no interior-edge vertices');
+  assert.ok(out.length > tris.length, 'the offending triangle was subdivided');
 });

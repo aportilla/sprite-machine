@@ -27,9 +27,10 @@
 
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { voxIndex, unvoxIndex, FACE_KEYS } from './carve.js';
-import { FACE_GEO } from './faces.js';
+import { voxIndex, FACE_KEYS } from './carve.js';
+import { faceQuads } from './faces.js';
 import { unpackRGBA } from './ingest.js';
+import { eliminateTJunctions } from './t-junction.js';
 import { makeVertexColorLinearizer, finishVoxelMesh } from './mesh-util.js';
 import { DEFAULT_WORLD_SIZE } from './constants.js';
 
@@ -144,45 +145,21 @@ export function wedgeMesh(result, opts = {}) {
   }
 
   // --- geometry emit --------------------------------------------------------
+  // Collect INTEGER-lattice triangles first (base faces + wedges), eliminate the
+  // T-junctions greedy merging introduces, THEN build the scaled buffers.
   const toLin = makeVertexColorLinearizer();
-
-  // Base faces are emitted PER VOXEL, not greedy-merged. A greedy rectangle
-  // abutting a wedge's unit-scale cap/slope edge would leave a T-junction and
-  // break the watertight weld (the watertightness test proves this) — so the
-  // low-poly triangle count runs a bit higher than voxel mode's, by design.
-  let baseFaceCount = 0;
-  for (let i = 0; i < surfaceMask.length; i++) {
-    let m = surfaceMask[i];
-    while (m) { baseFaceCount += m & 1; m >>= 1; }
-  }
-  baseFaceCount -= removed.size; // wedges cover (and cull) these
-
-  // Exact preallocation: 2 tris (6 verts) per base face + up to 4 tris (12
-  // verts) per wedge (slope quad + two optional gable caps). A write cursor
-  // avoids the plain-array boxing + full copy the old growable buffers incurred.
-  const maxVerts = baseFaceCount * 6 + wedges.length * 12;
-  const pos = new Float32Array(maxVerts * 3);
-  const nrm = new Float32Array(maxVerts * 3);
-  const col = new Float32Array(maxVerts * 3);
-  let vc = 0; // vertex write cursor
-  const emit = (v, N, lin) => {
-    const o = vc * 3;
-    pos[o] = v[0] * s; pos[o + 1] = v[1] * s; pos[o + 2] = v[2] * s;
-    nrm[o] = N[0]; nrm[o + 1] = N[1]; nrm[o + 2] = N[2];
-    col[o] = lin[0]; col[o + 1] = lin[1]; col[o + 2] = lin[2];
-    vc++;
-  };
-  const pushTri = (a, b, c, N, lin) => {
+  const tris = []; // {a,b,c: int[3], normal:[3], color:uint32}, CCW wrt normal
+  const pushTri = (a, b, c, N, color) => {
     // wind to match the explicit outward normal N (backface culling is on)
     const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
     const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
     const gx = uy * vz - uz * vy, gy = uz * vx - ux * vz, gz = ux * vy - uy * vx;
     if (gx * N[0] + gy * N[1] + gz * N[2] < 0) { const t = b; b = c; c = t; }
-    emit(a, N, lin); emit(b, N, lin); emit(c, N, lin);
+    tris.push({ a, b, c, normal: N, color });
   };
-  const pushQuad = (a, b, c, d, N, lin) => {
-    pushTri(a, b, c, N, lin);
-    pushTri(a, c, d, N, lin);
+  const pushQuad = (a, b, c, d, N, color) => {
+    pushTri(a, b, c, N, color);
+    pushTri(a, c, d, N, color);
   };
   // build a point [x,y,z] from three axis/value pairs
   const mk = (a1, v1, a2, v2, a3, v3) => {
@@ -197,18 +174,14 @@ export function wedgeMesh(result, opts = {}) {
     return [p[0] / L, p[1] / L, p[2] / L];
   };
 
-  // 1. base voxel faces (culled) minus the ones wedges cover
-  for (let idx = 0; idx < surfaceMask.length; idx++) {
-    const mask = surfaceMask[idx];
-    if (!mask) continue;
-    const c = unvoxIndex(idx, dims);
-    for (let f = 0; f < 6; f++) {
-      if (!(mask & (1 << f)) || removed.has(idx * 6 + f)) continue;
-      const g = FACE_GEO[FACE_KEYS[f]];
-      const corners = g.quad(c[g.A], c[g.A], c[g.B], c[g.B], c[g.N]);
-      const packed = flat ? FLAT_COLOR : (faceColor.get(idx * 6 + f) ?? dominant) >>> 0;
-      pushQuad(corners[0], corners[1], corners[2], corners[3], g.normal, toLin(packed));
-    }
+  // 1. base voxel faces, GREEDY-merged, minus the ones wedges cover. Merging
+  // creates T-junctions against the unit-scale wedge edges; the repair pass
+  // below stitches those back into a watertight manifold.
+  const baseMask = surfaceMask.slice();
+  for (const rk of removed) baseMask[(rk / 6) | 0] &= ~(1 << rk % 6);
+  for (const qd of faceQuads(dims, baseMask, faceColor, true)) {
+    const cr = qd.corners;
+    pushQuad(cr[0], cr[1], cr[2], cr[3], qd.normal, flat ? FLAT_COLOR : qd.color >>> 0);
   }
 
   // 2. wedge prisms: hypotenuse slope + gable caps at open ends
@@ -220,11 +193,11 @@ export function wedgeMesh(result, opts = {}) {
     const Bc = sB < 0 ? bC : bC + 1, Bo = sB < 0 ? bC + 1 : bC;
     const rLo = rC, rHi = rC + 1;
     const pt = (av, bv, rv) => mk(A, av, B, bv, R, rv);
-    const lin = toLin(flat ? FLAT_COLOR : w.color);
+    const wc = flat ? FLAT_COLOR : w.color >>> 0;
 
     // sloped face: connects the opposite-A and opposite-B corners, swept along R
     const HN = axisVec(A, -sA, B, -sB);
-    pushQuad(pt(Ao, Bc, rLo), pt(Ao, Bc, rHi), pt(Ac, Bo, rHi), pt(Ac, Bo, rLo), HN, lin);
+    pushQuad(pt(Ao, Bc, rLo), pt(Ao, Bc, rHi), pt(Ac, Bo, rHi), pt(Ac, Bo, rLo), HN, wc);
 
     // cap an end iff the run doesn't continue there and isn't buried in solid
     const capNeeded = (sg) => {
@@ -235,17 +208,32 @@ export function wedgeMesh(result, opts = {}) {
       return !(wn && wn.R === R && wn.sA === sA && wn.sB === sB);
     };
     if (capNeeded(-1))
-      pushTri(pt(Ac, Bc, rLo), pt(Ao, Bc, rLo), pt(Ac, Bo, rLo), axisVec(R, -1), lin);
+      pushTri(pt(Ac, Bc, rLo), pt(Ao, Bc, rLo), pt(Ac, Bo, rLo), axisVec(R, -1), wc);
     if (capNeeded(1))
-      pushTri(pt(Ac, Bc, rHi), pt(Ao, Bc, rHi), pt(Ac, Bo, rHi), axisVec(R, 1), lin);
+      pushTri(pt(Ac, Bc, rHi), pt(Ao, Bc, rHi), pt(Ac, Bo, rHi), axisVec(R, 1), wc);
+  }
+
+  // 3. stitch out T-junctions, then flatten to scaled vertex buffers
+  const repaired = eliminateTJunctions(tris);
+  const pos = new Float32Array(repaired.length * 9);
+  const nrm = new Float32Array(repaired.length * 9);
+  const col = new Float32Array(repaired.length * 9);
+  let o = 0;
+  for (const t of repaired) {
+    const lin = toLin(t.color >>> 0);
+    for (const v of [t.a, t.b, t.c]) {
+      pos[o] = v[0] * s; pos[o + 1] = v[1] * s; pos[o + 2] = v[2] * s;
+      nrm[o] = t.normal[0]; nrm[o + 1] = t.normal[1]; nrm[o + 2] = t.normal[2];
+      col[o] = lin[0]; col[o + 1] = lin[1]; col[o + 2] = lin[2];
+      o += 3;
+    }
   }
 
   // --- assemble -------------------------------------------------------------
-  const used = vc * 3;
   let geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos.subarray(0, used), 3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm.subarray(0, used), 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(col.subarray(0, used), 3));
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   // Weld coincident lattice vertices by position+normal+color so distinct-facing
   // wedge/base vertices stay split. Normals are load-bearing HERE and in diag.js
   // — not for lighting (flatShading recomputes them per-face in the shader).
@@ -257,7 +245,7 @@ export function wedgeMesh(result, opts = {}) {
     nz,
     s,
     userData: {
-      triangles: geo.index ? geo.index.count / 3 : vc / 3,
+      triangles: geo.index ? geo.index.count / 3 : repaired.length,
       wedges: wedges.length,
     },
   });
