@@ -30,6 +30,7 @@ import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { voxIndex, FACE_KEYS } from './carve.js';
 import { FACE_GEO } from './faces.js';
 import { unpackRGBA } from './ingest.js';
+import { VIEWS } from './views.js';
 
 const AXI = { x: 0, y: 1, z: 2 };
 // face key from axis name + sign (+1/-1)
@@ -39,6 +40,14 @@ const FKEY = {
 const FIDX = {};
 FACE_KEYS.forEach((k, i) => (FIDX[k] = i));
 const FLAT_COLOR = 0xffcfcfd6;
+
+// The view that looks ALONG a ridge axis, so it sees the slope's cross-section
+// (profile) — where a 45° slope reads as its true surface with nothing in front
+// to occlude it. Mirror-fallback to the opposite side when a view isn't given.
+const PROFILE = { x: 'right', y: 'top', z: 'front' };
+// The view that sees a riser (faceA, outward normal -sA on axis A) head-on.
+const FACING = { z1: 'front', 'z-1': 'back', x1: 'right', 'x-1': 'left', y1: 'top', 'y-1': 'bottom' };
+const OPP_VIEW = { front: 'back', back: 'front', right: 'left', left: 'right', top: 'bottom', bottom: 'top' };
 
 // The three ridge axes (the axis a wedge prism extends along) and their two
 // in-plane tangent axes (A, B). Order matters: z first so long z-ridges (the
@@ -50,7 +59,7 @@ const RIDGES = [
 ];
 
 export function wedgeMesh(result, opts = {}) {
-  const { dims, solid, surfaceMask, faceColor, palette } = result;
+  const { dims, solid, surfaceMask, faceColor, palette, gviews } = result;
   const { nx, ny, nz } = dims;
   const flat = !!opts.flat;
   const worldSize = opts.worldSize ?? 2.5;
@@ -66,6 +75,16 @@ export function wedgeMesh(result, opts = {}) {
     y + sg * (ax === 'y'),
     z + sg * (ax === 'z'),
   ];
+  // Sample the SOURCE sprite at a voxel via a given view (mirror-fallback for an
+  // un-provided side). Returns the raw packed colour, or null if that pixel is
+  // outside the silhouette.
+  const viewSample = (view, x, y, z) => {
+    let gv = gviews[view];
+    if (!gv) { view = OPP_VIEW[view]; gv = gviews[view]; if (!gv) return null; }
+    const p = VIEWS[view].project(x, y, z, dims);
+    const i = p.v * gv.imgW + p.u;
+    return gv.occ[i] ? gv.rgb[i] >>> 0 : null;
+  };
 
   // --- scan for wedges ------------------------------------------------------
   const wedgeCell = new Map(); // cellIdx -> chosen {R,A,B,sA,sB}
@@ -97,16 +116,40 @@ export function wedgeMesh(result, opts = {}) {
               const cA = faceColor.get(aKey);
               const cB = faceColor.get(bKey);
 
-              // Every concave unit step is smoothed on geometry alone (no colour
-              // gate): the slope's colour is the upper step's facing (riser) face
-              // — the surface's identity colour. A colour-match gate can't work
-              // here: a slope's lower step exposes only its up-facing tread, and
-              // the top view paints that tread the SAME white for a windshield and
-              // a wheel-well, so per-voxel colour can't tell a coherent slope from
-              // a material boundary. Blobby features (wheels) are a geometric case.
+              // Gate + colour by sampling the SOURCE sprite directly (the wedge IS
+              // the real surface): read each step's material through the PROFILE
+              // view — the one looking along the ridge, which sees the slope's
+              // cross-section with nothing in front to occlude it (so a windshield
+              // reads teal all the way down, where the facing view saw hood). Same
+              // source colour on both steps -> coherent surface -> wedge; differ ->
+              // material boundary (tyre/body, roof/window) -> skip. Colour from the
+              // notch centre (mid-slope).
+              // Profile view (along the ridge) fills coherent slopes even where
+              // the hood occludes them — but it's blind to a material boundary
+              // that runs along the ridge (a hard roof/window edge), reading both
+              // sides as the white pillar. So also consult the FACING view, which
+              // sees each riser's true colour: if the two steps differ there AND
+              // the lower step isn't occluded, it's a real boundary -> skip.
+              const profileView = PROFILE[R];
+              const sUp = viewSample(profileView, ...aN);
+              const sLo = viewSample(profileView, ...bN);
+              const profileOk = sUp != null && sLo != null && (sUp >>> 0) === (sLo >>> 0);
+
+              const fUp = viewSample(FACING[A + -sA], ...aN);
+              const fLo = viewSample(FACING[A + -sA], ...bN);
+              let ox = bN[0], oy = bN[1], oz = bN[2], occ = false;
+              for (let k = 0; k < 16 && !occ; k++) {
+                if (A === 'x') ox += -sA; else if (A === 'y') oy += -sA; else oz += -sA;
+                if (!inBounds(ox, oy, oz)) break;
+                if (solidAt(ox, oy, oz)) occ = true;
+              }
+              const boundary = fUp != null && fLo != null && (fUp >>> 0) !== (fLo >>> 0) && !occ;
+              if (!flat && !(profileOk && !boundary)) continue;
               wedgeCell.set(cidx, { R, A, B, sA, sB });
               removed.add(aKey);
               removed.add(bKey);
+              // colour from the riser's own face (the surface's true colour, e.g.
+              // teal glass), NOT the profile view (which sees the pillar edge).
               const color = (cA != null ? cA : cB != null ? cB : dominant) >>> 0;
               wedges.push({ x, y, z, R, A, B, sA, sB, color });
               placed = true;
