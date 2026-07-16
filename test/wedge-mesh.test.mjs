@@ -85,14 +85,16 @@ test('a real material seam still gates wedges (tolerance is not too loose)', () 
   );
 });
 
-// A 3-wide, 3-step staircase whose every face is one solid material (white),
-// carrying a stray colour band somewhere in its FRONT elevation. Because the
-// step surfaces are all the same material, every one of the 9 notch cells must
-// wedge — no matter where the band falls. This is the "third face" bug: the
-// facing-view veto used to sample a lower step's riser in the elevation (a face
-// the wedge never touches) and drop the step at each band edge — the white-cap
-// stair kept only 6/9 wedges, the pink-band stair only 3/9. The veto now also
-// requires the two faces the wedge covers to differ, so the count is invariant.
+// The gate is STRICT: a wedge fires iff the two faces it covers — the riser and
+// the tread — are the same material. It consults nothing else (no profile/facing
+// view, no elevation). These two staircases prove both directions of that
+// contract, which hands the sprite author exact control over which corners round.
+
+// (1) All step faces one material (white), with a stray pink band elsewhere in
+// the FRONT elevation. Every step's riser AND tread are white, so all 9 notch
+// cells wedge regardless of where the band sits — the projection is irrelevant
+// because only the covered faces are read. (An earlier heuristic that sampled the
+// facing-view elevation dropped a step at each band edge: white-cap 6/9, band 3/9.)
 const WP = { '#': [255, 255, 255], O: [233, 23, 241] }; // white body + pink band
 const stair = (frontRows, topRows) => ({
   right: img(['   ###', '  ####', ' #####', '######'], WP), // all-white step profile
@@ -101,12 +103,22 @@ const stair = (frontRows, topRows) => ({
 });
 
 test('monochrome staircase wedges every step regardless of an elevation colour band', () => {
-  // Pink band high in the elevation (white cap over pink): old code dropped the
-  // top step (6/9). Pink band low (white over a single pink step): old code
-  // dropped the pink step and the white one above it (3/9). Both are one white
-  // stepped surface, so both must now smooth all 3 steps across the 3-wide run.
   const whiteCap = stair(['###', 'OOO', 'OOO', 'OOO'], ['OOO', 'OOO', '###', '###', '###', '###']);
   const pinkBand = stair(['###', '###', 'OOO', '###'], ['OOO', '###', '###', '###', '###', '###']);
   assert.equal(wedgeCount(whiteCap), 9, 'white-cap staircase must wedge every step (3 steps x 3 wide)');
   assert.equal(wedgeCount(pinkBand), 9, 'pink-band staircase must wedge every step (3 steps x 3 wide)');
+});
+
+test('strict gate: a corner whose riser and tread differ never wedges (author control)', () => {
+  // (2) A geometrically perfect ramp, but the TOP view paints the treads a
+  // different colour than the FRONT view paints the risers. The artist has said
+  // "these two faces are different materials", so every corner stays a crisp step
+  // — zero wedges — even though the identical geometry in one colour wedges freely.
+  const twoColour = () => ({
+    front: fill(4, 4, 'T'), // risers -> teal
+    right: img(['...T', '..TT', '.TTT', 'TTTT']),
+    top: fill(4, 4, 'R'), // treads -> red  =>  riser != tread at every step
+  });
+  assert.ok(wedgeCount(ramp()) > 0, 'the one-colour ramp must wedge');
+  assert.equal(wedgeCount(twoColour()), 0, 'riser!=tread must never wedge, even on a perfect ramp');
 });

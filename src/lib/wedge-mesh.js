@@ -30,8 +30,6 @@ import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { voxIndex, FACE_KEYS } from './carve.js';
 import { FACE_GEO } from './faces.js';
 import { unpackRGBA } from './ingest.js';
-import { VIEWS } from './views.js';
-import { buildPalette, makeSnapper } from './colorize.js';
 
 const AXI = { x: 0, y: 1, z: 2 };
 // face key from axis name + sign (+1/-1)
@@ -41,14 +39,6 @@ const FKEY = {
 const FIDX = {};
 FACE_KEYS.forEach((k, i) => (FIDX[k] = i));
 const FLAT_COLOR = 0xffcfcfd6;
-
-// The view that looks ALONG a ridge axis, so it sees the slope's cross-section
-// (profile) — where a 45° slope reads as its true surface with nothing in front
-// to occlude it. Mirror-fallback to the opposite side when a view isn't given.
-const PROFILE = { x: 'right', y: 'top', z: 'front' };
-// The view that sees a riser (faceA, outward normal -sA on axis A) head-on.
-const FACING = { z1: 'front', 'z-1': 'back', x1: 'right', 'x-1': 'left', y1: 'top', 'y-1': 'bottom' };
-const OPP_VIEW = { front: 'back', back: 'front', right: 'left', left: 'right', top: 'bottom', bottom: 'top' };
 
 // The three ridge axes (the axis a wedge prism extends along) and their two
 // in-plane tangent axes (A, B). Order matters: z first so long z-ridges (the
@@ -60,22 +50,20 @@ const RIDGES = [
 ];
 
 export function wedgeMesh(result, opts = {}) {
-  const { dims, solid, surfaceMask, faceColor, palette, gviews } = result;
+  const { dims, solid, surfaceMask, faceColor, palette } = result;
   const { nx, ny, nz } = dims;
   const flat = !!opts.flat;
   const worldSize = opts.worldSize ?? 2.5;
   const s = worldSize / Math.max(nx, ny, nz);
   const dominant = (palette && palette.length ? palette[0] : FLAT_COLOR) >>> 0;
 
-  // Gate samples are snapped to the canonical sprite palette so same-material
-  // pixels compare equal despite farble noise (privacy browsers like Helium
-  // perturb getImageData by ~±1/channel) or ordinary AA fringe. Snapping alone
-  // isn't enough: farble also splits the palette into near-duplicate entries, so
-  // two noisy pixels can snap to *adjacent* entries — hence sameMat also allows
-  // a small colour tolerance. Distinct materials sit far above TOL2 (~180 apart
-  // here vs a 12 slack), so real seams still gate.
-  const snapPalette = palette && palette.length ? palette : buildPalette(gviews);
-  const snap = snapPalette.length ? makeSnapper(snapPalette) : (c) => c;
+  // The wedge fires only where its two covered faces are the same material.
+  // Those faceColor values are already palette-snapped by colorize, but privacy
+  // browsers "farble" getImageData (~±1/channel), which splits the palette into
+  // near-duplicate entries, so two same-material faces can land on *adjacent*
+  // entries. sameMat therefore compares with a small squared-L2 tolerance;
+  // distinct authored materials sit ~180 apart, far above the ~12 slack, so a
+  // colour boundary the artist drew still gates crisply.
   const TOL2 = 12 * 12; // ~12 per-channel slack (squared L2): covers farble + AA
   const sameMat = (a, b) => {
     if (a == null || b == null) return false;
@@ -94,16 +82,6 @@ export function wedgeMesh(result, opts = {}) {
     y + sg * (ax === 'y'),
     z + sg * (ax === 'z'),
   ];
-  // Sample the SOURCE sprite at a voxel via a given view (mirror-fallback for an
-  // un-provided side). Returns the raw packed colour, or null if that pixel is
-  // outside the silhouette.
-  const viewSample = (view, x, y, z) => {
-    let gv = gviews[view];
-    if (!gv) { view = OPP_VIEW[view]; gv = gviews[view]; if (!gv) return null; }
-    const p = VIEWS[view].project(x, y, z, dims);
-    const i = p.v * gv.imgW + p.u;
-    return gv.occ[i] ? snap(gv.rgb[i] >>> 0) >>> 0 : null;
-  };
 
   // --- scan for wedges ------------------------------------------------------
   const wedgeCell = new Map(); // cellIdx -> chosen {R,A,B,sA,sB}
@@ -135,50 +113,22 @@ export function wedgeMesh(result, opts = {}) {
               const cA = faceColor.get(aKey);
               const cB = faceColor.get(bKey);
 
-              // Gate + colour by sampling the SOURCE sprite directly (the wedge IS
-              // the real surface): read each step's material through the PROFILE
-              // view — the one looking along the ridge, which sees the slope's
-              // cross-section with nothing in front to occlude it (so a windshield
-              // reads teal all the way down, where the facing view saw hood). Same
-              // source colour on both steps -> coherent surface -> wedge; differ ->
-              // material boundary (tyre/body, roof/window) -> skip. Colour from the
-              // notch centre (mid-slope).
-              // Profile view (along the ridge) fills coherent slopes even where
-              // the hood occludes them — but it's blind to a material boundary
-              // that runs along the ridge (a hard roof/window edge), reading both
-              // sides as the white pillar. So also consult the FACING view, which
-              // sees each riser's true colour: if the two steps differ there AND
-              // the lower step isn't occluded, it's a real boundary -> skip.
-              const profileView = PROFILE[R];
-              const sUp = viewSample(profileView, ...aN);
-              const sLo = viewSample(profileView, ...bN);
-              const profileOk = sameMat(sUp, sLo);
-
-              const fUp = viewSample(FACING[A + -sA], ...aN);
-              const fLo = viewSample(FACING[A + -sA], ...bN);
-              let ox = bN[0], oy = bN[1], oz = bN[2], occ = false;
-              for (let k = 0; k < 16 && !occ; k++) {
-                if (A === 'x') ox += -sA; else if (A === 'y') oy += -sA; else oz += -sA;
-                if (!inBounds(ox, oy, oz)) break;
-                if (solidAt(ox, oy, oz)) occ = true;
-              }
-              // The facing veto samples each step's facing-view PIXEL, but the
-              // lower step's pixel is the front elevation at that height — which
-              // can belong to a *different* lower step (a pink riser under a white
-              // cap), not the face this wedge covers. So a facing mismatch is only
-              // a real boundary when the two faces the wedge actually TOUCHES
-              // (cA, cB) also disagree; otherwise it's one coherent surface
-              // crossing a colour band in the elevation and must still wedge (a
-              // monochrome staircase would else drop the step at every band edge).
-              const boundary =
-                fUp != null && fLo != null && !sameMat(fUp, fLo) && !occ &&
-                !sameMat(cA, cB);
-              if (!flat && !(profileOk && !boundary)) continue;
+              // Gate: fire the wedge iff its two COVERED faces — the only two
+              // surfaces the prism merges (the riser cA and the tread cB) — are
+              // the same material. Nothing else is consulted: no profile/facing
+              // view sampling, no occlusion march. This is deliberate and gives
+              // the sprite author exact, local control over every wedge: paint the
+              // two faces a corner joins the same colour and it ramps; paint them
+              // differently and it stays a crisp step. A slope smooths only where
+              // its riser and its up-facing tread read the same colour, so the
+              // top-view art over a slope must match the face it caps — the author
+              // decides which corners round, not a heuristic guess about "slopes".
+              if (!flat && !sameMat(cA, cB)) continue;
               wedgeCell.set(cidx, { R, A, B, sA, sB });
               removed.add(aKey);
               removed.add(bKey);
-              // colour from the riser's own face (the surface's true colour, e.g.
-              // teal glass), NOT the profile view (which sees the pillar edge).
+              // The gate guarantees cA and cB agree, so either is the surface's
+              // true colour; fall back only if a covered face was left uncoloured.
               const color = (cA != null ? cA : cB != null ? cB : dominant) >>> 0;
               wedges.push({ x, y, z, R, A, B, sA, sB, color });
               placed = true;

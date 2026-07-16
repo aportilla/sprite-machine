@@ -100,16 +100,14 @@ they can never punch a hole or eat the object, and a shape with no staircase (a
 plain cube) gets no wedges and stays sharp. Every vertex lands on the integer
 lattice, so the result welds **watertight**.
 
-Whether a wedge fires is a **same-surface test against the source sprites**, not
-the voxel face colors (a slope's up-facing tread is painted by the top view, so
-it reads white even over blue glass). Each candidate is sampled through the
-**profile view** — the one looking along the wedge's ridge, which sees the
-slope's cross-section with nothing in front to occlude it — at both steps: same
-color ⇒ one coherent surface ⇒ wedge; different ⇒ skip. A second **facing-view**
-check (guarded by an occlusion march) rejects a hard material boundary that runs
-along the ridge — e.g. a roof/window edge the profile view would read as one
-white pillar. The wedge takes its color from the riser face (the surface's true
-color). See `src/lib/wedge-mesh.js`.
+Whether a wedge fires is a **strict same-material test on the two faces it would
+merge** — the corner's **riser** and **tread**. Same color on both ⇒ the corner
+ramps; different ⇒ it stays a crisp step. Nothing else is consulted, which hands
+the sprite author exact, local control over every wedge: to smooth a slope, paint
+both faces it joins the same color (so the top-view art over a windshield must
+match the glass down to its foot); to keep an edge sharp — a roof/window seam, a
+tyre/body join — paint them differently and it can never round. The wedge takes
+its color from that shared material. See `src/lib/wedge-mesh.js`.
 
 ### Missing faces
 
