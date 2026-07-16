@@ -92,6 +92,38 @@ test('L-step: occluded +z face is not smeared with the front color', () => {
   assert.equal(colorOf(r, 0, 0, 2, 'py'), pk('G')); // top of front block
 });
 
+// --- 3b. Opposite-view registration slip must not erode a protrusion --------
+// A car's side mirror sticks out on the outer column (x=0,2). The TOP sprite
+// draws it one row back from where the BOTTOM sprite does (a 1-texel hand-draw
+// slip). Both views constrain the X-Z plane; a naive AND of the pair leaves an
+// empty intersection on the outer columns and deletes the mirror. Carving must
+// UNION opposite views per plane, keeping the protrusion the artist drew.
+test('opposite views: 1-texel top/bottom slip does not erase a protrusion', () => {
+  const r = buildVoxels(
+    {
+      front: fill(3, 1, 'M'), // nx=3, ny=1 — every column allowed by front/right
+      right: fill(3, 1, 'N'), // nz=3
+      // top rows map v->z as z=2,1,0; bottom rows map v->z as z=0,1,2.
+      top: img(['TTT', '.T.', '.T.']), // outer cols (x=0,2) protrude at z=2
+      bottom: img(['.T.', 'TTT', '.T.']), // ...but bottom puts them at z=1
+    },
+    { mirror: { x: false, y: false, z: false } }
+  );
+  assert.deepEqual(r.dims, { nx: 3, ny: 1, nz: 3 });
+  // Union per plane keeps BOTH the top-drawn (z=2) and bottom-drawn (z=1) outer
+  // voxels; the old AND-every-view carve would have deleted both.
+  assert.equal(r.solid[voxIndex(0, 0, 2, r.dims)], 1); // top's protrusion row
+  assert.equal(r.solid[voxIndex(2, 0, 2, r.dims)], 1);
+  assert.equal(r.solid[voxIndex(0, 0, 1, r.dims)], 1); // bottom's protrusion row
+  assert.equal(r.solid[voxIndex(2, 0, 1, r.dims)], 1);
+  // Union is not a free-for-all: where NEITHER opposite view covers the outer
+  // column (z=0) it stays carved out.
+  assert.equal(r.solid[voxIndex(0, 0, 0, r.dims)], 0);
+  assert.equal(r.solid[voxIndex(2, 0, 0, r.dims)], 0);
+  // The body column (x=1) is solid the full depth.
+  for (let z = 0; z < 3; z++) assert.equal(r.solid[voxIndex(1, 0, z, r.dims)], 1);
+});
+
 // --- 4. Asymmetric sides, mirror OFF: each side keeps its own art -----------
 test('asymmetric sides are not fabricated when mirror is off', () => {
   const r = buildVoxels(

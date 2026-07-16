@@ -6,8 +6,10 @@
 //   FRONT/BACK -> X-Y,  LEFT/RIGHT -> Z-Y,  TOP/BOTTOM -> X-Z.
 // The two views of a pair produce the same silhouette (mirror images), so for
 // CARVING a single view per plane fully constrains that axis. Mirroring is only
-// needed for COLOR (see colorize.js). So carving is just: AND every provided
-// view's occupancy, sampled through its projection. No camera math, no CSG.
+// needed for COLOR (see colorize.js). So carving is: UNION the views within
+// each plane (opposite silhouettes are identical in theory, so this is robust
+// to a 1-texel registration slip between hand-drawn opposite sprites — see
+// carve()), then AND across the planes. No camera math, no CSG.
 // ---------------------------------------------------------------------------
 
 import { resampleView } from './ingest.js';
@@ -94,16 +96,42 @@ export function carve(gviews, dims) {
   // fully empty input yields a single solid voxel (pipeline.js warns about it).
   if (active.length === 0) return solid;
 
+  // Group the provided views by the projection PLANE they constrain
+  // (front/back -> X-Y, left/right -> Z-Y, top/bottom -> X-Z). A real solid's
+  // two opposite silhouettes are identical, so WITHIN a plane we UNION the
+  // views — a voxel is covered if ANY view on that plane sees it. This is what
+  // the header means by "a single view per plane fully constrains that axis":
+  // the opposite view is redundant for carving, not an extra constraint.
+  // ANDing the pair instead lets a 1-texel registration slip between two
+  // hand-drawn opposite sprites erode thin protrusions — e.g. a car's side
+  // mirror that survives in the top sprite but sits one row over in the bottom
+  // sprite has an empty top∧bottom intersection, so its outer column vanishes.
+  // We then intersect ACROSS the (up to three) planes to get the visual hull.
+  const planes = new Map(); // planeKey -> [{spec, occ, imgW}, ...]
   for (const [name, gv] of active) {
-    const spec = VIEWS[name];
-    const { occ, imgW } = gv;
-    for (let z = 0; z < nz; z++) {
-      for (let y = 0; y < ny; y++) {
-        for (let x = 0; x < nx; x++) {
-          const idx = voxIndex(x, y, z, dims);
-          if (!solid[idx]) continue;
-          const p = spec.project(x, y, z, dims);
-          if (!occ[p.v * imgW + p.u]) solid[idx] = 0;
+    const key = VIEW_AXES[name].join(); // e.g. 'nx,ny' — one key per plane
+    const group = planes.get(key) || planes.set(key, []).get(key);
+    group.push({ spec: VIEWS[name], occ: gv.occ, imgW: gv.imgW });
+  }
+  const planeList = [...planes.values()];
+
+  for (let z = 0; z < nz; z++) {
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        const idx = voxIndex(x, y, z, dims);
+        for (const group of planeList) {
+          let covered = false;
+          for (const { spec, occ, imgW } of group) {
+            const p = spec.project(x, y, z, dims);
+            if (occ[p.v * imgW + p.u]) {
+              covered = true;
+              break;
+            }
+          }
+          if (!covered) {
+            solid[idx] = 0;
+            break;
+          }
         }
       }
     }
