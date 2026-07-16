@@ -1,6 +1,8 @@
 :root {
   color-scheme: dark;
   --bg: #4a4a52;
+  --sidebar-w: 248px;
+  --editor-w: 420px;
 }
 
 * {
@@ -17,31 +19,51 @@ body {
   overflow: hidden;
 }
 
+/* ---- app shell: left sidebar | main 3D view ---- */
 #app {
   position: fixed;
   inset: 0;
+  display: flex;
+}
+
+#sidebar {
+  flex: 0 0 auto;
+  width: var(--sidebar-w);
+  height: 100%;
+  overflow-y: auto;
+  background: rgba(24, 24, 30, 0.96);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Right-side editor panel: collapsed to zero width until drawing mode opens it;
+   the 3D viewport (flex: 1) flexes to make room. */
+#editor-panel {
+  flex: 0 0 auto;
+  width: 0;
+  height: 100%;
+  overflow: hidden;
+  background: rgba(24, 24, 30, 0.96);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  transition: width 0.16s ease;
+}
+#editor-panel.open {
+  width: var(--editor-w);
+  overflow-y: auto;
 }
 
 #viewport {
-  display: block;
-  width: 100%;
+  flex: 1 1 0;
+  min-width: 0;
   height: 100%;
+  display: block;
   /* Keep upscaled pixels crisp, not blurred. */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 
-/* ---- control panel ---- */
+/* ---- control panel (content of the sidebar) ---- */
 .panel {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  width: 236px;
   padding: 14px;
-  background: rgba(28, 28, 34, 0.82);
-  backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
   font-size: 11px;
   line-height: 1.4;
   user-select: none;
@@ -94,38 +116,12 @@ body {
   color: #201025;
   font-weight: 600;
 }
-.dropzone {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 96px;
-  padding: 4px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  cursor: pointer;
-}
-.dropzone:hover {
-  border-color: rgba(255, 255, 255, 0.35);
-}
-.dropzone.drag {
-  border-color: #a9dcd6;
-  background: rgba(169, 220, 214, 0.12);
-}
-.atlas-preview {
-  image-rendering: pixelated;
-}
-.drop-hint {
-  position: absolute;
-  color: #8a8a96;
-  font-size: 10px;
-  text-align: center;
-  pointer-events: none;
-}
 .tiny {
   font-size: 10px;
   color: #9a9aa6;
+}
+.hint {
+  margin-top: 5px;
 }
 .tile-val {
   color: #a9dcd6;
@@ -133,13 +129,12 @@ body {
   letter-spacing: normal;
   font-size: 10px;
 }
+
+/* ---- faces preview (click a tile to edit) ---- */
 .slots {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
-}
-.slot.ro {
-  cursor: default;
 }
 .slot {
   position: relative;
@@ -154,6 +149,9 @@ body {
   border-radius: 6px;
   cursor: pointer;
 }
+.slot:hover {
+  border-color: rgba(255, 255, 255, 0.42);
+}
 .slot.filled {
   border-style: solid;
   border-color: rgba(255, 255, 255, 0.28);
@@ -164,6 +162,11 @@ body {
 }
 .slot.derived .thumb {
   opacity: 0.82;
+}
+.slot.editing {
+  border-style: solid;
+  border-color: #c77dd6;
+  box-shadow: 0 0 0 1px #c77dd6;
 }
 .thumb {
   image-rendering: pixelated;
@@ -224,4 +227,206 @@ body {
   color: #e8c07a;
   margin-top: 6px;
   font-size: 10px;
+}
+
+/* ---- whole-app drop target ---- */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 14, 0.7);
+  backdrop-filter: blur(2px);
+  pointer-events: none; /* let the drop event fall through to #app */
+}
+#app.app-drag .drop-overlay {
+  display: flex;
+}
+.drop-overlay-msg {
+  border: 2px dashed rgba(169, 220, 214, 0.85);
+  background: rgba(28, 28, 34, 0.6);
+  color: #e8e8ea;
+  padding: 22px 34px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+/* ---- inline tile editor (content of the right-side #editor-panel) ---- */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 14px;
+  /* Hold layout width while the panel collapses so content slides, not reflows. */
+  min-width: var(--editor-w);
+}
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.editor-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+/* face-pair tabs (mirror pair) just above the palette */
+.editor-facepair {
+  display: flex;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.editor-tab {
+  flex: 1;
+  padding: 7px 8px;
+  background: transparent;
+  border: none;
+  color: #9a9aa6;
+  font: inherit;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.editor-tab + .editor-tab {
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+.editor-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8e8ea;
+}
+.editor-tab.active {
+  background: #c77dd6;
+  color: #201025;
+  font-weight: 600;
+  cursor: default;
+}
+.editor-btn {
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #e8e8ea;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.editor-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.editor-btn-done {
+  background: #c77dd6;
+  border-color: #c77dd6;
+  color: #201025;
+  font-weight: 600;
+}
+.editor-badge {
+  font-size: 10px;
+  color: #e8c07a;
+  background: rgba(232, 192, 122, 0.1);
+  border: 1px solid rgba(232, 192, 122, 0.25);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+.editor-canvas-wrap {
+  position: relative;
+  align-self: center;
+  padding: 6px;
+}
+.editor-canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  /* checkerboard shows through transparent texels while editing */
+  background-color: #2a2a30;
+  background-image: linear-gradient(45deg, #3a3a42 25%, transparent 25%, transparent 75%, #3a3a42 75%),
+    linear-gradient(45deg, #3a3a42 25%, transparent 25%, transparent 75%, #3a3a42 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+  cursor: crosshair;
+  touch-action: none;
+}
+.editor-frontedge {
+  position: absolute;
+  background: #7ee787;
+  pointer-events: none;
+}
+.fe-left {
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+}
+.fe-right {
+  right: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+}
+.fe-top {
+  top: 0;
+  left: 6px;
+  right: 6px;
+  height: 3px;
+}
+.fe-bottom {
+  bottom: 0;
+  left: 6px;
+  right: 6px;
+  height: 3px;
+}
+.editor-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+}
+.editor-swatch {
+  aspect-ratio: 1;
+  border: 2px solid transparent;
+  border-radius: 5px;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.editor-swatch.active {
+  border-color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.editor-tile-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e8e8ea;
+  background: rgba(255, 255, 255, 0.08);
+}
+.editor-tile-transparent {
+  background-color: #2a2a30;
+  background-image: linear-gradient(45deg, #52525c 25%, transparent 25%, transparent 75%, #52525c 75%),
+    linear-gradient(45deg, #52525c 25%, transparent 25%, transparent 75%, #52525c 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 6px 6px;
+}
+.editor-brush {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 16px;
+}
+.editor-brush-sw {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.editor-brush-sw.is-transparent {
+  background-color: #2a2a30;
+  background-image: linear-gradient(45deg, #52525c 25%, transparent 25%, transparent 75%, #52525c 75%),
+    linear-gradient(45deg, #52525c 25%, transparent 25%, transparent 75%, #52525c 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
 }

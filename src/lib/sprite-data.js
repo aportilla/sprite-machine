@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Built-in samples + a grid -> ImageData helper. Both samples are 3x2 atlases
-// (RIGHT FRONT TOP / LEFT BACK BOTTOM), so they flow through the same atlas
+// (LEFT FRONT TOP / RIGHT BACK BOTTOM), so they flow through the same atlas
 // path as a user-dropped sheet.
 // ---------------------------------------------------------------------------
 
@@ -27,8 +27,8 @@ export function gridToImageData(rows, palette) {
 }
 
 // --- Cube: reference demo, generated as a 3x2 atlas of solid tiles ----------
-// Row 0: right(tan) front(magenta) top(teal). Row 1 blank -> mirror-X fills the
-// left, back/bottom fall back (matches the original reference cube).
+// Row 0: left(tan) front(magenta) top(teal). Row 1 blank -> mirror-X fills the
+// right, back/bottom fall back (matches the original reference cube).
 const CUBE_PAL = { T: [169, 220, 214], M: [199, 125, 214], N: [201, 184, 120] };
 
 function cubeAtlasImage() {
@@ -49,9 +49,9 @@ export const CUBE_SAMPLE = {
   atlas: { image: cubeAtlasImage() },
 };
 
-// --- Car: a real 40x40 3x2 atlas (RIGHT FRONT TOP / LEFT BACK BOTTOM) --------
-// A taxi drawn to the pipeline conventions -> no transforms. LEFT is left blank
-// and mirror-filled from RIGHT.
+// --- Car: a real 40x40 3x2 atlas (LEFT FRONT TOP / RIGHT BACK BOTTOM) --------
+// A taxi drawn to the pipeline conventions -> no transforms. RIGHT is left blank
+// and mirror-filled from LEFT.
 export const CAR_ATLAS_SAMPLE = {
   name: 'Car',
   atlas: { url: carAtlasUrl }, // layout + 40x40 tiles auto-derived from 120x80

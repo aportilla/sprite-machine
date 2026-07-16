@@ -11,8 +11,8 @@ import { VIEW_NAMES } from './views.js';
 
 // Grid of view names (row-major). null = an intentionally empty cell.
 export const DEFAULT_ATLAS_LAYOUT = [
-  ['right', 'front', 'top'],
-  ['left', 'back', 'bottom'],
+  ['left', 'front', 'top'],
+  ['right', 'back', 'bottom'],
 ];
 
 export function layoutSize(layout) {
@@ -107,4 +107,50 @@ export function sliceAtlas(img, opts = {}) {
     }
   }
   return { views, tileW, tileH, cols, rows, warnings };
+}
+
+/**
+ * Inverse of subTile: copy a tile's pixels into a sheet at (sx, sy), in place.
+ * Mutates `sheet.data` (does NOT change the ImageData identity, so a canonical
+ * `state.atlasImage` reference stays valid). Writes only within the tile's rect
+ * and clips to the sheet bounds, so remainder pixels of a non-divisible sheet
+ * are left untouched.
+ * @param {{width:number,height:number,data:Uint8ClampedArray|number[]}} sheet
+ * @param {{width:number,height:number,data:ArrayLike<number>}} tile
+ * @param {number} sx @param {number} sy
+ * @returns {{width:number,height:number,data:Uint8ClampedArray|number[]}}
+ */
+export function blitTile(sheet, tile, sx, sy) {
+  const { width: W, height: H } = sheet;
+  const { width: w, height: h, data: td } = tile;
+  for (let y = 0; y < h; y++) {
+    const dy = sy + y;
+    if (dy < 0 || dy >= H) continue;
+    for (let x = 0; x < w; x++) {
+      const dx = sx + x;
+      if (dx < 0 || dx >= W) continue;
+      const s = (y * w + x) * 4;
+      const d = (dy * W + dx) * 4;
+      sheet.data[d] = td[s];
+      sheet.data[d + 1] = td[s + 1];
+      sheet.data[d + 2] = td[s + 2];
+      sheet.data[d + 3] = td[s + 3];
+    }
+  }
+  return sheet;
+}
+
+/**
+ * Locate a view's grid cell in the layout without duplicating the layout scan.
+ * @param {string} name
+ * @param {string[][]} [layout]
+ * @returns {{r:number, c:number} | null}
+ */
+export function cellOf(name, layout = DEFAULT_ATLAS_LAYOUT) {
+  for (let r = 0; r < layout.length; r++) {
+    for (let c = 0; c < layout[r].length; c++) {
+      if (layout[r][c] === name) return { r, c };
+    }
+  }
+  return null;
 }

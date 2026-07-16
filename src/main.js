@@ -5,10 +5,12 @@ import { buildVoxels } from './lib/pipeline.js';
 import { voxelMesh } from './lib/mesh.js';
 import { wedgeMesh } from './lib/wedge-mesh.js';
 import { SAMPLES } from './lib/sprite-data.js';
-import { sliceAtlas } from './lib/atlas.js';
-import { VIEW_NAMES } from './lib/views.js';
-import { urlToImageData } from './image-io.js';
-import { createUI } from './ui.js';
+import { sliceAtlas, blitTile, cellOf } from './lib/atlas.js';
+import { VIEW_NAMES, VIEW_OPPOSITE, VIEW_MIRROR_AXIS, VIEW_FRONT_EDGE } from './lib/views.js';
+import { PENCIL_PALETTE } from './lib/constants.js';
+import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
+import { createUI, mirrorImage } from './ui.js';
+import { createTileEditor } from './editor.js';
 
 // --------------------------------------------------------------------------
 // Scene
@@ -56,12 +58,18 @@ scene.add(ground);
 // State + rebuild
 // --------------------------------------------------------------------------
 const state = {
-  views: {}, // name -> ImageData | null
+  views: {}, // name -> {width,height,data} | null
   lowpoly: true, // additive 45° wedges over same-color staircases (default on)
   transforms: {}, // per-view reorientation (rot/flip)
   autoRotate: true,
-  atlasImage: null, // the current sprite sheet (ImageData)
+  atlasImage: null, // the current sprite sheet (ImageData) — canonical source
   atlasWarnings: [],
+  // Rounded tile geometry from the last sliceAtlas — the editor writes tiles back
+  // into atlasImage using these, so it must never re-derive them from dimensions.
+  tileW: 0,
+  tileH: 0,
+  cols: 0,
+  rows: 0,
 };
 
 let current = null; // THREE.Object3D in the scene
@@ -72,6 +80,9 @@ const params = new URLSearchParams(location.search);
 const FLAT = params.get('flat') === '1';
 const DIAG = params.get('diag') === '1';
 const RENDER_SCALE = 0.5; // low-res render, crisply upscaled by CSS
+// Dev hook: ?edit=<view> auto-opens the tile editor on that face after the first
+// build (handy for screenshots / the manual test checklist).
+let pendingEditFace = null;
 
 const camParam = params.get('cam');
 const ISO_DIR = new THREE.Vector3(
@@ -91,6 +102,12 @@ function frameObject(obj) {
 function rebuild() {
   const opts = { transforms: state.transforms };
   const provided = VIEW_NAMES.filter((n) => state.views[n]);
+
+  // Carry the spin forward: a live tile edit (or an option toggle) rebuilds the
+  // mesh in place, and a fresh mesh starts at rotation 0 — without this the
+  // auto-rotate angle would visibly snap to 0 on every stroke. Framed rebuilds
+  // (sample/atlas load) skip this and start fresh.
+  const prevRotY = current ? current.rotation.y : null;
 
   if (current) {
     scene.remove(current);
@@ -134,6 +151,8 @@ function rebuild() {
   if (frameNext) {
     frameObject(current);
     frameNext = false;
+  } else if (prevRotY != null) {
+    current.rotation.y = prevRotY;
   }
   ui.setStats(stats);
 }
@@ -141,14 +160,150 @@ function rebuild() {
 // Slice the current atlas into face views (with the current tile size) and build.
 function sliceAndBuild(reframe) {
   if (!state.atlasImage) return;
+  // A new sheet replaces every view wholesale, so any open editor is now stale.
+  exitDrawing();
   const sliced = sliceAtlas(state.atlasImage);
   state.views = sliced.views;
   state.atlasWarnings = sliced.warnings;
+  state.tileW = sliced.tileW;
+  state.tileH = sliced.tileH;
+  state.cols = sliced.cols;
+  state.rows = sliced.rows;
   if (reframe) frameNext = true;
-  ui.setAtlasPreview(state.atlasImage);
   ui.setAtlasInfo(sliced);
   ui.setThumbnails(sliced.views);
   rebuild();
+  if (pendingEditFace) {
+    const f = pendingEditFace;
+    pendingEditFace = null;
+    enterDrawing(f);
+  }
+}
+
+// --------------------------------------------------------------------------
+// Tile editor wiring (see docs/drawing-editor-plan.md)
+// --------------------------------------------------------------------------
+const isAllTransparent = (tile) => {
+  const d = tile.data;
+  for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return false;
+  return true;
+};
+
+// Coalesce live edits to at most one voxel rebuild per animation frame. The
+// editor's own 2D canvas repaints per pixel; only the (heavier) blit + preview +
+// mesh rebuild is throttled here.
+let liveRAF = 0;
+let livePending = null; // { name, tile } awaiting flush
+function flushLive() {
+  liveRAF = 0;
+  const p = livePending;
+  livePending = null;
+  if (!p) return;
+  const cell = cellOf(p.name);
+  if (cell && state.atlasImage) {
+    blitTile(state.atlasImage, p.tile, cell.c * state.tileW, cell.r * state.tileH);
+  }
+  ui.setThumbnails(state.views);
+  rebuild();
+}
+
+// Apply one live/committed tile edit. `wasDerived` = the face had no independent
+// art when the editor opened; if the user drew nothing (`!dirty`) it stays that
+// way (mirror-derived or empty). Otherwise the working buffer becomes the face's
+// real art — or null again if fully erased, reverting it to mirror-derived.
+function applyTileEdit(name, wasDerived, tile, dirty) {
+  if (wasDerived && !dirty) return; // untouched derived/empty face: leave as-is
+  state.views[name] = isAllTransparent(tile) ? null : tile;
+  livePending = { name, tile };
+  if (!liveRAF) liveRAF = requestAnimationFrame(flushLive);
+}
+
+// --- drawing-mode session -------------------------------------------------
+// The editor is docked in the sidebar (not modal); the 3D view stays live. The
+// brush selection is shared so it survives a mirror-partner face swap.
+const brush = { mode: 'pencil', color: null, swatchIndex: 0 };
+let currentEditor = null;
+let editingName = null;
+
+// Canonical mirror-pair ordering for the face tabs (primary face first), so the
+// pill always reads [front|back] / [left|right] / [top|bottom] whichever is open.
+const FACE_PRIMARY = new Set(['front', 'left', 'top']);
+const facePair = (n) => {
+  const opp = VIEW_OPPOSITE[n];
+  return FACE_PRIMARY.has(n) ? [n, opp] : [opp, n];
+};
+
+const freshTile = () => ({
+  width: state.tileW,
+  height: state.tileH,
+  data: new Uint8ClampedArray(state.tileW * state.tileH * 4),
+});
+
+function mountEditor(name) {
+  if (currentEditor) {
+    currentEditor.destroy();
+    currentEditor = null;
+  }
+  const existing = state.views[name] || null;
+  const wasDerived = existing == null;
+  // For a derived face, seed the canvas with the mirrored opposite (exactly what
+  // the thumbnail shows) so editing refines from there rather than a blank.
+  let seedMirror = null;
+  if (wasDerived) {
+    const opp = state.views[VIEW_OPPOSITE[name]];
+    if (opp) seedMirror = mirrorImage(opp, VIEW_MIRROR_AXIS[name]);
+  }
+  editingName = name;
+  currentEditor = createTileEditor(ui.editorDock, {
+    name,
+    tile: existing || freshTile(),
+    tileW: state.tileW,
+    tileH: state.tileH,
+    palette: PENCIL_PALETTE,
+    frontEdge: VIEW_FRONT_EDGE[name],
+    seedMirror,
+    pair: facePair(name),
+    brush,
+    onLive: (working, dirty) => applyTileEdit(name, wasDerived, working, dirty),
+    onSelectFace: (target) => enterDrawing(target),
+    onClose: () => exitDrawing(),
+  });
+  ui.setActiveFace(name);
+}
+
+// Clicking a face tile enters (or, if already editing, switches to) drawing mode.
+function enterDrawing(name) {
+  if (!state.atlasImage || !state.tileW || !state.tileH) return;
+  ui.setDrawingMode(true);
+  mountEditor(name);
+}
+
+function exitDrawing() {
+  if (currentEditor) {
+    currentEditor.destroy();
+    currentEditor = null;
+  }
+  // Drop any pending live rebuild so a stale tile can't blit into a freshly
+  // loaded atlas (which may have a different tile size) on the next frame.
+  if (liveRAF) {
+    cancelAnimationFrame(liveRAF);
+    liveRAF = 0;
+  }
+  livePending = null;
+  editingName = null;
+  ui.setDrawingMode(false);
+  ui.setActiveFace(null);
+}
+
+function onTileEdit(name) {
+  enterDrawing(name);
+}
+
+function onDownload() {
+  if (!state.atlasImage) return;
+  imageDataToBlob(state.atlasImage)
+    .then((b) => downloadBlob(b, 'atlas.png'))
+    .catch((err) => ui.setError(`Download failed: ${err.message}`));
 }
 
 // --------------------------------------------------------------------------
@@ -174,6 +329,8 @@ const ui = createUI({
     sliceAndBuild(true);
   },
   onOptionChange: () => rebuild(),
+  onTileEdit,
+  onDownload,
 });
 
 // --------------------------------------------------------------------------
@@ -196,6 +353,12 @@ function resize() {
   }
 }
 window.addEventListener('resize', resize);
+// The viewport is a flex child: entering drawing mode widens the sidebar and
+// shrinks it. Observe its box directly so the render buffer + camera aspect stay
+// correct without a window resize event.
+if (typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(() => resize()).observe(canvas);
+}
 
 function tick() {
   if (state.autoRotate && current) current.rotation.y += 0.006;
@@ -207,6 +370,8 @@ function tick() {
 // Boot with a sample (?sample=<index|name> overrides, handy for testing).
 if (params.get('lowpoly') != null) state.lowpoly = params.get('lowpoly') === '1';
 if (params.get('rotate') === '0') state.autoRotate = false;
+const editParam = params.get('edit');
+if (editParam && VIEW_NAMES.includes(editParam)) pendingEditFace = editParam;
 const q = params.get('sample');
 let startIndex = 0;
 if (q != null) {

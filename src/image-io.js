@@ -20,3 +20,40 @@ export async function urlToImageData(url) {
   if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
   return bitmapToImageData(await createImageBitmap(await res.blob()));
 }
+
+// Encode an ImageData (or plain {width,height,data}) to a PNG Blob. The
+// wrap-if-plain guard mirrors ui.js's drawPixels so a pipeline tile object works
+// as well as a real ImageData.
+export function imageDataToBlob(imageData) {
+  const id =
+    imageData instanceof ImageData
+      ? imageData
+      : new ImageData(
+          new Uint8ClampedArray(imageData.data),
+          imageData.width,
+          imageData.height
+        );
+  const c = document.createElement('canvas');
+  c.width = id.width;
+  c.height = id.height;
+  c.getContext('2d').putImageData(id, 0, 0);
+  return new Promise((resolve, reject) => {
+    c.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('canvas toBlob returned null'))),
+      'image/png'
+    );
+  });
+}
+
+// Trigger a browser download of a Blob under the given filename via a transient
+// <a download>, revoking the object URL afterwards so nothing leaks.
+export function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

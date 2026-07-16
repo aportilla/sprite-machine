@@ -60,9 +60,9 @@ test('solid cube: top=teal, +x=tan, +z=magenta, mirrored -x=tan', () => {
   assert.deepEqual(r.dims, { nx: 3, ny: 3, nz: 3 });
   assert.equal(r.solidCount, 27);
   assert.equal(colorOf(r, 1, 2, 1, 'py'), pk('T')); // top face teal
-  assert.equal(colorOf(r, 2, 1, 1, 'px'), pk('N')); // +x face tan
+  assert.equal(colorOf(r, 2, 1, 1, 'px'), pk('N')); // +x face tan (mirror of right)
   assert.equal(colorOf(r, 1, 1, 2, 'pz'), pk('M')); // +z face magenta
-  assert.equal(colorOf(r, 0, 1, 1, 'nx'), pk('N')); // -x mirrored from right
+  assert.equal(colorOf(r, 0, 1, 1, 'nx'), pk('N')); // -x face tan (from the right tile)
 });
 
 // --- 2. Non-cube slab: depth comes from the SIDE width ----------------------
@@ -135,8 +135,8 @@ test('asymmetric sides are not fabricated when mirror is off', () => {
     { front: fill(1, 1, 'R'), right: fill(1, 1, 'N'), left: fill(1, 1, 'M') },
     { mirror: { x: false, y: false, z: false } }
   );
-  assert.equal(colorOf(r, 0, 0, 0, 'px'), pk('N')); // +x from right
-  assert.equal(colorOf(r, 0, 0, 0, 'nx'), pk('M')); // -x from left (its own art)
+  assert.equal(colorOf(r, 0, 0, 0, 'px'), pk('M')); // +x from left (reads as left profile)
+  assert.equal(colorOf(r, 0, 0, 0, 'nx'), pk('N')); // -x from right (its own art)
 });
 
 // --- 5. Phantom-block trap: convex over-approx, still fully colored ----------
@@ -174,7 +174,7 @@ function mockAtlas() {
   const W = 6, H = 4;
   const data = new Uint8ClampedArray(W * H * 4);
   const cellColor = {
-    // [col,row] -> [r,g,b] ; row1col0 (left) left transparent
+    // [col,row] -> [r,g,b] ; row1col0 (right) left transparent
     '0,0': [10, 0, 0], '1,0': [20, 0, 0], '2,0': [30, 0, 0],
     '1,1': [40, 0, 0], '2,1': [50, 0, 0],
   };
@@ -199,13 +199,13 @@ test('atlas: tile size auto-derived and cells mapped to named views', () => {
 
   const { views, warnings } = sliceAtlas(mockAtlas());
   assert.equal(warnings.length, 0);
-  // layout: right front top / left back bottom
-  assert.equal(views.right.data[0], 10);
+  // layout: left front top / right back bottom
+  assert.equal(views.left.data[0], 10);
   assert.equal(views.front.data[0], 20);
   assert.equal(views.top.data[0], 30);
   assert.equal(views.back.data[0], 40);
   assert.equal(views.bottom.data[0], 50);
-  assert.equal(views.left, null); // blank cell -> null
+  assert.equal(views.right, null); // blank cell -> null
 });
 
 test('applyTransform rot:1 rotates 90deg CW (left column -> top row)', () => {
@@ -290,10 +290,10 @@ test('TOP/BOTTOM view: object front pins to the top/bottom image row', () => {
   assert.equal(VIEWS.bottom.project(0, 0, 0, d).v, 0);
 });
 
-test('RIGHT view: object front pins to the left image column', () => {
+test('LEFT view: object front pins to the left image column', () => {
   const d = { nx: 4, ny: 3, nz: 5 };
-  assert.equal(VIEWS.right.project(0, 0, d.nz - 1, d).u, 0); // front -> left col
-  assert.equal(VIEWS.right.project(0, 0, 0, d).u, d.nz - 1); // back  -> right col
+  assert.equal(VIEWS.left.project(0, 0, d.nz - 1, d).u, 0); // front -> left col
+  assert.equal(VIEWS.left.project(0, 0, 0, d).u, d.nz - 1); // back  -> right col
 });
 
 // The UI marks the object's front edge on each face thumbnail. Pin that marker

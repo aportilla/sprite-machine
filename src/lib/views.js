@@ -23,8 +23,8 @@
 
 // Human-facing view names <-> face normals.
 export const VIEW_TO_FACE = {
-  right: 'px',
-  left: 'nx',
+  right: 'nx',
+  left: 'px',
   top: 'py',
   bottom: 'ny',
   front: 'pz',
@@ -86,10 +86,12 @@ export const VIEWS = {
     imgH: (d) => d.ny,
     project: (x, y, z, d) => ({ u: d.nx - 1 - x, v: d.ny - 1 - y }),
   },
-  // RIGHT: looks toward -x from +x. Sees +x face. Image = Z by Y.
-  // Standing at +x looking -x with up=+y, the front of the object (+z) is on
-  // the viewer's LEFT, so u = nz-1-z puts front-facing art at the left column.
-  right: {
+  // LEFT: the atlas tile drawn as the object's LEFT side. It colors the +x face
+  // — viewed straight-on from +x that face reads as a left-side profile, so the
+  // *tile* is named by how it reads (a deliberate labeling choice; see README),
+  // not by the world axis it happens to occupy. Image = Z by Y. u = nz-1-z puts
+  // the object's front (+z) at the left column, matching a nose-left profile.
+  left: {
     face: 'px',
     axis: 'x',
     step: -1,
@@ -98,8 +100,9 @@ export const VIEWS = {
     imgH: (d) => d.ny,
     project: (x, y, z, d) => ({ u: d.nz - 1 - z, v: d.ny - 1 - y }),
   },
-  // LEFT: looks toward +x from -x. Sees -x face. Mirror of right along z.
-  left: {
+  // RIGHT: the object's RIGHT side; colors the -x face, which reads as a
+  // right-side profile. Mirror of left along z — u = z puts front at the right column.
+  right: {
     face: 'nx',
     axis: 'x',
     step: 1,
@@ -136,17 +139,17 @@ export const VIEW_NAMES = Object.keys(VIEWS);
 
 // The six view names in the order the UI's face-preview grid lays them out
 // (a 3x2 arrangement). Matches the atlas layout (atlas.js DEFAULT_ATLAS_LAYOUT:
-// RIGHT FRONT TOP / LEFT BACK BOTTOM) so the preview reads like the sheet.
-export const VIEW_DISPLAY_ORDER = ['right', 'front', 'top', 'left', 'back', 'bottom'];
+// LEFT FRONT TOP / RIGHT BACK BOTTOM) so the preview reads like the sheet.
+export const VIEW_DISPLAY_ORDER = ['left', 'front', 'top', 'right', 'back', 'bottom'];
 
 // Which image edge of a view's tile the object's FRONT (+z, the "nose") points
 // toward — used by the UI to mark orientation on each face thumbnail. Derived
-// from the projections in VIEWS: e.g. in RIGHT, front (z=nz-1) maps to u=0, the
+// from the projections in VIEWS: e.g. in LEFT, front (z=nz-1) maps to u=0, the
 // left column. FRONT/BACK look straight down +z/-z, so their nose points out of
 // / into the screen — there is no in-plane front edge (null).
 export const VIEW_FRONT_EDGE = {
-  right: 'left',
-  left: 'right',
+  right: 'right',
+  left: 'left',
   top: 'top',
   bottom: 'bottom',
   front: null,

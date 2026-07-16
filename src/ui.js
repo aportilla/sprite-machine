@@ -1,9 +1,8 @@
 // ---------------------------------------------------------------------------
-// UI panel: sample picker, a single atlas dropzone, a read-only preview of the
-// faces we actually render (laid out like the sheet — provided tiles plus the
-// mirror-derived ones, with the object's front edge marked beside each), and
-// low-poly / auto-rotate toggles plus a live stats readout. Pure DOM; talks to
-// main.js via callbacks.
+// UI: the left sidebar panel (sample picker, atlas pick button, an editable face
+// preview laid out like the sheet, low-poly / auto-rotate toggles, live stats)
+// plus a docked slot below it for the inline tile editor. The whole app window is
+// a drop target for sprite sheets. Pure DOM; talks to main.js via callbacks.
 // ---------------------------------------------------------------------------
 
 import { fileToImageData } from './image-io.js';
@@ -55,7 +54,9 @@ function drawPixels(canvas, img, boxW, boxH) {
 
 // Mirror a tile for display (an axis-flip in image space), so a mirror-derived
 // face shows the way we actually render it. `axis` is 'x' (horizontal) or 'y'.
-function mirrorImage(img, axis) {
+// Exported so main.js can seed the tile editor's canvas with the same mirrored
+// image the thumbnail shows.
+export function mirrorImage(img, axis) {
   const { width: W, height: H, data } = img;
   const out = new Uint8ClampedArray(W * H * 4);
   for (let y = 0; y < H; y++) {
@@ -92,10 +93,27 @@ function drawFrontEdge(canvas, edge, rect) {
   else if (edge === 'bottom') g.fillRect(ox, Math.min(H - T, oy + h + GAP), w, T);
 }
 
-export function createUI({ samples, state, onSample, onAtlas, onOptionChange }) {
+const dragHasFiles = (e) =>
+  !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+
+export function createUI({
+  samples,
+  state,
+  onSample,
+  onAtlas,
+  onOptionChange,
+  onTileEdit,
+  onDownload,
+}) {
   const app = document.getElementById('app');
+  const sidebar = document.getElementById('sidebar');
   const panel = el('div', 'panel');
-  app.appendChild(panel);
+  sidebar.appendChild(panel);
+
+  // Whole-app drop overlay (shown while a file is dragged anywhere over the app).
+  const dropOverlay = el('div', 'drop-overlay');
+  dropOverlay.appendChild(el('div', 'drop-overlay-msg', 'drop a sprite sheet to load'));
+  app.appendChild(dropOverlay);
 
   panel.appendChild(el('div', 'panel-title', 'sprite machine'));
   panel.appendChild(el('div', 'panel-sub', 'pixel atlas → 3D voxel object'));
@@ -112,19 +130,12 @@ export function createUI({ samples, state, onSample, onAtlas, onOptionChange }) 
   });
   panel.appendChild(sampleRow);
 
-  // --- atlas dropzone (section label carries the derived tile size) ---------
+  // --- atlas (pick button + download; the whole app is a drop target) --------
   const atlasLabel = el('div', 'label label-row');
-  atlasLabel.appendChild(el('span', null, 'atlas dropzone'));
+  atlasLabel.appendChild(el('span', null, 'atlas'));
   const tileText = el('span', 'tile-val', '—');
   atlasLabel.appendChild(tileText);
   panel.appendChild(atlasLabel);
-
-  const drop = el('div', 'dropzone');
-  const dropCanvas = el('canvas', 'atlas-preview');
-  dropCanvas.width = 204;
-  dropCanvas.height = 96;
-  const dropHint = el('div', 'drop-hint', 'drag a sprite sheet here, or click');
-  drop.append(dropCanvas, dropHint);
 
   const fileInput = el('input');
   fileInput.type = 'file';
@@ -135,19 +146,14 @@ export function createUI({ samples, state, onSample, onAtlas, onOptionChange }) 
     fileInput.value = '';
     if (f) await loadFile(f);
   };
-  drop.appendChild(fileInput);
-  drop.onclick = () => fileInput.click();
-  drop.ondragover = (e) => {
-    e.preventDefault();
-    drop.classList.add('drag');
-  };
-  drop.ondragleave = () => drop.classList.remove('drag');
-  drop.ondrop = async (e) => {
-    e.preventDefault();
-    drop.classList.remove('drag');
-    const f = e.dataTransfer.files[0];
-    if (f) await loadFile(f);
-  };
+  const atlasRow = el('div', 'row');
+  const pickBtn = el('button', 'chip', 'pick atlas…');
+  pickBtn.onclick = () => fileInput.click();
+  const dlBtn = el('button', 'chip', 'download');
+  dlBtn.onclick = () => onDownload?.();
+  atlasRow.append(pickBtn, dlBtn);
+  panel.append(fileInput, atlasRow);
+  panel.appendChild(el('div', 'tiny hint', 'or drop a sprite sheet anywhere'));
 
   // Decode a dropped/picked file, surfacing failures instead of swallowing them
   // as an unhandled promise rejection (bad/corrupt images just no-op otherwise).
@@ -158,17 +164,42 @@ export function createUI({ samples, state, onSample, onAtlas, onOptionChange }) 
       setError(`Couldn't read "${f.name}" as an image: ${err.message}`);
     }
   }
-  panel.appendChild(drop);
 
-  // --- read-only face preview (laid out like the sheet) --------------------
+  // Whole-app drag & drop. A depth counter keeps the overlay stable as the drag
+  // crosses child elements (dragenter/leave bubble from every descendant).
+  let dragDepth = 0;
+  app.addEventListener('dragenter', (e) => {
+    if (!dragHasFiles(e)) return;
+    e.preventDefault();
+    dragDepth++;
+    app.classList.add('app-drag');
+  });
+  app.addEventListener('dragover', (e) => {
+    if (dragHasFiles(e)) e.preventDefault();
+  });
+  app.addEventListener('dragleave', () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) app.classList.remove('app-drag');
+  });
+  app.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    app.classList.remove('app-drag');
+    const f = e.dataTransfer?.files?.[0];
+    if (f) await loadFile(f);
+  });
+
+  // --- editable face preview (laid out like the sheet; click a tile to edit) -
   panel.appendChild(el('div', 'label', 'faces'));
   const slotGrid = el('div', 'slots');
   const slotEls = {};
   for (const name of SLOT_ORDER) {
-    const slot = el('div', 'slot ro');
+    const slot = el('div', 'slot');
     const cv = el('canvas', 'thumb');
     cv.width = cv.height = THUMB;
     slot.append(cv, el('div', 'slot-cap', name));
+    slot.title = `edit ${name}`;
+    slot.onclick = () => onTileEdit?.(name);
     slotGrid.appendChild(slot);
     slotEls[name] = { slot, cv };
   }
@@ -204,6 +235,9 @@ export function createUI({ samples, state, onSample, onAtlas, onOptionChange }) 
   const stats = el('div', 'stats');
   panel.appendChild(stats);
 
+  // --- editor panel (the right-side sidebar; populated by main.js on edit) ----
+  const editorDock = document.getElementById('editor-panel');
+
   // --- methods --------------------------------------------------------------
   function selectSample(i) {
     sampleBtns.forEach((b, j) => b.classList.toggle('active', j === i));
@@ -213,11 +247,6 @@ export function createUI({ samples, state, onSample, onAtlas, onOptionChange }) 
   function syncControls() {
     lowpoly.checked = state.lowpoly;
     rot.checked = state.autoRotate;
-  }
-
-  function setAtlasPreview(img) {
-    drawPixels(dropCanvas, img, dropCanvas.width - 8, dropCanvas.height - 8);
-    dropHint.style.display = img ? 'none' : 'block';
   }
 
   function setAtlasInfo({ tileW: tw, tileH: th }) {
@@ -265,13 +294,26 @@ export function createUI({ samples, state, onSample, onAtlas, onOptionChange }) 
     stats.appendChild(el('div', 'warn', '⚠ ' + msg));
   }
 
+  // Enter/leave drawing mode: slide the right-side editor panel open/closed (the
+  // 3D viewport flexes to make room).
+  function setDrawingMode(on) {
+    editorDock.classList.toggle('open', !!on);
+  }
+
+  // Highlight the face currently open in the editor (null clears it).
+  function setActiveFace(name) {
+    for (const n of SLOT_ORDER) slotEls[n].slot.classList.toggle('editing', n === name);
+  }
+
   return {
     selectSample,
     syncControls,
     setThumbnails,
     setStats,
     setError,
-    setAtlasPreview,
     setAtlasInfo,
+    editorDock,
+    setDrawingMode,
+    setActiveFace,
   };
 }

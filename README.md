@@ -9,15 +9,17 @@ geometry, not faked by a shader.
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # pipeline + wedge-mesh correctness (node --test)
+npm test         # pipeline + wedge-mesh + atlas round-trip (node --test)
 npm run build    # static bundle in dist/
 ```
 
-Drop a **3×2 sprite sheet** onto the atlas zone, or pick a built-in sample.
-**Low-poly** (additive 45° wedges) is on by default and toggles live; greedy
-meshing is always on. Sprites are hard pixel art — every texel is fully opaque
-or fully transparent — and every face with no view of its own is mirror-filled
-from its opposite (and shown, derived, in the faces preview).
+**Pick a built-in sample**, or load your own **3×2 sprite sheet** — click *pick
+atlas…* or drop a PNG anywhere on the window. **Low-poly** (additive 45° wedges)
+is on by default and toggles live; greedy meshing is always on. Sprites are hard
+pixel art — every texel is fully opaque or fully transparent — and every face
+with no view of its own is mirror-filled from its opposite (and shown, derived,
+in the faces preview). Click any face in that preview to **edit its pixels
+in-app** — see [Drawing editor](#drawing-editor).
 
 ## Input: a 3×2 atlas
 
@@ -25,8 +27,8 @@ One sheet, six tiles, in this fixed layout (empty cells are fine — they fall b
 to mirroring):
 
 ```
-RIGHT  FRONT  TOP
-LEFT   BACK   BOTTOM
+LEFT   FRONT  TOP
+RIGHT  BACK   BOTTOM
 ```
 
 The **tile size is auto-derived** from the image dimensions and the grid (a
@@ -39,8 +41,8 @@ draw each tile this way for a zero-transform ingest:
 | Tile | Draw as… | Front points | Size |
 |---|---|---|---|
 | FRONT / BACK | head-on / from behind, upright | — | width × height |
-| RIGHT | the right side | left | depth × height |
-| LEFT | the left side | right | depth × height |
+| RIGHT | the right side | right | depth × height |
+| LEFT | the left side | left | depth × height |
 | TOP | plan view, width horizontal | top edge | width × depth |
 | BOTTOM | plan from below, width horizontal | bottom edge | width × depth |
 
@@ -48,6 +50,36 @@ The UI's **faces** preview lays the sliced tiles out like the sheet and marks
 this **Front points** edge in green on each thumbnail, so a mis-oriented tile is
 obvious at a glance. Per-tile `rot`/`flip` transforms exist in the pipeline for
 sheets that don't follow the convention.
+
+## Drawing editor
+
+Click any tile in the **faces** preview to open an in-app pixel editor in a
+right-side panel; the 3D view stays live beside it and rebuilds as you draw.
+
+- **Palette** — a fixed **DB16** ramp (16 colors) plus an **eyedropper** (sample
+  a color straight from the sprite) and a **transparent** tile (erase). Every
+  stroke is hard-pixel: fully opaque or fully erased, never anti-aliased.
+- **Mirror-pair tabs** — a `[front|back]` / `[left|right]` / `[top|bottom]` pill
+  under the canvas switches which face of the pair you're editing, so you can flip
+  back and forth for reference. A **mirror-derived** face opens seeded with the
+  mirrored opposite (exactly what its thumbnail shows) and only becomes its own
+  independent art once you actually change a pixel — open-and-close leaves it
+  derived, and erasing it fully reverts it to derived.
+- **Live + canonical** — edits write straight back into the current sheet, so the
+  **download** button saves the edited atlas as `atlas.png`, and the model
+  rebuilds (rAF-debounced) with no camera jump.
+
+Drawn pixels are **not** 1:1 with voxels: `buildVoxels` still auto-crops each view
+and resamples disagreeing axes up to the reconciled grid, so a face drawn wider
+than its opposite rescales along that axis. The editor is pure authoring — no
+changes to the carve / colorize / mesh pipeline. See `src/editor.js`.
+
+**Dev hook:** append `?edit=<face>` (e.g. `?edit=front`) to open the editor on
+that face right after the first build. It's how the editor gets exercised in
+headless screenshots (the capture tool can't click), and it's handy for jumping
+straight to a face while iterating. It joins the other test-only URL params:
+`?sample=<index|name>`, `?rotate=0`, `?lowpoly=0|1`, `?flat=1`, `?diag=1`
+(watertightness self-check), and `?cam=top|front|fq|bq`.
 
 ---
 
@@ -117,13 +149,13 @@ its color from that shared material. See `src/lib/wedge-mesh.js`.
 Not every face has to be drawn. **Mirror-fill is always on for all three axes:**
 a surface face with no view of its own takes its color from the mirrored
 opposite view, so a half-drawn sheet still colors every face — both built-in
-samples ship only RIGHT/FRONT/TOP and mirror-fill LEFT/BACK/BOTTOM. Mirroring is
+samples ship only LEFT/FRONT/TOP and mirror-fill RIGHT/BACK/BOTTOM. Mirroring is
 a *coloring* step; an axis with no view at all (neither side) is simply
 unconstrained for carving — the shape fills to the bounding box there and warns.
 
 ### Coordinate conventions
 
-World: `+x` right, `+y` up, `+z` toward the camera/front. In a **side (right)**
+World: `+x` right, `+y` up, `+z` toward the camera/front. In a **side (left)**
 sprite the object's front is the left column; in a **top** sprite the front is
 the top row. See `src/lib/views.js` for all six projection mappings.
 
@@ -134,13 +166,15 @@ the top row. See `src/lib/views.js` for all six projection mappings.
 The whole grid pipeline is **pure typed-array code — no THREE, no DOM** — so it's
 verified in Node (`test/pipeline.test.mjs`), including the depth-smear regression
 and asymmetric-face coloring. A companion `test/wedge-mesh.test.mjs` loads THREE
-to gate the low-poly wedge engine (the Helium canvas-farbling regression).
+to gate the low-poly wedge engine (the Helium canvas-farbling regression), and
+`test/atlas.test.mjs` locks the tile write-back inverse (slice → `blitTile`
+round-trip) that the drawing editor depends on.
 
 ```
 src/lib/
-  constants.js    shared default mirror (all-on) / world-size (pure)
+  constants.js    default mirror (all-on) / world-size + DB16 pencil palette (pure)
   views.js        6 view definitions: normals, axes, projections, front-edge meta
-  atlas.js        slice a 3x2 sheet -> named face tiles, auto tile size (pure)
+  atlas.js        slice a 3x2 sheet <-> face tiles: blitTile write-back, cellOf (pure)
   ingest.js       sprite -> occupancy/color arrays, auto-crop, resample, reorient
   carve.js        dim reconciliation, visual-hull AND, surface extraction
   colorize.js     depth-aware first-hit surface coloring + palette snap
@@ -153,9 +187,10 @@ src/lib/
   sprite-data.js  built-in samples (as atlases) + grid->ImageData helper
   diag.js         geometry watertightness self-check (dev only; ?diag=1)
 src/
-  main.js         scene, lights, shadowed ground, framing, render loop
-  ui.js           control panel: samples, atlas dropzone, options, stats
-  image-io.js     File/URL -> ImageData decoding (browser)
+  main.js         scene, lights, ground, framing, render loop + drawing-editor wiring
+  ui.js           left panel: samples, pick/drop atlas, clickable faces, options, stats
+  editor.js       inline tile editor (right panel): DB16 palette, eyedropper/eraser, mirror tabs
+  image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
 ```
 
 ## Known limitations & next steps

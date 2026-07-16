@@ -141,7 +141,9 @@ test('a real material seam still gates wedges (tolerance is not too loose)', () 
 // facing-view elevation dropped a step at each band edge: white-cap 6/9, band 3/9.)
 const WP = { '#': [255, 255, 255], O: [233, 23, 241] }; // white body + pink band
 const stair = (frontRows, topRows) => ({
-  right: img(['   ###', '  ####', ' #####', '######'], WP), // all-white step profile
+  // Side profile in LEFT (its projection matches the z-order the topRows below
+  // were authored against); all-white step profile.
+  left: img(['   ###', '  ####', ' #####', '######'], WP),
   front: img(frontRows, WP),
   top: img(topRows, WP),
 });
