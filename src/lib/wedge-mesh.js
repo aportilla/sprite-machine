@@ -162,7 +162,17 @@ export function wedgeMesh(result, opts = {}) {
                 if (!inBounds(ox, oy, oz)) break;
                 if (solidAt(ox, oy, oz)) occ = true;
               }
-              const boundary = fUp != null && fLo != null && !sameMat(fUp, fLo) && !occ;
+              // The facing veto samples each step's facing-view PIXEL, but the
+              // lower step's pixel is the front elevation at that height — which
+              // can belong to a *different* lower step (a pink riser under a white
+              // cap), not the face this wedge covers. So a facing mismatch is only
+              // a real boundary when the two faces the wedge actually TOUCHES
+              // (cA, cB) also disagree; otherwise it's one coherent surface
+              // crossing a colour band in the elevation and must still wedge (a
+              // monochrome staircase would else drop the step at every band edge).
+              const boundary =
+                fUp != null && fLo != null && !sameMat(fUp, fLo) && !occ &&
+                !sameMat(cA, cB);
               if (!flat && !(profileOk && !boundary)) continue;
               wedgeCell.set(cidx, { R, A, B, sA, sB });
               removed.add(aKey);

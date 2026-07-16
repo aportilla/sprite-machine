@@ -110,13 +110,24 @@ not the voxel face colours. Per candidate:
    *along* the ridge (a roof/window edge) — the profile view reads both sides as
    the white pillar there, so it can't see it. If the two steps differ in the
    facing view AND the lower step isn't occluded, it's a real boundary ⇒ skip.
+   **Guard (the "third-face" fix):** this veto also requires the two faces the
+   wedge actually *covers* (cA, cB) to differ. The facing view samples each
+   step's elevation *pixel*, and the lower step's pixel can belong to a
+   *different* lower step (a pink riser under a white cap) — a face the wedge
+   never touches. Without the guard, a monochrome staircase crossing a colour
+   band in its elevation drops the step at every band edge (white-cap stair kept
+   6/9 wedges, pink-band stair 3/9). With it, the count is band-invariant and the
+   car is untouched (roof/window still white≠teal ⇒ still sharp). Regression:
+   `test/wedge-mesh.test.mjs` "monochrome staircase … regardless of … colour band".
 3. Colour the wedge from its **riser face** (the surface's true colour, e.g.
    teal glass; the profile view would give the white pillar).
 
 ### Colour-gate dead ends (don't repeat these)
-- ❌ **strict same-colour on the two covered faces** — a slope's up-facing tread
-  is coloured by the TOP view (white), so riser(teal)≠tread(white) → glass never
-  fills, yet a tyre(dark)/tread(white) looks identical → can't separate them.
+- ❌ **strict same-colour on the two covered faces** (as the *primary* gate) — a
+  slope's up-facing tread is coloured by the TOP view (white), so
+  riser(teal)≠tread(white) → glass never fills; measured -44 windshield wedges on
+  the Car (220→176). It only works as a *guard* on the facing veto (step 2), not
+  as the fire condition — the profile view stays primary.
 - ❌ **no gate** — fills all glass but bridges tyre↔body and roof↔window (blobs).
 - ❌ **facing-view sample of the two steps** — the hood occludes the lower
   windshield steps → they read white → glass steps at the bottom / rear.

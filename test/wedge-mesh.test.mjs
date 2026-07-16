@@ -84,3 +84,29 @@ test('a real material seam still gates wedges (tolerance is not too loose)', () 
     'a real seam must yield fewer wedges than a coherent ramp'
   );
 });
+
+// A 3-wide, 3-step staircase whose every face is one solid material (white),
+// carrying a stray colour band somewhere in its FRONT elevation. Because the
+// step surfaces are all the same material, every one of the 9 notch cells must
+// wedge — no matter where the band falls. This is the "third face" bug: the
+// facing-view veto used to sample a lower step's riser in the elevation (a face
+// the wedge never touches) and drop the step at each band edge — the white-cap
+// stair kept only 6/9 wedges, the pink-band stair only 3/9. The veto now also
+// requires the two faces the wedge covers to differ, so the count is invariant.
+const WP = { '#': [255, 255, 255], O: [233, 23, 241] }; // white body + pink band
+const stair = (frontRows, topRows) => ({
+  right: img(['   ###', '  ####', ' #####', '######'], WP), // all-white step profile
+  front: img(frontRows, WP),
+  top: img(topRows, WP),
+});
+
+test('monochrome staircase wedges every step regardless of an elevation colour band', () => {
+  // Pink band high in the elevation (white cap over pink): old code dropped the
+  // top step (6/9). Pink band low (white over a single pink step): old code
+  // dropped the pink step and the white one above it (3/9). Both are one white
+  // stepped surface, so both must now smooth all 3 steps across the 3-wide run.
+  const whiteCap = stair(['###', 'OOO', 'OOO', 'OOO'], ['OOO', 'OOO', '###', '###', '###', '###']);
+  const pinkBand = stair(['###', '###', 'OOO', '###'], ['OOO', '###', '###', '###', '###', '###']);
+  assert.equal(wedgeCount(whiteCap), 9, 'white-cap staircase must wedge every step (3 steps x 3 wide)');
+  assert.equal(wedgeCount(pinkBand), 9, 'pink-band staircase must wedge every step (3 steps x 3 wide)');
+});
