@@ -31,6 +31,7 @@ import { voxIndex, FACE_KEYS } from './carve.js';
 import { FACE_GEO } from './faces.js';
 import { unpackRGBA } from './ingest.js';
 import { VIEWS } from './views.js';
+import { buildPalette, makeSnapper } from './colorize.js';
 
 const AXI = { x: 0, y: 1, z: 2 };
 // face key from axis name + sign (+1/-1)
@@ -66,6 +67,24 @@ export function wedgeMesh(result, opts = {}) {
   const s = worldSize / Math.max(nx, ny, nz);
   const dominant = (palette && palette.length ? palette[0] : FLAT_COLOR) >>> 0;
 
+  // Gate samples are snapped to the canonical sprite palette so same-material
+  // pixels compare equal despite farble noise (privacy browsers like Helium
+  // perturb getImageData by ~±1/channel) or ordinary AA fringe. Snapping alone
+  // isn't enough: farble also splits the palette into near-duplicate entries, so
+  // two noisy pixels can snap to *adjacent* entries — hence sameMat also allows
+  // a small colour tolerance. Distinct materials sit far above TOL2 (~180 apart
+  // here vs a 12 slack), so real seams still gate.
+  const snapPalette = palette && palette.length ? palette : buildPalette(gviews);
+  const snap = snapPalette.length ? makeSnapper(snapPalette) : (c) => c;
+  const TOL2 = 12 * 12; // ~12 per-channel slack (squared L2): covers farble + AA
+  const sameMat = (a, b) => {
+    if (a == null || b == null) return false;
+    if ((a >>> 0) === (b >>> 0)) return true;
+    const ar = a & 255, ag = (a >>> 8) & 255, ab = (a >>> 16) & 255;
+    const br = b & 255, bg = (b >>> 8) & 255, bb = (b >>> 16) & 255;
+    return (ar - br) ** 2 + (ag - bg) ** 2 + (ab - bb) ** 2 <= TOL2;
+  };
+
   const inBounds = (x, y, z) =>
     x >= 0 && y >= 0 && z >= 0 && x < nx && y < ny && z < nz;
   const solidAt = (x, y, z) =>
@@ -83,7 +102,7 @@ export function wedgeMesh(result, opts = {}) {
     if (!gv) { view = OPP_VIEW[view]; gv = gviews[view]; if (!gv) return null; }
     const p = VIEWS[view].project(x, y, z, dims);
     const i = p.v * gv.imgW + p.u;
-    return gv.occ[i] ? gv.rgb[i] >>> 0 : null;
+    return gv.occ[i] ? snap(gv.rgb[i] >>> 0) >>> 0 : null;
   };
 
   // --- scan for wedges ------------------------------------------------------
@@ -133,7 +152,7 @@ export function wedgeMesh(result, opts = {}) {
               const profileView = PROFILE[R];
               const sUp = viewSample(profileView, ...aN);
               const sLo = viewSample(profileView, ...bN);
-              const profileOk = sUp != null && sLo != null && (sUp >>> 0) === (sLo >>> 0);
+              const profileOk = sameMat(sUp, sLo);
 
               const fUp = viewSample(FACING[A + -sA], ...aN);
               const fLo = viewSample(FACING[A + -sA], ...bN);
@@ -143,7 +162,7 @@ export function wedgeMesh(result, opts = {}) {
                 if (!inBounds(ox, oy, oz)) break;
                 if (solidAt(ox, oy, oz)) occ = true;
               }
-              const boundary = fUp != null && fLo != null && (fUp >>> 0) !== (fLo >>> 0) && !occ;
+              const boundary = fUp != null && fLo != null && !sameMat(fUp, fLo) && !occ;
               if (!flat && !(profileOk && !boundary)) continue;
               wedgeCell.set(cidx, { R, A, B, sA, sB });
               removed.add(aKey);

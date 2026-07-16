@@ -43,7 +43,7 @@ export function buildPalette(gviews) {
   return palette;
 }
 
-function makeSnapper(palette) {
+export function makeSnapper(palette) {
   const cache = new Map();
   return (color) => {
     const key = color >>> 0;
