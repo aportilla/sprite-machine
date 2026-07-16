@@ -14,8 +14,8 @@ npm run build    # static bundle in dist/
 ```
 
 Drop a **3×2 sprite sheet** onto the atlas zone, or pick a built-in sample.
-Toggle **voxel (3D)** vs **box (fast)**, flip mirror axes, and tune the alpha
-threshold live.
+Toggle **voxel (3D)**, **low-poly** (45° wedges), or **box (fast)**, flip mirror
+axes, and tune the alpha threshold live.
 
 ## Input: a 3×2 atlas
 
@@ -88,7 +88,28 @@ any angle — 1 pixel = 1 voxel = 1 cube.
 | Mode | What it is | Use |
 |---|---|---|
 | **voxel (3D)** | Visual-hull voxel solid (above) | The real object |
+| **low-poly** | Voxel solid + 45° wedges over same-surface staircases | Softer silhouette, fewer hard steps |
 | **box (fast)** | One `BoxGeometry`, six cut-out face textures | Instant preview / <2 views |
+
+### Low-poly (additive wedges)
+
+Low-poly mode keeps the voxel solid and **adds 45° wedges** into concave
+unit-step notches — a staircase of same-surface voxels becomes a smooth ramp
+(windshield, roof, wheel arch). It's **additive only**: wedges fill notches, so
+they can never punch a hole or eat the object, and a shape with no staircase (a
+plain cube) gets no wedges and stays sharp. Every vertex lands on the integer
+lattice, so the result welds **watertight**.
+
+Whether a wedge fires is a **same-surface test against the source sprites**, not
+the voxel face colors (a slope's up-facing tread is painted by the top view, so
+it reads white even over blue glass). Each candidate is sampled through the
+**profile view** — the one looking along the wedge's ridge, which sees the
+slope's cross-section with nothing in front to occlude it — at both steps: same
+color ⇒ one coherent surface ⇒ wedge; different ⇒ skip. A second **facing-view**
+check (guarded by an occlusion march) rejects a hard material boundary that runs
+along the ridge — e.g. a roof/window edge the profile view would read as one
+white pillar. The wedge takes its color from the riser face (the surface's true
+color). See `src/lib/wedge-mesh.js`.
 
 ### Missing faces
 
@@ -120,8 +141,9 @@ src/lib/
   colorize.js     depth-aware first-hit surface coloring + palette snap
   faces.js        surface voxels -> quads: greedy-merged or culled (pure)
   pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
-  mesh.js         quads -> merged, vertex-colored THREE.Mesh           (THREE)
-  textured-box.js fast box-with-decals mode                           (THREE)
+  mesh.js         quads -> merged, vertex-colored THREE.Mesh    (voxel mode; THREE)
+  wedge-mesh.js   voxel solid + additive 45° wedges             (low-poly mode; THREE)
+  textured-box.js fast box-with-decals mode                     (box mode; THREE)
   sprite-data.js  built-in samples (as atlases) + grid->ImageData helper
 src/
   main.js         scene, lights, shadowed ground, framing, render loop
@@ -135,6 +157,11 @@ src/
   axis (e.g. the gap between wheels fills into a skirt). An opt-in per-column
   **depth channel** would subtract single-axis notches; the color rule already
   handles depth.
+- **Low-poly scope** — wedges are **additive only**: a convex staircase (a hood
+  sloping down-and-out) still steps, and where two wedge ridges meet at a true
+  3-D corner it degrades to a step rather than a corner tile. Its base voxel
+  faces aren't greedy-merged yet, so low-poly's triangle count runs higher than
+  voxel mode's.
 - **Perf** — hidden-face culling + greedy meshing (both on) keep it to one draw
   call and a handful of triangles; for a scene of *many* objects, batch identical
   ones with an object-level `InstancedMesh`, and move `buildVoxels` to a Web

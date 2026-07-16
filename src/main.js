@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildVoxels } from './lib/pipeline.js';
 import { voxelMesh } from './lib/mesh.js';
-import { tileMesh } from './lib/tile-mesh.js';
 import { wedgeMesh } from './lib/wedge-mesh.js';
 import { texturedBoxMesh } from './lib/textured-box.js';
 import { SAMPLES } from './lib/sprite-data.js';
@@ -163,10 +162,8 @@ function rebuild() {
       provided.length < 2 ? ['Box mode: fewer than 2 views — depth is a guess.'] : [];
   } else {
     const result = buildVoxels(rawViews, opts);
-    const sp = new URLSearchParams(location.search);
-    const lowpolyEngine = sp.get('engine') === 'tile' ? tileMesh : wedgeMesh;
     current = state.lowpoly
-      ? lowpolyEngine(result, { flat: sp.get('flat') === '1' })
+      ? wedgeMesh(result, { flat: new URLSearchParams(location.search).get('flat') === '1' })
       : voxelMesh(result, { greedy: state.greedy });
     stats = {
       provided,
@@ -178,7 +175,7 @@ function rebuild() {
   }
   stats.warnings = [...state.atlasWarnings, ...(stats.warnings || [])];
   if (new URLSearchParams(location.search).get('diag') === '1' && current?.geometry) {
-    document.title = 'DIAG ' + JSON.stringify({ ...computeDiag(current.geometry), sweep: current.userData.sweep });
+    document.title = 'DIAG ' + JSON.stringify(computeDiag(current.geometry));
   }
   scene.add(current);
   if (frameNext) {
