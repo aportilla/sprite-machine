@@ -9,7 +9,7 @@ geometry, not faked by a shader.
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # pure-pipeline correctness tests (node --test)
+npm test         # pipeline + wedge-mesh correctness (node --test)
 npm run build    # static bundle in dist/
 ```
 
@@ -77,8 +77,8 @@ any angle — 1 pixel = 1 voxel = 1 cube.
    → dominant body color.
 6. **Mesh** — exposed faces (interior culled) are **greedy-meshed**: coplanar
    same-color faces merge into the largest rectangles, so a flat wall is one quad
-   instead of one-per-texel (the cube drops from 768 → **12** triangles, the Van
-   832 → **110**, appearance-identical). Emitted into one `BufferGeometry` with
+   instead of one-per-texel (the reference cube drops from 768 → **12** triangles,
+   appearance-identical). Emitted into one `BufferGeometry` with
    per-face vertex colors, rendered `MeshStandardMaterial({ vertexColors,
    flatShading })`. One draw call, real shadows, and `flatShading` lets the
    directional light separate top from sides for free.
@@ -119,30 +119,34 @@ An un-mirrored missing view simply drops its carving constraint on that axis
 ### Coordinate conventions
 
 World: `+x` right, `+y` up, `+z` toward the camera/front. In a **side (right)**
-sprite the object's front is the right column; in a **top** sprite the front is
-the bottom row. See `src/lib/views.js` for all six projection mappings.
+sprite the object's front is the left column; in a **top** sprite the front is
+the top row. See `src/lib/views.js` for all six projection mappings.
 
 ---
 
 ## Architecture
 
 The whole grid pipeline is **pure typed-array code — no THREE, no DOM** — so it's
-verified in Node against 7 regression sprites (`test/pipeline.test.mjs`),
-including the depth-smear regression and asymmetric-face coloring.
+verified in Node (`test/pipeline.test.mjs`), including the depth-smear regression
+and asymmetric-face coloring. A companion `test/wedge-mesh.test.mjs` loads THREE
+to gate the low-poly wedge engine (the Helium canvas-farbling regression).
 
 ```
 src/lib/
-  views.js        6 view definitions: normals, axes, projections
+  constants.js    shared default mirror / world-size / alpha-threshold (pure)
+  views.js        6 view definitions: normals, axes, projections, face metadata
   atlas.js        slice a 3x2 sheet -> named face tiles, auto tile size (pure)
   ingest.js       sprite -> occupancy/color arrays, auto-crop, resample, reorient
   carve.js        dim reconciliation, visual-hull AND, surface extraction
   colorize.js     depth-aware first-hit surface coloring + palette snap
   faces.js        surface voxels -> quads: greedy-merged or culled (pure)
   pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
+  mesh-util.js    shared vertex-color linearizer + mesh finishing (THREE)
   mesh.js         quads -> merged, vertex-colored THREE.Mesh    (voxel mode; THREE)
   wedge-mesh.js   voxel solid + additive 45° wedges             (low-poly mode; THREE)
   textured-box.js fast box-with-decals mode                     (box mode; THREE)
   sprite-data.js  built-in samples (as atlases) + grid->ImageData helper
+  diag.js         geometry watertightness self-check (dev only; ?diag=1)
 src/
   main.js         scene, lights, shadowed ground, framing, render loop
   ui.js           control panel: samples, atlas dropzone, options, stats
@@ -158,8 +162,10 @@ src/
 - **Low-poly scope** — wedges are **additive only**: a convex staircase (a hood
   sloping down-and-out) still steps, and where two wedge ridges meet at a true
   3-D corner it degrades to a step rather than a corner tile. Its base voxel
-  faces aren't greedy-merged yet, so low-poly's triangle count runs higher than
-  voxel mode's.
+  faces are emitted per voxel rather than greedy-merged — a greedy rectangle
+  abutting a wedge's unit edge would leave a T-junction and break the watertight
+  weld (there's a regression test) — so low-poly's triangle count runs a little
+  higher than voxel mode's.
 - **Perf** — hidden-face culling + greedy meshing (both on) keep it to one draw
   call and a handful of triangles; for a scene of *many* objects, batch identical
   ones with an object-level `InstancedMesh`, and move `buildVoxels` to a Web

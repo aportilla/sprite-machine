@@ -17,5 +17,6 @@ export async function fileToImageData(file) {
 
 export async function urlToImageData(url) {
   const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
   return bitmapToImageData(await createImageBitmap(await res.blob()));
 }

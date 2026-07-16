@@ -20,10 +20,9 @@
 // ---------------------------------------------------------------------------
 
 import { unpackRGBA, packRGBA } from './ingest.js';
-import { voxIndex, FACE_KEYS } from './carve.js';
-import { VIEWS, FACE_NORMAL, FACE_TO_VIEW, FACE_OPPOSITE } from './views.js';
-
-const FACE_AXIS = { px: 'x', nx: 'x', py: 'y', ny: 'y', pz: 'z', nz: 'z' };
+import { voxIndex, unvoxIndex, FACE_KEYS } from './carve.js';
+import { VIEWS, FACE_NORMAL, FACE_TO_VIEW, FACE_OPPOSITE, FACE_AXIS } from './views.js';
+import { DEFAULT_MIRROR } from './constants.js';
 
 /** Build the deduped palette (union of all solid sprite pixels). */
 export function buildPalette(gviews) {
@@ -45,6 +44,9 @@ export function buildPalette(gviews) {
 
 export function makeSnapper(palette) {
   const cache = new Map();
+  // Unpack each palette entry once (keeping its packed value) instead of
+  // re-splitting bytes on every query iteration.
+  const pal = palette.map((c) => ({ c: c >>> 0, ...unpackRGBA(c) }));
   return (color) => {
     const key = color >>> 0;
     const hit = cache.get(key);
@@ -52,14 +54,11 @@ export function makeSnapper(palette) {
     const { r, g, b } = unpackRGBA(key);
     let best = key;
     let bestD = Infinity;
-    for (const p of palette) {
-      const pr = p & 255,
-        pg = (p >>> 8) & 255,
-        pb = (p >>> 16) & 255;
-      const d = (r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2;
+    for (const p of pal) {
+      const d = (r - p.r) ** 2 + (g - p.g) ** 2 + (b - p.b) ** 2;
       if (d < bestD) {
         bestD = d;
-        best = p;
+        best = p.c;
       }
     }
     cache.set(key, best);
@@ -101,11 +100,12 @@ function sampleView(gv, name, x, y, z, dims) {
  * @param {Uint8Array} surfaceMask  6-bit exposure per voxel
  * @param {Record<string,{occ,rgb,imgW,imgH}>} gviews
  * @param {{nx,ny,nz}} dims
- * @param {{mirror?:{x:boolean,y:boolean,z:boolean}}} [opts]
- * @returns {Map<number, number>}  key = idx*6 + faceIndex, value = packed RGBA
+ * @param {{mirror?:{x?:boolean,y?:boolean,z?:boolean}}} [opts]
+ * @returns {{faceColor: Map<number, number>, palette: number[]}}
+ *   faceColor key = idx*6 + faceIndex, value = packed RGBA; palette = solid colors.
  */
 export function colorize(solid, surfaceMask, gviews, dims, opts = {}) {
-  const mirror = { x: true, y: false, z: false, ...(opts.mirror || {}) };
+  const mirror = { ...DEFAULT_MIRROR, ...(opts.mirror || {}) };
   const palette = buildPalette(gviews);
   const snap = palette.length ? makeSnapper(palette) : (c) => c;
   const faceColor = new Map();
@@ -114,26 +114,29 @@ export function colorize(solid, surfaceMask, gviews, dims, opts = {}) {
   for (let idx = 0; idx < surfaceMask.length; idx++) {
     const mask = surfaceMask[idx];
     if (!mask) continue;
-    const z = (idx / (dims.nx * dims.ny)) | 0;
-    const rem = idx - z * dims.nx * dims.ny;
-    const y = (rem / dims.nx) | 0;
-    const x = rem - y * dims.nx;
+    const { x, y, z } = unvoxIndex(idx, dims);
 
     for (let f = 0; f < 6; f++) {
       if (!(mask & (1 << f))) continue;
       const faceKey = FACE_KEYS[f];
       const key = idx * 6 + f;
 
+      // firstHitFromFace is invariant for this face; memoize so the facing and
+      // mirror branches march the depth ray at most once between them.
+      let firstHit;
+      const isFirstHit = () =>
+        (firstHit ??= firstHitFromFace(solid, dims, x, y, z, faceKey));
+
       // 1. Facing view, depth-gated.
       const facing = FACE_TO_VIEW[faceKey];
       let color = null;
-      if (gviews[facing] && firstHitFromFace(solid, dims, x, y, z, faceKey)) {
+      if (gviews[facing] && isFirstHit()) {
         color = sampleView(gviews[facing], facing, x, y, z, dims);
       }
       // 2. Mirrored opposite view.
       if (color == null && mirror[FACE_AXIS[faceKey]]) {
         const opp = FACE_TO_VIEW[FACE_OPPOSITE[faceKey]];
-        if (gviews[opp] && firstHitFromFace(solid, dims, x, y, z, faceKey)) {
+        if (gviews[opp] && isFirstHit()) {
           color = sampleView(gviews[opp], opp, x, y, z, dims);
         }
       }

@@ -10,8 +10,9 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { unpackRGBA } from './ingest.js';
 import { faceQuads } from './faces.js';
+import { makeVertexColorLinearizer, finishVoxelMesh } from './mesh-util.js';
+import { DEFAULT_WORLD_SIZE } from './constants.js';
 
 /**
  * @param {ReturnType<import('./pipeline.js').buildVoxels>} result
@@ -20,7 +21,7 @@ import { faceQuads } from './faces.js';
  */
 export function voxelMesh(result, opts = {}) {
   const { dims, surfaceMask, faceColor } = result;
-  const worldSize = opts.worldSize ?? 2.5;
+  const worldSize = opts.worldSize ?? DEFAULT_WORLD_SIZE;
   const greedy = opts.greedy ?? true;
   const s = worldSize / Math.max(dims.nx, dims.ny, dims.nz);
 
@@ -31,19 +32,7 @@ export function voxelMesh(result, opts = {}) {
   const colors = new Float32Array(quads.length * 12);
   const indices = new Uint32Array(quads.length * 6);
 
-  // Cache sRGB byte-triple -> linear THREE.Color components for vertex colors.
-  const colorCache = new Map();
-  const tmp = new THREE.Color();
-  const toLinear = (packed) => {
-    let c = colorCache.get(packed);
-    if (!c) {
-      const { r, g, b } = unpackRGBA(packed);
-      tmp.setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
-      c = [tmp.r, tmp.g, tmp.b];
-      colorCache.set(packed, c);
-    }
-    return c;
-  };
+  const toLinear = makeVertexColorLinearizer();
 
   for (let q = 0; q < quads.length; q++) {
     const { normal, color, corners } = quads[q];
@@ -54,6 +43,8 @@ export function voxelMesh(result, opts = {}) {
       positions[o] = corners[k][0] * s;
       positions[o + 1] = corners[k][1] * s;
       positions[o + 2] = corners[k][2] * s;
+      // Normals feed computeDiag + glTF export; flatShading recomputes per-face
+      // normals in the shader, so this attribute doesn't drive lighting.
       normals[o] = normal[0];
       normals[o + 1] = normal[1];
       normals[o + 2] = normal[2];
@@ -76,22 +67,10 @@ export function voxelMesh(result, opts = {}) {
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.setIndex(new THREE.BufferAttribute(indices, 1));
 
-  // Center on X/Z, rest the bottom on the ground plane (y = 0).
-  geo.translate((-dims.nx * s) / 2, 0, (-dims.nz * s) / 2);
-  geo.computeBoundingBox();
-  geo.computeBoundingSphere();
-
-  const mat = new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    flatShading: true,
-    metalness: 0,
-    roughness: 1,
+  return finishVoxelMesh(geo, {
+    nx: dims.nx,
+    nz: dims.nz,
+    s,
+    userData: { triangles: quads.length * 2, quads: quads.length },
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  mesh.userData.triangles = quads.length * 2;
-  mesh.userData.quads = quads.length;
-  mesh.userData.worldHeight = dims.ny * s;
-  return mesh;
 }

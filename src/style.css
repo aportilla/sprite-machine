@@ -165,10 +165,6 @@ body {
   border-style: solid;
   border-color: rgba(255, 255, 255, 0.28);
 }
-.slot.drag {
-  border-color: #a9dcd6;
-  background: rgba(169, 220, 214, 0.12);
-}
 .thumb {
   image-rendering: pixelated;
   width: 40px;
@@ -179,21 +175,6 @@ body {
   color: #9a9aa6;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-}
-.slot-clear {
-  position: absolute;
-  top: 1px;
-  right: 3px;
-  border: 0;
-  background: none;
-  color: #77777f;
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1;
-  padding: 0;
-}
-.slot.filled .slot-clear:hover {
-  color: #e88;
 }
 .check {
   display: inline-flex;

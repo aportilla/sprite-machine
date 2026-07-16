@@ -38,6 +38,50 @@ function img(rows, pal = C) {
 const fill = (w, h, ch) => img(Array.from({ length: h }, () => ch.repeat(w)));
 const wedgeCount = (views) => wedgeMesh(buildVoxels(views)).userData.wedges;
 
+// Count undirected edges used an ODD number of times. A closed (watertight)
+// welded surface uses every edge an even number of times, so 0 == watertight.
+// This is why base faces are emitted per voxel, not greedy-merged: a greedy
+// rect abutting a wedge's unit-scale edge would leave a boundary edge here.
+function oddEdges(mesh) {
+  const geo = mesh.geometry;
+  const pos = geo.attributes.position.array;
+  const idx = geo.index ? geo.index.array : null;
+  const tris = idx ? idx.length / 3 : pos.length / 9;
+  const key = (i) =>
+    `${Math.round(pos[i * 3] * 1e4)},${Math.round(pos[i * 3 + 1] * 1e4)},${Math.round(pos[i * 3 + 2] * 1e4)}`;
+  const edges = new Map();
+  for (let t = 0; t < tris; t++) {
+    const [a, b, c] = idx
+      ? [idx[t * 3], idx[t * 3 + 1], idx[t * 3 + 2]]
+      : [t * 3, t * 3 + 1, t * 3 + 2];
+    for (const [p, q] of [[a, b], [b, c], [c, a]]) {
+      const ka = key(p), kb = key(q);
+      const e = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+      edges.set(e, (edges.get(e) || 0) + 1);
+    }
+  }
+  let odd = 0;
+  for (const n of edges.values()) if (n % 2 === 1) odd++;
+  return odd;
+}
+
+test('wedge mesh is watertight — solid cube (no wedges)', () => {
+  const mesh = wedgeMesh(
+    buildVoxels(
+      { front: fill(6, 6, 'T'), right: fill(6, 6, 'T'), top: fill(6, 6, 'T') },
+      { mirror: { x: true, y: false, z: false } }
+    )
+  );
+  assert.equal(mesh.userData.wedges, 0, 'a solid cube has no notches to wedge');
+  assert.equal(oddEdges(mesh), 0, 'base faces must weld watertight');
+});
+
+test('wedge mesh is watertight — staircase (base faces + wedges)', () => {
+  const mesh = wedgeMesh(buildVoxels(ramp()));
+  assert.ok(mesh.userData.wedges > 0, 'the ramp must produce wedges');
+  assert.equal(oddEdges(mesh), 0, 'base faces + wedges must weld with no boundary edges');
+});
+
 // A coherent 45° ramp: a staircase of one material -> should produce wedges.
 const ramp = () => ({
   front: fill(4, 4, 'T'),

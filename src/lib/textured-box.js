@@ -12,14 +12,22 @@ import {
   FACE_INDEX,
   FACE_TO_VIEW,
   FACE_OPPOSITE,
+  FACE_AXIS,
   VIEW_NAMES,
 } from './views.js';
+import { DEFAULT_MIRROR, DEFAULT_WORLD_SIZE } from './constants.js';
 
 function imageDataToTexture(img, mirrorX = false) {
   const src = document.createElement('canvas');
   src.width = img.width;
   src.height = img.height;
-  src.getContext('2d').putImageData(img, 0, 0);
+  // Atlas-sliced tiles are plain {width,height,data}; putImageData needs a real
+  // ImageData, so wrap when necessary (mirrors ui.js drawPixels).
+  const id =
+    img instanceof ImageData
+      ? img
+      : new ImageData(new Uint8ClampedArray(img.data), img.width, img.height);
+  src.getContext('2d').putImageData(id, 0, 0);
 
   let canvas = src;
   if (mirrorX) {
@@ -53,28 +61,28 @@ function faceMaterial(img, mirrorX) {
 
 /**
  * @param {Record<string, ImageData|null>} rawViews
- * @param {{mirror?:{x:boolean,y:boolean,z:boolean}, alphaThreshold?:number, anyAlpha?:boolean}} opts
+ * @param {{mirror?:{x:boolean,y:boolean,z:boolean}, worldSize?:number, alphaThreshold?:number, anyAlpha?:boolean}} opts
  * @returns {THREE.Mesh}
  */
 export function texturedBoxMesh(rawViews, opts = {}) {
-  const mirror = { x: true, y: false, z: false, ...(opts.mirror || {}) };
+  const mirror = { ...DEFAULT_MIRROR, ...(opts.mirror || {}) };
+  /** @type {Record<string, any>} */
   const cropped = {};
   for (const name of VIEW_NAMES) {
     if (rawViews[name]) cropped[name] = ingestSprite(rawViews[name], opts);
   }
   const { dims } = reconcileDims(cropped);
-  const worldSize = 2.5;
+  const worldSize = opts.worldSize ?? DEFAULT_WORLD_SIZE;
   const s = worldSize / Math.max(dims.nx, dims.ny, dims.nz);
   const geo = new THREE.BoxGeometry(dims.nx * s, dims.ny * s, dims.nz * s);
 
   // Material array indexed by BoxGeometry face order: px,nx,py,ny,pz,nz.
   const mats = new Array(6);
-  const axisOf = { px: 'x', nx: 'x', py: 'y', ny: 'y', pz: 'z', nz: 'z' };
   for (const face of Object.keys(FACE_INDEX)) {
     const view = FACE_TO_VIEW[face];
     let img = rawViews[view] || null;
     let mirroredX = false;
-    if (!img && mirror[axisOf[face]]) {
+    if (!img && mirror[FACE_AXIS[face]]) {
       const oppView = FACE_TO_VIEW[FACE_OPPOSITE[face]];
       img = rawViews[oppView] || null;
       mirroredX = !!img;

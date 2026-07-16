@@ -27,9 +27,11 @@
 
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { voxIndex, FACE_KEYS } from './carve.js';
+import { voxIndex, unvoxIndex, FACE_KEYS } from './carve.js';
 import { FACE_GEO } from './faces.js';
 import { unpackRGBA } from './ingest.js';
+import { makeVertexColorLinearizer, finishVoxelMesh } from './mesh-util.js';
+import { DEFAULT_WORLD_SIZE } from './constants.js';
 
 const AXI = { x: 0, y: 1, z: 2 };
 // face key from axis name + sign (+1/-1)
@@ -53,7 +55,7 @@ export function wedgeMesh(result, opts = {}) {
   const { dims, solid, surfaceMask, faceColor, palette } = result;
   const { nx, ny, nz } = dims;
   const flat = !!opts.flat;
-  const worldSize = opts.worldSize ?? 2.5;
+  const worldSize = opts.worldSize ?? DEFAULT_WORLD_SIZE;
   const s = worldSize / Math.max(nx, ny, nz);
   const dominant = (palette && palette.length ? palette[0] : FLAT_COLOR) >>> 0;
 
@@ -67,10 +69,12 @@ export function wedgeMesh(result, opts = {}) {
   const TOL2 = 12 * 12; // ~12 per-channel slack (squared L2): covers farble + AA
   const sameMat = (a, b) => {
     if (a == null || b == null) return false;
-    if ((a >>> 0) === (b >>> 0)) return true;
-    const ar = a & 255, ag = (a >>> 8) & 255, ab = (a >>> 16) & 255;
-    const br = b & 255, bg = (b >>> 8) & 255, bb = (b >>> 16) & 255;
-    return (ar - br) ** 2 + (ag - bg) ** 2 + (ab - bb) ** 2 <= TOL2;
+    // Compare RGB only; the alpha byte is always 255 here, so masking it keeps
+    // the exact fast path and the tolerant path judging identity on the same bits.
+    if (((a >>> 0) & 0xffffff) === ((b >>> 0) & 0xffffff)) return true;
+    const A = unpackRGBA(a);
+    const B = unpackRGBA(b);
+    return (A.r - B.r) ** 2 + (A.g - B.g) ** 2 + (A.b - B.b) ** 2 <= TOL2;
   };
 
   const inBounds = (x, y, z) =>
@@ -78,9 +82,9 @@ export function wedgeMesh(result, opts = {}) {
   const solidAt = (x, y, z) =>
     inBounds(x, y, z) && solid[voxIndex(x, y, z, dims)];
   const step = (x, y, z, ax, sg) => [
-    x + sg * (ax === 'x'),
-    y + sg * (ax === 'y'),
-    z + sg * (ax === 'z'),
+    x + sg * +(ax === 'x'),
+    y + sg * +(ax === 'y'),
+    z + sg * +(ax === 'z'),
   ];
 
   // --- scan for wedges ------------------------------------------------------
@@ -140,18 +144,33 @@ export function wedgeMesh(result, opts = {}) {
   }
 
   // --- geometry emit --------------------------------------------------------
-  const pos = [], nrm = [], col = [];
-  const cache = new Map();
-  const tmpC = new THREE.Color();
-  const toLin = (packed) => {
-    let c = cache.get(packed);
-    if (!c) {
-      const { r, g, b } = unpackRGBA(packed);
-      tmpC.setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
-      c = [tmpC.r, tmpC.g, tmpC.b];
-      cache.set(packed, c);
-    }
-    return c;
+  const toLin = makeVertexColorLinearizer();
+
+  // Base faces are emitted PER VOXEL, not greedy-merged. A greedy rectangle
+  // abutting a wedge's unit-scale cap/slope edge would leave a T-junction and
+  // break the watertight weld (the watertightness test proves this) — so the
+  // low-poly triangle count runs a bit higher than voxel mode's, by design.
+  let baseFaceCount = 0;
+  for (let i = 0; i < surfaceMask.length; i++) {
+    let m = surfaceMask[i];
+    while (m) { baseFaceCount += m & 1; m >>= 1; }
+  }
+  baseFaceCount -= removed.size; // wedges cover (and cull) these
+
+  // Exact preallocation: 2 tris (6 verts) per base face + up to 4 tris (12
+  // verts) per wedge (slope quad + two optional gable caps). A write cursor
+  // avoids the plain-array boxing + full copy the old growable buffers incurred.
+  const maxVerts = baseFaceCount * 6 + wedges.length * 12;
+  const pos = new Float32Array(maxVerts * 3);
+  const nrm = new Float32Array(maxVerts * 3);
+  const col = new Float32Array(maxVerts * 3);
+  let vc = 0; // vertex write cursor
+  const emit = (v, N, lin) => {
+    const o = vc * 3;
+    pos[o] = v[0] * s; pos[o + 1] = v[1] * s; pos[o + 2] = v[2] * s;
+    nrm[o] = N[0]; nrm[o + 1] = N[1]; nrm[o + 2] = N[2];
+    col[o] = lin[0]; col[o + 1] = lin[1]; col[o + 2] = lin[2];
+    vc++;
   };
   const pushTri = (a, b, c, N, lin) => {
     // wind to match the explicit outward normal N (backface culling is on)
@@ -159,11 +178,7 @@ export function wedgeMesh(result, opts = {}) {
     const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
     const gx = uy * vz - uz * vy, gy = uz * vx - ux * vz, gz = ux * vy - uy * vx;
     if (gx * N[0] + gy * N[1] + gz * N[2] < 0) { const t = b; b = c; c = t; }
-    for (const v of [a, b, c]) {
-      pos.push(v[0] * s, v[1] * s, v[2] * s);
-      nrm.push(N[0], N[1], N[2]);
-      col.push(lin[0], lin[1], lin[2]);
-    }
+    emit(a, N, lin); emit(b, N, lin); emit(c, N, lin);
   };
   const pushQuad = (a, b, c, d, N, lin) => {
     pushTri(a, b, c, N, lin);
@@ -186,11 +201,7 @@ export function wedgeMesh(result, opts = {}) {
   for (let idx = 0; idx < surfaceMask.length; idx++) {
     const mask = surfaceMask[idx];
     if (!mask) continue;
-    const z = (idx / (nx * ny)) | 0;
-    const rem = idx - z * nx * ny;
-    const y = (rem / nx) | 0;
-    const x = rem - y * nx;
-    const c = { x, y, z };
+    const c = unvoxIndex(idx, dims);
     for (let f = 0; f < 6; f++) {
       if (!(mask & (1 << f)) || removed.has(idx * 6 + f)) continue;
       const g = FACE_GEO[FACE_KEYS[f]];
@@ -230,23 +241,24 @@ export function wedgeMesh(result, opts = {}) {
   }
 
   // --- assemble -------------------------------------------------------------
+  const used = vc * 3;
   let geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  geo = mergeVertices(geo, 1e-4); // weld on the integer lattice (position+normal+color)
-  // match voxelMesh framing exactly: centre X/Z, rest the base on y=0
-  geo.translate((-nx * s) / 2, 0, (-nz * s) / 2);
-  geo.computeBoundingBox();
-  geo.computeBoundingSphere();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos.subarray(0, used), 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm.subarray(0, used), 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col.subarray(0, used), 3));
+  // Weld coincident lattice vertices by position+normal+color so distinct-facing
+  // wedge/base vertices stay split. Normals are load-bearing HERE and in diag.js
+  // — not for lighting (flatShading recomputes them per-face in the shader).
+  geo = mergeVertices(geo, 1e-4);
 
-  const mat = new THREE.MeshStandardMaterial({
-    vertexColors: true, flatShading: true, metalness: 0, roughness: 1,
+  // finishVoxelMesh centres X/Z and rests the base on y=0 — matches voxelMesh.
+  return finishVoxelMesh(geo, {
+    nx,
+    nz,
+    s,
+    userData: {
+      triangles: geo.index ? geo.index.count / 3 : vc / 3,
+      wedges: wedges.length,
+    },
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  mesh.userData.triangles = geo.index ? geo.index.count / 3 : pos.length / 9;
-  mesh.userData.wedges = wedges.length;
-  return mesh;
 }

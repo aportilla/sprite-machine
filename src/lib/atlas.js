@@ -7,6 +7,8 @@
 // explicitly: a 3x2 layout on a 120x80 sheet => 40x40 tiles.
 // ---------------------------------------------------------------------------
 
+import { VIEW_NAMES } from './views.js';
+
 // Grid of view names (row-major). null = an intentionally empty cell.
 export const DEFAULT_ATLAS_LAYOUT = [
   ['right', 'front', 'top'],
@@ -58,17 +60,28 @@ const isBlank = (tile) => {
  */
 export function sliceAtlas(img, opts = {}) {
   const layout = opts.layout || DEFAULT_ATLAS_LAYOUT;
-  const { rows, cols } = layoutSize(layout);
+  const { cols, rows, tileW: autoW, tileH: autoH } = deriveTileSize(
+    img.width,
+    img.height,
+    layout
+  );
   const warnings = [];
 
-  let tileW = opts.tileW;
-  let tileH = opts.tileH;
-  if (!tileW || !tileH) {
-    tileW = img.width / cols;
-    tileH = img.height / rows;
+  // Fill each dimension independently so a lone tileW/tileH override survives.
+  const tileW = Math.round(opts.tileW || autoW);
+  const tileH = Math.round(opts.tileH || autoH);
+
+  /** @type {Record<string, {width:number,height:number,data:ArrayLike<number>}|null>} */
+  const views = {};
+
+  // Bail on a fundamentally unusable sheet rather than emitting garbage tiles.
+  if (!(img.width > 0 && img.height > 0) || tileW < 1 || tileH < 1) {
+    warnings.push(
+      `Atlas is unusable: a ${img.width}×${img.height}px sheet split into ` +
+        `${cols}×${rows} gives ${tileW}×${tileH}px tiles. Check the image and tile size.`
+    );
+    return { views, tileW, tileH, cols, rows, warnings };
   }
-  tileW = Math.round(tileW);
-  tileH = Math.round(tileH);
 
   if (cols * tileW !== img.width || rows * tileH !== img.height) {
     warnings.push(
@@ -78,11 +91,14 @@ export function sliceAtlas(img, opts = {}) {
     );
   }
 
-  const views = {};
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < (layout[r] || []).length; c++) {
       const name = layout[r][c];
       if (!name) continue;
+      if (!VIEW_NAMES.includes(name)) {
+        warnings.push(`Unknown view "${name}" in layout; ignored.`);
+        continue;
+      }
       const sx = c * tileW;
       const sy = r * tileH;
       if (sx + tileW > img.width || sy + tileH > img.height) continue;

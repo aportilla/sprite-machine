@@ -7,6 +7,8 @@
 // tests). Output packs color as a Uint32 (bytes r,g,b,a, little-endian).
 // ---------------------------------------------------------------------------
 
+import { DEFAULT_ALPHA_THRESHOLD } from './constants.js';
+
 export const packRGBA = (r, g, b, a = 255) =>
   ((r & 255) | ((g & 255) << 8) | ((b & 255) << 16) | ((a & 255) << 24)) >>> 0;
 
@@ -77,8 +79,14 @@ export function applyTransform(img, t = {}) {
  *            srcW:number, srcH:number} | null}  null if fully transparent.
  */
 export function ingestSprite(img, opts = {}) {
-  const { alphaThreshold = 128, anyAlpha = false } = opts;
+  const { alphaThreshold = DEFAULT_ALPHA_THRESHOLD, anyAlpha = false } = opts;
   const { width: W, height: H, data } = img;
+  if (!(W > 0) || !(H > 0) || !data || data.length < W * H * 4) {
+    throw new Error(
+      `ingestSprite: expected {width>0, height>0, data.length>=w*h*4}, got ` +
+        `${W}×${H} with ${data ? data.length : 'no'} bytes.`
+    );
+  }
   const solid = (a) => (anyAlpha ? a > 0 : a >= alphaThreshold);
 
   // Find the occupied bounding box.

@@ -15,6 +15,15 @@ import { VIEWS, VIEW_AXES } from './views.js';
 
 export const voxIndex = (x, y, z, d) => x + d.nx * (y + d.ny * z);
 
+/** Inverse of voxIndex: linear grid index -> {x,y,z}. Kept next to voxIndex so
+ * the forward and inverse packing can't drift. */
+export const unvoxIndex = (idx, d) => {
+  const z = (idx / (d.nx * d.ny)) | 0;
+  const rem = idx - z * d.nx * d.ny;
+  const y = (rem / d.nx) | 0;
+  return { x: rem - y * d.nx, y, z };
+};
+
 /**
  * Reconcile one integer resolution per axis from the cropped view sizes.
  * @param {Record<string, {w:number,h:number}>} views  provided views by name
@@ -57,6 +66,7 @@ export function reconcileDims(views) {
  * @returns {Record<string,{occ:Uint8Array,rgb:Uint32Array,imgW:number,imgH:number}>}
  */
 export function gridViews(views, dims) {
+  /** @type {Record<string, {occ:Uint8Array,rgb:Uint32Array,imgW:number,imgH:number}>} */
   const out = {};
   for (const [name, v] of Object.entries(views)) {
     if (!v) continue;
@@ -79,6 +89,9 @@ export function carve(gviews, dims) {
   const { nx, ny, nz } = dims;
   const solid = new Uint8Array(nx * ny * nz).fill(1);
   const active = Object.entries(gviews);
+  // Contract: with no views, nothing carves — the grid stays filled to its
+  // bounding box. reconcileDims defaults every unconstrained axis to 1, so a
+  // fully empty input yields a single solid voxel (pipeline.js warns about it).
   if (active.length === 0) return solid;
 
   for (const [name, gv] of active) {

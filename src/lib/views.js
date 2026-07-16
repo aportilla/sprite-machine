@@ -21,8 +21,6 @@
 
 /** @typedef {{nx:number, ny:number, nz:number}} Dims */
 
-export const FACES = ['px', 'nx', 'py', 'ny', 'pz', 'nz'];
-
 // Human-facing view names <-> face normals.
 export const VIEW_TO_FACE = {
   right: 'px',
@@ -45,6 +43,12 @@ export const FACE_NORMAL = {
   pz: [0, 0, 1],
   nz: [0, 0, -1],
 };
+
+// Which world axis each face's outward normal lies on. Derived from
+// FACE_NORMAL so it can't drift; used by colorize (mirror-fill) & textured-box.
+export const FACE_AXIS = Object.fromEntries(
+  Object.entries(FACE_NORMAL).map(([k, n]) => [k, n[0] ? 'x' : n[1] ? 'y' : 'z'])
+);
 
 // Opposite face (for mirror-fill).
 export const FACE_OPPOSITE = {
@@ -105,8 +109,8 @@ export const VIEWS = {
     project: (x, y, z, d) => ({ u: z, v: d.ny - 1 - y }),
   },
   // TOP: looks toward -y from +y. Sees +y face. Image = X by Z.
-  // Looking straight down with the object's front (+z) toward the bottom of the
-  // image (a common orthographic top-view convention): v = nz-1-z.
+  // Looking straight down: v = nz-1-z puts the object's front (+z, z=nz-1) on
+  // the TOP row of the image (v=0), matching the FRONT view's top-is-v=0.
   top: {
     face: 'py',
     axis: 'y',
@@ -129,6 +133,10 @@ export const VIEWS = {
 };
 
 export const VIEW_NAMES = Object.keys(VIEWS);
+
+// The six view names in the order the UI's face-preview grid lays them out
+// (a 3x2 arrangement). Kept here so the face-name vocabulary lives in one file.
+export const VIEW_DISPLAY_ORDER = ['top', 'left', 'front', 'right', 'back', 'bottom'];
 
 // Which grid axes a view's (imgW, imgH) constrain. Used by dimension
 // reconciliation. Each entry: [axisForImgW, axisForImgH].

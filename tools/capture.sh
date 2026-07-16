@@ -18,6 +18,7 @@ set -euo pipefail
 MODE="${1:?usage: capture.sh shot|dom <url> [out.png]}"
 URL="${2:?missing url}"
 CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
+[ -x "$CHROME" ] || { echo "Chrome not found/executable at: $CHROME (set \$CHROME)" >&2; exit 3; }
 DIR="$(mktemp -d /tmp/cr-cap.XXXXXX)"
 cleanup() { pkill -f "user-data-dir=$DIR" 2>/dev/null || true; rm -rf "$DIR"; }
 trap cleanup EXIT
@@ -29,8 +30,11 @@ COMMON=(--headless=new --disable-gpu --use-gl=angle --use-angle=swiftshader
 case "$MODE" in
   shot)
     OUT="${3:?missing out.png}"
+    mkdir -p "$(dirname "$OUT")"
+    # Chrome is force-killed by the EXIT trap (the app's rAF loop never exits),
+    # so its exit status is unreliable — verify the artifact instead of trusting it.
     "$CHROME" "${COMMON[@]}" --screenshot="$OUT" "$URL" >/dev/null 2>&1 || true
-    echo "shot -> $OUT"
+    [ -s "$OUT" ] && echo "shot -> $OUT" || { echo "capture failed: no $OUT written" >&2; exit 1; }
     ;;
   dom)
     "$CHROME" "${COMMON[@]}" --dump-dom "$URL" 2>/dev/null || true

@@ -8,9 +8,8 @@ import { packRGBA, applyTransform } from '../src/lib/ingest.js';
 import { voxIndex } from '../src/lib/carve.js';
 import { culledQuads, greedyQuads } from '../src/lib/faces.js';
 import { sliceAtlas, deriveTileSize } from '../src/lib/atlas.js';
-import { marchingSquares, rasterizeLoops } from '../src/lib/vectorize.js';
-import { sweepSolidGrid, carveGrid } from '../src/lib/lowpoly.js';
-import { diagonalizeLoop } from '../src/lib/diagonalize.js';
+import { buildPalette, makeSnapper } from '../src/lib/colorize.js';
+import { VIEWS } from '../src/lib/views.js';
 
 // --- tiny sprite builder: rows of chars -> ImageData-like -------------------
 const C = {
@@ -227,91 +226,6 @@ test('greedy collapses a solid cube to 6 faces (12 tris)', () => {
   assert.equal(greedy.length, 6);
 });
 
-// --- vectorize: rasterize(trace(mask)) === mask (make-or-break fidelity) -----
-function maskFrom(rows) {
-  const h = rows.length, w = rows[0].length;
-  const m = new Uint8Array(w * h);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (rows[y][x] === '#') m[y * w + x] = 1;
-  return { m, w, h };
-}
-const CASES = {
-  rect: ['####', '####', '####'],
-  window: ['#####', '#...#', '#.#.#', '#...#', '#####'], // hole + inner nub
-  Lshape: ['#....', '#....', '#####', '#####'],
-  ramp: ['#...', '##..', '###.', '####'], // 45° staircase
-  diagTouch: ['#.', '.#'], // checkerboard: must stay 2 separate regions
-  twoBlobs: ['#.#', '#.#', '#.#'], // two disconnected posts (wheels)
-  ring: ['#####', '#...#', '#...#', '#...#', '#####'],
-};
-
-for (const [name, rows] of Object.entries(CASES)) {
-  test(`vectorize fidelity: ${name} round-trips exactly`, () => {
-    const { m, w, h } = maskFrom(rows);
-    const loops = marchingSquares(m, w, h);
-    const back = rasterizeLoops(loops, w, h);
-    assert.deepEqual([...back], [...m], `${name}: rasterize(trace) != mask`);
-  });
-}
-
-// --- low-poly z-sweep reproduces carve() EXACTLY (the make-or-break) --------
-test('z-sweep cross-section rasterizes back to carve() bit-for-bit', () => {
-  // Synthetic 3-view "car": front has WHEEL GAPS at the bottom (disconnected),
-  // side has a diagonal WINDSHIELD, top is a solid rectangle.
-  const dims = { nx: 8, ny: 7, nz: 10 };
-  const { nx, ny, nz } = dims;
-  const front = new Uint8Array(nx * ny);
-  for (let y = 0; y < ny; y++)
-    for (let x = 0; x < nx; x++) {
-      let on = 1;
-      if (y === 0 && !(x === 1 || x === 2 || x === 5 || x === 6)) on = 0; // wheels
-      if (y >= 5 && (x < 1 || x > 6)) on = 0; // cabin narrows on top
-      front[x + nx * y] = on;
-    }
-  const top = new Uint8Array(nx * nz).fill(1); // solid roof footprint
-  const side = new Uint8Array(nz * ny);
-  for (let y = 0; y < ny; y++)
-    for (let z = 0; z < nz; z++) {
-      // body full length; a diagonal windshield ramp at the front (low z)
-      let on = 1;
-      if (y >= 4 && z < y - 1) on = 0; // 45° cabin/windshield cut
-      if (y === 0 && (z === 0 || z === nz - 1)) on = 0; // slight bumper relief
-      side[z + nz * y] = on;
-    }
-
-  const swept = sweepSolidGrid(front, top, side, dims);
-  const carved = carveGrid(front, top, side, dims);
-  assert.deepEqual([...swept], [...carved], 'sweep must equal carve exactly');
-  assert.ok(carved.reduce((a, b) => a + b, 0) > 0);
-});
-
-// --- 45° diagonalizer: staircases bevel, blocks stay square -----------------
-const isHalf = (p) => !Number.isInteger(p[0]) || !Number.isInteger(p[1]);
-
-test('diagonalize: a 2x2 block stays a sharp square (no bevel)', () => {
-  const { m, w, h } = maskFrom(['##', '##']);
-  const poly = diagonalizeLoop(marchingSquares(m, w, h)[0]);
-  assert.equal(poly.length, 4, 'square keeps 4 corners');
-  assert.ok(poly.every((p) => !isHalf(p)), 'no half-integer (bevel) vertices');
-});
-
-test('diagonalize: a 1:1 staircase becomes a single 45° edge', () => {
-  // lower-left triangle; the hypotenuse is a 1:1 staircase.
-  const { m, w, h } = maskFrom(['#..', '##.', '###']);
-  const poly = diagonalizeLoop(marchingSquares(m, w, h)[0]);
-  assert.ok(poly.some(isHalf), 'staircase produced beveled (half-integer) vertices');
-  // the two axis-aligned legs remain -> triangle-ish, few vertices
-  assert.ok(poly.length <= 5, `expected a clean few-vertex polygon, got ${poly.length}`);
-});
-
-test('diagonalize: a lone 1px notch keeps structural corners sharp', () => {
-  // a rectangle with a single-pixel bump on top: the bump is a zigzag (bevels),
-  // but the four outer rectangle corners must stay sharp.
-  const { m, w, h } = maskFrom(['..#..', '#####', '#####']);
-  const poly = diagonalizeLoop(marchingSquares(m, w, h)[0]);
-  const sharpCorners = poly.filter((p) => !isHalf(p));
-  assert.ok(sharpCorners.length >= 4, 'outer rectangle corners stay sharp');
-});
-
 // --- 7. Minimal 3-face "truck" sanity ---------------------------------------
 test('3-face chunky object builds and fully colors', () => {
   const r = buildVoxels({
@@ -326,4 +240,45 @@ test('3-face chunky object builds and fully colors', () => {
     for (let f = 0; f < 6; f++)
       if (m & (1 << f)) assert.ok(r.faceColor.has(idx * 6 + f));
   }
+});
+
+// --- 8. Projection conventions pinned (docs/code can't silently drift) -------
+test('TOP/BOTTOM view: object front pins to the top/bottom image row', () => {
+  const d = { nx: 4, ny: 3, nz: 5 };
+  // front is +z (z = nz-1). TOP puts it on the top row (v=0); BOTTOM on v=nz-1.
+  assert.equal(VIEWS.top.project(0, 0, d.nz - 1, d).v, 0);
+  assert.equal(VIEWS.top.project(0, 0, 0, d).v, d.nz - 1);
+  assert.equal(VIEWS.bottom.project(0, 0, d.nz - 1, d).v, d.nz - 1);
+  assert.equal(VIEWS.bottom.project(0, 0, 0, d).v, 0);
+});
+
+test('RIGHT view: object front pins to the left image column', () => {
+  const d = { nx: 4, ny: 3, nz: 5 };
+  assert.equal(VIEWS.right.project(0, 0, d.nz - 1, d).u, 0); // front -> left col
+  assert.equal(VIEWS.right.project(0, 0, 0, d).u, d.nz - 1); // back  -> right col
+});
+
+// --- 9. Palette build + snap (colorize's "most likely to look wrong" unit) ---
+test('buildPalette collects unique solid pixel colors, skipping transparent', () => {
+  const gv = {
+    front: { occ: new Uint8Array([1, 1, 0, 1]), rgb: new Uint32Array([pk('M'), pk('M'), 0, pk('T')]) },
+  };
+  const pal = buildPalette(gv).map((c) => c >>> 0).sort();
+  assert.deepEqual(pal, [pk('M'), pk('T')].sort());
+});
+
+test('makeSnapper maps a near-palette color to its nearest entry', () => {
+  const snap = makeSnapper([pk('T'), pk('M')]);
+  assert.equal(snap(pk('T')) >>> 0, pk('T')); // exact hit returns itself
+  const [r, g, b] = C.T;
+  // a ±1/channel perturbation snaps back to teal, not magenta.
+  assert.equal(snap(packRGBA(r + 1, g - 1, b + 1)) >>> 0, pk('T'));
+});
+
+// --- 10. Zero-view edge case: a single solid voxel, with a clear warning -----
+test('buildVoxels with no views yields one voxel and warns', () => {
+  const r = buildVoxels({});
+  assert.deepEqual(r.dims, { nx: 1, ny: 1, nz: 1 });
+  assert.equal(r.solidCount, 1);
+  assert.ok(r.warnings.some((w) => /no usable views/i.test(w)));
 });

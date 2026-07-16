@@ -5,8 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { fileToImageData } from './image-io.js';
-
-const SLOT_ORDER = ['top', 'left', 'front', 'right', 'back', 'bottom'];
+import { VIEW_DISPLAY_ORDER as SLOT_ORDER } from './lib/views.js';
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -68,8 +67,9 @@ export function createUI({ samples, state, onSample, onAtlas, onTileSize, onOpti
   fileInput.accept = 'image/*';
   fileInput.style.display = 'none';
   fileInput.onchange = async () => {
-    if (fileInput.files[0]) onAtlas(await fileToImageData(fileInput.files[0]));
+    const f = fileInput.files[0];
     fileInput.value = '';
+    if (f) await loadFile(f);
   };
   drop.appendChild(fileInput);
   drop.onclick = () => fileInput.click();
@@ -82,8 +82,18 @@ export function createUI({ samples, state, onSample, onAtlas, onTileSize, onOpti
     e.preventDefault();
     drop.classList.remove('drag');
     const f = e.dataTransfer.files[0];
-    if (f) onAtlas(await fileToImageData(f));
+    if (f) await loadFile(f);
   };
+
+  // Decode a dropped/picked file, surfacing failures instead of swallowing them
+  // as an unhandled promise rejection (bad/corrupt images just no-op otherwise).
+  async function loadFile(f) {
+    try {
+      onAtlas(await fileToImageData(f));
+    } catch (err) {
+      setError(`Couldn't read "${f.name}" as an image: ${err.message}`);
+    }
+  }
   panel.appendChild(drop);
 
   // tile size (auto-derived, editable)
@@ -245,11 +255,19 @@ export function createUI({ samples, state, onSample, onAtlas, onTileSize, onOpti
     for (const w of warnings || []) stats.appendChild(el('div', 'warn', '⚠ ' + w));
   }
 
+  // Show a one-off error (e.g. a failed image decode) in the stats panel; it
+  // persists until the next successful build overwrites the panel.
+  function setError(msg) {
+    stats.innerHTML = '';
+    stats.appendChild(el('div', 'warn', '⚠ ' + msg));
+  }
+
   return {
     selectSample,
     syncControls,
     setThumbnails,
     setStats,
+    setError,
     setMode,
     setAtlasPreview,
     setAtlasInfo,
