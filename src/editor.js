@@ -10,7 +10,7 @@
 // and atlas.isBlank (alpha!==0) can never diverge.
 //
 // createTileEditor(container, { name, tile, tileW, tileH, palette,
-//   mirrorBehind, guides, pair, brush, onLive, onSelectFace, onClose })
+//   mirrorBehind, guides, faces, brush, onLive, onSelectFace, onClose })
 //   -> { destroy }
 //   - mirrorBehind: {width,height,data} onion-skin of the opposite face drawn
 //     faded UNDER the pixel canvas (display only — never written to `work`). null
@@ -18,7 +18,8 @@
 //     with an EMPTY canvas and this faded mirror as its only reference.
 //   - guides: from faceGuides() — extent of the orthogonal faces' pixels, drawn
 //     as hairline rules over the canvas so you can align to the stricter carve.
-//   - pair: the ordered mirror pair for the face tabs, e.g. ['front','back'].
+//   - faces: the ordered list of all six atlas faces, shown as tabs across the
+//     top; the edited `name` is the active tab and clicking another switches.
 //   - brush: shared { mode, color:{r,g,b}, swatchIndex } — persisted by the caller
 //     across face swaps.
 //   - onLive(workingTile, dirty): fired on each actual pixel change.
@@ -84,7 +85,7 @@ export function createTileEditor(
     palette,
     mirrorBehind,
     guides,
-    pair,
+    faces,
     brush,
     onLive,
     onSelectFace,
@@ -109,13 +110,31 @@ export function createTileEditor(
   const root = el('div', 'editor');
   container.appendChild(root);
 
-  // --- header: title + mirror-partner toggle + done -------------------------
+  // --- header: done (left, primary exit) + a muted size readout (right) -----
   const header = el('div', 'editor-header');
-  header.appendChild(el('div', 'editor-title', `edit: ${name}`));
-  const doneBtn = el('button', 'editor-btn editor-btn-done', 'done');
+  const doneBtn = el('button', 'editor-btn-done');
+  doneBtn.append(el('span', 'editor-done-mark', '✓'), el('span', null, 'Done Editing'));
   doneBtn.onclick = () => onClose?.();
-  header.appendChild(doneBtn);
+  header.append(doneBtn, el('div', 'editor-title', `${tileW} × ${tileH}`));
   root.appendChild(header);
+
+  // --- canvas widget: tabs + framed canvas as one self-contained unit --------
+  // A bordered card that groups the face tabs on top of the canvas box. The tabs
+  // scope ONLY the canvas — the header above and the palette below are separate.
+  // The active tab merges into the box below it.
+  const widget = el('div', 'editor-canvas-panel');
+  root.appendChild(widget);
+
+  // Six face tabs across the top of the box (one per atlas tile). The edited face
+  // is the active tab; clicking any other switches to it (the caller re-mounts
+  // the editor there — live edits are already committed).
+  const tabs = el('div', 'editor-tabs');
+  for (const f of faces || [name]) {
+    const t = el('button', 'editor-tab' + (f === name ? ' active' : ''), f);
+    if (f !== name) t.onclick = () => onSelectFace?.(f);
+    tabs.appendChild(t);
+  }
+  widget.appendChild(tabs);
 
   // --- canvas (backing store at native tile resolution, CSS-upscaled crisp) --
   // Three stacked layers in the wrap: a background (checkerboard via CSS + faded
@@ -164,23 +183,12 @@ export function createTileEditor(
   wrap.appendChild(overlay);
   drawGuides(overlay.getContext('2d'), guides, scale, cssW, cssH);
 
-  root.appendChild(wrap);
+  widget.appendChild(wrap);
 
   const ctx = canvas.getContext('2d');
   const imgData = new ImageData(work, tileW, tileH); // shares `work` by reference
   const repaint = () => ctx.putImageData(imgData, 0, 0);
   repaint();
-
-  // --- face-pair tabs (below the canvas, above the palette) -----------------
-  // A two-segment pill for the mirror pair (e.g. [front|back]); the face being
-  // edited is highlighted, and clicking the other switches to it.
-  const tabs = el('div', 'editor-facepair');
-  for (const f of pair || [name]) {
-    const t = el('button', 'editor-tab' + (f === name ? ' active' : ''), f);
-    if (f !== name) t.onclick = () => onSelectFace?.(f);
-    tabs.appendChild(t);
-  }
-  root.appendChild(tabs);
 
   // --- tool grid: 16 colors + eyedropper + transparent (6x3) ----------------
   const grid = el('div', 'editor-swatches');

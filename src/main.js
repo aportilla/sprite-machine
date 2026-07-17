@@ -6,7 +6,12 @@ import { voxelMesh } from './lib/mesh.js';
 import { wedgeMesh } from './lib/wedge-mesh.js';
 import { SAMPLES } from './lib/sprite-data.js';
 import { sliceAtlas, blitTile, cellOf } from './lib/atlas.js';
-import { VIEW_NAMES, VIEW_OPPOSITE, VIEW_MIRROR_AXIS } from './lib/views.js';
+import {
+  VIEW_NAMES,
+  VIEW_OPPOSITE,
+  VIEW_MIRROR_AXIS,
+  VIEW_DISPLAY_ORDER,
+} from './lib/views.js';
 import { PENCIL_PALETTE } from './lib/constants.js';
 import { faceGuides } from './lib/guides.js';
 import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
@@ -234,14 +239,6 @@ const brush = { mode: 'pencil', color: null, swatchIndex: 0 };
 let currentEditor = null;
 let editingName = null;
 
-// Canonical mirror-pair ordering for the face tabs (primary face first), so the
-// pill always reads [front|back] / [left|right] / [top|bottom] whichever is open.
-const FACE_PRIMARY = new Set(['front', 'left', 'top']);
-const facePair = (n) => {
-  const opp = VIEW_OPPOSITE[n];
-  return FACE_PRIMARY.has(n) ? [n, opp] : [opp, n];
-};
-
 const freshTile = () => ({
   width: state.tileW,
   height: state.tileH,
@@ -273,7 +270,7 @@ function mountEditor(name) {
     palette: PENCIL_PALETTE,
     mirrorBehind,
     guides,
-    pair: facePair(name),
+    faces: VIEW_DISPLAY_ORDER,
     brush,
     onLive: (working, dirty) => applyTileEdit(name, wasDerived, working, dirty),
     onSelectFace: (target) => enterDrawing(target),

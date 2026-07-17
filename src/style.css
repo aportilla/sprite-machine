@@ -3,6 +3,14 @@
   --bg: #4a4a52;
   --sidebar-w: 248px;
   --editor-w: 420px;
+  /* Opaque panel fill (matches the old rgba(24,24,30,.96) composited over --bg).
+     Solid so the active folder-tab can blend into it exactly. */
+  --panel-bg: #1a1a20;
+  /* A lighter-dark fill (a step up from the panel bg) shared by the active tab and
+     the canvas box, so the selected tab reads as one structure with the content
+     area it caps. */
+  --widget-bg: #2e2e38;
+  --accent: #c77dd6;
 }
 
 * {
@@ -31,7 +39,7 @@ body {
   width: var(--sidebar-w);
   height: 100%;
   overflow-y: auto;
-  background: rgba(24, 24, 30, 0.96);
+  background: var(--panel-bg);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -42,7 +50,7 @@ body {
   width: 0;
   height: 100%;
   overflow: hidden;
-  background: rgba(24, 24, 30, 0.96);
+  background: var(--panel-bg);
   border-left: 1px solid rgba(255, 255, 255, 0.08);
   transition: width 0.16s ease;
 }
@@ -299,67 +307,109 @@ body {
   justify-content: space-between;
   gap: 8px;
 }
+/* Muted tile-size readout on the right of the header (e.g. "40 × 40"). */
 .editor-title {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: 10px;
+  color: #8a8a96;
+  letter-spacing: 0.02em;
 }
-/* face-pair tabs (mirror pair) just above the palette */
-.editor-facepair {
+/* Self-contained canvas widget: the tabs + framed canvas box as one card,
+   centered and hugging the canvas so it reads as distinct from the full-width
+   header above and palette below. */
+.editor-canvas-panel {
+  align-self: center;
+}
+/* Six face tabs across the top of the canvas box — traditional folder tabs that
+   scope ONLY the canvas: inactive tabs recede, the active tab lifts to the box
+   color and breaks the box's top border so it reads as part of the canvas. */
+.editor-tabs {
   display: flex;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 7px;
-  overflow: hidden;
+  gap: 2px;
+  position: relative;
+  z-index: 1; /* tabs sit over the box's top border */
 }
 .editor-tab {
-  flex: 1;
-  padding: 7px 8px;
-  background: transparent;
-  border: none;
+  flex: 1 1 0;
+  min-width: 0;
+  margin-bottom: -1px; /* overlap the box's top border so active can break it */
+  padding: 8px 3px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: none; /* the box below supplies the bottom edge */
+  border-radius: 7px 7px 0 0;
   color: #9a9aa6;
   font: inherit;
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.03em;
   cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
-.editor-tab + .editor-tab {
-  border-left: 1px solid rgba(255, 255, 255, 0.14);
-}
-.editor-tab:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #e8e8ea;
+.editor-tab:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #d8d8de;
 }
 .editor-tab.active {
-  background: #c77dd6;
-  color: #201025;
-  font-weight: 600;
+  background: var(--widget-bg); /* same fill as the box → merges into it */
+  border-color: rgba(255, 255, 255, 0.2); /* continues the box's border */
+  color: #f0f0f4; /* bright label marks the selected tab */
+  font-weight: 700;
   cursor: default;
 }
-.editor-btn {
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  color: #e8e8ea;
+/* Done button — the primary exit from drawing mode. Accent-filled, with a clear
+   hover (brighten + lift-glow) and pressed (darken + sink) state. */
+.editor-btn-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  color: #201025;
   font: inherit;
   font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.06s ease;
 }
-.editor-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+.editor-btn-done:hover {
+  background: #d79ce3;
+  border-color: #d79ce3;
+  box-shadow: 0 2px 10px rgba(199, 125, 214, 0.45);
 }
-.editor-btn-done {
-  background: #c77dd6;
-  border-color: #c77dd6;
-  color: #201025;
-  font-weight: 600;
+.editor-btn-done:active {
+  background: #b568c9;
+  border-color: #b568c9;
+  transform: translateY(1px);
+  box-shadow: 0 1px 3px rgba(199, 125, 214, 0.3);
 }
+.editor-btn-done:focus-visible {
+  outline: 2px solid #e6c2ef;
+  outline-offset: 2px;
+}
+.editor-done-mark {
+  font-size: 11px;
+  line-height: 1;
+}
+/* The canvas box — the widget's content area the tabs cap. Its lighter-dark fill
+   (shared with the active tab) frames the canvas, so the selected tab reads as a
+   structural extension of this panel. Square top corners (the tab strip sits
+   there), rounded bottom. */
 .editor-canvas-wrap {
   position: relative;
-  align-self: center;
-  padding: 6px;
+  padding: 9px;
+  background: var(--widget-bg);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28); /* lift the card off the panel */
 }
 .editor-canvas {
   position: relative;
@@ -375,8 +425,8 @@ body {
 .editor-canvas-bg,
 .editor-canvas-overlay {
   position: absolute;
-  top: 6px; /* matches .editor-canvas-wrap padding */
-  left: 6px;
+  top: 9px; /* matches .editor-canvas-wrap padding */
+  left: 9px;
   image-rendering: pixelated;
   pointer-events: none;
 }
