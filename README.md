@@ -14,12 +14,13 @@ npm run build    # static bundle in dist/
 ```
 
 **Pick a built-in sample**, or load your own **3×2 sprite sheet** — click _pick
-atlas…_ or drop a PNG anywhere on the window. **Low-poly** (additive 45° wedges)
-is on by default and toggles live; greedy meshing is always on. Sprites are hard
-pixel art — every texel is fully opaque or fully transparent — and every face
-with no view of its own is mirror-filled from its opposite (and shown, derived,
-in the faces preview). Click any face in that preview to **edit its pixels
-in-app** — see [Drawing editor](#drawing-editor).
+atlas…_ or drop a PNG anywhere on the window. **Smooth slopes** (low-poly
+additive 45° wedges) is on by default and toggles live; greedy meshing is always
+on. Sprites are hard pixel art — every texel is fully opaque or fully transparent
+— and every face with no view of its own is mirror-filled from its opposite at
+render time (the faces preview shows only the tiles actually drawn — an honest
+view of the sheet). Click any face in that preview to **edit its pixels in-app**
+— see [Drawing editor](#drawing-editor).
 
 ## Input: a 3×2 atlas
 
@@ -65,10 +66,11 @@ right-side panel; the 3D view stays live beside it and rebuilds as you draw.
   stroke is hard-pixel: fully opaque or fully erased, never anti-aliased.
 - **Mirror-pair tabs** — a `[front|back]` / `[left|right]` / `[top|bottom]` pill
   under the canvas switches which face of the pair you're editing, so you can flip
-  back and forth for reference. A **mirror-derived** face opens seeded with the
-  mirrored opposite (exactly what its thumbnail shows) and only becomes its own
-  independent art once you actually change a pixel — open-and-close leaves it
-  derived, and erasing it fully reverts it to derived.
+  back and forth for reference. A **mirror-derived** face (one with no art of its
+  own) opens with an **empty canvas** and a **faded onion-skin** of the mirrored
+  opposite behind it for reference; it becomes its own independent art only once
+  you actually change a pixel — open-and-close leaves it derived, and erasing it
+  fully reverts it to derived.
 - **Live + canonical** — edits write straight back into the current sheet, so the
   **download** button saves the edited atlas as `atlas.png`, and the model
   rebuilds (rAF-debounced) with no camera jump.

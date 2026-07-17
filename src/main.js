@@ -260,16 +260,10 @@ function mountEditor(name) {
   }
   const existing = state.views[name] || null;
   const wasDerived = existing == null;
-  // For a derived face, seed the canvas with the mirrored opposite (exactly what
-  // the thumbnail shows) so editing refines from there rather than a blank.
-  let seedMirror = null;
-  if (wasDerived) {
-    const opp = state.views[VIEW_OPPOSITE[name]];
-    if (opp) seedMirror = mirrorImage(opp, VIEW_MIRROR_AXIS[name]);
-  }
   // Onion-skin: the opposite face's OWN art, mirrored, faded behind the canvas —
   // only when it has independent art (a derived opposite is just this face's own
-  // mirror, so it would overlay identically and add nothing).
+  // mirror, so it would overlay identically and add nothing). A derived face
+  // opens with an empty canvas and relies on this faded mirror as its reference.
   const oppArt = state.views[VIEW_OPPOSITE[name]];
   const mirrorBehind = oppArt ? mirrorImage(oppArt, VIEW_MIRROR_AXIS[name]) : null;
   // Hairline extent rules from the orthogonal faces sharing each of this face's
@@ -283,7 +277,6 @@ function mountEditor(name) {
     tileH: state.tileH,
     palette: PENCIL_PALETTE,
     frontEdge: VIEW_FRONT_EDGE[name],
-    seedMirror,
     mirrorBehind,
     guides,
     pair: facePair(name),

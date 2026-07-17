@@ -110,11 +110,50 @@ body {
 .chip:hover {
   background: rgba(255, 255, 255, 0.12);
 }
-.chip.active {
-  background: #c77dd6;
-  border-color: #c77dd6;
-  color: #201025;
-  font-weight: 600;
+
+/* Atlas action menu: "pick atlas…" trigger + a dropdown of load actions. */
+.picker {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.picker-trigger {
+  width: 100%;
+}
+.picker.open .picker-trigger {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.picker-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: #22222a;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.picker.open .picker-menu {
+  display: flex;
+}
+.picker-item {
+  text-align: left;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #e8e8ea;
+  font: inherit;
+  cursor: pointer;
+}
+.picker-item:hover {
+  background: rgba(199, 125, 214, 0.28);
 }
 .tiny {
   font-size: 10px;
@@ -156,13 +195,6 @@ body {
   border-style: solid;
   border-color: rgba(255, 255, 255, 0.28);
 }
-.slot.derived {
-  border-style: dashed;
-  border-color: rgba(255, 255, 255, 0.22);
-}
-.slot.derived .thumb {
-  opacity: 0.82;
-}
 .slot.editing {
   border-style: solid;
   border-color: #c77dd6;
@@ -194,17 +226,31 @@ body {
   border-radius: 2px;
   background: #7ee787;
 }
-.legend-derived {
-  width: 12px;
-  height: 12px;
-  border: 1px dashed rgba(255, 255, 255, 0.4);
-  border-radius: 2px;
-}
-.check {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
+/* Pill toggle buttons (options row) — subtle when off, accent-filled when on. */
+.toggle {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #b8b8c0;
+  font: inherit;
   cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+.toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #e8e8ea;
+}
+.toggle.on {
+  background: #c77dd6;
+  border-color: #c77dd6;
+  color: #201025;
+  font-weight: 600;
 }
 .stats {
   margin-top: 12px;
@@ -324,14 +370,6 @@ body {
   border-color: #c77dd6;
   color: #201025;
   font-weight: 600;
-}
-.editor-badge {
-  font-size: 10px;
-  color: #e8c07a;
-  background: rgba(232, 192, 122, 0.1);
-  border: 1px solid rgba(232, 192, 122, 0.25);
-  border-radius: 6px;
-  padding: 5px 8px;
 }
 .editor-canvas-wrap {
   position: relative;

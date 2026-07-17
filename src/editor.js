@@ -10,13 +10,12 @@
 // and atlas.isBlank (alpha!==0) can never diverge.
 //
 // createTileEditor(container, { name, tile, tileW, tileH, palette, frontEdge,
-//   seedMirror, mirrorBehind, guides, pair, brush, onLive, onSelectFace,
-//   onClose }) -> { destroy }
-//   - seedMirror: for a mirror-derived face, the mirrored-opposite image to seed
-//     the canvas with (so what you edit matches the thumbnail). null otherwise.
+//   mirrorBehind, guides, pair, brush, onLive, onSelectFace, onClose })
+//   -> { destroy }
 //   - mirrorBehind: {width,height,data} onion-skin of the opposite face drawn
 //     faded UNDER the pixel canvas (display only — never written to `work`). null
-//     when the opposite face has no art of its own.
+//     when the opposite face has no art of its own. A mirror-derived face opens
+//     with an EMPTY canvas and this faded mirror as its only reference.
 //   - guides: from faceGuides() — extent of the orthogonal faces' pixels, drawn
 //     as hairline rules over the canvas so you can align to the stricter carve.
 //   - pair: the ordered mirror pair for the face tabs, e.g. ['front','back'].
@@ -84,7 +83,6 @@ export function createTileEditor(
     tileH,
     palette,
     frontEdge,
-    seedMirror,
     mirrorBehind,
     guides,
     pair,
@@ -94,13 +92,12 @@ export function createTileEditor(
     onClose,
   }
 ) {
-  const derived = !!seedMirror;
-
-  // Working copy of the tile's pixels. Derived faces seed from the mirror so the
-  // canvas shows exactly what the thumbnail shows; the face becomes real art only
-  // once the user actually changes a pixel (tracked by `dirty`).
+  // Working copy of the tile's pixels — starts from the face's own art, or empty
+  // for a face with none. A mirror-derived face opens EMPTY (the faded onion-skin
+  // behind the canvas is the reference); it becomes real art only once the user
+  // actually changes a pixel (tracked by `dirty`).
   const work = new Uint8ClampedArray(tileW * tileH * 4);
-  work.set(seedMirror ? seedMirror.data : tile.data);
+  work.set(tile.data);
   const workingTile = { width: tileW, height: tileH, data: work };
   let dirty = false;
 
@@ -120,12 +117,6 @@ export function createTileEditor(
   doneBtn.onclick = () => onClose?.();
   header.appendChild(doneBtn);
   root.appendChild(header);
-
-  if (derived) {
-    root.appendChild(
-      el('div', 'editor-badge', 'derived — editing creates independent art')
-    );
-  }
 
   // --- canvas (backing store at native tile resolution, CSS-upscaled crisp) --
   // Three stacked layers in the wrap: a background (checkerboard via CSS + faded

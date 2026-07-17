@@ -6,12 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { fileToImageData } from './image-io.js';
-import {
-  VIEW_DISPLAY_ORDER as SLOT_ORDER,
-  VIEW_FRONT_EDGE,
-  VIEW_OPPOSITE,
-  VIEW_MIRROR_AXIS,
-} from './lib/views.js';
+import { VIEW_DISPLAY_ORDER as SLOT_ORDER, VIEW_FRONT_EDGE } from './lib/views.js';
 
 // Accent for the front-edge orientation marker on face thumbnails.
 const FRONT_EDGE_COLOR = '#7ee787';
@@ -25,6 +20,26 @@ function el(tag, cls, text) {
   if (cls) n.className = cls;
   if (text != null) n.textContent = text;
   return n;
+}
+
+// Reflect an on/off state onto a pill toggle button (class + a11y state).
+function setToggle(btn, on) {
+  btn.classList.toggle('on', !!on);
+  btn.setAttribute('aria-pressed', String(!!on));
+}
+
+// A pill toggle button: clicking flips it and reports the new state. Nicer than
+// a bare checkbox and matches the sample/atlas chips.
+function toggleBtn(label, initial, onToggle) {
+  const b = el('button', 'toggle', label);
+  b.type = 'button';
+  setToggle(b, initial);
+  b.onclick = () => {
+    const on = !b.classList.contains('on');
+    setToggle(b, on);
+    onToggle(on);
+  };
+  return b;
 }
 
 // Draw a pixel-art tile centered in the canvas, fit within a boxW×boxH area.
@@ -118,19 +133,9 @@ export function createUI({
   panel.appendChild(el('div', 'panel-title', 'sprite machine'));
   panel.appendChild(el('div', 'panel-sub', 'pixel atlas → 3D voxel object'));
 
-  // --- samples --------------------------------------------------------------
-  panel.appendChild(el('div', 'label', 'sample'));
-  const sampleRow = el('div', 'row samples');
-  const sampleBtns = [];
-  samples.forEach((s, i) => {
-    const b = el('button', 'chip', s.name);
-    b.onclick = () => selectSample(i);
-    sampleRow.appendChild(b);
-    sampleBtns.push(b);
-  });
-  panel.appendChild(sampleRow);
-
-  // --- atlas (pick button + download; the whole app is a drop target) --------
+  // --- atlas: an action menu (samples / blank / from disk) + download --------
+  // The "pick atlas…" trigger opens a menu of actions; its label never changes.
+  // The whole app is also a drop target.
   const atlasLabel = el('div', 'label label-row');
   atlasLabel.appendChild(el('span', null, 'atlas'));
   const tileText = el('span', 'tile-val', '—');
@@ -146,12 +151,44 @@ export function createUI({
     fileInput.value = '';
     if (f) await loadFile(f);
   };
-  const atlasRow = el('div', 'row');
-  const pickBtn = el('button', 'chip', 'pick atlas…');
-  pickBtn.onclick = () => fileInput.click();
+
+  // A fresh 3x2 sheet of empty (transparent) square 40×40 tiles to draw from
+  // scratch — every face reads empty until you paint it.
+  const loadBlank = () => onAtlas(new ImageData(120, 80));
+
+  const picker = el('div', 'picker');
+  const pickBtn = el('button', 'chip picker-trigger', 'pick atlas…');
+  const menu = el('div', 'picker-menu');
+  picker.append(pickBtn, menu);
+
+  let menuOpen = false;
+  const closeMenu = () => {
+    menuOpen = false;
+    picker.classList.remove('open');
+  };
+  const menuItem = (label, action) => {
+    const it = el('button', 'picker-item', label);
+    it.onclick = () => {
+      closeMenu();
+      action();
+    };
+    menu.appendChild(it);
+  };
+  samples.forEach((s, i) => menuItem(s.name.toLowerCase(), () => selectSample(i)));
+  menuItem('blank', loadBlank);
+  menuItem('select from disk…', () => fileInput.click());
+
+  pickBtn.onclick = (e) => {
+    e.stopPropagation(); // don't let the outside-click closer see this same click
+    menuOpen = !menuOpen;
+    picker.classList.toggle('open', menuOpen);
+  };
+  document.addEventListener('click', () => menuOpen && closeMenu());
+
   const dlBtn = el('button', 'chip', 'download');
   dlBtn.onclick = () => onDownload?.();
-  atlasRow.append(pickBtn, dlBtn);
+  const atlasRow = el('div', 'row');
+  atlasRow.append(picker, dlBtn);
   panel.append(fileInput, atlasRow);
   panel.appendChild(el('div', 'tiny hint', 'or drop a sprite sheet anywhere'));
 
@@ -210,25 +247,18 @@ export function createUI({
     return l;
   };
   panel.appendChild(legendRow('legend-swatch', 'front-facing edge'));
-  panel.appendChild(legendRow('legend-derived', 'mirror-derived face'));
 
-  // --- options --------------------------------------------------------------
+  // --- options (pill toggle buttons) ----------------------------------------
   panel.appendChild(el('div', 'label', 'options'));
   const toggleRow = el('div', 'row');
-  const lowpolyLab = el('label', 'check');
-  const lowpoly = el('input');
-  lowpoly.type = 'checkbox';
-  lowpoly.onchange = () => {
-    state.lowpoly = lowpoly.checked;
+  const lowpolyBtn = toggleBtn('smooth slopes', state.lowpoly, (on) => {
+    state.lowpoly = on;
     onOptionChange();
-  };
-  lowpolyLab.append(lowpoly, document.createTextNode(' low-poly'));
-  const rotLab = el('label', 'check');
-  const rot = el('input');
-  rot.type = 'checkbox';
-  rot.onchange = () => (state.autoRotate = rot.checked);
-  rotLab.append(rot, document.createTextNode(' auto-rotate'));
-  toggleRow.append(lowpolyLab, rotLab);
+  });
+  const rotBtn = toggleBtn('auto-rotate', state.autoRotate, (on) => {
+    state.autoRotate = on;
+  });
+  toggleRow.append(lowpolyBtn, rotBtn);
   panel.appendChild(toggleRow);
 
   // --- stats ----------------------------------------------------------------
@@ -240,13 +270,12 @@ export function createUI({
 
   // --- methods --------------------------------------------------------------
   function selectSample(i) {
-    sampleBtns.forEach((b, j) => b.classList.toggle('active', j === i));
     onSample(samples[i]);
   }
 
   function syncControls() {
-    lowpoly.checked = state.lowpoly;
-    rot.checked = state.autoRotate;
+    setToggle(lowpolyBtn, state.lowpoly);
+    setToggle(rotBtn, state.autoRotate);
   }
 
   function setAtlasInfo({ tileW: tw, tileH: th }) {
@@ -256,19 +285,11 @@ export function createUI({
   function setThumbnails(views) {
     for (const name of SLOT_ORDER) {
       const { slot, cv } = slotEls[name];
-      let img = views && views[name];
-      let derived = false;
-      // No art of its own? Show the mirror-derived face we actually render, so
-      // the preview matches the rendered object rather than leaving a gap.
-      if (!img) {
-        const opp = views && views[VIEW_OPPOSITE[name]];
-        if (opp) {
-          img = mirrorImage(opp, VIEW_MIRROR_AXIS[name]);
-          derived = true;
-        }
-      }
-      slot.classList.toggle('filled', !!img && !derived);
-      slot.classList.toggle('derived', derived);
+      // Show ONLY the face's actual atlas pixels — a face with no art of its own
+      // reads as empty (an honest view of state; it's still mirror-filled when the
+      // model renders, but the sheet genuinely has nothing there yet).
+      const img = (views && views[name]) || null;
+      slot.classList.toggle('filled', !!img);
       const rect = drawPixels(cv, img, THUMB_FIT, THUMB_FIT);
       drawFrontEdge(cv, VIEW_FRONT_EDGE[name], rect);
     }
