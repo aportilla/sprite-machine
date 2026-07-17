@@ -70,7 +70,11 @@ test('blitTile only touches its rect (a non-divisible remainder is left alone)',
     sheet.data[i] = sheet.data[i + 1] = sheet.data[i + 2] = sheet.data[i + 3] = v;
   };
   mark(6, 4, 200); // a remainder pixel
-  const opaque = { width: 2, height: 2, data: new Uint8ClampedArray(2 * 2 * 4).fill(255) };
+  const opaque = {
+    width: 2,
+    height: 2,
+    data: new Uint8ClampedArray(2 * 2 * 4).fill(255),
+  };
   blitTile(sheet, opaque, 0, 0); // fills [0,2)x[0,2)
   const at = (x, y) => sheet.data[(y * W + x) * 4];
   assert.equal(at(0, 0), 255, 'blitted rect written');

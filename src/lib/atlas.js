@@ -60,11 +60,12 @@ const isBlank = (tile) => {
  */
 export function sliceAtlas(img, opts = {}) {
   const layout = opts.layout || DEFAULT_ATLAS_LAYOUT;
-  const { cols, rows, tileW: autoW, tileH: autoH } = deriveTileSize(
-    img.width,
-    img.height,
-    layout
-  );
+  const {
+    cols,
+    rows,
+    tileW: autoW,
+    tileH: autoH,
+  } = deriveTileSize(img.width, img.height, layout);
   const warnings = [];
 
   // Fill each dimension independently so a lone tileW/tileH override survives.

@@ -20,7 +20,9 @@ export function computeDiag(geo) {
   };
   const edges = new Map();
   const axis = (i) => {
-    const ax = Math.abs(nrm[i * 3]), ay = Math.abs(nrm[i * 3 + 1]), az = Math.abs(nrm[i * 3 + 2]);
+    const ax = Math.abs(nrm[i * 3]),
+      ay = Math.abs(nrm[i * 3 + 1]),
+      az = Math.abs(nrm[i * 3 + 2]);
     if (ax >= ay && ax >= az) return nrm[i * 3] > 0 ? 'px' : 'nx';
     if (ay >= az) return nrm[i * 3 + 1] > 0 ? 'py' : 'ny';
     return nrm[i * 3 + 2] > 0 ? 'pz' : 'nz';
@@ -31,13 +33,28 @@ export function computeDiag(geo) {
     const b = idx ? idx[t * 3 + 1] : t * 3 + 1;
     const c = idx ? idx[t * 3 + 2] : t * 3 + 2;
     hist[axis(a)]++;
-    for (const [p, q] of [[a, b], [b, c], [c, a]]) {
-      const ka = key(p), kb = key(q);
+    for (const [p, q] of [
+      [a, b],
+      [b, c],
+      [c, a],
+    ]) {
+      const ka = key(p),
+        kb = key(q);
       const e = ka < kb ? ka + '|' + kb : kb + '|' + ka;
       edges.set(e, (edges.get(e) || 0) + 1);
     }
   }
-  let boundary = 0, odd = 0;
-  for (const n of edges.values()) { if (n === 1) boundary++; if (n % 2 === 1) odd++; }
-  return { triCount, hist, uniqueEdges: edges.size, boundaryEdges: boundary, oddEdges: odd };
+  let boundary = 0,
+    odd = 0;
+  for (const n of edges.values()) {
+    if (n === 1) boundary++;
+    if (n % 2 === 1) odd++;
+  }
+  return {
+    triCount,
+    hist,
+    uniqueEdges: edges.size,
+    boundaryEdges: boundary,
+    oddEdges: odd,
+  };
 }

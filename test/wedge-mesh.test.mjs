@@ -54,8 +54,13 @@ function oddEdges(mesh) {
     const [a, b, c] = idx
       ? [idx[t * 3], idx[t * 3 + 1], idx[t * 3 + 2]]
       : [t * 3, t * 3 + 1, t * 3 + 2];
-    for (const [p, q] of [[a, b], [b, c], [c, a]]) {
-      const ka = key(p), kb = key(q);
+    for (const [p, q] of [
+      [a, b],
+      [b, c],
+      [c, a],
+    ]) {
+      const ka = key(p),
+        kb = key(q);
       const e = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
       edges.set(e, (edges.get(e) || 0) + 1);
     }
@@ -149,10 +154,24 @@ const stair = (frontRows, topRows) => ({
 });
 
 test('monochrome staircase wedges every step regardless of an elevation colour band', () => {
-  const whiteCap = stair(['###', 'OOO', 'OOO', 'OOO'], ['OOO', 'OOO', '###', '###', '###', '###']);
-  const pinkBand = stair(['###', '###', 'OOO', '###'], ['OOO', '###', '###', '###', '###', '###']);
-  assert.equal(wedgeCount(whiteCap), 9, 'white-cap staircase must wedge every step (3 steps x 3 wide)');
-  assert.equal(wedgeCount(pinkBand), 9, 'pink-band staircase must wedge every step (3 steps x 3 wide)');
+  const whiteCap = stair(
+    ['###', 'OOO', 'OOO', 'OOO'],
+    ['OOO', 'OOO', '###', '###', '###', '###']
+  );
+  const pinkBand = stair(
+    ['###', '###', 'OOO', '###'],
+    ['OOO', '###', '###', '###', '###', '###']
+  );
+  assert.equal(
+    wedgeCount(whiteCap),
+    9,
+    'white-cap staircase must wedge every step (3 steps x 3 wide)'
+  );
+  assert.equal(
+    wedgeCount(pinkBand),
+    9,
+    'pink-band staircase must wedge every step (3 steps x 3 wide)'
+  );
 });
 
 test('strict gate: a corner whose riser and tread differ never wedges (author control)', () => {
@@ -166,5 +185,9 @@ test('strict gate: a corner whose riser and tread differ never wedges (author co
     top: fill(4, 4, 'R'), // treads -> red  =>  riser != tread at every step
   });
   assert.ok(wedgeCount(ramp()) > 0, 'the one-colour ramp must wedge');
-  assert.equal(wedgeCount(twoColour()), 0, 'riser!=tread must never wedge, even on a perfect ramp');
+  assert.equal(
+    wedgeCount(twoColour()),
+    0,
+    'riser!=tread must never wedge, even on a perfect ramp'
+  );
 });

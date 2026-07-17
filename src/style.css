@@ -14,7 +14,7 @@ body {
   margin: 0;
   height: 100%;
   background: var(--bg);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   color: #e8e8ea;
   overflow: hidden;
 }
@@ -360,10 +360,18 @@ body {
 .editor-canvas-bg {
   z-index: 0;
   background-color: #2a2a30;
-  background-image: linear-gradient(45deg, #3a3a42 25%, transparent 25%, transparent 75%, #3a3a42 75%),
+  background-image: linear-gradient(
+      45deg,
+      #3a3a42 25%,
+      transparent 25%,
+      transparent 75%,
+      #3a3a42 75%
+    ),
     linear-gradient(45deg, #3a3a42 25%, transparent 25%, transparent 75%, #3a3a42 75%);
   background-size: 16px 16px;
-  background-position: 0 0, 8px 8px;
+  background-position:
+    0 0,
+    8px 8px;
 }
 /* Hairline extent rules sit ABOVE the pixel canvas. */
 .editor-canvas-overlay {
@@ -425,10 +433,18 @@ body {
 }
 .editor-tile-transparent {
   background-color: #2a2a30;
-  background-image: linear-gradient(45deg, #52525c 25%, transparent 25%, transparent 75%, #52525c 75%),
+  background-image: linear-gradient(
+      45deg,
+      #52525c 25%,
+      transparent 25%,
+      transparent 75%,
+      #52525c 75%
+    ),
     linear-gradient(45deg, #52525c 25%, transparent 25%, transparent 75%, #52525c 75%);
   background-size: 12px 12px;
-  background-position: 0 0, 6px 6px;
+  background-position:
+    0 0,
+    6px 6px;
 }
 .editor-brush {
   display: flex;
@@ -444,8 +460,16 @@ body {
 }
 .editor-brush-sw.is-transparent {
   background-color: #2a2a30;
-  background-image: linear-gradient(45deg, #52525c 25%, transparent 25%, transparent 75%, #52525c 75%),
+  background-image: linear-gradient(
+      45deg,
+      #52525c 25%,
+      transparent 25%,
+      transparent 75%,
+      #52525c 75%
+    ),
     linear-gradient(45deg, #52525c 25%, transparent 25%, transparent 75%, #52525c 75%);
   background-size: 8px 8px;
-  background-position: 0 0, 4px 4px;
+  background-position:
+    0 0,
+    4px 4px;
 }

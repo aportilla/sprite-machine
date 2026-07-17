@@ -37,7 +37,12 @@ import { DEFAULT_WORLD_SIZE } from './constants.js';
 const AXI = { x: 0, y: 1, z: 2 };
 // face key from axis name + sign (+1/-1)
 const FKEY = {
-  'x1': 'px', 'x-1': 'nx', 'y1': 'py', 'y-1': 'ny', 'z1': 'pz', 'z-1': 'nz',
+  x1: 'px',
+  'x-1': 'nx',
+  y1: 'py',
+  'y-1': 'ny',
+  z1: 'pz',
+  'z-1': 'nz',
 };
 const FIDX = {};
 FACE_KEYS.forEach((k, i) => (FIDX[k] = i));
@@ -78,10 +83,8 @@ export function wedgeMesh(result, opts = {}) {
     return (A.r - B.r) ** 2 + (A.g - B.g) ** 2 + (A.b - B.b) ** 2 <= TOL2;
   };
 
-  const inBounds = (x, y, z) =>
-    x >= 0 && y >= 0 && z >= 0 && x < nx && y < ny && z < nz;
-  const solidAt = (x, y, z) =>
-    inBounds(x, y, z) && solid[voxIndex(x, y, z, dims)];
+  const inBounds = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < nx && y < ny && z < nz;
+  const solidAt = (x, y, z) => inBounds(x, y, z) && solid[voxIndex(x, y, z, dims)];
   const step = (x, y, z, ax, sg) => [
     x + sg * +(ax === 'x'),
     y + sg * +(ax === 'y'),
@@ -151,10 +154,20 @@ export function wedgeMesh(result, opts = {}) {
   const tris = []; // {a,b,c: int[3], normal:[3], color:uint32}, CCW wrt normal
   const pushTri = (a, b, c, N, color) => {
     // wind to match the explicit outward normal N (backface culling is on)
-    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
-    const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
-    const gx = uy * vz - uz * vy, gy = uz * vx - ux * vz, gz = ux * vy - uy * vx;
-    if (gx * N[0] + gy * N[1] + gz * N[2] < 0) { const t = b; b = c; c = t; }
+    const ux = b[0] - a[0],
+      uy = b[1] - a[1],
+      uz = b[2] - a[2];
+    const vx = c[0] - a[0],
+      vy = c[1] - a[1],
+      vz = c[2] - a[2];
+    const gx = uy * vz - uz * vy,
+      gy = uz * vx - ux * vz,
+      gz = ux * vy - uy * vx;
+    if (gx * N[0] + gy * N[1] + gz * N[2] < 0) {
+      const t = b;
+      b = c;
+      c = t;
+    }
     tris.push({ a, b, c, normal: N, color });
   };
   const pushQuad = (a, b, c, d, N, color) => {
@@ -164,12 +177,15 @@ export function wedgeMesh(result, opts = {}) {
   // build a point [x,y,z] from three axis/value pairs
   const mk = (a1, v1, a2, v2, a3, v3) => {
     const p = [0, 0, 0];
-    p[AXI[a1]] = v1; p[AXI[a2]] = v2; p[AXI[a3]] = v3;
+    p[AXI[a1]] = v1;
+    p[AXI[a2]] = v2;
+    p[AXI[a3]] = v3;
     return p;
   };
   const axisVec = (a1, s1, a2, s2) => {
     const p = [0, 0, 0];
-    p[AXI[a1]] = s1; if (a2) p[AXI[a2]] = s2;
+    p[AXI[a1]] = s1;
+    if (a2) p[AXI[a2]] = s2;
     const L = Math.hypot(p[0], p[1], p[2]) || 1;
     return [p[0] / L, p[1] / L, p[2] / L];
   };
@@ -188,10 +204,15 @@ export function wedgeMesh(result, opts = {}) {
   for (const w of wedges) {
     const { x, y, z, R, A, B, sA, sB } = w;
     const p = { x, y, z };
-    const aC = p[A], bC = p[B], rC = p[R];
-    const Ac = sA < 0 ? aC : aC + 1, Ao = sA < 0 ? aC + 1 : aC; // filled / opposite A corner
-    const Bc = sB < 0 ? bC : bC + 1, Bo = sB < 0 ? bC + 1 : bC;
-    const rLo = rC, rHi = rC + 1;
+    const aC = p[A],
+      bC = p[B],
+      rC = p[R];
+    const Ac = sA < 0 ? aC : aC + 1,
+      Ao = sA < 0 ? aC + 1 : aC; // filled / opposite A corner
+    const Bc = sB < 0 ? bC : bC + 1,
+      Bo = sB < 0 ? bC + 1 : bC;
+    const rLo = rC,
+      rHi = rC + 1;
     const pt = (av, bv, rv) => mk(A, av, B, bv, R, rv);
     const wc = flat ? FLAT_COLOR : w.color >>> 0;
 
@@ -222,9 +243,15 @@ export function wedgeMesh(result, opts = {}) {
   for (const t of repaired) {
     const lin = toLin(t.color >>> 0);
     for (const v of [t.a, t.b, t.c]) {
-      pos[o] = v[0] * s; pos[o + 1] = v[1] * s; pos[o + 2] = v[2] * s;
-      nrm[o] = t.normal[0]; nrm[o + 1] = t.normal[1]; nrm[o + 2] = t.normal[2];
-      col[o] = lin[0]; col[o + 1] = lin[1]; col[o + 2] = lin[2];
+      pos[o] = v[0] * s;
+      pos[o + 1] = v[1] * s;
+      pos[o + 2] = v[2] * s;
+      nrm[o] = t.normal[0];
+      nrm[o + 1] = t.normal[1];
+      nrm[o + 2] = t.normal[2];
+      col[o] = lin[0];
+      col[o + 1] = lin[1];
+      col[o + 2] = lin[2];
       o += 3;
     }
   }

@@ -13,8 +13,8 @@ npm test         # pipeline + wedge-mesh + atlas round-trip (node --test)
 npm run build    # static bundle in dist/
 ```
 
-**Pick a built-in sample**, or load your own **3×2 sprite sheet** — click *pick
-atlas…* or drop a PNG anywhere on the window. **Low-poly** (additive 45° wedges)
+**Pick a built-in sample**, or load your own **3×2 sprite sheet** — click _pick
+atlas…_ or drop a PNG anywhere on the window. **Low-poly** (additive 45° wedges)
 is on by default and toggles live; greedy meshing is always on. Sprites are hard
 pixel art — every texel is fully opaque or fully transparent — and every face
 with no view of its own is mirror-filled from its opposite (and shown, derived,
@@ -33,7 +33,7 @@ RIGHT  BACK   BOTTOM
 
 The **tile size is auto-derived** from the image dimensions and the grid (a
 120×80 sheet ⇒ 40×40 tiles). Each tile is a **literal slice of the voxel
-lattice** — a pixel's position inside its tile *is* its position in the object,
+lattice** — a pixel's position inside its tile _is_ its position in the object,
 so tiles are read at full size (**no auto-crop**) and must be **registered across
 faces**: a FRONT pixel only becomes solid where the SIDE covers its row and the
 TOP covers its column. Use **square tiles** (a cubic lattice); the in-app editor
@@ -42,13 +42,13 @@ draws alignment guides to help you line pixels up.
 **Tile orientation** (world: `+x` right, `+y` up, `+z` = front toward camera) —
 draw each tile this way for a zero-transform ingest:
 
-| Tile | Draw as… | Front points | Size |
-|---|---|---|---|
-| FRONT / BACK | head-on / from behind, upright | — | width × height |
-| RIGHT | the right side | right | depth × height |
-| LEFT | the left side | left | depth × height |
-| TOP | plan view, width horizontal | top edge | width × depth |
-| BOTTOM | plan from below, width horizontal | bottom edge | width × depth |
+| Tile         | Draw as…                          | Front points | Size           |
+| ------------ | --------------------------------- | ------------ | -------------- |
+| FRONT / BACK | head-on / from behind, upright    | —            | width × height |
+| RIGHT        | the right side                    | right        | depth × height |
+| LEFT         | the left side                     | left         | depth × height |
+| TOP          | plan view, width horizontal       | top edge     | width × depth  |
+| BOTTOM       | plan from below, width horizontal | bottom edge  | width × depth  |
 
 The UI's **faces** preview lays the sliced tiles out like the sheet and marks
 this **Front points** edge in green on each thumbnail, so a mis-oriented tile is
@@ -132,15 +132,15 @@ any angle — 1 pixel = 1 voxel = 1 cube.
    instead of one-per-texel (the reference cube drops from 768 → **12** triangles,
    appearance-identical). Emitted into one `BufferGeometry` with
    per-face vertex colors, rendered `MeshStandardMaterial({ vertexColors,
-   flatShading })`. One draw call, real shadows, and `flatShading` lets the
+flatShading })`. One draw call, real shadows, and `flatShading` lets the
    directional light separate top from sides for free.
 
 ### Render modes
 
-| Mode | What it is | Use |
-|---|---|---|
-| **voxel (3D)** | Visual-hull voxel solid (above), greedy-meshed | The real object (low-poly off) |
-| **low-poly** | Voxel solid + 45° wedges over same-surface staircases | Softer silhouette, fewer hard steps (default) |
+| Mode           | What it is                                            | Use                                           |
+| -------------- | ----------------------------------------------------- | --------------------------------------------- |
+| **voxel (3D)** | Visual-hull voxel solid (above), greedy-meshed        | The real object (low-poly off)                |
+| **low-poly**   | Voxel solid + 45° wedges over same-surface staircases | Softer silhouette, fewer hard steps (default) |
 
 ### Low-poly (additive wedges)
 
@@ -166,7 +166,7 @@ Not every face has to be drawn. **Mirror-fill is always on for all three axes:**
 a surface face with no view of its own takes its color from the mirrored
 opposite view, so a half-drawn sheet still colors every face — both built-in
 samples ship only LEFT/FRONT/TOP and mirror-fill RIGHT/BACK/BOTTOM. Mirroring is
-a *coloring* step; an axis with no view at all (neither side) is simply
+a _coloring_ step; an axis with no view at all (neither side) is simply
 unconstrained for carving — the shape fills to the bounding box there and warns.
 
 ### Coordinate conventions
@@ -226,7 +226,7 @@ src/
   (`t-junction.js`), so the result stays watertight (a regression test asserts
   zero boundary edges).
 - **Perf** — hidden-face culling + greedy meshing (both on) keep it to one draw
-  call and a handful of triangles; for a scene of *many* objects, batch identical
+  call and a handful of triangles; for a scene of _many_ objects, batch identical
   ones with an object-level `InstancedMesh`, and move `buildVoxels` to a Web
   Worker (it's pure typed-array code, trivially transferable) if rebuilds ever
   stall the main thread.

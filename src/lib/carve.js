@@ -183,8 +183,7 @@ export function extractSurface(solid, dims) {
           const ax = x + dx,
             ay = y + dy,
             az = z + dz;
-          const outside =
-            ax < 0 || ay < 0 || az < 0 || ax >= nx || ay >= ny || az >= nz;
+          const outside = ax < 0 || ay < 0 || az < 0 || ax >= nx || ay >= ny || az >= nz;
           if (outside || !solid[voxIndex(ax, ay, az, dims)]) mask |= 1 << f;
         }
         if (mask) {

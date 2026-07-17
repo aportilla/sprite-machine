@@ -43,22 +43,22 @@ feature is purely additive — no changes to the voxel pipeline (`carve`,
 
 ## 1. How it fits the existing architecture
 
-This is mostly *wiring* onto seams that already exist — not new machinery.
+This is mostly _wiring_ onto seams that already exist — not new machinery.
 
-| What we need | What already exists | Where |
-|---|---|---|
-| Source of truth for the sheet | `state.atlasImage` (a real `ImageData`) | `main.js:63` |
-| Re-render on change | `rebuild()` — reads `state.views`, **disposes the old mesh** (leak-safe), rebuilds | `main.js:91` |
-| Per-tile data | `state.views[name]` = `{width,height,data}` cell, or `null` if blank | `main.js`, `atlas.js` |
-| Clickable targets | `slotEls[name] = {slot, cv}` — one `<canvas>` per face | `ui.js:167-174` |
-| Callback pattern | `createUI({ onSample, onAtlas, onOptionChange })` | `ui.js:95` / `main.js:157` |
-| Tile ↔ sheet math | `subTile(img, sx, sy, w, h)`, `sx=c*tileW, sy=r*tileH` | `atlas.js:34,102` |
+| What we need                  | What already exists                                                                | Where                      |
+| ----------------------------- | ---------------------------------------------------------------------------------- | -------------------------- |
+| Source of truth for the sheet | `state.atlasImage` (a real `ImageData`)                                            | `main.js:63`               |
+| Re-render on change           | `rebuild()` — reads `state.views`, **disposes the old mesh** (leak-safe), rebuilds | `main.js:91`               |
+| Per-tile data                 | `state.views[name]` = `{width,height,data}` cell, or `null` if blank               | `main.js`, `atlas.js`      |
+| Clickable targets             | `slotEls[name] = {slot, cv}` — one `<canvas>` per face                             | `ui.js:167-174`            |
+| Callback pattern              | `createUI({ onSample, onAtlas, onOptionChange })`                                  | `ui.js:95` / `main.js:157` |
+| Tile ↔ sheet math            | `subTile(img, sx, sy, w, h)`, `sx=c*tileW, sy=r*tileH`                             | `atlas.js:34,102`          |
 
 **Canonical data model.** Every edit is blitted back into `state.atlasImage`,
-which remains the single source of truth. `state.views` is *replaced wholesale*
+which remains the single source of truth. `state.views` is _replaced wholesale_
 on every `sliceAndBuild` (`main.js:145`), so edits stored only in `state.views`
 would be silently discarded on the next sample switch or atlas drop. Keeping the
-sheet in sync also makes **download free** — `state.atlasImage` already *is* the
+sheet in sync also makes **download free** — `state.atlasImage` already _is_ the
 current atlas.
 
 ---
@@ -70,7 +70,7 @@ crops each view to its alpha bounding box (`ingest.js:94`), reconciles each axis
 to the **max** extent across views (`reconcileDims`, `carve.js:53`), then
 **nearest-neighbor resamples** to that grid (`resampleView`, `ingest.js:135`).
 So if the user draws FRONT wider than BACK, the model rescales along X and single
-edge pixels can shift or drop. This is *pre-existing* pipeline behavior (README:
+edge pixels can shift or drop. This is _pre-existing_ pipeline behavior (README:
 "disagreeing views are resampled up") — the editor merely inherits it. We will
 **not** claim pixel-perfect fidelity. Optional nicety: surface the reconciled
 `result.dims` in the editor so the effective resolution is visible.
@@ -82,13 +82,13 @@ edge pixels can shift or drop. This is *pre-existing* pipeline behavior (README:
 ### A. The editing surface = the full `tileW × tileH` cell
 
 Not the auto-cropped content, and not the whole sheet. The full cell is the only
-representation that lets a user draw *new* pixels outside the current alpha
+representation that lets a user draw _new_ pixels outside the current alpha
 bounds (the crop happens later, inside `buildVoxels`→`ingestSprite`). A `null`
 (blank) tile opens as a fresh transparent `Uint8ClampedArray(tileW*tileH*4)`.
 
 Use the **rounded** `tileW/tileH` that `sliceAtlas` returned (cache them in
 `state`) for both the blank-buffer size and the blit rect — never re-derive from
-image dimensions (off-by-one on non-divisible sheets; `sliceAtlas` *warns* but
+image dimensions (off-by-one on non-divisible sheets; `sliceAtlas` _warns_ but
 does not fail when `cols*tileW != width`). The blit writes only within
 `[sx, sx+tileW) × [sy, sy+tileH)`, leaving any remainder pixels of a
 non-divisible sheet untouched.
@@ -98,12 +98,12 @@ non-divisible sheet untouched.
 No fixed palette exists in the codebase today — the render palette is derived
 per-sprite by `buildPalette` (`colorize.js:28`). We add a new **authoring**
 palette, `PENCIL_PALETTE`, to `src/lib/constants.js` as 16 packed-RGBA `uint32`
-values (via `packRGBA`, `a=255`). This is *only* the brush's swatch set;
+values (via `packRGBA`, `a=255`). This is _only_ the brush's swatch set;
 `buildPalette`/`makeSnapper` stay untouched, and because drawn pixels are already
 exact palette colors, snapping is a no-op on them.
 
 **Wedge-gate safety.** The low-poly wedge merge test `sameMat` uses
-`TOL2 = 12*12` (~12 Euclidean units, `wedge-mesh.js:70`); two *distinct* palette
+`TOL2 = 12*12` (~12 Euclidean units, `wedge-mesh.js:70`); two _distinct_ palette
 colors closer than that would falsely fuse into a smooth wedge. DB16's minimum
 pairwise distance is ≈58 — comfortably clear — so no two swatches can false-merge.
 DB16 also includes neutral grays, so the `palette[0]` dominant-body fallback
@@ -111,16 +111,16 @@ DB16 also includes neutral grays, so the `palette[0]` dominant-body fallback
 
 DB16 values (index → hex → r,g,b):
 
-| # | hex | r,g,b |  | # | hex | r,g,b |
-|---|---|---|---|---|---|---|
-| 0 | `#140c1c` | 20,12,28 |  | 8 | `#597dce` | 89,125,206 |
-| 1 | `#442434` | 68,36,52 |  | 9 | `#d27d2c` | 210,125,44 |
-| 2 | `#30346d` | 48,52,109 |  | 10 | `#8595a1` | 133,149,161 |
-| 3 | `#4e4a4e` | 78,74,78 |  | 11 | `#6daa2c` | 109,170,44 |
-| 4 | `#854c30` | 133,76,48 |  | 12 | `#d2aa99` | 210,170,153 |
-| 5 | `#346524` | 52,101,36 |  | 13 | `#6dc2ca` | 109,194,202 |
-| 6 | `#d04648` | 208,70,72 |  | 14 | `#dad45e` | 218,212,94 |
-| 7 | `#757161` | 117,113,97 |  | 15 | `#deeed6` | 222,238,214 |
+| #   | hex       | r,g,b      |     | #   | hex       | r,g,b       |
+| --- | --------- | ---------- | --- | --- | --------- | ----------- |
+| 0   | `#140c1c` | 20,12,28   |     | 8   | `#597dce` | 89,125,206  |
+| 1   | `#442434` | 68,36,52   |     | 9   | `#d27d2c` | 210,125,44  |
+| 2   | `#30346d` | 48,52,109  |     | 10  | `#8595a1` | 133,149,161 |
+| 3   | `#4e4a4e` | 78,74,78   |     | 11  | `#6daa2c` | 109,170,44  |
+| 4   | `#854c30` | 133,76,48  |     | 12  | `#d2aa99` | 210,170,153 |
+| 5   | `#346524` | 52,101,36  |     | 13  | `#6dc2ca` | 109,194,202 |
+| 6   | `#d04648` | 208,70,72  |     | 14  | `#dad45e` | 218,212,94  |
+| 7   | `#757161` | 117,113,97 |     | 15  | `#deeed6` | 222,238,214 |
 
 ### C. Live update via `rebuild()` directly
 
@@ -143,14 +143,14 @@ redraws that `sliceAndBuild` would do. Requirements:
 
 ### D. Mirror-derived faces
 
-When `state.views[name]` is `null`, the thumbnail shows the *mirrored opposite*
+When `state.views[name]` is `null`, the thumbnail shows the _mirrored opposite_
 (`setThumbnails`, `ui.js:234-240`). Opening a blank canvas there would be a
 jarring "what-you-see-isn't-what-you-edit" discontinuity. Per decision #2:
 
 - **Pre-seed** the editor's working buffer with the mirrored-opposite image
   (reuse `ui.js`'s `mirrorImage` + `VIEW_MIRROR_AXIS`), so the editor shows
   exactly what the thumbnail shows.
-- Badge the face: *"derived — editing creates independent art for this face."*
+- Badge the face: _"derived — editing creates independent art for this face."_
 - Track a **`dirty`** flag. On close, if the buffer is unchanged (user drew
   nothing), leave `state.views[name] = null` — the face stays mirror-derived. If
   `dirty`, commit the full buffer as real art for that face.
@@ -193,6 +193,7 @@ Export `PENCIL_PALETTE`: the 16 DB16 entries, each as `{ packed, css }`
 
 **Step 2 — `src/lib/atlas.js`** (modify)
 Add two tested pure helpers beside `subTile`:
+
 - `blitTile(sheet, tile, sx, sy)` — inverse of `subTile`; copies `tile.data` rows
   into `sheet.data` at the rect, in place (does not change the `ImageData`
   identity).
@@ -234,6 +235,7 @@ section → `onDownload()`. `setThumbnails` is reused unchanged for post-edit
 refresh.
 
 **Step 6 — `src/main.js`** (modify)
+
 - In `sliceAndBuild`, cache `state.tileW/tileH/cols/rows` from `sliceAtlas`'s
   return (rounded values).
 - `onTileEdit(name)`: resolve `tile = state.views[name]` or a fresh transparent
@@ -258,6 +260,7 @@ Add `.editor-overlay` (fixed dim backdrop, flex-center), `.editor-panel`,
 ## 5. Testing
 
 **Node (pure, `npm test`)** — add `test/atlas.test.mjs`:
+
 - **Round-trip:** `sliceAtlas(sheet)` then `blitTile` every view back into a
   fresh sheet is byte-equal to the original (divisible sheet).
 - **Empty-tile:** a fully-transparent tile blitted in re-slices to `null` via

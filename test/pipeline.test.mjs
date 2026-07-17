@@ -237,12 +237,16 @@ test('strict registration: unmatched front pixels carve away', () => {
 // --- atlas slicing ----------------------------------------------------------
 // Build a mock 3x2 atlas of 2x2 tiles (6x4 px); one cell left blank.
 function mockAtlas() {
-  const W = 6, H = 4;
+  const W = 6,
+    H = 4;
   const data = new Uint8ClampedArray(W * H * 4);
   const cellColor = {
     // [col,row] -> [r,g,b] ; row1col0 (right) left transparent
-    '0,0': [10, 0, 0], '1,0': [20, 0, 0], '2,0': [30, 0, 0],
-    '1,1': [40, 0, 0], '2,1': [50, 0, 0],
+    '0,0': [10, 0, 0],
+    '1,0': [20, 0, 0],
+    '2,0': [30, 0, 0],
+    '1,1': [40, 0, 0],
+    '2,1': [50, 0, 0],
   };
   for (let r = 0; r < 2; r++)
     for (let c = 0; c < 3; c++) {
@@ -275,8 +279,13 @@ test('atlas: tile size auto-derived and cells mapped to named views', () => {
 });
 
 test('applyTransform rot:1 rotates 90deg CW (left column -> top row)', () => {
-  const img = { width: 2, height: 1, data: new Uint8ClampedArray([
-    200, 0, 0, 255, /* left = red */ 0, 0, 200, 255, /* right = blue */ ]) };
+  const img = {
+    width: 2,
+    height: 1,
+    data: new Uint8ClampedArray([
+      200, 0, 0, 255, /* left = red */ 0, 0, 200, 255 /* right = blue */,
+    ]),
+  };
   const out = applyTransform(img, { rot: 1 });
   assert.equal(out.width, 1);
   assert.equal(out.height, 2);
@@ -341,8 +350,7 @@ test('3-face chunky object builds and fully colors', () => {
   assert.equal(r.warnings.length, 0);
   for (let idx = 0; idx < r.surfaceMask.length; idx++) {
     const m = r.surfaceMask[idx];
-    for (let f = 0; f < 6; f++)
-      if (m & (1 << f)) assert.ok(r.faceColor.has(idx * 6 + f));
+    for (let f = 0; f < 6; f++) if (m & (1 << f)) assert.ok(r.faceColor.has(idx * 6 + f));
   }
 });
 
@@ -385,7 +393,11 @@ test('faces preview order matches the atlas layout', () => {
 
 // Sprites are hard pixel art: solid at alpha >= 128, transparent below.
 test('ingest treats alpha >= 128 as solid, < 128 as transparent', () => {
-  const px = (a) => ({ width: 1, height: 1, data: new Uint8ClampedArray([200, 0, 0, a]) });
+  const px = (a) => ({
+    width: 1,
+    height: 1,
+    data: new Uint8ClampedArray([200, 0, 0, a]),
+  });
   assert.notEqual(ingestSprite(px(255)), null);
   assert.notEqual(ingestSprite(px(128)), null);
   assert.equal(ingestSprite(px(127)), null); // dropped -> fully transparent
@@ -395,9 +407,14 @@ test('ingest treats alpha >= 128 as solid, < 128 as transparent', () => {
 // --- 9. Palette build + snap (colorize's "most likely to look wrong" unit) ---
 test('buildPalette collects unique solid pixel colors, skipping transparent', () => {
   const gv = {
-    front: { occ: new Uint8Array([1, 1, 0, 1]), rgb: new Uint32Array([pk('M'), pk('M'), 0, pk('T')]) },
+    front: {
+      occ: new Uint8Array([1, 1, 0, 1]),
+      rgb: new Uint32Array([pk('M'), pk('M'), 0, pk('T')]),
+    },
   };
-  const pal = buildPalette(gv).map((c) => c >>> 0).sort();
+  const pal = buildPalette(gv)
+    .map((c) => c >>> 0)
+    .sort();
   assert.deepEqual(pal, [pk('M'), pk('T')].sort());
 });
 
@@ -420,11 +437,12 @@ test('buildVoxels with no views yields one voxel and warns', () => {
 // --- 11. T-junction elimination (used by low-poly greedy base faces) ---------
 // A vertex is a T-junction if it lies strictly interior to some triangle edge.
 function hasTJunction(tris) {
-  const seen = new Set(), verts = [];
+  const seen = new Set(),
+    verts = [];
   for (const t of tris)
     for (const v of [t.a, t.b, t.c]) {
       const k = v.join(',');
-      if (!seen.has(k)) (seen.add(k), verts.push(v));
+      if (!seen.has(k)) seen.add(k), verts.push(v);
     }
   const interior = (p, q, v) => {
     const d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
@@ -438,7 +456,11 @@ function hasTJunction(tris) {
     return dot > 0 && dot < len2; // strictly between the endpoints
   };
   for (const t of tris)
-    for (const [p, q] of [[t.a, t.b], [t.b, t.c], [t.c, t.a]])
+    for (const [p, q] of [
+      [t.a, t.b],
+      [t.b, t.c],
+      [t.c, t.a],
+    ])
       for (const v of verts) if (interior(p, q, v)) return true;
   return false;
 }

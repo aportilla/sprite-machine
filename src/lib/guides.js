@@ -34,7 +34,11 @@ function axisMask(view, ia, worldAxis) {
     const m = new Uint8Array(w);
     for (let u = 0; u < w; u++) {
       let any = 0;
-      for (let v = 0; v < h; v++) if (solid(u, v)) { any = 1; break; }
+      for (let v = 0; v < h; v++)
+        if (solid(u, v)) {
+          any = 1;
+          break;
+        }
       m[ia.colFlip ? w - 1 - u : u] = any;
     }
     return m;
@@ -42,7 +46,11 @@ function axisMask(view, ia, worldAxis) {
   const m = new Uint8Array(h);
   for (let v = 0; v < h; v++) {
     let any = 0;
-    for (let u = 0; u < w; u++) if (solid(u, v)) { any = 1; break; }
+    for (let u = 0; u < w; u++)
+      if (solid(u, v)) {
+        any = 1;
+        break;
+      }
     m[ia.rowFlip ? h - 1 - v : v] = any;
   }
   return m;
@@ -95,10 +103,18 @@ export function faceGuides(views, name, tileW, tileH) {
   // The constraining plane for each axis is the OTHER plane containing it
   // (i.e. {axis, depthAxis}), never the edited face's own plane.
   const colSupport = axisSupport(
-    views, viewsOnPlane(colAxis, depthAxis), colAxis, tileW, ia.colFlip
+    views,
+    viewsOnPlane(colAxis, depthAxis),
+    colAxis,
+    tileW,
+    ia.colFlip
   );
   const rowSupport = axisSupport(
-    views, viewsOnPlane(rowAxis, depthAxis), rowAxis, tileH, ia.rowFlip
+    views,
+    viewsOnPlane(rowAxis, depthAxis),
+    rowAxis,
+    tileH,
+    ia.rowFlip
   );
   return {
     colSupport,

@@ -6,7 +6,12 @@ import { voxelMesh } from './lib/mesh.js';
 import { wedgeMesh } from './lib/wedge-mesh.js';
 import { SAMPLES } from './lib/sprite-data.js';
 import { sliceAtlas, blitTile, cellOf } from './lib/atlas.js';
-import { VIEW_NAMES, VIEW_OPPOSITE, VIEW_MIRROR_AXIS, VIEW_FRONT_EDGE } from './lib/views.js';
+import {
+  VIEW_NAMES,
+  VIEW_OPPOSITE,
+  VIEW_MIRROR_AXIS,
+  VIEW_FRONT_EDGE,
+} from './lib/views.js';
 import { PENCIL_PALETTE } from './lib/constants.js';
 import { faceGuides } from './lib/guides.js';
 import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
@@ -87,7 +92,15 @@ let pendingEditFace = null;
 
 const camParam = params.get('cam');
 const ISO_DIR = new THREE.Vector3(
-  ...(camParam === 'top' ? [0.001, 1, 0.001] : camParam === 'front' ? [0, 0.2, 1] : camParam === 'fq' ? [0.7, 0.35, 1] : camParam === 'bq' ? [0.7, 0.35, -1] : [1, 0.8, 1])
+  ...(camParam === 'top'
+    ? [0.001, 1, 0.001]
+    : camParam === 'front'
+      ? [0, 0.2, 1]
+      : camParam === 'fq'
+        ? [0.7, 0.35, 1]
+        : camParam === 'bq'
+          ? [0.7, 0.35, -1]
+          : [1, 0.8, 1])
 ).normalize();
 function frameObject(obj) {
   const box = new THREE.Box3().setFromObject(obj);

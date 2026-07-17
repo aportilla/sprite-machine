@@ -17,50 +17,116 @@ import { voxIndex, FACE_KEYS } from './carve.js';
 export const FACE_GEO = {
   px: {
     normal: [1, 0, 0],
-    N: 'x', A: 'y', B: 'z',
+    N: 'x',
+    A: 'y',
+    B: 'z',
     quad: (aMin, aMax, bMin, bMax, s) => {
-      const aLo = aMin, aHi = aMax + 1, bLo = bMin, bHi = bMax + 1, p = s + 1;
-      return [[p, aLo, bHi], [p, aLo, bLo], [p, aHi, bLo], [p, aHi, bHi]];
+      const aLo = aMin,
+        aHi = aMax + 1,
+        bLo = bMin,
+        bHi = bMax + 1,
+        p = s + 1;
+      return [
+        [p, aLo, bHi],
+        [p, aLo, bLo],
+        [p, aHi, bLo],
+        [p, aHi, bHi],
+      ];
     },
   },
   nx: {
     normal: [-1, 0, 0],
-    N: 'x', A: 'y', B: 'z',
+    N: 'x',
+    A: 'y',
+    B: 'z',
     quad: (aMin, aMax, bMin, bMax, s) => {
-      const aLo = aMin, aHi = aMax + 1, bLo = bMin, bHi = bMax + 1, p = s;
-      return [[p, aLo, bLo], [p, aLo, bHi], [p, aHi, bHi], [p, aHi, bLo]];
+      const aLo = aMin,
+        aHi = aMax + 1,
+        bLo = bMin,
+        bHi = bMax + 1,
+        p = s;
+      return [
+        [p, aLo, bLo],
+        [p, aLo, bHi],
+        [p, aHi, bHi],
+        [p, aHi, bLo],
+      ];
     },
   },
   py: {
     normal: [0, 1, 0],
-    N: 'y', A: 'x', B: 'z',
+    N: 'y',
+    A: 'x',
+    B: 'z',
     quad: (aMin, aMax, bMin, bMax, s) => {
-      const aLo = aMin, aHi = aMax + 1, bLo = bMin, bHi = bMax + 1, p = s + 1;
-      return [[aLo, p, bHi], [aHi, p, bHi], [aHi, p, bLo], [aLo, p, bLo]];
+      const aLo = aMin,
+        aHi = aMax + 1,
+        bLo = bMin,
+        bHi = bMax + 1,
+        p = s + 1;
+      return [
+        [aLo, p, bHi],
+        [aHi, p, bHi],
+        [aHi, p, bLo],
+        [aLo, p, bLo],
+      ];
     },
   },
   ny: {
     normal: [0, -1, 0],
-    N: 'y', A: 'x', B: 'z',
+    N: 'y',
+    A: 'x',
+    B: 'z',
     quad: (aMin, aMax, bMin, bMax, s) => {
-      const aLo = aMin, aHi = aMax + 1, bLo = bMin, bHi = bMax + 1, p = s;
-      return [[aLo, p, bLo], [aHi, p, bLo], [aHi, p, bHi], [aLo, p, bHi]];
+      const aLo = aMin,
+        aHi = aMax + 1,
+        bLo = bMin,
+        bHi = bMax + 1,
+        p = s;
+      return [
+        [aLo, p, bLo],
+        [aHi, p, bLo],
+        [aHi, p, bHi],
+        [aLo, p, bHi],
+      ];
     },
   },
   pz: {
     normal: [0, 0, 1],
-    N: 'z', A: 'x', B: 'y',
+    N: 'z',
+    A: 'x',
+    B: 'y',
     quad: (aMin, aMax, bMin, bMax, s) => {
-      const aLo = aMin, aHi = aMax + 1, bLo = bMin, bHi = bMax + 1, p = s + 1;
-      return [[aLo, bLo, p], [aHi, bLo, p], [aHi, bHi, p], [aLo, bHi, p]];
+      const aLo = aMin,
+        aHi = aMax + 1,
+        bLo = bMin,
+        bHi = bMax + 1,
+        p = s + 1;
+      return [
+        [aLo, bLo, p],
+        [aHi, bLo, p],
+        [aHi, bHi, p],
+        [aLo, bHi, p],
+      ];
     },
   },
   nz: {
     normal: [0, 0, -1],
-    N: 'z', A: 'x', B: 'y',
+    N: 'z',
+    A: 'x',
+    B: 'y',
     quad: (aMin, aMax, bMin, bMax, s) => {
-      const aLo = aMin, aHi = aMax + 1, bLo = bMin, bHi = bMax + 1, p = s;
-      return [[aHi, bLo, p], [aLo, bLo, p], [aLo, bHi, p], [aHi, bHi, p]];
+      const aLo = aMin,
+        aHi = aMax + 1,
+        bLo = bMin,
+        bHi = bMax + 1,
+        p = s;
+      return [
+        [aHi, bLo, p],
+        [aLo, bLo, p],
+        [aLo, bHi, p],
+        [aHi, bHi, p],
+      ];
     },
   },
 };
@@ -137,12 +203,7 @@ export function greedyQuads(dims, surfaceMask, faceColor) {
 
           // grow width along A
           let w = 1;
-          while (
-            a + w < dimA &&
-            has[base + w] &&
-            cell[base + w] === c &&
-            !used[base + w]
-          )
+          while (a + w < dimA && has[base + w] && cell[base + w] === c && !used[base + w])
             w++;
 
           // grow height along B while the whole row segment matches

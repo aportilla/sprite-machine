@@ -48,16 +48,26 @@ function interiorPointsOnEdge(p, q, vset) {
 // would span a subdivided edge and re-introduce the T-junction we're removing.
 function triangulateConvex(ring, normal, emit) {
   const turn = (o, a, b) => {
-    const ux = a[0] - o[0], uy = a[1] - o[1], uz = a[2] - o[2];
-    const vx = b[0] - o[0], vy = b[1] - o[1], vz = b[2] - o[2];
-    return (uy * vz - uz * vy) * normal[0]
-      + (uz * vx - ux * vz) * normal[1]
-      + (ux * vy - uy * vx) * normal[2];
+    const ux = a[0] - o[0],
+      uy = a[1] - o[1],
+      uz = a[2] - o[2];
+    const vx = b[0] - o[0],
+      vy = b[1] - o[1],
+      vz = b[2] - o[2];
+    return (
+      (uy * vz - uz * vy) * normal[0] +
+      (uz * vx - ux * vz) * normal[1] +
+      (ux * vy - uy * vx) * normal[2]
+    );
   };
   // v strictly interior to segment p->q (collinear + between the endpoints).
   const onSeg = (p, q, v) => {
-    const dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2];
-    const ex = v[0] - p[0], ey = v[1] - p[1], ez = v[2] - p[2];
+    const dx = q[0] - p[0],
+      dy = q[1] - p[1],
+      dz = q[2] - p[2];
+    const ex = v[0] - p[0],
+      ey = v[1] - p[1],
+      ez = v[2] - p[2];
     if (dy * ez - dz * ey || dz * ex - dx * ez || dx * ey - dy * ex) return false;
     const dot = dx * ex + dy * ey + dz * ez;
     return dot > 0 && dot < dx * dx + dy * dy + dz * dz;
@@ -73,7 +83,12 @@ function triangulateConvex(ring, normal, emit) {
       if (turn(prev, cur, next) <= 0) continue; // reflex or collinear
       let blocked = false;
       for (let j = 0; j < poly.length && !blocked; j++)
-        if (poly[j] !== prev && poly[j] !== cur && poly[j] !== next && onSeg(prev, next, poly[j]))
+        if (
+          poly[j] !== prev &&
+          poly[j] !== cur &&
+          poly[j] !== next &&
+          onSeg(prev, next, poly[j])
+        )
           blocked = true;
       if (blocked) continue;
       emit(prev, cur, next);
@@ -88,7 +103,10 @@ function triangulateConvex(ring, normal, emit) {
       for (let i = 0; i < poly.length; i++) {
         const prev = poly[(i - 1 + poly.length) % poly.length];
         const next = poly[(i + 1) % poly.length];
-        if (turn(prev, poly[i], next) > 0) { ai = i; break; }
+        if (turn(prev, poly[i], next) > 0) {
+          ai = i;
+          break;
+        }
       }
       for (let k = 1; k < poly.length - 1; k++) {
         const w1 = poly[(ai + k) % poly.length];

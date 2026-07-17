@@ -72,14 +72,7 @@ function firstHitFromFace(solid, dims, x, y, z, faceKey) {
   let cx = x + nx,
     cy = y + ny,
     cz = z + nz;
-  while (
-    cx >= 0 &&
-    cy >= 0 &&
-    cz >= 0 &&
-    cx < dims.nx &&
-    cy < dims.ny &&
-    cz < dims.nz
-  ) {
+  while (cx >= 0 && cy >= 0 && cz >= 0 && cx < dims.nx && cy < dims.ny && cz < dims.nz) {
     if (solid[voxIndex(cx, cy, cz, dims)]) return false; // occluded
     cx += nx;
     cy += ny;
@@ -215,11 +208,10 @@ export function colorize(solid, surfaceMask, gviews, dims, opts = {}) {
   // 4. Dominant body color for anything left.
   if (pending.length) {
     const tally = new Map();
-    for (const c of faceColor.values())
-      tally.set(c, (tally.get(c) || 0) + 1);
+    for (const c of faceColor.values()) tally.set(c, (tally.get(c) || 0) + 1);
     let dom = palette[0] ?? packRGBA(200, 200, 200);
     let domN = -1;
-    for (const [c, k] of tally) if (k > domN) ((domN = k), (dom = c));
+    for (const [c, k] of tally) if (k > domN) (domN = k), (dom = c);
     for (const item of pending) faceColor.set(item.key, dom);
   }
 

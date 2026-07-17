@@ -77,7 +77,7 @@ function flip(img, flipX, flipY) {
  */
 export function applyTransform(img, t = {}) {
   let out = img;
-  const rot = ((t.rot || 0) % 4 + 4) % 4;
+  const rot = (((t.rot || 0) % 4) + 4) % 4;
   for (let i = 0; i < rot; i++) out = rot90cw(out);
   return flip(out, !!t.flipX, !!t.flipY);
 }

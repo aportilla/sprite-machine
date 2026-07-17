@@ -77,7 +77,22 @@ const rgbHex = ({ r, g, b }) => `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
 
 export function createTileEditor(
   container,
-  { name, tile, tileW, tileH, palette, frontEdge, seedMirror, mirrorBehind, guides, pair, brush, onLive, onSelectFace, onClose }
+  {
+    name,
+    tile,
+    tileW,
+    tileH,
+    palette,
+    frontEdge,
+    seedMirror,
+    mirrorBehind,
+    guides,
+    pair,
+    brush,
+    onLive,
+    onSelectFace,
+    onClose,
+  }
 ) {
   const derived = !!seedMirror;
 
@@ -107,7 +122,9 @@ export function createTileEditor(
   root.appendChild(header);
 
   if (derived) {
-    root.appendChild(el('div', 'editor-badge', 'derived — editing creates independent art'));
+    root.appendChild(
+      el('div', 'editor-badge', 'derived — editing creates independent art')
+    );
   }
 
   // --- canvas (backing store at native tile resolution, CSS-upscaled crisp) --
@@ -128,9 +145,13 @@ export function createTileEditor(
     const tmp = document.createElement('canvas');
     tmp.width = tileW;
     tmp.height = tileH;
-    tmp.getContext('2d').putImageData(
-      new ImageData(new Uint8ClampedArray(mirrorBehind.data), tileW, tileH), 0, 0
-    );
+    tmp
+      .getContext('2d')
+      .putImageData(
+        new ImageData(new Uint8ClampedArray(mirrorBehind.data), tileW, tileH),
+        0,
+        0
+      );
     const bgx = bg.getContext('2d');
     bgx.imageSmoothingEnabled = false;
     bgx.globalAlpha = MIRROR_ALPHA; // putImageData ignores alpha; drawImage honors it
