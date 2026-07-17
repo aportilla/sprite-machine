@@ -64,7 +64,8 @@ export const FACE_OPPOSITE = {
 // direction used for first-hit visibility, and the pixel projection.
 //
 // project() returns integer image coords. `imgW`/`imgH` give the expected view
-// image size for a grid, so ingest can validate/resample.
+// image size for a grid, so carve can place each view at native scale (padding,
+// never stretching) and index it 1:1.
 export const VIEWS = {
   // FRONT: looks toward -z from +z. Sees +z face. Image = X (right) by Y (up).
   front: {

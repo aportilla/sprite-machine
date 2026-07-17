@@ -128,22 +128,31 @@ export function ingestSprite(img) {
 }
 
 /**
- * Nearest-neighbor resample a cropped view to an exact target size, so that
- * projection can index it 1:1 against the reconciled grid.
+ * Place a cropped view into a (targetW,targetH) grid buffer at NATIVE scale — no
+ * resampling. Its texels map 1:1 into the target at offset (offX,offY); the rest
+ * is left transparent (empty). This is what makes disagreeing views INTERSECT
+ * instead of stretch: a shorter view fills only its own rows, so the visual-hull
+ * carve clips the solid down to it rather than scaling it up to fill the grid.
+ *
+ * offX/offY are the target-space position of the view's (0,0) texel; gridViews
+ * chooses them per axis (world-Y bottom-anchored, X/Z centered). A view is never
+ * larger than the grid on an axis it constrains (the grid is the per-axis max),
+ * so placement only ever pads — it can't crop.
  * @returns {{occ:Uint8Array, rgb:Uint32Array}}
  */
-export function resampleView(view, targetW, targetH) {
+export function placeView(view, targetW, targetH, offX, offY) {
   const { w, h, occ, rgb } = view;
-  if (w === targetW && h === targetH) return { occ, rgb };
+  if (w === targetW && h === targetH) return { occ, rgb }; // exact fit (offX/offY==0)
   const outOcc = new Uint8Array(targetW * targetH);
   const outRgb = new Uint32Array(targetW * targetH);
-  for (let ty = 0; ty < targetH; ty++) {
-    // Sample the source pixel nearest the center of the target texel.
-    const sy = Math.min(h - 1, Math.floor(((ty + 0.5) * h) / targetH));
-    for (let tx = 0; tx < targetW; tx++) {
-      const sx = Math.min(w - 1, Math.floor(((tx + 0.5) * w) / targetW));
-      const si = sy * w + sx;
+  for (let sy = 0; sy < h; sy++) {
+    const ty = sy + offY;
+    if (ty < 0 || ty >= targetH) continue;
+    for (let sx = 0; sx < w; sx++) {
+      const tx = sx + offX;
+      if (tx < 0 || tx >= targetW) continue;
       const di = ty * targetW + tx;
+      const si = sy * w + sx;
       outOcc[di] = occ[si];
       outRgb[di] = rgb[si];
     }

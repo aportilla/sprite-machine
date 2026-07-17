@@ -168,6 +168,46 @@ test('padding/offset is normalized by auto-crop to bbox', () => {
   assert.deepEqual([...shifted.solid], [...base.solid]);
 });
 
+// --- 6b. Strict intersection: a taller side clips, it does NOT stretch front --
+// The height axis Y is shared by FRONT and the SIDE. When the side is drawn
+// taller, the old pipeline resampled (stretched) front up to the side's height,
+// so the side's height won. Strict intersection instead keeps front at native
+// scale, bottom-anchored, and lets the carve clip the solid to front's height.
+test('taller side clips the solid to the front height (no vertical stretch)', () => {
+  const r = buildVoxels({
+    front: fill(2, 2, 'M'), // nx=2, ny=2  -> object is 2 tall
+    right: fill(1, 4, 'N'), // nz=1, ny=4  -> side drawn 4 tall
+  });
+  // Grid holds the taller view, but the SOLID clips to front's 2 rows...
+  assert.deepEqual(r.dims, { nx: 2, ny: 4, nz: 1 });
+  assert.equal(r.solidCount, 4); // 2(x) * 1(z) * 2(y) — NOT 8 (would-be stretch)
+  // ...bottom-anchored: y=0,1 solid; the side's extra top rows carve away.
+  for (let x = 0; x < 2; x++) {
+    assert.equal(r.solid[voxIndex(x, 0, 0, r.dims)], 1);
+    assert.equal(r.solid[voxIndex(x, 1, 0, r.dims)], 1);
+    assert.equal(r.solid[voxIndex(x, 2, 0, r.dims)], 0);
+    assert.equal(r.solid[voxIndex(x, 3, 0, r.dims)], 0);
+  }
+  assert.ok(r.warnings.some((w) => /disagree on Y/i.test(w)));
+});
+
+// --- 6c. Strict intersection on a horizontal axis is CENTERED ----------------
+// A wider TOP view and a narrower FRONT disagree on X. The narrow front is
+// centered (not corner-anchored), so it clips the solid to the middle columns.
+test('wider top clips the solid to the centered front columns', () => {
+  const r = buildVoxels({
+    front: fill(2, 1, 'M'), // nx=2
+    top: fill(4, 1, 'N'), // nx=4, nz=1
+  });
+  assert.deepEqual(r.dims, { nx: 4, ny: 1, nz: 1 });
+  // front (width 2) centers in the width-4 grid -> occupies x=1,2 only.
+  assert.equal(r.solid[voxIndex(0, 0, 0, r.dims)], 0);
+  assert.equal(r.solid[voxIndex(1, 0, 0, r.dims)], 1);
+  assert.equal(r.solid[voxIndex(2, 0, 0, r.dims)], 1);
+  assert.equal(r.solid[voxIndex(3, 0, 0, r.dims)], 0);
+  assert.equal(r.solidCount, 2);
+});
+
 // --- atlas slicing ----------------------------------------------------------
 // Build a mock 3x2 atlas of 2x2 tiles (6x4 px); one cell left blank.
 function mockAtlas() {

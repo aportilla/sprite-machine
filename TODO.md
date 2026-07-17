@@ -310,9 +310,9 @@ Verified against the code and found **not** actionable — recorded so they aren
 
 - **"Stale README reference to the retired diagonalizer"** — the README never mentions
   `diagonalize`/`vectorize`/`z-sweep`; the Architecture listing already omits them. Nothing to remove.
-- **"`resampleView` silently downsamples and loses color"** — unreachable. `reconcileDims`
-  picks `max()` over all views per axis, so every view is upsampled-or-equal, never
-  downsampled. Only a doc nit on the "nearest the center" comment remains.
+- **"`resampleView` silently downsamples and loses color"** — moot: `resampleView` was
+  retired for `placeView`, which places each view at native scale (1:1) and only pads,
+  so it never resamples up OR down. Disagreeing views now intersect (clip), not stretch.
 - **"Wedge gate tolerance duplicates colorize's palette-snap"** — `wedge-mesh` reads
   already-snapped colors from `faceColor` and does no snapping; the `TOL2` tolerance
   covers adjacent-palette-entry farble drift that snapping was never meant to fix.

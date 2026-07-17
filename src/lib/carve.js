@@ -12,7 +12,7 @@
 // carve()), then AND across the planes. No camera math, no CSG.
 // ---------------------------------------------------------------------------
 
-import { resampleView } from './ingest.js';
+import { placeView } from './ingest.js';
 import { VIEWS, VIEW_AXES } from './views.js';
 
 export const voxIndex = (x, y, z, d) => x + d.nx * (y + d.ny * z);
@@ -53,7 +53,8 @@ export function reconcileDims(views) {
     const mx = Math.max(...c);
     if (mn !== mx) {
       warnings.push(
-        `Views disagree on ${label} (${c.join(', ')}); resampling to ${mx}.`
+        `Views disagree on ${label} (${c.join(', ')}); keeping ${mx} and ` +
+          `intersecting — the smaller view clips the solid, it is not stretched.`
       );
     }
     return mx;
@@ -63,8 +64,12 @@ export function reconcileDims(views) {
 }
 
 /**
- * Resample each provided view to exactly (imgW,imgH) for the reconciled grid so
- * projection indexes 1:1.
+ * Place each provided view into the reconciled (imgW,imgH) grid at NATIVE scale —
+ * no resampling — so projection indexes 1:1. A view smaller than the grid on a
+ * shared axis is padded, not stretched, and the carve intersection clips the
+ * solid to it. Anchoring: world-Y is bottom-anchored (content rests on y=0, so a
+ * front and a taller side register at the ground); the horizontal axes X/Z are
+ * centered (an object's mid-line stays put instead of sliding to a corner).
  * @returns {Record<string,{occ:Uint8Array,rgb:Uint32Array,imgW:number,imgH:number}>}
  */
 export function gridViews(views, dims) {
@@ -75,7 +80,13 @@ export function gridViews(views, dims) {
     const spec = VIEWS[name];
     const imgW = spec.imgW(dims);
     const imgH = spec.imgH(dims);
-    const { occ, rgb } = resampleView(v, imgW, imgH);
+    // The image V axis is world-Y exactly for front/back/left/right (hAxis 'ny');
+    // those project world y=0 to the bottom image row, so bottom-anchor = the
+    // max-v end (offY = imgH - h). Everything horizontal is centered.
+    const [, hAxis] = VIEW_AXES[name];
+    const offX = (imgW - v.w) >> 1;
+    const offY = hAxis === 'ny' ? imgH - v.h : (imgH - v.h) >> 1;
+    const { occ, rgb } = placeView(v, imgW, imgH, offX, offY);
     out[name] = { occ, rgb, imgW, imgH };
   }
   return out;

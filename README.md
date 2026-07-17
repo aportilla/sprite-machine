@@ -69,10 +69,12 @@ right-side panel; the 3D view stays live beside it and rebuilds as you draw.
   **download** button saves the edited atlas as `atlas.png`, and the model
   rebuilds (rAF-debounced) with no camera jump.
 
-Drawn pixels are **not** 1:1 with voxels: `buildVoxels` still auto-crops each view
-and resamples disagreeing axes up to the reconciled grid, so a face drawn wider
-than its opposite rescales along that axis. The editor is pure authoring — no
-changes to the carve / colorize / mesh pipeline. See `src/editor.js`.
+Drawn pixels map 1:1 to voxels: `buildVoxels` auto-crops each view to its content
+(so padding/centering within a tile doesn't matter) and places it at native scale
+— never stretched. Views that disagree on a shared axis are **intersected** by the
+carve, so a side drawn taller than the front clips the solid to the front's height
+(bottom-anchored) instead of stretching the front up to match. The editor is pure
+authoring — no changes to the carve / colorize / mesh pipeline. See `src/editor.js`.
 
 **Dev hook:** append `?edit=<face>` (e.g. `?edit=front`) to open the editor on
 that face right after the first build. It's how the editor gets exercised in
@@ -95,9 +97,12 @@ any angle — 1 pixel = 1 voxel = 1 cube.
    packed-RGB typed arrays, then **auto-cropped to its alpha bounding box** (the
    #1 real-world failure is art that isn't centered per view).
 2. **Reconcile dims** — one integer resolution per axis is derived from the
-   sprite sizes: `front → W×H`, `side → D×H`, `top → W×D`. Disagreeing views are
-   nearest-neighbor resampled up and a warning is surfaced.
-   (MagicaVoxel's `12×30 + 10×30 → 12×10×30` rule.)
+   sprite sizes: `front → W×H`, `side → D×H`, `top → W×D` (MagicaVoxel's
+   `12×30 + 10×30 → 12×10×30` rule). Where two views disagree on a shared axis
+   the grid takes the larger, but the smaller view is **placed at native scale
+   and padded — never stretched** (world-Y bottom-anchored so content rests on
+   the ground, X/Z centered). The carve below then **intersects**, so the shorter
+   silhouette clips the solid instead of scaling up to fit. A warning is surfaced.
 3. **Carve** — a voxel is solid iff it lands inside the silhouette of **every**
    provided view. For axis-aligned orthographic sprites this is just a boolean
    **AND of extruded masks** — no camera matrices, no CSG. Because opposite views
@@ -175,7 +180,7 @@ src/lib/
   constants.js    default mirror (all-on) / world-size + DB16 pencil palette (pure)
   views.js        6 view definitions: normals, axes, projections, front-edge meta
   atlas.js        slice a 3x2 sheet <-> face tiles: blitTile write-back, cellOf (pure)
-  ingest.js       sprite -> occupancy/color arrays, auto-crop, resample, reorient
+  ingest.js       sprite -> occupancy/color arrays, auto-crop, place (native scale), reorient
   carve.js        dim reconciliation, visual-hull AND, surface extraction
   colorize.js     depth-aware first-hit surface coloring + palette snap
   faces.js        surface voxels -> quads: greedy-merged or culled (pure)
