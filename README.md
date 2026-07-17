@@ -42,13 +42,13 @@ draws alignment guides to help you line pixels up.
 **Tile orientation** (world: `+x` right, `+y` up, `+z` = front toward camera) —
 draw each tile this way for a zero-transform ingest:
 
-| Tile         | Draw as…                          | Front points | Size           |
-| ------------ | --------------------------------- | ------------ | -------------- |
-| FRONT / BACK | head-on / from behind, upright    | —            | width × height |
-| RIGHT        | the right side                    | right        | depth × height |
-| LEFT         | the left side                     | left         | depth × height |
-| TOP          | plan view, width horizontal       | top edge     | width × depth  |
-| BOTTOM       | plan from below, width horizontal | bottom edge  | width × depth  |
+| Tile         | Draw as…                                                | Front points | Size           |
+| ------------ | ------------------------------------------------------- | ------------ | -------------- |
+| FRONT / BACK | head-on / from behind, upright                          | —            | width × height |
+| RIGHT        | the right side                                          | right        | depth × height |
+| LEFT         | the left side                                           | left         | depth × height |
+| TOP          | plan view, width horizontal                             | top edge     | width × depth  |
+| BOTTOM       | plan from below (car rolled sideways, not end-over-end) | top edge     | width × depth  |
 
 The UI's **faces** preview lays the sliced tiles out like the sheet and marks
 this **Front points** edge in green on each thumbnail, so a mis-oriented tile is

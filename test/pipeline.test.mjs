@@ -108,7 +108,8 @@ test('opposite views: 1-texel top/bottom slip does not erase a protrusion', () =
     {
       front: fill(3, 1, 'M'), // nx=3, ny=1 — every column allowed by front/right
       right: fill(3, 1, 'N'), // nz=3
-      // top rows map v->z as z=2,1,0; bottom rows map v->z as z=0,1,2.
+      // top & bottom both map v->z as z=2,1,0 (bottom also mirrors x, but these
+      // tiles are x-symmetric): top's full row is at z=2, bottom's at z=1.
       top: img(['TTT', '.T.', '.T.']), // outer cols (x=0,2) protrude at z=2
       bottom: img(['.T.', 'TTT', '.T.']), // ...but bottom puts them at z=1
     },
@@ -355,13 +356,17 @@ test('3-face chunky object builds and fully colors', () => {
 });
 
 // --- 8. Projection conventions pinned (docs/code can't silently drift) -------
-test('TOP/BOTTOM view: object front pins to the top/bottom image row', () => {
+test('TOP/BOTTOM view: object front pins to the TOP image row of both', () => {
   const d = { nx: 4, ny: 3, nz: 5 };
-  // front is +z (z = nz-1). TOP puts it on the top row (v=0); BOTTOM on v=nz-1.
+  // front is +z (z = nz-1). TOP and BOTTOM both put it on the top row (v=0) —
+  // BOTTOM is the sideways (left/right) flip of TOP, not end-over-end.
   assert.equal(VIEWS.top.project(0, 0, d.nz - 1, d).v, 0);
   assert.equal(VIEWS.top.project(0, 0, 0, d).v, d.nz - 1);
-  assert.equal(VIEWS.bottom.project(0, 0, d.nz - 1, d).v, d.nz - 1);
-  assert.equal(VIEWS.bottom.project(0, 0, 0, d).v, 0);
+  assert.equal(VIEWS.bottom.project(0, 0, d.nz - 1, d).v, 0); // front -> top row too
+  assert.equal(VIEWS.bottom.project(0, 0, 0, d).v, d.nz - 1);
+  // ...and BOTTOM mirrors X vs TOP (sideways flip): x=0 -> right column.
+  assert.equal(VIEWS.top.project(0, 0, 0, d).u, 0);
+  assert.equal(VIEWS.bottom.project(0, 0, 0, d).u, d.nx - 1);
 });
 
 test('LEFT view: object front pins to the left image column', () => {

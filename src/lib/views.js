@@ -124,7 +124,10 @@ export const VIEWS = {
     imgH: (d) => d.nz,
     project: (x, y, z, d) => ({ u: x, v: d.nz - 1 - z }),
   },
-  // BOTTOM: looks toward +y from -y. Sees -y face. Mirror of top along z.
+  // BOTTOM: looks toward +y from -y. Sees -y face. The car is flipped SIDEWAYS
+  // (rolled about its front-back axis), NOT end-over-end — so the front stays on
+  // the TOP row like TOP (v = nz-1-z) and only left/right swap (u = nx-1-x). That
+  // way the TOP and BOTTOM tiles register front-to-front on the same edge.
   bottom: {
     face: 'ny',
     axis: 'y',
@@ -132,7 +135,7 @@ export const VIEWS = {
     from: 'min',
     imgW: (d) => d.nx,
     imgH: (d) => d.nz,
-    project: (x, y, z, d) => ({ u: x, v: z }),
+    project: (x, y, z, d) => ({ u: d.nx - 1 - x, v: d.nz - 1 - z }),
   },
 };
 
@@ -146,13 +149,14 @@ export const VIEW_DISPLAY_ORDER = ['left', 'front', 'top', 'right', 'back', 'bot
 // Which image edge of a view's tile the object's FRONT (+z, the "nose") points
 // toward — used by the UI to mark orientation on each face thumbnail. Derived
 // from the projections in VIEWS: e.g. in LEFT, front (z=nz-1) maps to u=0, the
-// left column. FRONT/BACK look straight down +z/-z, so their nose points out of
-// / into the screen — there is no in-plane front edge (null).
+// left column. TOP and BOTTOM both put the front on their TOP edge (BOTTOM is the
+// sideways flip of TOP). FRONT/BACK look straight down +z/-z, so their nose
+// points out of / into the screen — there is no in-plane front edge (null).
 export const VIEW_FRONT_EDGE = {
   right: 'right',
   left: 'left',
   top: 'top',
-  bottom: 'bottom',
+  bottom: 'top',
   front: null,
   back: null,
 };
@@ -168,15 +172,16 @@ export const VIEW_OPPOSITE = {
 };
 
 // To DISPLAY a mirror-derived face, flip its opposite view's tile along this
-// IMAGE axis. Follows the projections: the X/Z-plane pairs (left↔right,
-// front↔back) mirror horizontally; the Y pair (top↔bottom) mirrors vertically.
+// IMAGE axis. Follows the projections: every pair now mirrors HORIZONTALLY —
+// left↔right and front↔back on the X/Z planes, and top↔bottom too because BOTTOM
+// is the sideways (left/right) flip of TOP, not an end-over-end one.
 export const VIEW_MIRROR_AXIS = {
   right: 'x',
   left: 'x',
   front: 'x',
   back: 'x',
-  top: 'y',
-  bottom: 'y',
+  top: 'x',
+  bottom: 'x',
 };
 
 // Which grid axes a view's (imgW, imgH) constrain. Used by dimension
