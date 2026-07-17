@@ -307,11 +307,76 @@ body {
   justify-content: space-between;
   gap: 8px;
 }
-/* Muted tile-size readout on the right of the header (e.g. "40 × 40"). */
-.editor-title {
-  font-size: 10px;
+/* Editable tile size on the right of the header: a W and an H stepper. Changing
+   either resizes the whole atlas (alignment-preserving) and re-mounts the editor. */
+.editor-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.editor-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+}
+.editor-step-cap {
+  padding: 0 3px 0 4px;
+  font-size: 9px;
+  font-weight: 700;
   color: #8a8a96;
-  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.editor-step {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: #e8e8ea;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.editor-step:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+.editor-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.editor-step-val {
+  width: 36px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: #e8e8ea;
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.editor-step-val:focus {
+  outline: none;
+  color: #fff;
+}
+/* Drop the native number spinners — the ± buttons are the control. */
+.editor-step-val::-webkit-outer-spin-button,
+.editor-step-val::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 /* Self-contained canvas widget: the tabs + framed canvas box as one card,
    centered and hugging the canvas so it reads as distinct from the full-width

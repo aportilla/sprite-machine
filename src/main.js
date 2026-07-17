@@ -5,7 +5,15 @@ import { buildVoxels } from './lib/pipeline.js';
 import { voxelMesh } from './lib/mesh.js';
 import { wedgeMesh } from './lib/wedge-mesh.js';
 import { SAMPLES } from './lib/sprite-data.js';
-import { sliceAtlas, blitTile, cellOf } from './lib/atlas.js';
+import {
+  sliceAtlas,
+  blitTile,
+  cellOf,
+  resizeAtlas,
+  clampTile,
+  TILE_MIN,
+  TILE_MAX,
+} from './lib/atlas.js';
 import {
   VIEW_NAMES,
   VIEW_OPPOSITE,
@@ -89,6 +97,9 @@ const RENDER_SCALE = 0.5; // low-res render, crisply upscaled by CSS
 // Dev hook: ?edit=<view> auto-opens the tile editor on that face after the first
 // build (handy for screenshots / the manual test checklist).
 let pendingEditFace = null;
+// Dev hook: ?tile=N (square) or ?tile=WxH applies one resize after the first build
+// (the capture tool can't click the steppers).
+let pendingTileResize = null;
 
 const camParam = params.get('cam');
 const ISO_DIR = new THREE.Vector3(
@@ -171,11 +182,11 @@ function rebuild() {
   ui.setStats(stats);
 }
 
-// Slice the current atlas into face views (with the current tile size) and build.
-function sliceAndBuild(reframe) {
-  if (!state.atlasImage) return;
-  // A new sheet replaces every view wholesale, so any open editor is now stale.
-  exitDrawing();
+// Re-slice the canonical atlas into face views (at its current tile size) and
+// rebuild the mesh. Does NOT touch drawing mode — callers decide whether an open
+// editor survives: a tile resize keeps it (re-mounting at the new size), a
+// wholesale sheet swap closes it first (sliceAndBuild).
+function refreshFromAtlas(reframe) {
   const sliced = sliceAtlas(state.atlasImage);
   state.views = sliced.views;
   state.atlasWarnings = sliced.warnings;
@@ -187,6 +198,22 @@ function sliceAndBuild(reframe) {
   ui.setAtlasInfo(sliced);
   ui.setThumbnails(sliced.views);
   rebuild();
+}
+
+// Load a NEW sheet (sample / dropped atlas / blank): it replaces every view
+// wholesale, so any open editor is now stale — close it, refresh, then honor a
+// pending ?edit= face.
+function sliceAndBuild(reframe) {
+  if (!state.atlasImage) return;
+  exitDrawing();
+  refreshFromAtlas(reframe);
+  // Dev hook: ?tile=WxH resizes the fresh sheet once (the capture tool can't click
+  // the steppers) before any ?edit face opens, so a headless shot shows the result.
+  if (pendingTileResize) {
+    const { w, h } = pendingTileResize;
+    pendingTileResize = null;
+    resizeTiles(w, h);
+  }
   if (pendingEditFace) {
     const f = pendingEditFace;
     pendingEditFace = null;
@@ -245,7 +272,7 @@ const freshTile = () => ({
   data: new Uint8ClampedArray(state.tileW * state.tileH * 4),
 });
 
-function mountEditor(name) {
+function mountEditor(name, focusSize) {
   if (currentEditor) {
     currentEditor.destroy();
     currentEditor = null;
@@ -272,11 +299,39 @@ function mountEditor(name) {
     guides,
     faces: VIEW_DISPLAY_ORDER,
     brush,
+    sizeMin: TILE_MIN,
+    sizeMax: TILE_MAX,
+    focusSize,
     onLive: (working, dirty) => applyTileEdit(name, wasDerived, working, dirty),
     onSelectFace: (target) => enterDrawing(target),
+    onResizeTile: resizeTiles,
     onClose: () => exitDrawing(),
   });
   ui.setActiveFace(name);
+}
+
+// Change a tile dimension from the editor's W/H steppers. Resizes the WHOLE atlas
+// so every face moves together, then re-slices and re-opens the editor on the same
+// face at the new size (restoring focus to the edited stepper for typed entry).
+// A PROPORTIONAL (square) change keeps the object ground-rested and every voxel at
+// its lattice coords; an asymmetric W≠H change is allowed but over-constrains the
+// shared depth axis, so it shears and warns (accepted trade-off). The control only
+// shows while editing, but this guards defensively.
+function resizeTiles(newW, newH, focusSize) {
+  if (!state.atlasImage) return;
+  const w = clampTile(newW);
+  const h = clampTile(newH);
+  if (w === state.tileW && h === state.tileH) return; // no-op (e.g. ± at a bound)
+  // Fold any un-flushed live stroke into the canonical sheet BEFORE we rebuild it
+  // at a new size, so the last edit isn't dropped or blitted at the wrong scale.
+  if (liveRAF) {
+    cancelAnimationFrame(liveRAF);
+    flushLive();
+  }
+  state.atlasImage = resizeAtlas(state.atlasImage, w, h);
+  const face = editingName;
+  refreshFromAtlas(false); // keep the camera — the world size is normalized anyway
+  if (face) mountEditor(face, focusSize); // re-open at the new size, refocus the stepper
 }
 
 // Clicking a face tile enters (or, if already editing, switches to) drawing mode.
@@ -380,6 +435,11 @@ if (params.get('lowpoly') != null) state.lowpoly = params.get('lowpoly') === '1'
 if (params.get('rotate') === '0') state.autoRotate = false;
 const editParam = params.get('edit');
 if (editParam && VIEW_NAMES.includes(editParam)) pendingEditFace = editParam;
+const tileParam = params.get('tile');
+if (tileParam) {
+  const m = /^(\d+)(?:x(\d+))?$/i.exec(tileParam.trim());
+  if (m) pendingTileResize = { w: clampTile(+m[1]), h: clampTile(+(m[2] ?? m[1])) };
+}
 const q = params.get('sample');
 let startIndex = 0;
 if (q != null) {

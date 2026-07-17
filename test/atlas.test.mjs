@@ -4,8 +4,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { sliceAtlas, blitTile, cellOf } from '../src/lib/atlas.js';
-import { VIEW_DISPLAY_ORDER } from '../src/lib/views.js';
+import {
+  sliceAtlas,
+  blitTile,
+  cellOf,
+  resizeTile,
+  resizeAtlas,
+  clampTile,
+  TILE_MIN,
+  TILE_MAX,
+} from '../src/lib/atlas.js';
+import { buildVoxels } from '../src/lib/pipeline.js';
+import { voxIndex } from '../src/lib/carve.js';
+import { VIEW_DISPLAY_ORDER, VIEW_NAMES } from '../src/lib/views.js';
 
 // A divisible sheet where every one of the six cells has fully-opaque content,
 // so sliceAtlas returns a non-null tile for each (no blank→null) and the blit
@@ -96,4 +107,161 @@ test('cellOf returns the correct {r,c} for all six views', () => {
     assert.deepEqual(cellOf(name), rc, `cell for ${name}`);
   }
   assert.equal(cellOf('nope'), null, 'unknown view → null');
+});
+
+// --- tile / atlas resize ----------------------------------------------------
+
+// A 2x2 tile with a single opaque marker at (0,0) so anchoring is observable.
+function markerTile() {
+  const data = new Uint8ClampedArray(2 * 2 * 4);
+  data[0] = 11; // R at texel (0,0)
+  data[1] = 22; // G
+  data[2] = 33; // B
+  data[3] = 255; // A
+  return { width: 2, height: 2, data };
+}
+const alphaAt = (t, x, y) => t.data[(y * t.width + x) * 4 + 3];
+
+test('resizeTile: grow anchored top-left keeps (0,0), pads right/bottom', () => {
+  const out = resizeTile(markerTile(), 4, 4, false, false);
+  assert.equal(out.width, 4);
+  assert.equal(out.height, 4);
+  assert.equal(alphaAt(out, 0, 0), 255, 'marker stays at top-left');
+  assert.equal(out.data[0], 11, 'RGB carried through');
+  assert.equal(alphaAt(out, 3, 3), 0, 'far corner padded transparent');
+});
+
+test('resizeTile: grow anchored bottom-right moves the marker to the far corner', () => {
+  const out = resizeTile(markerTile(), 4, 4, true, true);
+  // The (0,0) marker is offset by (newW-w, newH-h) = (2,2).
+  assert.equal(alphaAt(out, 2, 2), 255, 'marker at (2,2)');
+  assert.equal(alphaAt(out, 0, 0), 0, 'top-left now empty');
+});
+
+test('resizeTile: shrink anchored bottom crops the top rows away', () => {
+  // Marker at top row (0,0); shrinking height with a bottom anchor drops it.
+  const out = resizeTile(markerTile(), 2, 1, false, true);
+  assert.equal(out.height, 1);
+  assert.equal(alphaAt(out, 0, 0), 0, 'top-anchored-away marker is cropped');
+});
+
+// A hand-painted 3x2 sheet with an asymmetric, distinctly-colored shape per face,
+// so a WRONG resize anchor would shift a silhouette and change the carved solid.
+const PAL = {
+  R: [220, 60, 60],
+  G: [80, 190, 90],
+  B: [70, 90, 200],
+  Y: [220, 210, 90],
+  C: [100, 200, 210],
+  M: [200, 120, 210],
+};
+// Each tile: mostly opaque with one distinct transparent corner notch (asymmetry).
+const TILE_ART = {
+  left: ['.RRR', 'RRRR', 'RRRR', 'RRRR'],
+  front: ['GGG.', 'GGGG', 'GGGG', 'GGGG'],
+  top: ['BBBB', 'BBBB', 'BBBB', 'BBB.'],
+  right: ['YYYY', 'YYYY', 'YYYY', '.YYY'],
+  back: ['.CCC', 'CCCC', 'CCCC', 'CCCC'],
+  bottom: ['MMMM', 'MMMM', 'MMMM', 'MMM.'],
+};
+function artSheet(tile) {
+  const cols = 3;
+  const rows = 2;
+  const W = cols * tile;
+  const H = rows * tile;
+  const sheet = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4) };
+  for (const name of VIEW_NAMES) {
+    const { r, c } = cellOf(name);
+    const rowsArt = TILE_ART[name];
+    for (let y = 0; y < tile; y++) {
+      for (let x = 0; x < tile; x++) {
+        const ch = rowsArt[y][x];
+        if (ch === '.') continue;
+        const [rr, gg, bb] = PAL[ch];
+        const i = ((r * tile + y) * W + (c * tile + x)) * 4;
+        sheet.data[i] = rr;
+        sheet.data[i + 1] = gg;
+        sheet.data[i + 2] = bb;
+        sheet.data[i + 3] = 255;
+      }
+    }
+  }
+  return sheet;
+}
+
+// Build voxels straight from a sheet, the way main.js does (slice → buildVoxels).
+function voxelsOf(sheet) {
+  const { views } = sliceAtlas(sheet);
+  const raw = {};
+  for (const n of VIEW_NAMES) raw[n] = views[n] || null;
+  return buildVoxels(raw);
+}
+
+test('resizeAtlas: a square grow preserves every voxel + face color (registration held)', () => {
+  const base = voxelsOf(artSheet(4));
+  assert.ok(base.solidCount > 0, 'the base sheet carves to a non-empty solid');
+
+  const grown = voxelsOf(resizeAtlas(artSheet(4), 6, 6));
+  // The lattice grew by the delta on every axis...
+  assert.deepEqual(grown.dims, {
+    nx: base.dims.nx + 2,
+    ny: base.dims.ny + 2,
+    nz: base.dims.nz + 2,
+  });
+  // ...but the object is byte-identical, pinned to the origin corner: same count,
+  // same solid coordinates, same per-face colors. A mis-anchored tile would shear
+  // a silhouette and fail this.
+  assert.equal(grown.solidCount, base.solidCount, 'solid voxel count unchanged');
+  for (let z = 0; z < base.dims.nz; z++) {
+    for (let y = 0; y < base.dims.ny; y++) {
+      for (let x = 0; x < base.dims.nx; x++) {
+        const bi = voxIndex(x, y, z, base.dims);
+        const gi = voxIndex(x, y, z, grown.dims);
+        assert.equal(grown.solid[gi], base.solid[bi], `solid @ ${x},${y},${z}`);
+        for (let f = 0; f < 6; f++) {
+          assert.equal(
+            grown.faceColor.get(gi * 6 + f),
+            base.faceColor.get(bi * 6 + f),
+            `face ${f} color @ ${x},${y},${z}`
+          );
+        }
+      }
+    }
+  }
+});
+
+test('resizeAtlas: an asymmetric (non-square) resize falls out of registration — depth shears (accepted, warned)', () => {
+  // The primitive faithfully produces the requested (non-uniform) tiles...
+  const sheet = resizeAtlas(artSheet(4), 6, 4); // W 4→6, H unchanged
+  assert.equal(sheet.width, 6 * 3);
+  assert.equal(sheet.height, 4 * 2);
+  const { tileW, tileH } = sliceAtlas(sheet);
+  assert.equal(tileW, 6);
+  assert.equal(tileH, 4);
+  // ...but the carve can't keep registration: nz is the side tile's WIDTH AND the
+  // top tile's HEIGHT at once, so W≠H over-constrains depth. reconcileDims takes
+  // the max and the object shears (voxels drop) with a warning. The editor allows
+  // independent W/H knowing this; pin the behavior so it can't regress silently.
+  const base = voxelsOf(artSheet(4)); // 4×4×4
+  const skew = voxelsOf(sheet);
+  assert.notEqual(skew.dims.nz, base.dims.nz, 'depth axis is double-booked → shifts');
+  assert.ok(skew.solidCount < base.solidCount, 'asymmetric resize shears voxels away');
+  assert.ok(
+    skew.warnings.some((w) => /disagree on Z/i.test(w)),
+    'the shear is surfaced as a warning'
+  );
+});
+
+test('resizeAtlas: shrinking below the object extent crops without throwing', () => {
+  const small = voxelsOf(resizeAtlas(artSheet(4), 2, 2));
+  assert.deepEqual(small.dims, { nx: 2, ny: 2, nz: 2 });
+  assert.ok(small.solidCount <= 8, 'solid is clamped to the smaller lattice');
+});
+
+test('clampTile: rounds and clamps to the integer tile range', () => {
+  assert.equal(clampTile(0), TILE_MIN);
+  assert.equal(clampTile(1000), TILE_MAX);
+  assert.equal(clampTile(40.6), 41);
+  assert.equal(clampTile('12'), 12);
+  assert.equal(clampTile(NaN), TILE_MIN);
 });

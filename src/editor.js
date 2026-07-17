@@ -10,7 +10,8 @@
 // and atlas.isBlank (alpha!==0) can never diverge.
 //
 // createTileEditor(container, { name, tile, tileW, tileH, palette,
-//   mirrorBehind, guides, faces, brush, onLive, onSelectFace, onClose })
+//   mirrorBehind, guides, faces, brush, sizeMin, sizeMax,
+//   onLive, onSelectFace, onResizeTile, onClose })
 //   -> { destroy }
 //   - mirrorBehind: {width,height,data} onion-skin of the opposite face drawn
 //     faded UNDER the pixel canvas (display only — never written to `work`). null
@@ -22,8 +23,13 @@
 //     top; the edited `name` is the active tab and clicking another switches.
 //   - brush: shared { mode, color:{r,g,b}, swatchIndex } — persisted by the caller
 //     across face swaps.
+//   - sizeMin/sizeMax: inclusive integer bounds for the W/H steppers.
 //   - onLive(workingTile, dirty): fired on each actual pixel change.
 //   - onSelectFace(name): the user clicked the other face tab.
+//   - onResizeTile(newW, newH, axis): the user changed a tile dimension ('W' or
+//     'H'). The caller resizes the whole atlas and re-mounts. A PROPORTIONAL
+//     (square) change is alignment-preserving; an asymmetric W≠H change is allowed
+//     but falls out of registration and warns (see atlas.js resizeAtlas).
 //   - onClose(): the user clicked "done".
 // ---------------------------------------------------------------------------
 
@@ -75,6 +81,40 @@ function hexToRgb(css) {
 const toHex2 = (n) => n.toString(16).padStart(2, '0');
 const rgbHex = ({ r, g, b }) => `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
 
+// A compact [cap] [−] [value] [+] integer stepper for a tile dimension. Commits
+// on the buttons and on the field's `change` (blur/Enter) — never per keystroke,
+// so the caller's re-mount can't fight the user mid-type. The value is clamped
+// and the field normalized on every commit, and a commit that resolves to the
+// current value is a no-op (so tapping + at the max, or retyping the same number,
+// doesn't churn a rebuild). `value` is the dimension at mount time.
+function sizeStepper(cap, value, min, max, onCommit) {
+  const clamp = (n) => Math.max(min, Math.min(max, Math.round(Number(n) || 0)));
+  const wrap = el('div', 'editor-stepper');
+  const dec = el('button', 'editor-step', '−');
+  const inc = el('button', 'editor-step', '+');
+  const input = el('input', 'editor-step-val');
+  input.type = 'number';
+  input.min = String(min);
+  input.max = String(max);
+  input.step = '1';
+  input.value = String(value);
+  input.dataset.axis = cap; // so the caller can restore focus here after a re-mount
+  input.setAttribute('aria-label', `tile ${cap} (${min}–${max})`);
+  dec.type = inc.type = 'button';
+  dec.disabled = value <= min;
+  inc.disabled = value >= max;
+  const commit = (n) => {
+    const v = clamp(n);
+    input.value = String(v); // normalize even when the caller no-ops the resize
+    if (v !== value) onCommit(v);
+  };
+  dec.onclick = () => commit(value - 1);
+  inc.onclick = () => commit(value + 1);
+  input.onchange = () => commit(input.value);
+  wrap.append(el('span', 'editor-step-cap', cap), dec, input, inc);
+  return wrap;
+}
+
 export function createTileEditor(
   container,
   {
@@ -87,8 +127,12 @@ export function createTileEditor(
     guides,
     faces,
     brush,
+    sizeMin = 1,
+    sizeMax = 256,
+    focusSize,
     onLive,
     onSelectFace,
+    onResizeTile,
     onClose,
   }
 ) {
@@ -110,12 +154,22 @@ export function createTileEditor(
   const root = el('div', 'editor');
   container.appendChild(root);
 
-  // --- header: done (left, primary exit) + a muted size readout (right) -----
+  // --- header: done (left) + editable W/H tile size (right) ------------------
+  // Each stepper resizes the WHOLE atlas (all six tiles); the caller re-mounts
+  // this editor at the new size. A PROPORTIONAL (square) change stays
+  // alignment-preserving; an asymmetric W≠H change is allowed but falls out of
+  // registration and warns — a 3×2 atlas can't hold three independent lattice axes
+  // in two tile dimensions (its depth is the side width AND the top height).
   const header = el('div', 'editor-header');
   const doneBtn = el('button', 'editor-btn-done');
   doneBtn.append(el('span', 'editor-done-mark', '✓'), el('span', null, 'Done Editing'));
   doneBtn.onclick = () => onClose?.();
-  header.append(doneBtn, el('div', 'editor-title', `${tileW} × ${tileH}`));
+  const sizeCtl = el('div', 'editor-size');
+  sizeCtl.append(
+    sizeStepper('W', tileW, sizeMin, sizeMax, (w) => onResizeTile?.(w, tileH, 'W')),
+    sizeStepper('H', tileH, sizeMin, sizeMax, (h) => onResizeTile?.(tileW, h, 'H'))
+  );
+  header.append(doneBtn, sizeCtl);
   root.appendChild(header);
 
   // --- canvas widget: tabs + framed canvas as one self-contained unit --------
@@ -360,6 +414,17 @@ export function createTileEditor(
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerUp);
+
+  // A resize re-mounts the whole editor, which would drop keyboard focus off the
+  // stepper the user was typing in. Restore it to the matching new field (and
+  // select its text) so Tab/Enter-driven sizing keeps flowing.
+  if (focusSize) {
+    const inp = root.querySelector(`.editor-step-val[data-axis="${focusSize}"]`);
+    if (inp) {
+      inp.focus();
+      inp.select?.();
+    }
+  }
 
   // --- teardown -------------------------------------------------------------
   let destroyed = false;

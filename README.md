@@ -74,6 +74,17 @@ right-side panel; the 3D view stays live beside it and rebuilds as you draw.
 - **Live + canonical** — edits write straight back into the current sheet, so the
   **download** button saves the edited atlas as `atlas.png`, and the model
   rebuilds (rAF-debounced) with no camera jump.
+- **Tile size** — **W / H steppers** in the editor header retile the whole atlas
+  to any integer **1–256** per axis, **independently**. A **proportional (square)**
+  change is **alignment-preserving**: every axis keeps its origin line fixed and
+  grows / shrinks only at the far edge, so a voxel keeps its lattice coordinates,
+  the object stays ground-rested (`y=0` pinned), and no sprite shears out of
+  registration (growing pads with transparency, shrinking crops the far edges). An
+  **asymmetric** change (`W≠H`) is allowed but **falls out of registration** — a
+  3×2 atlas shares its depth axis between the side tile's width and the top tile's
+  height, so a non-square tile over-constrains that axis: the depth **shears** and
+  it **warns** (the accepted trade-off for independent axes). See `resizeAtlas` in
+  `src/lib/atlas.js`.
 
 Drawn pixels map 1:1 to voxels at their **literal tile position** — `buildVoxels`
 reads each view at full size (no crop, no re-centering) and the carve intersects
@@ -91,7 +102,8 @@ that face right after the first build. It's how the editor gets exercised in
 headless screenshots (the capture tool can't click), and it's handy for jumping
 straight to a face while iterating. It joins the other test-only URL params:
 `?sample=<index|name>`, `?rotate=0`, `?lowpoly=0|1`, `?flat=1`, `?diag=1`
-(watertightness self-check), and `?cam=top|front|fq|bq`.
+(watertightness self-check), `?cam=top|front|fq|bq`, and `?tile=<N>` (or `<W>x<H>`) to apply one tile resize
+after the first build — the steppers can't be clicked headlessly.
 
 ---
 
