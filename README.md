@@ -32,8 +32,12 @@ RIGHT  BACK   BOTTOM
 ```
 
 The **tile size is auto-derived** from the image dimensions and the grid (a
-120×80 sheet ⇒ 40×40 tiles). Each tile is auto-cropped to its content, so
-padding/centering doesn't matter.
+120×80 sheet ⇒ 40×40 tiles). Each tile is a **literal slice of the voxel
+lattice** — a pixel's position inside its tile *is* its position in the object,
+so tiles are read at full size (**no auto-crop**) and must be **registered across
+faces**: a FRONT pixel only becomes solid where the SIDE covers its row and the
+TOP covers its column. Use **square tiles** (a cubic lattice); the in-app editor
+draws alignment guides to help you line pixels up.
 
 **Tile orientation** (world: `+x` right, `+y` up, `+z` = front toward camera) —
 draw each tile this way for a zero-transform ingest:
@@ -69,12 +73,16 @@ right-side panel; the 3D view stays live beside it and rebuilds as you draw.
   **download** button saves the edited atlas as `atlas.png`, and the model
   rebuilds (rAF-debounced) with no camera jump.
 
-Drawn pixels map 1:1 to voxels: `buildVoxels` auto-crops each view to its content
-(so padding/centering within a tile doesn't matter) and places it at native scale
-— never stretched. Views that disagree on a shared axis are **intersected** by the
-carve, so a side drawn taller than the front clips the solid to the front's height
-(bottom-anchored) instead of stretching the front up to match. The editor is pure
-authoring — no changes to the carve / colorize / mesh pipeline. See `src/editor.js`.
+Drawn pixels map 1:1 to voxels at their **literal tile position** — `buildVoxels`
+reads each view at full size (no crop, no re-centering) and the carve intersects
+the extruded silhouettes, so a pixel survives only where every view sharing an
+axis agrees. To help meet that stricter requirement the editor draws **hairline
+extent rules** (how far the orthogonal faces' pixels reach — the box a pixel must
+land inside to survive the carve) and a **faded onion-skin** of the opposite face
+behind the canvas. There is **no auto ground-rest**: an object sits at whatever Y
+you paint it (paint at the tile's bottom to rest on the ground). The editor is
+pure authoring — no changes to the carve / colorize / mesh pipeline. See
+`src/editor.js` and `src/lib/guides.js`.
 
 **Dev hook:** append `?edit=<face>` (e.g. `?edit=front`) to open the editor on
 that face right after the first build. It's how the editor gets exercised in
@@ -94,15 +102,18 @@ genuine solid that self-occludes, casts a true blocky shadow, and stays crisp at
 any angle — 1 pixel = 1 voxel = 1 cube.
 
 1. **Ingest** — each sprite is read at native pixel resolution into occupancy +
-   packed-RGB typed arrays, then **auto-cropped to its alpha bounding box** (the
-   #1 real-world failure is art that isn't centered per view).
-2. **Reconcile dims** — one integer resolution per axis is derived from the
-   sprite sizes: `front → W×H`, `side → D×H`, `top → W×D` (MagicaVoxel's
-   `12×30 + 10×30 → 12×10×30` rule). Where two views disagree on a shared axis
-   the grid takes the larger, but the smaller view is **placed at native scale
-   and padded — never stretched** (world-Y bottom-anchored so content rests on
-   the ground, X/Z centered). The carve below then **intersects**, so the shorter
-   silhouette clips the solid instead of scaling up to fit. A warning is surfaced.
+   packed-RGB typed arrays at **full tile size (no crop)**. Strict registration:
+   a tile is a literal slice of the lattice, so texel (u,v) maps 1:1 to a fixed
+   lattice line and must line up across faces (the author's job — the editor
+   guides help).
+2. **Reconcile dims** — one integer resolution per axis comes straight from the
+   (uniform) tile size: `front → W×H`, `side → D×H`, `top → W×D` (MagicaVoxel's
+   `12×30 + 10×30 → 12×10×30` rule). Views are placed at **identity position** —
+   no re-centering, no bottom-anchor — so a pixel stays exactly where it was
+   painted. Well-formed sheets use **square tiles** (depth reads as a width in the
+   side view but a height in the top view, so only a square tile registers on all
+   three planes); a non-square or mismatched sheet takes the max per axis, places
+   from the origin, and **warns**.
 3. **Carve** — a voxel is solid iff it lands inside the silhouette of **every**
    provided view. For axis-aligned orthographic sprites this is just a boolean
    **AND of extruded masks** — no camera matrices, no CSG. Because opposite views
@@ -173,17 +184,20 @@ verified in Node (`test/pipeline.test.mjs`), including the depth-smear regressio
 and asymmetric-face coloring. A companion `test/wedge-mesh.test.mjs` loads THREE
 to gate the low-poly wedge engine (the Helium canvas-farbling regression), and
 `test/atlas.test.mjs` locks the tile write-back inverse (slice → `blitTile`
-round-trip) that the drawing editor depends on.
+round-trip) that the drawing editor depends on. `test/guides.test.mjs` pins the
+editor's cross-axis alignment guides (and that `VIEW_IMAGE_AXES` can't drift from
+the projections it's probed from).
 
 ```
 src/lib/
   constants.js    default mirror (all-on) / world-size + DB16 pencil palette (pure)
   views.js        6 view definitions: normals, axes, projections, front-edge meta
   atlas.js        slice a 3x2 sheet <-> face tiles: blitTile write-back, cellOf (pure)
-  ingest.js       sprite -> occupancy/color arrays, auto-crop, place (native scale), reorient
+  ingest.js       sprite -> occupancy/color arrays (full tile, no crop), place, reorient
   carve.js        dim reconciliation, visual-hull AND, surface extraction
   colorize.js     depth-aware first-hit surface coloring + palette snap
   faces.js        surface voxels -> quads: greedy-merged or culled (pure)
+  guides.js       editor alignment guides: per-face cross-axis extent (pure)
   pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
   t-junction.js   lattice-exact T-junction repair for merged+wedge meshes (pure)
   mesh-util.js    shared vertex-color linearizer + mesh finishing (THREE)
@@ -194,7 +208,7 @@ src/lib/
 src/
   main.js         scene, lights, ground, framing, render loop + drawing-editor wiring
   ui.js           left panel: samples, pick/drop atlas, clickable faces, options, stats
-  editor.js       inline tile editor (right panel): DB16 palette, eyedropper/eraser, mirror tabs
+  editor.js       inline tile editor (right panel): DB16 palette, eyedropper/eraser, mirror tabs, align guides
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
 ```
 

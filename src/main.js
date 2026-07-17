@@ -8,6 +8,7 @@ import { SAMPLES } from './lib/sprite-data.js';
 import { sliceAtlas, blitTile, cellOf } from './lib/atlas.js';
 import { VIEW_NAMES, VIEW_OPPOSITE, VIEW_MIRROR_AXIS, VIEW_FRONT_EDGE } from './lib/views.js';
 import { PENCIL_PALETTE } from './lib/constants.js';
+import { faceGuides } from './lib/guides.js';
 import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
 import { createUI, mirrorImage } from './ui.js';
 import { createTileEditor } from './editor.js';
@@ -253,6 +254,14 @@ function mountEditor(name) {
     const opp = state.views[VIEW_OPPOSITE[name]];
     if (opp) seedMirror = mirrorImage(opp, VIEW_MIRROR_AXIS[name]);
   }
+  // Onion-skin: the opposite face's OWN art, mirrored, faded behind the canvas —
+  // only when it has independent art (a derived opposite is just this face's own
+  // mirror, so it would overlay identically and add nothing).
+  const oppArt = state.views[VIEW_OPPOSITE[name]];
+  const mirrorBehind = oppArt ? mirrorImage(oppArt, VIEW_MIRROR_AXIS[name]) : null;
+  // Hairline extent rules from the orthogonal faces sharing each of this face's
+  // axes — where a painted pixel can survive the (now strict) carve.
+  const guides = faceGuides(state.views, name, state.tileW, state.tileH);
   editingName = name;
   currentEditor = createTileEditor(ui.editorDock, {
     name,
@@ -262,6 +271,8 @@ function mountEditor(name) {
     palette: PENCIL_PALETTE,
     frontEdge: VIEW_FRONT_EDGE[name],
     seedMirror,
+    mirrorBehind,
+    guides,
     pair: facePair(name),
     brush,
     onLive: (working, dirty) => applyTileEdit(name, wasDerived, working, dirty),

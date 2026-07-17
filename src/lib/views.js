@@ -189,3 +189,34 @@ export const VIEW_AXES = {
   top: ['nx', 'nz'],
   bottom: ['nx', 'nz'],
 };
+
+// For each view: which world axis its image COLUMNS (u) and ROWS (v) run along,
+// and whether the image index runs the SAME direction as the world coordinate
+// (flip:false) or the OPPOSITE (flip:true). Probed from project() at load so it
+// can never drift from the projections above. Consumed by the editor's alignment
+// guides (src/lib/guides.js) to map a sibling view's occupancy into the edited
+// face's own pixel frame.
+const AXIS_ARG = { nx: 0, ny: 1, nz: 2 };
+function probeFlip(spec, axisName, which) {
+  const d = { nx: 2, ny: 2, nz: 2 };
+  const at = (coord) => {
+    const p = [0, 0, 0];
+    p[AXIS_ARG[axisName]] = coord;
+    return spec.project(p[0], p[1], p[2], d)[which];
+  };
+  return at(0) > at(1); // world coord 0 -> higher image index => flipped
+}
+export const VIEW_IMAGE_AXES = Object.fromEntries(
+  VIEW_NAMES.map((name) => {
+    const [colAxis, rowAxis] = VIEW_AXES[name];
+    return [
+      name,
+      {
+        colAxis,
+        colFlip: probeFlip(VIEWS[name], colAxis, 'u'),
+        rowAxis,
+        rowFlip: probeFlip(VIEWS[name], rowAxis, 'v'),
+      },
+    ];
+  })
+);

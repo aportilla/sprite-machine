@@ -17,24 +17,24 @@ import { VIEW_NAMES } from './views.js';
 export function buildVoxels(rawViews, opts = {}) {
   const transforms = opts.transforms || {};
   /** @type {Record<string, any>} */
-  const cropped = {};
+  const ingested = {};
   for (const name of VIEW_NAMES) {
     let img = rawViews[name];
     if (!img) continue;
     if (transforms[name]) img = applyTransform(img, transforms[name]);
     const v = ingestSprite(img);
-    if (v) cropped[name] = v;
+    if (v) ingested[name] = v;
   }
 
-  const { dims, warnings } = reconcileDims(cropped);
-  if (Object.keys(cropped).length === 0) {
+  const { dims, warnings } = reconcileDims(ingested);
+  if (Object.keys(ingested).length === 0) {
     warnings.unshift('No usable views: every provided sprite was empty or missing.');
   }
-  const gviews = gridViews(cropped, dims);
+  const gviews = gridViews(ingested, dims);
   const solid = carve(gviews, dims);
   const { surfaceMask, count } = extractSurface(solid, dims);
   const { faceColor, palette } = colorize(solid, surfaceMask, gviews, dims, opts);
-  if (palette.length === 0 && Object.keys(cropped).length > 0) {
+  if (palette.length === 0 && Object.keys(ingested).length > 0) {
     warnings.push('No opaque pixels found — every provided sprite is fully transparent.');
   }
 
@@ -51,7 +51,7 @@ export function buildVoxels(rawViews, opts = {}) {
     palette,
     warnings,
     gviews,
-    cropped,
-    providedViews: Object.keys(cropped),
+    ingested,
+    providedViews: Object.keys(ingested),
   };
 }

@@ -27,7 +27,11 @@ export const unvoxIndex = (idx, d) => {
 };
 
 /**
- * Reconcile one integer resolution per axis from the cropped view sizes.
+ * Reconcile one integer resolution per axis from the (uncropped) tile sizes.
+ * For a well-formed sheet every view is the same size, so each axis has a single
+ * candidate and the grid is exactly the tile size. Unequal sizes (a malformed
+ * sheet, or non-square tiles whose depth differs between side-width and
+ * top-height) take the max and warn — the shorter view under-constrains the tail.
  * @param {Record<string, {w:number,h:number}>} views  provided views by name
  * @returns {{dims:{nx:number,ny:number,nz:number}, warnings:string[]}}
  */
@@ -53,8 +57,10 @@ export function reconcileDims(views) {
     const mx = Math.max(...c);
     if (mn !== mx) {
       warnings.push(
-        `Views disagree on ${label} (${c.join(', ')}); keeping ${mx} and ` +
-          `intersecting — the smaller view clips the solid, it is not stretched.`
+        `Views disagree on ${label} (${c.join(', ')}); strict registration ` +
+          `expects uniform, square tiles. Using ${mx}; a smaller view is placed ` +
+          `from the origin (not re-centered) and leaves the far end of ${label} ` +
+          `uncarved — check the atlas tile size.`
       );
     }
     return mx;
@@ -64,12 +70,14 @@ export function reconcileDims(views) {
 }
 
 /**
- * Place each provided view into the reconciled (imgW,imgH) grid at NATIVE scale —
- * no resampling — so projection indexes 1:1. A view smaller than the grid on a
- * shared axis is padded, not stretched, and the carve intersection clips the
- * solid to it. Anchoring: world-Y is bottom-anchored (content rests on y=0, so a
- * front and a taller side register at the ground); the horizontal axes X/Z are
- * centered (an object's mid-line stays put instead of sliding to a corner).
+ * Place each provided view into the reconciled (imgW,imgH) grid at NATIVE scale
+ * and IDENTITY position (offX=offY=0) — strict registration: a tile's texel
+ * (u,v) is a fixed lattice line, so it is NOT re-centered or bottom-anchored.
+ * For a well-formed (uniform-tile) sheet each view already equals the grid on
+ * the axes it constrains, so this is a 1:1 copy. There is no auto ground-rest:
+ * where the object sits in Y is wherever the artist painted it (paint at the
+ * tile's bottom rows to rest on y=0). A malformed sheet with unequal-size views
+ * lands each at the origin and warns (reconcileDims).
  * @returns {Record<string,{occ:Uint8Array,rgb:Uint32Array,imgW:number,imgH:number}>}
  */
 export function gridViews(views, dims) {
@@ -80,13 +88,7 @@ export function gridViews(views, dims) {
     const spec = VIEWS[name];
     const imgW = spec.imgW(dims);
     const imgH = spec.imgH(dims);
-    // The image V axis is world-Y exactly for front/back/left/right (hAxis 'ny');
-    // those project world y=0 to the bottom image row, so bottom-anchor = the
-    // max-v end (offY = imgH - h). Everything horizontal is centered.
-    const [, hAxis] = VIEW_AXES[name];
-    const offX = (imgW - v.w) >> 1;
-    const offY = hAxis === 'ny' ? imgH - v.h : (imgH - v.h) >> 1;
-    const { occ, rgb } = placeView(v, imgW, imgH, offX, offY);
+    const { occ, rgb } = placeView(v, imgW, imgH, 0, 0);
     out[name] = { occ, rgb, imgW, imgH };
   }
   return out;

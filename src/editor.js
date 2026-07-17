@@ -10,9 +10,15 @@
 // and atlas.isBlank (alpha!==0) can never diverge.
 //
 // createTileEditor(container, { name, tile, tileW, tileH, palette, frontEdge,
-//   seedMirror, pair, brush, onLive, onSelectFace, onClose }) -> { destroy }
+//   seedMirror, mirrorBehind, guides, pair, brush, onLive, onSelectFace,
+//   onClose }) -> { destroy }
 //   - seedMirror: for a mirror-derived face, the mirrored-opposite image to seed
 //     the canvas with (so what you edit matches the thumbnail). null otherwise.
+//   - mirrorBehind: {width,height,data} onion-skin of the opposite face drawn
+//     faded UNDER the pixel canvas (display only — never written to `work`). null
+//     when the opposite face has no art of its own.
+//   - guides: from faceGuides() — extent of the orthogonal faces' pixels, drawn
+//     as hairline rules over the canvas so you can align to the stricter carve.
 //   - pair: the ordered mirror pair for the face tabs, e.g. ['front','back'].
 //   - brush: shared { mode, color:{r,g,b}, swatchIndex } — persisted by the caller
 //     across face swaps.
@@ -22,6 +28,27 @@
 // ---------------------------------------------------------------------------
 
 const EDIT_MAX = 384; // max on-screen size of the drawing canvas, px
+
+// Hairline extent rules: translucent cyan so they read as guides distinct from
+// the green front-edge marker. MIRROR_ALPHA keeps the onion-skin a faint hint.
+const GUIDE_COLOR = 'rgba(120, 200, 255, 0.6)';
+const MIRROR_ALPHA = 0.22;
+
+// Draw the four "furthest extent" hairlines into an OVERLAY context sized to the
+// on-screen canvas (screen-res so the 1px lines stay crisp regardless of scale).
+// The lines box the region where a painted pixel can survive the carve: verticals
+// at the outer edges of the supported columns, horizontals at the supported rows.
+function drawGuides(g, guides, scale, cssW, cssH) {
+  g.clearRect(0, 0, cssW, cssH);
+  if (!guides) return;
+  const { uMin, uMax, vMin, vMax } = guides.extent;
+  g.fillStyle = GUIDE_COLOR;
+  const T = 1; // hairline thickness (screen px)
+  if (uMin != null) g.fillRect(uMin * scale, 0, T, cssH); // left extent
+  if (uMax != null) g.fillRect((uMax + 1) * scale - T, 0, T, cssH); // right extent
+  if (vMin != null) g.fillRect(0, vMin * scale, cssW, T); // top extent
+  if (vMax != null) g.fillRect(0, (vMax + 1) * scale - T, cssW, T); // bottom extent
+}
 
 // Simple pipette glyph for the eyedropper tile (strokes `currentColor`).
 const EYEDROPPER_SVG =
@@ -50,7 +77,7 @@ const rgbHex = ({ r, g, b }) => `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
 
 export function createTileEditor(
   container,
-  { name, tile, tileW, tileH, palette, frontEdge, seedMirror, pair, brush, onLive, onSelectFace, onClose }
+  { name, tile, tileW, tileH, palette, frontEdge, seedMirror, mirrorBehind, guides, pair, brush, onLive, onSelectFace, onClose }
 ) {
   const derived = !!seedMirror;
 
@@ -84,14 +111,48 @@ export function createTileEditor(
   }
 
   // --- canvas (backing store at native tile resolution, CSS-upscaled crisp) --
+  // Three stacked layers in the wrap: a background (checkerboard via CSS + faded
+  // opposite-face onion-skin), the transparent pixel canvas, and a hairline
+  // overlay. Only the pixel canvas takes pointer events.
   const scale = Math.max(1, Math.floor(Math.min(EDIT_MAX / tileW, EDIT_MAX / tileH)));
+  const cssW = tileW * scale;
+  const cssH = tileH * scale;
   const wrap = el('div', 'editor-canvas-wrap');
+
+  const bg = el('canvas', 'editor-canvas-bg');
+  bg.width = tileW;
+  bg.height = tileH;
+  bg.style.width = `${cssW}px`;
+  bg.style.height = `${cssH}px`;
+  if (mirrorBehind) {
+    const tmp = document.createElement('canvas');
+    tmp.width = tileW;
+    tmp.height = tileH;
+    tmp.getContext('2d').putImageData(
+      new ImageData(new Uint8ClampedArray(mirrorBehind.data), tileW, tileH), 0, 0
+    );
+    const bgx = bg.getContext('2d');
+    bgx.imageSmoothingEnabled = false;
+    bgx.globalAlpha = MIRROR_ALPHA; // putImageData ignores alpha; drawImage honors it
+    bgx.drawImage(tmp, 0, 0);
+  }
+  wrap.appendChild(bg);
+
   const canvas = el('canvas', 'editor-canvas');
   canvas.width = tileW;
   canvas.height = tileH;
-  canvas.style.width = `${tileW * scale}px`;
-  canvas.style.height = `${tileH * scale}px`;
+  canvas.style.width = `${cssW}px`;
+  canvas.style.height = `${cssH}px`;
   wrap.appendChild(canvas);
+
+  const overlay = el('canvas', 'editor-canvas-overlay');
+  overlay.width = cssW; // screen-res so hairlines stay 1px crisp
+  overlay.height = cssH;
+  overlay.style.width = `${cssW}px`;
+  overlay.style.height = `${cssH}px`;
+  wrap.appendChild(overlay);
+  drawGuides(overlay.getContext('2d'), guides, scale, cssW, cssH);
+
   if (frontEdge) wrap.appendChild(el('div', `editor-frontedge fe-${frontEdge}`));
   root.appendChild(wrap);
 

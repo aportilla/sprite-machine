@@ -159,53 +159,79 @@ test('phantom block: over-approximated but every surface face is colored', () =>
   }
 });
 
-// --- 6. Misregistration recovered by auto-crop ------------------------------
-test('padding/offset is normalized by auto-crop to bbox', () => {
+// --- 6. Strict registration: tile padding is significant (no auto-crop) ------
+// A pixel's position inside its tile IS its position in the object, so a padded
+// view is NOT normalized away — the padding changes the geometry.
+test('strict registration: tile padding is preserved (not auto-cropped)', () => {
   const base = buildVoxels({ front: fill(2, 2, 'M'), right: fill(2, 2, 'N') });
+  assert.deepEqual(base.dims, { nx: 2, ny: 2, nz: 2 });
+  // A 4x4 right with its 2x2 of pixels in the middle is a 4-wide, 4-tall view.
   const paddedRight = img(['....', '.NN.', '.NN.', '....']);
-  const shifted = buildVoxels({ front: fill(2, 2, 'M'), right: paddedRight });
-  assert.deepEqual(shifted.dims, base.dims);
-  assert.deepEqual([...shifted.solid], [...base.solid]);
+  const padded = buildVoxels({ front: fill(2, 2, 'M'), right: paddedRight });
+  // No crop: the padding grows the depth (nz) and height (ny) axes...
+  assert.deepEqual(padded.dims, { nx: 2, ny: 4, nz: 4 });
+  // ...and the resulting size mismatch on Y (front 2 vs right 4) is surfaced.
+  assert.ok(padded.warnings.some((w) => /disagree on Y/i.test(w)));
 });
 
-// --- 6b. Strict intersection: a taller side clips, it does NOT stretch front --
-// The height axis Y is shared by FRONT and the SIDE. When the side is drawn
-// taller, the old pipeline resampled (stretched) front up to the side's height,
-// so the side's height won. Strict intersection instead keeps front at native
-// scale, bottom-anchored, and lets the carve clip the solid to front's height.
-test('taller side clips the solid to the front height (no vertical stretch)', () => {
-  const r = buildVoxels({
-    front: fill(2, 2, 'M'), // nx=2, ny=2  -> object is 2 tall
-    right: fill(1, 4, 'N'), // nz=1, ny=4  -> side drawn 4 tall
-  });
-  // Grid holds the taller view, but the SOLID clips to front's 2 rows...
-  assert.deepEqual(r.dims, { nx: 2, ny: 4, nz: 1 });
-  assert.equal(r.solidCount, 4); // 2(x) * 1(z) * 2(y) — NOT 8 (would-be stretch)
-  // ...bottom-anchored: y=0,1 solid; the side's extra top rows carve away.
-  for (let x = 0; x < 2; x++) {
-    assert.equal(r.solid[voxIndex(x, 0, 0, r.dims)], 1);
-    assert.equal(r.solid[voxIndex(x, 1, 0, r.dims)], 1);
-    assert.equal(r.solid[voxIndex(x, 2, 0, r.dims)], 0);
-    assert.equal(r.solid[voxIndex(x, 3, 0, r.dims)], 0);
-  }
-  assert.ok(r.warnings.some((w) => /disagree on Y/i.test(w)));
-});
-
-// --- 6c. Strict intersection on a horizontal axis is CENTERED ----------------
-// A wider TOP view and a narrower FRONT disagree on X. The narrow front is
-// centered (not corner-anchored), so it clips the solid to the middle columns.
-test('wider top clips the solid to the centered front columns', () => {
-  const r = buildVoxels({
-    front: fill(2, 1, 'M'), // nx=2
-    top: fill(4, 1, 'N'), // nx=4, nz=1
-  });
-  assert.deepEqual(r.dims, { nx: 4, ny: 1, nz: 1 });
-  // front (width 2) centers in the width-4 grid -> occupies x=1,2 only.
+// --- 6b. Strict registration: identity placement, no auto ground-rest --------
+// The old pipeline bottom-anchored every view so content rested on y=0. Strict
+// registration keeps a pixel at the row the artist drew it: paint high in the
+// tile and the solid sits high (it floats — ground contact is the artist's job).
+test('strict registration: mid-tile Y is preserved (no bottom-anchor)', () => {
+  const r = buildVoxels(
+    {
+      front: img(['MM', '..', '..']), // content only in the TOP row -> world y=2
+      right: fill(1, 3, 'N'), // full-height side, same 3 rows -> Y agrees
+    },
+    { mirror: { x: false, y: false, z: false } }
+  );
+  assert.deepEqual(r.dims, { nx: 2, ny: 3, nz: 1 });
+  assert.equal(r.warnings.length, 0); // uniform Y (both 3 tall): no disagreement
+  // Top image row is world y = ny-1 = 2; that is where the solid lands...
+  assert.equal(r.solid[voxIndex(0, 2, 0, r.dims)], 1);
+  assert.equal(r.solid[voxIndex(1, 2, 0, r.dims)], 1);
+  // ...NOT dropped to the ground (y=0,1 empty — the old bottom-anchor put it here).
   assert.equal(r.solid[voxIndex(0, 0, 0, r.dims)], 0);
+  assert.equal(r.solid[voxIndex(0, 1, 0, r.dims)], 0);
+  assert.equal(r.solidCount, 2);
+});
+
+// --- 6c. Strict registration: a narrower view anchors at the origin ----------
+// A wider TOP and a narrower FRONT disagree on X. The front is placed from the
+// origin (left), NOT centered, so it constrains the leftmost columns and warns.
+test('strict registration: a narrower view anchors at the origin (not centered)', () => {
+  const r = buildVoxels({ front: fill(2, 1, 'M'), top: fill(4, 1, 'N') });
+  assert.deepEqual(r.dims, { nx: 4, ny: 1, nz: 1 });
+  assert.ok(r.warnings.some((w) => /disagree on X/i.test(w)));
+  // front (width 2) sits at x=0,1 (origin) -> those columns solid, x=2,3 carved.
+  assert.equal(r.solid[voxIndex(0, 0, 0, r.dims)], 1);
   assert.equal(r.solid[voxIndex(1, 0, 0, r.dims)], 1);
-  assert.equal(r.solid[voxIndex(2, 0, 0, r.dims)], 1);
+  assert.equal(r.solid[voxIndex(2, 0, 0, r.dims)], 0);
   assert.equal(r.solid[voxIndex(3, 0, 0, r.dims)], 0);
   assert.equal(r.solidCount, 2);
+});
+
+// --- 6d. Strict registration: the core contract — pixels must align ----------
+// A FRONT pixel at (col cx, row ry) only becomes a voxel where the TOP covers
+// column cx AND the SIDE covers row ry. Aligned pixels survive; misaligned carve.
+test('strict registration: unmatched front pixels carve away', () => {
+  const r = buildVoxels(
+    {
+      // 3x3x3. front paints (x=2 at v=0 -> y=2) and (x=0 at v=2 -> y=0).
+      front: img(['..M', '...', 'M..']),
+      top: img(['T..', 'T..', 'T..']), // covers only column x=0 (all z)
+      right: img(['...', '...', 'NNN']), // covers only row y=0 (bottom image row)
+    },
+    { mirror: { x: false, y: false, z: false } }
+  );
+  assert.deepEqual(r.dims, { nx: 3, ny: 3, nz: 3 });
+  // (x=0,y=0): top covers col 0 AND side covers row y=0 -> survives at some z.
+  let survive = 0;
+  for (let z = 0; z < 3; z++) survive += r.solid[voxIndex(0, 0, z, r.dims)];
+  assert.ok(survive > 0, 'aligned pixel (x=0,y=0) should survive');
+  // (x=2,y=2): top has no column 2 -> fully carved regardless of the side.
+  for (let z = 0; z < 3; z++) assert.equal(r.solid[voxIndex(2, 2, z, r.dims)], 0);
 });
 
 // --- atlas slicing ----------------------------------------------------------

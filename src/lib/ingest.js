@@ -1,6 +1,13 @@
 // ---------------------------------------------------------------------------
-// Ingest: sprite image -> occupancy + color typed arrays, cropped to the alpha
-// bounding box. No THREE / no DOM here so it runs unchanged in Node tests.
+// Ingest: sprite image -> occupancy + color typed arrays, at NATIVE size — the
+// tile is NOT cropped. No THREE / no DOM here so it runs unchanged in Node tests.
+//
+// Strict registration: a tile is a literal slice of the voxel lattice, so texel
+// (u,v) maps 1:1 to a fixed lattice line. We deliberately do NOT crop to the
+// alpha bounding box — where a pixel sits inside its tile IS its position in the
+// object, and must line up across faces (a FRONT pixel only survives the carve
+// where the SIDE covers its row and the TOP covers its column). Cropping would
+// throw that registration away.
 //
 // Input shape is ImageData-compatible: { width, height, data } where data is an
 // RGBA byte array (canvas.getImageData().data in the browser; a plain array in
@@ -76,10 +83,12 @@ export function applyTransform(img, t = {}) {
 }
 
 /**
+ * Ingest a sprite at NATIVE size — occupancy/color for the WHOLE tile, no crop.
+ * The tile's own dimensions become the view's dimensions, so its texels register
+ * 1:1 against the other faces. A fully transparent tile has nothing to constrain
+ * and returns null (treated as absent — the mirror partner colors it).
  * @param {{width:number,height:number,data:ArrayLike<number>}} img
- * @returns {{w:number,h:number,occ:Uint8Array,rgb:Uint32Array,
- *            bbox:{x0:number,y0:number,x1:number,y1:number},
- *            srcW:number, srcH:number} | null}  null if fully transparent.
+ * @returns {{w:number,h:number,occ:Uint8Array,rgb:Uint32Array} | null}
  */
 export function ingestSprite(img) {
   const { width: W, height: H, data } = img;
@@ -89,55 +98,32 @@ export function ingestSprite(img) {
         `${W}×${H} with ${data ? data.length : 'no'} bytes.`
     );
   }
-  const solid = (a) => a >= ALPHA_SOLID;
-
-  // Find the occupied bounding box.
-  let x0 = W,
-    y0 = H,
-    x1 = -1,
-    y1 = -1;
+  const occ = new Uint8Array(W * H);
+  const rgb = new Uint32Array(W * H);
+  let any = false;
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      const a = data[(y * W + x) * 4 + 3];
-      if (solid(a)) {
-        if (x < x0) x0 = x;
-        if (y < y0) y0 = y;
-        if (x > x1) x1 = x;
-        if (y > y1) y1 = y;
-      }
-    }
-  }
-  if (x1 < 0) return null; // nothing solid
-
-  const w = x1 - x0 + 1;
-  const h = y1 - y0 + 1;
-  const occ = new Uint8Array(w * h);
-  const rgb = new Uint32Array(w * h);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const si = ((y + y0) * W + (x + x0)) * 4;
-      const a = data[si + 3];
-      const di = y * w + x;
-      if (solid(a)) {
+      const si = (y * W + x) * 4;
+      if (data[si + 3] >= ALPHA_SOLID) {
+        const di = y * W + x;
         occ[di] = 1;
         rgb[di] = packRGBA(data[si], data[si + 1], data[si + 2], 255);
+        any = true;
       }
     }
   }
-  return { w, h, occ, rgb, bbox: { x0, y0, x1, y1 }, srcW: W, srcH: H };
+  if (!any) return null; // fully transparent -> absent (mirror-filled)
+  return { w: W, h: H, occ, rgb };
 }
 
 /**
- * Place a cropped view into a (targetW,targetH) grid buffer at NATIVE scale — no
- * resampling. Its texels map 1:1 into the target at offset (offX,offY); the rest
- * is left transparent (empty). This is what makes disagreeing views INTERSECT
- * instead of stretch: a shorter view fills only its own rows, so the visual-hull
- * carve clips the solid down to it rather than scaling it up to fill the grid.
- *
- * offX/offY are the target-space position of the view's (0,0) texel; gridViews
- * chooses them per axis (world-Y bottom-anchored, X/Z centered). A view is never
- * larger than the grid on an axis it constrains (the grid is the per-axis max),
- * so placement only ever pads — it can't crop.
+ * Copy a view into a (targetW,targetH) grid buffer at NATIVE scale — no
+ * resampling — with its (0,0) texel at (offX,offY). Under strict registration
+ * gridViews passes offX=offY=0, so for a well-formed (uniform-tile) sheet every
+ * view already equals the grid on the axes it constrains and this is the exact
+ * fast-path identity copy below. It stays general only to pad the degenerate
+ * case where a malformed sheet gives views of unequal size (origin-anchored,
+ * far end left empty); the bounds guards keep that from indexing out of range.
  * @returns {{occ:Uint8Array, rgb:Uint32Array}}
  */
 export function placeView(view, targetW, targetH, offX, offY) {
