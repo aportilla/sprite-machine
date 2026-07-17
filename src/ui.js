@@ -6,12 +6,10 @@
 // ---------------------------------------------------------------------------
 
 import { fileToImageData } from './image-io.js';
-import { VIEW_DISPLAY_ORDER as SLOT_ORDER, VIEW_FRONT_EDGE } from './lib/views.js';
+import { VIEW_DISPLAY_ORDER as SLOT_ORDER } from './lib/views.js';
 
-// Accent for the front-edge orientation marker on face thumbnails.
-const FRONT_EDGE_COLOR = '#7ee787';
-// Thumbnail canvas size and the box the sprite is fit into — the gap between
-// them guarantees margin for the front-edge line to sit beside (not over) art.
+// Thumbnail canvas size and the box the sprite is fit into — the gap leaves a
+// little breathing room so the art doesn't sit flush against the tile border.
 const THUMB = 48;
 const THUMB_FIT = 40;
 
@@ -87,25 +85,6 @@ export function mirrorImage(img, axis) {
     }
   }
   return { width: W, height: H, data: out };
-}
-
-// Draw a thin line just OUTSIDE the sprite's drawn rect, on the edge the
-// object's front (+z) points toward — so the tile orientation is unambiguous
-// without painting over the art. `edge` is left/right/top/bottom (null =
-// front/back, which face the camera and have no in-plane front edge).
-function drawFrontEdge(canvas, edge, rect) {
-  if (!edge || !rect) return;
-  const g = canvas.getContext('2d');
-  const { ox, oy, w, h } = rect;
-  const W = canvas.width;
-  const H = canvas.height;
-  const T = 2; // line thickness (px)
-  const GAP = 1; // clearance between line and sprite
-  g.fillStyle = FRONT_EDGE_COLOR;
-  if (edge === 'left') g.fillRect(Math.max(0, ox - GAP - T), oy, T, h);
-  else if (edge === 'right') g.fillRect(Math.min(W - T, ox + w + GAP), oy, T, h);
-  else if (edge === 'top') g.fillRect(ox, Math.max(0, oy - GAP - T), w, T);
-  else if (edge === 'bottom') g.fillRect(ox, Math.min(H - T, oy + h + GAP), w, T);
 }
 
 const dragHasFiles = (e) =>
@@ -241,12 +220,6 @@ export function createUI({
     slotEls[name] = { slot, cv };
   }
   panel.appendChild(slotGrid);
-  const legendRow = (swatchCls, text) => {
-    const l = el('div', 'legend');
-    l.append(el('span', swatchCls), el('span', 'tiny', text));
-    return l;
-  };
-  panel.appendChild(legendRow('legend-swatch', 'front-facing edge'));
 
   // --- options (pill toggle buttons) ----------------------------------------
   panel.appendChild(el('div', 'label', 'options'));
@@ -290,8 +263,7 @@ export function createUI({
       // model renders, but the sheet genuinely has nothing there yet).
       const img = (views && views[name]) || null;
       slot.classList.toggle('filled', !!img);
-      const rect = drawPixels(cv, img, THUMB_FIT, THUMB_FIT);
-      drawFrontEdge(cv, VIEW_FRONT_EDGE[name], rect);
+      drawPixels(cv, img, THUMB_FIT, THUMB_FIT);
     }
   }
 

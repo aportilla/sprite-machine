@@ -6,12 +6,7 @@ import { voxelMesh } from './lib/mesh.js';
 import { wedgeMesh } from './lib/wedge-mesh.js';
 import { SAMPLES } from './lib/sprite-data.js';
 import { sliceAtlas, blitTile, cellOf } from './lib/atlas.js';
-import {
-  VIEW_NAMES,
-  VIEW_OPPOSITE,
-  VIEW_MIRROR_AXIS,
-  VIEW_FRONT_EDGE,
-} from './lib/views.js';
+import { VIEW_NAMES, VIEW_OPPOSITE, VIEW_MIRROR_AXIS } from './lib/views.js';
 import { PENCIL_PALETTE } from './lib/constants.js';
 import { faceGuides } from './lib/guides.js';
 import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
@@ -276,7 +271,6 @@ function mountEditor(name) {
     tileW: state.tileW,
     tileH: state.tileH,
     palette: PENCIL_PALETTE,
-    frontEdge: VIEW_FRONT_EDGE[name],
     mirrorBehind,
     guides,
     pair: facePair(name),

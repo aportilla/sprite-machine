@@ -211,21 +211,6 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.legend {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 7px;
-}
-.legend + .legend {
-  margin-top: 3px;
-}
-.legend-swatch {
-  width: 14px;
-  height: 4px;
-  border-radius: 2px;
-  background: #7ee787;
-}
 /* Pill toggle buttons (options row) — subtle when off, accent-filled when on. */
 .toggle {
   flex: 1;
@@ -414,36 +399,6 @@ body {
 /* Hairline extent rules sit ABOVE the pixel canvas. */
 .editor-canvas-overlay {
   z-index: 2;
-}
-.editor-frontedge {
-  position: absolute;
-  z-index: 3;
-  background: #7ee787;
-  pointer-events: none;
-}
-.fe-left {
-  left: 0;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-}
-.fe-right {
-  right: 0;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-}
-.fe-top {
-  top: 0;
-  left: 6px;
-  right: 6px;
-  height: 3px;
-}
-.fe-bottom {
-  bottom: 0;
-  left: 6px;
-  right: 6px;
-  height: 3px;
 }
 .editor-swatches {
   display: grid;

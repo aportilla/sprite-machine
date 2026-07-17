@@ -51,10 +51,10 @@ draw each tile this way for a zero-transform ingest:
 | TOP          | plan view, width horizontal                             | top edge     | width × depth  |
 | BOTTOM       | plan from below (car rolled sideways, not end-over-end) | top edge     | width × depth  |
 
-The UI's **faces** preview lays the sliced tiles out like the sheet and marks
-this **Front points** edge in green on each thumbnail, so a mis-oriented tile is
-obvious at a glance. Per-tile `rot`/`flip` transforms exist in the pipeline for
-sheets that don't follow the convention.
+The UI's **faces** preview lays the sliced tiles out like the sheet, so you can
+eyeball each tile's orientation against this table's **Front points** column.
+Per-tile `rot`/`flip` transforms exist in the pipeline for sheets that don't
+follow the convention.
 
 ## Drawing editor
 
@@ -166,8 +166,9 @@ its color from that shared material. See `src/lib/wedge-mesh.js`.
 
 Not every face has to be drawn. **Mirror-fill is always on for all three axes:**
 a surface face with no view of its own takes its color from the mirrored
-opposite view, so a half-drawn sheet still colors every face — both built-in
-samples ship only LEFT/FRONT/TOP and mirror-fill RIGHT/BACK/BOTTOM. Mirroring is
+opposite view, so a half-drawn sheet still colors every face — the built-in
+**Cube** ships only LEFT/FRONT/TOP and mirror-fills RIGHT/BACK/BOTTOM; the
+**Car** draws every face but RIGHT, which mirror-fills from LEFT. Mirroring is
 a _coloring_ step; an axis with no view at all (neither side) is simply
 unconstrained for carving — the shape fills to the bounding box there and warns.
 

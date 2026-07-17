@@ -9,7 +9,7 @@
 // Every stroke is HARD-pixel (alpha 0 or 255) so downstream ingest (alpha>=128)
 // and atlas.isBlank (alpha!==0) can never diverge.
 //
-// createTileEditor(container, { name, tile, tileW, tileH, palette, frontEdge,
+// createTileEditor(container, { name, tile, tileW, tileH, palette,
 //   mirrorBehind, guides, pair, brush, onLive, onSelectFace, onClose })
 //   -> { destroy }
 //   - mirrorBehind: {width,height,data} onion-skin of the opposite face drawn
@@ -29,7 +29,7 @@
 const EDIT_MAX = 384; // max on-screen size of the drawing canvas, px
 
 // Hairline extent rules: translucent cyan so they read as guides distinct from
-// the green front-edge marker. MIRROR_ALPHA keeps the onion-skin a faint hint.
+// the sprite art. MIRROR_ALPHA keeps the onion-skin a faint hint.
 const GUIDE_COLOR = 'rgba(120, 200, 255, 0.6)';
 const MIRROR_ALPHA = 0.22;
 
@@ -82,7 +82,6 @@ export function createTileEditor(
     tileW,
     tileH,
     palette,
-    frontEdge,
     mirrorBehind,
     guides,
     pair,
@@ -165,7 +164,6 @@ export function createTileEditor(
   wrap.appendChild(overlay);
   drawGuides(overlay.getContext('2d'), guides, scale, cssW, cssH);
 
-  if (frontEdge) wrap.appendChild(el('div', `editor-frontedge fe-${frontEdge}`));
   root.appendChild(wrap);
 
   const ctx = canvas.getContext('2d');

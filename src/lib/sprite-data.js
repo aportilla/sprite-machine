@@ -49,12 +49,14 @@ export const CUBE_SAMPLE = {
   atlas: { image: cubeAtlasImage() },
 };
 
-// --- Car: a real 39x39 3x2 atlas (LEFT FRONT TOP / RIGHT BACK BOTTOM) --------
+// --- Car: a real 40x40 3x2 atlas (LEFT FRONT TOP / RIGHT BACK BOTTOM) --------
 // A taxi drawn to the pipeline conventions (square tiles) -> no transforms.
 // Faces left blank mirror-fill from their opposite.
 export const CAR_ATLAS_SAMPLE = {
   name: 'Car',
-  atlas: { url: carAtlasUrl }, // layout + 39x39 tiles auto-derived from 117x78
+  atlas: { url: carAtlasUrl }, // layout + 40x40 tiles auto-derived from 120x80
 };
 
-export const SAMPLES = [CUBE_SAMPLE, CAR_ATLAS_SAMPLE];
+// Order sets the picker-menu order; the first entry is the default loaded on
+// boot (?sample=<index|name> overrides). Car first — it's the showcase sprite.
+export const SAMPLES = [CAR_ATLAS_SAMPLE, CUBE_SAMPLE];
