@@ -20,7 +20,7 @@ import {
   VIEW_MIRROR_AXIS,
   VIEW_DISPLAY_ORDER,
 } from './lib/views.js';
-import { PENCIL_PALETTE } from './lib/constants.js';
+import { PENCIL_PALETTE, WEDGE_SAFE_256 } from './lib/constants.js';
 import { faceGuides } from './lib/guides.js';
 import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
 import { createUI, mirrorImage } from './ui.js';
@@ -272,6 +272,28 @@ const freshTile = () => ({
   data: new Uint8ClampedArray(state.tileW * state.tileH * 4),
 });
 
+// Distinct solid colors painted on ANY face except `exceptName` — that face is
+// edited live in the editor, which unions its own current pixels on top. Feeds
+// the editor's dynamic "in sprite" palette so authors can match existing colors.
+function usedColorsExcept(exceptName) {
+  const seen = new Set();
+  const out = [];
+  for (const name of VIEW_NAMES) {
+    if (name === exceptName) continue;
+    const view = state.views[name];
+    if (!view) continue;
+    const d = view.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const key = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ r: d[i], g: d[i + 1], b: d[i + 2] });
+    }
+  }
+  return out;
+}
+
 function mountEditor(name, focusSize) {
   if (currentEditor) {
     currentEditor.destroy();
@@ -295,6 +317,8 @@ function mountEditor(name, focusSize) {
     tileW: state.tileW,
     tileH: state.tileH,
     palette: PENCIL_PALETTE,
+    palette256: WEDGE_SAFE_256,
+    usedColors: usedColorsExcept(name),
     mirrorBehind,
     guides,
     faces: VIEW_DISPLAY_ORDER,

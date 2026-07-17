@@ -55,3 +55,40 @@ export const PENCIL_PALETTE = DB16_HEX.map((css) => {
   const b = parseInt(css.slice(5, 7), 16);
   return { packed: packRGBA(r, g, b, 255), css };
 });
+
+// ---------------------------------------------------------------------------
+// WEDGE_SAFE_256 — the full 256-color palette shown persistently in the tile
+// editor. An 8x8x4 RGB grid (the classic 8-bit "3-3-2" layout: 8 reds x 8 greens
+// x 4 blues), ordered blue-major so a 16-wide grid reads as four constant-blue
+// bands.
+//
+// Deliberately NOT a dense artist ramp (e.g. AAP-256): the low-poly wedge gate
+// (wedge-mesh.js sameMat, TOL2 = 12*12) fuses two touching faces into a smooth
+// 45-degree ramp whenever their colors sit within ~12 per channel. That is the
+// artist's exact, local control over every wedge — same color => ramp, different
+// => crisp step. A dense palette with sub-12 neighbors would silently merge
+// corners the artist wanted sharp. This 8x8x4 grid keeps every distinct swatch
+// >=36 apart (the min red/green step) — a comfortable 3x the ~12 slack, like
+// DB16's ~47 minimum — so a pick from it can never false-merge. Finer shades stay
+// reachable via the custom picker, which warns when a pick lands within the slack
+// of a color already on the tile.
+//
+// Blue uses {0,73,146,255} rather than four even quarters so that r==g==b lands
+// on four true neutrals (black, two mid-grays, white) while full blue (255) is
+// still present. Each entry is { packed, css } to match PENCIL_PALETTE.
+// ---------------------------------------------------------------------------
+const RG_LEVELS = [0, 36, 73, 109, 146, 182, 219, 255]; // 8 even levels, ~36 apart
+const B_LEVELS = [0, 73, 146, 255]; // 4 levels; with r==g gives black/white + 2 grays
+const cubeHex2 = (n) => n.toString(16).padStart(2, '0');
+
+export const WEDGE_SAFE_256 = [];
+for (const b of B_LEVELS) {
+  for (const g of RG_LEVELS) {
+    for (const r of RG_LEVELS) {
+      WEDGE_SAFE_256.push({
+        packed: packRGBA(r, g, b, 255),
+        css: `#${cubeHex2(r)}${cubeHex2(g)}${cubeHex2(b)}`,
+      });
+    }
+  }
+}

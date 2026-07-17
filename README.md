@@ -61,9 +61,16 @@ follow the convention.
 Click any tile in the **faces** preview to open an in-app pixel editor in a
 right-side panel; the 3D view stays live beside it and rebuilds as you draw.
 
-- **Palette** — a fixed **DB16** ramp (16 colors) plus an **eyedropper** (sample
-  a color straight from the sprite) and a **transparent** tile (erase). Every
-  stroke is hard-pixel: fully opaque or fully erased, never anti-aliased.
+- **Tools & palette** — a persistent tool strip (**pencil `B`**, whose icon is a
+  live swatch of the current color; **eyedropper `I`** / hold **Alt** to sample
+  mid-stroke; **eraser `E`** / **right-click**), then, in-flow below, a dynamic
+  **in sprite** row (every color currently painted on _any_ face, so you can match
+  existing colors) and the **full 256-color palette** as a 16×16 grid. The 256 is
+  an **8×8×4 RGB grid** (the classic 8-bit "3-3-2" layout) rather than a dense
+  artist ramp _on purpose_: the low-poly wedge merges two touching faces within
+  ~12/channel (`sameMat`), so every swatch here is ≥36 apart and can never
+  false-merge a corner you wanted sharp. Every stroke is hard-pixel: fully opaque
+  or fully erased, never anti-aliased.
 - **Mirror-pair tabs** — a `[front|back]` / `[left|right]` / `[top|bottom]` pill
   under the canvas switches which face of the pair you're editing, so you can flip
   back and forth for reference. A **mirror-derived** face (one with no art of its
@@ -223,7 +230,7 @@ src/lib/
 src/
   main.js         scene, lights, ground, framing, render loop + drawing-editor wiring
   ui.js           left panel: samples, pick/drop atlas, clickable faces, options, stats
-  editor.js       inline tile editor (right panel): DB16 palette, eyedropper/eraser, mirror tabs, align guides
+  editor.js       inline tile editor (right panel): tool strip + in-sprite row + 256 palette, eyedropper/eraser, face tabs, align guides
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
 ```
 

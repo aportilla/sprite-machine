@@ -3,13 +3,17 @@
 // a container in the sidebar — NOT a modal. The 3D view stays live + interactive
 // beside it. Self-contained, pure DOM; no imports from the voxel pipeline.
 //
-// Tools live in a single 6x3 grid: 16 DB16 colors + an eyedropper + a transparent
-// (eraser) tile — no separate pencil/eraser toggle. The brush selection is held
-// in the caller-owned `brush` object so it survives a mirror-partner face swap.
-// Every stroke is HARD-pixel (alpha 0 or 255) so downstream ingest (alpha>=128)
-// and atlas.isBlank (alpha!==0) can never diverge.
+// Tools (pencil / eyedropper / eraser) live in a persistent strip so they are
+// first-class, distinct from the colors; the pencil button's icon is a live
+// swatch of the color it would paint. Below them, in-flow (no overlay): a dynamic
+// "in sprite" row (every color currently painted on ANY face) and then the full
+// 256-color wedge-safe palette as a 16x16 grid. The brush selection is held in the
+// caller-owned `brush` object so it survives a mirror-partner face swap (which
+// destroys + re-mounts this editor). Every stroke is HARD-pixel (alpha 0 or 255)
+// so downstream ingest (alpha>=128) and atlas.isBlank (alpha!==0) can never
+// diverge.
 //
-// createTileEditor(container, { name, tile, tileW, tileH, palette,
+// createTileEditor(container, { name, tile, tileW, tileH, palette, palette256,
 //   mirrorBehind, guides, faces, brush, sizeMin, sizeMax,
 //   onLive, onSelectFace, onResizeTile, onClose })
 //   -> { destroy }
@@ -21,8 +25,13 @@
 //     as hairline rules over the canvas so you can align to the stricter carve.
 //   - faces: the ordered list of all six atlas faces, shown as tabs across the
 //     top; the edited `name` is the active tab and clicking another switches.
-//   - brush: shared { mode, color:{r,g,b}, swatchIndex } — persisted by the caller
-//     across face swaps.
+//   - palette256: the full 256-color wedge-safe palette ({ css }[]) shown
+//     persistently as a 16x16 grid. `palette` (DB16) is no longer displayed; it
+//     still seeds the default brush color and the `B` shortcut.
+//   - usedColors: [{r,g,b}] colors already painted on the OTHER faces; the editor
+//     unions the current tile's live pixels on top for the dynamic "in sprite" row.
+//   - brush: shared { mode, color:{r,g,b}, swatchIndex } — persisted by the
+//     caller across face swaps.
 //   - sizeMin/sizeMax: inclusive integer bounds for the W/H steppers.
 //   - onLive(workingTile, dirty): fired on each actual pixel change.
 //   - onSelectFace(name): the user clicked the other face tab.
@@ -62,6 +71,13 @@ const EYEDROPPER_SVG =
   'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
   '<path d="M2 22l1.2-4L14 7.2l2.8 2.8L6 20.8 2 22z"/><path d="M14 7l3 3"/>' +
   '<path d="M17.5 3.5l3 3-2.3 2.3-3-3 2.3-2.3z"/></svg>';
+
+// Eraser glyph for the persistent tool strip (strokes `currentColor`). The
+// pencil button uses a live color swatch as its icon instead of a glyph.
+const ERASER_SVG =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M20 20H8.5L3 14.5a2 2 0 0 1 0-3L12 3l9 9-8 8"/><path d="M7 12l5 5"/></svg>';
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -123,6 +139,8 @@ export function createTileEditor(
     tileW,
     tileH,
     palette,
+    palette256 = [],
+    usedColors = [],
     mirrorBehind,
     guides,
     faces,
@@ -244,65 +262,171 @@ export function createTileEditor(
   const repaint = () => ctx.putImageData(imgData, 0, 0);
   repaint();
 
-  // --- tool grid: 16 colors + eyedropper + transparent (6x3) ----------------
-  const grid = el('div', 'editor-swatches');
-  const swatchEls = palette.map((p, i) => {
-    const s = el('button', 'editor-swatch');
-    s.style.background = p.css;
-    s.title = p.css;
-    s.onclick = () => {
-      brush.mode = 'pencil';
-      brush.color = hexToRgb(p.css);
-      brush.swatchIndex = i;
-      syncTiles();
-    };
-    grid.appendChild(s);
-    return s;
-  });
-  const eyeTile = el('button', 'editor-swatch editor-tile-icon');
-  eyeTile.innerHTML = EYEDROPPER_SVG;
-  eyeTile.title = 'eyedropper — click the sprite to sample a color';
-  eyeTile.onclick = () => {
-    brush.mode = 'eyedropper';
-    syncTiles();
+  // --- color + tool bar (below the canvas) ----------------------------------
+  // Everything under the canvas: the tool strip, the dynamic "in sprite" row, and
+  // the full palette — all in-flow (the #editor-panel scrolls if it overflows).
+  const colorbar = el('div', 'editor-colorbar');
+  root.appendChild(colorbar);
+
+  const rgbEq = (a, b) => a.r === b.r && a.g === b.g && a.b === b.b;
+  const matchPaletteIndex = (color) =>
+    palette.findIndex((p) => rgbEq(hexToRgb(p.css), color));
+  const rkey = (c) => (c.r << 16) | (c.g << 8) | c.b;
+
+  // The single path every color pick funnels through (palette, in-sprite,
+  // eyedrop): become a pencil of `color` and refresh the UI.
+  function selectColor(color, swatchIndex) {
+    brush.mode = 'pencil';
+    brush.color = { r: color.r, g: color.g, b: color.b };
+    brush.swatchIndex = swatchIndex;
+    syncUI();
+  }
+
+  // tool strip: pencil / eyedropper / eraser — persistent, first-class ---------
+  const tools = el('div', 'editor-tools');
+  const pencilBtn = el('button', 'editor-tool');
+  pencilBtn.type = 'button';
+  const pencilSw = el('span', 'editor-tool-sw'); // tiny live current-color preview
+  pencilBtn.append(pencilSw, el('span', null, 'Pencil'));
+  pencilBtn.title = 'pencil — draw (B)';
+  const eyeBtn = el('button', 'editor-tool');
+  eyeBtn.type = 'button';
+  eyeBtn.innerHTML = EYEDROPPER_SVG + '<span>Eyedrop</span>';
+  eyeBtn.title = 'eyedropper — click the sprite to sample (I, or hold Alt while drawing)';
+  const eraseBtn = el('button', 'editor-tool');
+  eraseBtn.type = 'button';
+  eraseBtn.innerHTML = ERASER_SVG + '<span>Eraser</span>';
+  eraseBtn.title = 'eraser — erase to transparent (E, or right-click)';
+  tools.append(pencilBtn, eyeBtn, eraseBtn);
+  colorbar.appendChild(tools);
+  pencilBtn.onclick = () => {
+    brush.mode = 'pencil';
+    if (!brush.color) brush.color = hexToRgb(palette[0].css);
+    syncUI();
   };
-  const transTile = el('button', 'editor-swatch editor-tile-transparent');
-  transTile.title = 'transparent — erase';
-  transTile.onclick = () => {
+  eyeBtn.onclick = () => {
+    brush.mode = 'eyedropper';
+    syncUI();
+  };
+  eraseBtn.onclick = () => {
     brush.mode = 'eraser';
     brush.swatchIndex = -1;
-    syncTiles();
+    syncUI();
   };
-  grid.append(eyeTile, transTile);
-  root.appendChild(grid);
 
-  // Active-brush indicator (also surfaces a custom eyedropped color).
-  const brushChip = el('div', 'editor-brush');
-  root.appendChild(brushChip);
-
-  function syncTiles() {
-    swatchEls.forEach((e, i) =>
-      e.classList.toggle('active', brush.mode === 'pencil' && brush.swatchIndex === i)
-    );
-    eyeTile.classList.toggle('active', brush.mode === 'eyedropper');
-    transTile.classList.toggle('active', brush.mode === 'eraser');
-    brushChip.innerHTML = '';
-    const sw = el('span', 'editor-brush-sw');
-    if (brush.mode === 'eraser') {
-      sw.classList.add('is-transparent');
-      brushChip.append(sw, el('span', 'tiny', 'erase'));
-    } else if (brush.mode === 'eyedropper') {
-      brushChip.append(el('span', 'tiny', 'click the sprite to sample a color'));
-    } else {
-      sw.style.background = `rgb(${brush.color.r},${brush.color.g},${brush.color.b})`;
-      brushChip.append(sw, el('span', 'tiny', rgbHex(brush.color)));
+  // "In sprite" — a DYNAMIC palette of every color currently painted anywhere in
+  // the sprite (all faces). `usedColors` carries the OTHER faces' colors (passed
+  // at mount); this editor unions the CURRENT tile's live pixels on top, so the
+  // row reflects the whole sprite and updates as you draw or erase.
+  colorbar.appendChild(el('div', 'editor-pal-label', 'In sprite'));
+  const usedRow = el('div', 'editor-used-row');
+  colorbar.appendChild(usedRow);
+  let lastUsedSig = null;
+  function distinctWorkColors() {
+    const seen = new Set();
+    const out = [];
+    for (let i = 0; i < work.length; i += 4) {
+      if (work[i + 3] === 0) continue;
+      const c = { r: work[i], g: work[i + 1], b: work[i + 2] };
+      const k = rkey(c);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(c);
+    }
+    return out;
+  }
+  function renderUsed() {
+    const map = new Map();
+    for (const c of usedColors) map.set(rkey(c), c);
+    for (const c of distinctWorkColors()) map.set(rkey(c), c);
+    const list = [...map.values()].sort((a, b) => rkey(a) - rkey(b));
+    const sig = list.map(rkey).join(',');
+    if (sig === lastUsedSig) return; // set unchanged → skip DOM churn mid-stroke
+    lastUsedSig = sig;
+    usedRow.innerHTML = '';
+    if (!list.length) {
+      usedRow.appendChild(el('span', 'tiny', 'nothing drawn yet'));
+      return;
+    }
+    for (const c of list) {
+      const s = el('button', 'editor-swatch editor-used-sw');
+      s.type = 'button';
+      s.style.background = rgbHex(c);
+      s.title = rgbHex(c);
+      s.onclick = () => selectColor(c, matchPaletteIndex(c));
+      usedRow.appendChild(s);
     }
   }
-  syncTiles();
+
+  // --- palette (persistent, in-flow below the tools) ------------------------
+  // The full 256-color wedge-safe palette lives right here in the sidebar — no
+  // overlay — as a 16x16 grid. The panel scrolls if the viewport is short.
+  const pal = el('div', 'editor-palette');
+  pal.appendChild(el('div', 'editor-pal-label', `Palette (${palette256.length})`));
+  const cubeWrap = el('div', 'editor-cube');
+  const cubeEls = [];
+  for (const p of palette256) {
+    const rgb = hexToRgb(p.css);
+    const s = el('button', 'editor-swatch');
+    s.type = 'button';
+    s.style.background = p.css;
+    s.title = p.css;
+    s.onclick = () => selectColor(rgb, matchPaletteIndex(rgb));
+    cubeWrap.appendChild(s);
+    cubeEls.push({ el: s, rgb });
+  }
+  pal.appendChild(cubeWrap);
+
+  colorbar.appendChild(pal);
+
+  // active-brush + tool state --------------------------------------------------
+  function syncUI() {
+    pencilBtn.classList.toggle('active', brush.mode === 'pencil');
+    eyeBtn.classList.toggle('active', brush.mode === 'eyedropper');
+    eraseBtn.classList.toggle('active', brush.mode === 'eraser');
+    // the pencil button's swatch always shows the color it would paint
+    const c = brush.color || { r: 0, g: 0, b: 0 };
+    pencilSw.style.background = rgbHex(c);
+    pencilSw.title = rgbHex(c);
+    const pencilColor = brush.mode === 'pencil' ? brush.color : null;
+    cubeEls.forEach(({ el: e, rgb }) =>
+      e.classList.toggle('active', !!pencilColor && rgbEq(rgb, pencilColor))
+    );
+  }
+
+  // keyboard: B / I / E select pencil / eyedropper / eraser. Suppressed while a
+  // text/number input (the W/H steppers) is focused so typing there is never
+  // hijacked; torn down in destroy().
+  function onKeyDown(e) {
+    const tag = e.target && e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === 'b') {
+      brush.mode = 'pencil';
+      if (!brush.color) brush.color = hexToRgb(palette[0].css);
+      syncUI();
+    } else if (k === 'i') {
+      brush.mode = 'eyedropper';
+      syncUI();
+    } else if (k === 'e') {
+      brush.mode = 'eraser';
+      brush.swatchIndex = -1;
+      syncUI();
+    } else {
+      return;
+    }
+    e.preventDefault();
+  }
+  document.addEventListener('keydown', onKeyDown);
+
+  renderUsed();
+  syncUI();
 
   // --- drawing --------------------------------------------------------------
   let drawing = false;
   let prev = null; // last painted texel this stroke, for line interpolation
+  let forceErase = false; // right-click erases regardless of the active tool
 
   function toTexel(e) {
     const rect = canvas.getBoundingClientRect();
@@ -318,7 +442,7 @@ export function createTileEditor(
   // never dirties a mirror-derived face into real art.
   function writeTexel(px, py) {
     const i = (py * tileW + px) * 4;
-    const paint = brush.mode !== 'eraser';
+    const paint = !forceErase && brush.mode !== 'eraser';
     const r = paint ? brush.color.r : 0;
     const g = paint ? brush.color.g : 0;
     const b = paint ? brush.color.b : 0;
@@ -365,6 +489,7 @@ export function createTileEditor(
     if (changed) {
       dirty = true;
       repaint();
+      renderUsed(); // a stroke can add / remove a color from the sprite
       onLive?.(workingTile, dirty);
     }
   }
@@ -374,26 +499,26 @@ export function createTileEditor(
     if (work[i + 3] === 0) {
       brush.mode = 'eraser';
       brush.swatchIndex = -1;
+      syncUI();
     } else {
+      // Route through selectColor so an off-palette (imported) sample becomes the
+      // pencil color (and shows up in the "in sprite" row) just like any pick.
       const c = { r: work[i], g: work[i + 1], b: work[i + 2] };
-      brush.mode = 'pencil';
-      brush.color = c;
-      brush.swatchIndex = palette.findIndex((p) => {
-        const pc = hexToRgb(p.css);
-        return pc.r === c.r && pc.g === c.g && pc.b === c.b;
-      });
+      selectColor(c, matchPaletteIndex(c));
     }
-    syncTiles();
   }
 
   function onPointerDown(e) {
     const t = toTexel(e);
     if (!t) return;
     e.preventDefault();
-    if (brush.mode === 'eyedropper') {
+    // Alt-hold = momentary eyedropper (sample without switching to the tool);
+    // a right-click still erases even with Alt down.
+    if (e.button !== 2 && (e.altKey || brush.mode === 'eyedropper')) {
       sampleAt(t.px, t.py);
       return;
     }
+    forceErase = e.button === 2;
     drawing = true;
     prev = null;
     canvas.setPointerCapture?.(e.pointerId);
@@ -408,12 +533,14 @@ export function createTileEditor(
   function onPointerUp(e) {
     drawing = false;
     prev = null;
+    forceErase = false;
     canvas.releasePointerCapture?.(e.pointerId);
   }
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerUp);
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // right-click = erase
 
   // A resize re-mounts the whole editor, which would drop keyboard focus off the
   // stepper the user was typing in. Restore it to the matching new field (and
@@ -431,6 +558,9 @@ export function createTileEditor(
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    // The keydown listener isn't on `container`, so drop it explicitly — a face
+    // swap / resize re-mounts this editor often, and it would otherwise leak.
+    document.removeEventListener('keydown', onKeyDown);
     container.innerHTML = ''; // removes the canvas + its pointer listeners with it
   }
   return { destroy };

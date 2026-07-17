@@ -515,11 +515,6 @@ body {
 .editor-canvas-overlay {
   z-index: 2;
 }
-.editor-swatches {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 5px;
-}
 .editor-swatch {
   aspect-ratio: 1;
   border: 2px solid transparent;
@@ -532,52 +527,88 @@ body {
   border-color: #fff;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
 }
-.editor-tile-icon {
+
+/* ---- color + tool bar (tools strip, current-color chip, recents, palette) ---- */
+.editor-colorbar {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Persistent tool strip: pencil / eyedropper / eraser, always visible. */
+.editor-tools {
+  display: flex;
+  gap: 6px;
+}
+.editor-tool {
+  flex: 1;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #e8e8ea;
+  gap: 6px;
+  padding: 7px 6px;
+  font: inherit;
+  font-size: 11px;
+  color: #cfcfd6;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.editor-tool svg {
+  display: block;
+}
+.editor-tool:hover {
   background: rgba(255, 255, 255, 0.08);
 }
-.editor-tile-transparent {
-  background-color: #2a2a30;
-  background-image: linear-gradient(
-      45deg,
-      #52525c 25%,
-      transparent 25%,
-      transparent 75%,
-      #52525c 75%
-    ),
-    linear-gradient(45deg, #52525c 25%, transparent 25%, transparent 75%, #52525c 75%);
-  background-size: 12px 12px;
-  background-position:
-    0 0,
-    6px 6px;
+.editor-tool.active {
+  color: #fff;
+  border-color: var(--accent);
+  background: rgba(199, 125, 214, 0.16);
 }
-.editor-brush {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 16px;
-}
-.editor-brush-sw {
-  width: 14px;
-  height: 14px;
+
+/* Tiny live current-color swatch — the pencil button's icon (shows the color it
+   would paint). */
+.editor-tool-sw {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
   border-radius: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.35);
 }
-.editor-brush-sw.is-transparent {
-  background-color: #2a2a30;
-  background-image: linear-gradient(
-      45deg,
-      #52525c 25%,
-      transparent 25%,
-      transparent 75%,
-      #52525c 75%
-    ),
-    linear-gradient(45deg, #52525c 25%, transparent 25%, transparent 75%, #52525c 75%);
-  background-size: 8px 8px;
-  background-position:
-    0 0,
-    4px 4px;
+
+/* "In sprite" — dynamic colors currently painted anywhere in the sprite. Wraps,
+   since it can hold anywhere from nothing to a few dozen colors. */
+.editor-used-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 26px;
+}
+.editor-used-sw {
+  flex: 0 0 auto;
+  width: 26px;
+}
+
+/* Persistent palette — always visible in-flow below the tools (no overlay). The
+   #editor-panel scrolls if the viewport is short. */
+.editor-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.editor-pal-label {
+  margin-top: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #8a8a96;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* The full 256-color palette as a 16x16 grid. */
+.editor-cube {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 2px;
 }
