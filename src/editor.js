@@ -66,6 +66,8 @@
 //     ground-rested sprite floats up as the tile grows.
 // ---------------------------------------------------------------------------
 
+import { icon } from './icons.js';
+
 // The pixel-canvas CONTAINER is a stable box: its height is pinned to a fixed
 // fraction of the sidebar (panel) height, full-bleed below the tabs, so nothing
 // below it shifts as the tile size — and thus the drawn canvas — changes. The
@@ -92,13 +94,6 @@ function drawGuides(g, guides, scale, cssW, cssH) {
   if (vMin != null) g.fillRect(0, vMin * scale, cssW, T); // top extent
   if (vMax != null) g.fillRect(0, (vMax + 1) * scale - T, cssW, T); // bottom extent
 }
-
-// Simple pipette glyph for the eyedropper button (strokes `currentColor`).
-const EYEDROPPER_SVG =
-  '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" ' +
-  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-  '<path d="M2 22l1.2-4L14 7.2l2.8 2.8L6 20.8 2 22z"/><path d="M14 7l3 3"/>' +
-  '<path d="M17.5 3.5l3 3-2.3 2.3-3-3 2.3-2.3z"/></svg>';
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -382,17 +377,25 @@ export function createTileEditor(
   // so a resize is always alignment-safe).
   const toolstrip = el('div', 'editor-toolstrip');
   const toolGroup = el('div', 'editor-toolgroup');
-  const pencilBtn = el('button', 'editor-tool', 'pencil');
+  // Icon-only tool buttons (Spectrum workflow glyphs). The icon is decorative;
+  // each button carries its own aria-label + title so the tool stays named.
+  const pencilBtn = el('button', 'editor-tool editor-tool-icon');
   pencilBtn.type = 'button';
   pencilBtn.title = 'pencil — draw (B)';
-  const rectBtn = el('button', 'editor-tool', 'rect');
+  pencilBtn.setAttribute('aria-label', 'pencil');
+  pencilBtn.appendChild(icon('draw'));
+  const rectBtn = el('button', 'editor-tool editor-tool-icon');
   rectBtn.type = 'button';
   rectBtn.disabled = true;
   rectBtn.title = 'rectangle — coming soon';
-  const fillBtn = el('button', 'editor-tool', 'fill');
+  rectBtn.setAttribute('aria-label', 'rectangle');
+  rectBtn.appendChild(icon('rectangle'));
+  const fillBtn = el('button', 'editor-tool editor-tool-icon');
   fillBtn.type = 'button';
   fillBtn.disabled = true;
   fillBtn.title = 'fill — coming soon';
+  fillBtn.setAttribute('aria-label', 'fill');
+  fillBtn.appendChild(icon('color-fill'));
   toolGroup.append(pencilBtn, rectBtn, fillBtn);
   toolstrip.append(
     toolGroup,
@@ -452,21 +455,26 @@ export function createTileEditor(
   // the pencil's INK — a sampled color, or transparent ("clear color") — rather
   // than a drawing tool. A leading "+" opens the full 256-color palette modal.
   const usedRow = el('div', 'editor-used-row');
-  const addBtn = el('button', 'editor-add', '+');
+  const addBtn = el('button', 'editor-add');
   addBtn.type = 'button';
   addBtn.title = 'add a color from the 256 palette';
+  addBtn.setAttribute('aria-label', 'add a color from the 256 palette');
+  addBtn.appendChild(icon('add'));
   addBtn.onclick = () => openPalette();
   const eyeBtn = el('button', 'editor-pal-tool');
   eyeBtn.type = 'button';
-  eyeBtn.innerHTML = EYEDROPPER_SVG;
+  eyeBtn.appendChild(icon('sampler'));
   eyeBtn.title = 'eyedropper — click the sprite to sample (I, or hold Alt while drawing)';
+  eyeBtn.setAttribute('aria-label', 'eyedropper');
   eyeBtn.onclick = () => {
     brush.picking = true;
     syncUI();
   };
-  const eraserSw = el('button', 'editor-swatch editor-used-sw editor-erase-sw');
+  const eraserSw = el('button', 'editor-pal-tool editor-erase-tool');
   eraserSw.type = 'button';
   eraserSw.title = 'eraser — clear color / erase to transparent (E, or right-click)';
+  eraserSw.setAttribute('aria-label', 'eraser (clear color)');
+  eraserSw.appendChild(icon('erase'));
   eraserSw.onclick = () => {
     brush.erase = true;
     brush.picking = false;
@@ -544,9 +552,11 @@ export function createTileEditor(
   const card = el('div', 'palette-modal-card');
   const head = el('div', 'palette-modal-head');
   head.append(el('span', null, `Palette · ${palette256.length}`));
-  const closeX = el('button', 'palette-modal-close', '✕');
+  const closeX = el('button', 'palette-modal-close');
   closeX.type = 'button';
   closeX.title = 'close (Esc)';
+  closeX.setAttribute('aria-label', 'close');
+  closeX.appendChild(icon('close'));
   closeX.onclick = () => closePalette();
   head.appendChild(closeX);
   const cubeWrap = el('div', 'editor-cube');

@@ -75,7 +75,10 @@ _pick atlas ▾_ menu, and _download_.
   `src/editor.js`.
 - **Tools & palette** — a **tool footer inside the canvas card** (below the pixel
   canvas, set off by a hairline separator): a **tool strip** of first-class tools
-  (**pencil `B`**; **rect** and **fill** are present but **disabled** for now) with
+  (**pencil `B`**; **rect** and **fill** are present but **disabled** for now) —
+  each an **icon button** drawn from the open-source **Adobe Spectrum _workflow_**
+  icon set (`draw` / `rectangle` / `color-fill`; the ink pickers below use
+  `sampler` for the eyedropper and `erase` for the eraser) — with
   the square **tile-size stepper** docked at its right, above a **per-tool options**
   row — for the pencil, a **tip-size stepper** (`size: N px`) that stamps an **N×N**
   square footprint and **previews it** as a hairline outline on the canvas as you
@@ -287,6 +290,7 @@ src/
   ui.js           header strip (samples, pick/drop atlas, download) + stage overlays (options, stats)
   editor.js       tools panel (right half): one framed CARD of face tabs + stable-size canvas container (layout(): 60% of the sidebar height, centered integer-scaled canvas) + a tool FOOTER (tool strip — pencil; rect/fill stubbed — with docked tile-size stepper, and per-tool options: pencil size + hover footprint preview); palette row (colors + eyedropper/eraser/"+" 256-palette modal) sits below the card; align guides
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
+  icons.js        real UI glyphs — registers the Adobe Spectrum workflow <sp-icon-*> elements used by ui.js + editor.js (color via currentColor, size via --mod-icon-size; no sp-theme)
 ```
 
 ## Known limitations & next steps

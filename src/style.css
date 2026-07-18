@@ -142,8 +142,12 @@ body {
   background: rgba(255, 255, 255, 0.12);
 }
 .picker-caret {
-  font-size: 9px;
   color: #b8b8c0;
+  --mod-icon-size: 10px;
+}
+/* Leading download glyph in the header's download chip. */
+.chip sp-icon-download {
+  --mod-icon-size: 14px;
 }
 
 /* Atlas action menu: "pick atlas ▾" trigger + a dropdown of load actions. */
@@ -227,9 +231,19 @@ body {
   text-align: right;
 }
 .warn {
+  display: flex;
+  align-items: flex-start; /* pin the alert icon to the first line, not the block center */
+  justify-content: flex-end;
+  gap: 4px;
   color: #f0c883;
   margin-top: 6px;
   font-size: 10px;
+  --mod-icon-size: 11px;
+}
+/* Nudge the alert glyph down a hair so its optical center lines up with the
+   first line's cap height (the icon box is taller than the 10px text). */
+.warn sp-icon-alert {
+  margin-top: 1px;
 }
 
 /* ---- whole-app drop target ---- */
@@ -539,6 +553,17 @@ body {
   opacity: 0.4;
   cursor: default;
 }
+/* Icon-only tool buttons: center the Spectrum workflow glyph. The icons ship no
+   size without an <sp-theme>, so --mod-icon-size is the theme-free hook they
+   honor; color comes from the button's text color via currentColor, so .active
+   and :disabled restyle the glyph for free. */
+.editor-tool-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 12px;
+  --mod-icon-size: 18px;
+}
 
 /* Per-tool options row (contextual), the second footer row. A fixed min-height keeps
    the layout stable even for a tool with no options. For the pencil: the tip-size
@@ -574,10 +599,8 @@ body {
   align-items: center;
   justify-content: center;
   padding: 0;
-  font: inherit;
-  font-size: 18px;
-  line-height: 1;
   color: #cfcfd6;
+  --mod-icon-size: 16px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px dashed rgba(255, 255, 255, 0.3);
   border-radius: 5px;
@@ -603,9 +626,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 5px;
   cursor: pointer;
-}
-.editor-pal-tool svg {
-  display: block;
+  --mod-icon-size: 16px;
 }
 .editor-pal-tool:hover {
   background: rgba(255, 255, 255, 0.1);
@@ -616,29 +637,13 @@ body {
   border-color: var(--accent);
   background: rgba(199, 125, 214, 0.18);
 }
-
-/* Eraser swatch — the "clear color" ink: a transparency checkerboard crossed by a
-   red slash, so it reads as "no color" alongside the real color swatches. Picks up
-   .editor-swatch.active (white ring) when erasing. */
-.editor-erase-sw {
-  background-color: #2a2a30;
-  background-image: linear-gradient(
-      135deg,
-      transparent 43%,
-      #e5484d 43%,
-      #e5484d 57%,
-      transparent 57%
-    ),
-    linear-gradient(45deg, #3a3a42 25%, transparent 25%, transparent 75%, #3a3a42 75%),
-    linear-gradient(45deg, #3a3a42 25%, transparent 25%, transparent 75%, #3a3a42 75%);
-  background-size:
-    100% 100%,
-    10px 10px,
-    10px 10px;
-  background-position:
-    0 0,
-    0 0,
-    5px 5px;
+/* Eraser = the "clear color" ink. Neutral among the pickers; its ACTIVE state
+   goes red (not accent) to preserve the "erase / clear" signal the old
+   checkerboard-with-red-slash swatch used to carry. */
+.editor-erase-tool.active {
+  color: #ff9ea1;
+  border-color: #e5484d;
+  background: rgba(229, 72, 77, 0.16);
 }
 
 /* ---- full 256-color palette modal (opened by the "+") ---- */
@@ -693,8 +698,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
   color: #e8e8ea;
-  font: inherit;
-  font-size: 13px;
+  --mod-icon-size: 14px;
   cursor: pointer;
 }
 .palette-modal-close:hover {

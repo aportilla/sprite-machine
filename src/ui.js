@@ -8,12 +8,21 @@
 // ---------------------------------------------------------------------------
 
 import { fileToImageData } from './image-io.js';
+import { icon } from './icons.js';
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
   if (text != null) n.textContent = text;
   return n;
+}
+
+// A warning / error line for the stats overlay: an alert icon + the message.
+// The icon inherits the row's warn color via currentColor.
+function warnRow(msg) {
+  const r = el('div', 'warn');
+  r.append(icon('alert'), el('span', null, msg));
+  return r;
 }
 
 // Reflect an on/off state onto a pill toggle button (class + a11y state).
@@ -103,7 +112,9 @@ export function createUI({
   // target.
   const picker = el('div', 'picker');
   const pickBtn = el('button', 'chip picker-trigger');
-  pickBtn.append(el('span', null, 'pick atlas'), el('span', 'picker-caret', '▾'));
+  const caret = icon('chevron-down');
+  caret.classList.add('picker-caret');
+  pickBtn.append(el('span', null, 'pick atlas'), caret);
   const menu = el('div', 'picker-menu');
   picker.append(pickBtn, menu);
 
@@ -131,7 +142,8 @@ export function createUI({
   };
   document.addEventListener('click', () => menuOpen && closeMenu());
 
-  const dlBtn = el('button', 'chip', 'download');
+  const dlBtn = el('button', 'chip');
+  dlBtn.append(icon('download'), el('span', null, 'download'));
   dlBtn.onclick = () => onDownload?.();
   actions.append(picker, dlBtn);
 
@@ -209,14 +221,14 @@ export function createUI({
     }
     if (voxels) line('voxels', voxels);
     if (triangles) line('tris', triangles);
-    for (const w of warnings || []) stats.appendChild(el('div', 'warn', '⚠ ' + w));
+    for (const w of warnings || []) stats.appendChild(warnRow(w));
   }
 
   // Show a one-off error (e.g. a failed image decode) in the stats overlay; it
   // persists until the next successful build overwrites it.
   function setError(msg) {
     stats.innerHTML = '';
-    stats.appendChild(el('div', 'warn', '⚠ ' + msg));
+    stats.appendChild(warnRow(msg));
   }
 
   return {
