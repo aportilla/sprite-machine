@@ -102,6 +102,10 @@ let pendingOpenPalette = false;
 // the tile center on the first editor mount (the capture tool has no pointer to
 // hover). Consumed once.
 let pendingCursor = null;
+// Dev hook: ?pick=N selects PALETTE_256[N] as the ink on the first editor mount, as
+// if picked from the "+" modal (the capture tool can't click a swatch), so a shot
+// can show it landing as the selected palette-row tile. Consumed once.
+let pendingPick = null;
 
 const camParam = params.get('cam');
 const ISO_DIR = new THREE.Vector3(
@@ -352,12 +356,14 @@ function mountEditor(name, focusSize) {
     focusSize,
     openPaletteOnMount: pendingOpenPalette,
     previewCursor: pendingCursor,
+    pickIndex: pendingPick,
     onLive: (working, dirty) => applyTileEdit(name, wasDerived, working, dirty),
     onSelectFace: (target) => enterDrawing(target),
     onResizeTile: (n) => resizeTiles(n, n, 'Tile'),
   });
   pendingOpenPalette = false; // one-shot: don't re-open on face swap / resize
   pendingCursor = null; // one-shot: only preview on the first mount
+  pendingPick = null; // one-shot: only pre-select on the first mount
 }
 
 // Resize every tile from the editor's tile-size stepper. Tiles are locked SQUARE, so
@@ -473,6 +479,11 @@ const cursorParam = params.get('cursor');
 if (cursorParam) {
   const n = parseInt(cursorParam, 10);
   if (n > 0) pendingCursor = n;
+}
+const pickParam = params.get('pick');
+if (pickParam != null) {
+  const n = parseInt(pickParam, 10);
+  if (n >= 0 && n < PALETTE_256.length) pendingPick = n;
 }
 const q = params.get('sample');
 let startIndex = 0;

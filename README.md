@@ -82,7 +82,9 @@ _pick atlas ▾_ menu, and _download_.
   hover. While the pencil is active the **OS cursor is hidden** over the canvas, so
   that hover outline _is_ the cursor — the exact texels a stamp will cover, nothing
   else floating over them. **Below the card** is the **palette row** — every color currently painted on
-  _any_ face, so you can match existing colors — led by a **+** that opens a **modal
+  _any_ face, so you can match existing colors, **plus your currently selected ink**
+  (so a color picked from the modal lands here as the **selected tile** right away,
+  before you've drawn a single pixel with it) — led by a **+** that opens a **modal
   picker** over
   the **full 256-color palette**, then the **eyedropper** (`I` / hold **Alt** to
   sample mid-stroke) and the **eraser** (`E` / **right-click**): these two sit
@@ -150,9 +152,11 @@ test-only URL params: `?sample=<index|name>`, `?rotate=0`, `?lowpoly=0|1`,
 `?flat=1`, `?diag=1` (watertightness self-check), `?cam=top|front|fq|bq`,
 `?tile=<N>` (or `<W>x<H>` to force an asymmetric, out-of-registration resize the
 locked-square UI can't produce) to apply one tile resize after the first build,
-`?palette=1` to open the **+** palette modal on the first mount, and `?cursor=<N>`
+`?palette=1` to open the **+** palette modal on the first mount, `?cursor=<N>`
 to set the pencil size to N and draw its footprint outline at the tile center on
-mount — the stepper, tabs, modal, and hover preview can't be driven headlessly.
+mount, and `?pick=<N>` to select `PALETTE_256[N]` as the ink on mount (as if picked
+from the modal) so a shot can show it landing as the selected palette-row tile — the
+stepper, tabs, modal, swatch pick, and hover preview can't be driven headlessly.
 
 ---
 

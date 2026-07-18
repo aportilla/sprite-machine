@@ -39,11 +39,14 @@
 //     color and `B`.
 //   - usedColors: [{r,g,b}] colors already painted on the OTHER faces; the editor
 //     unions the current tile's live pixels on top for the dynamic palette row.
-//   - brush: shared { tool, color:{r,g,b}, swatchIndex, erase, picking, size } —
-//     persisted by the caller across face swaps. `tool` is the drawing op
-//     ('pencil'|'rect'|'fill'; only pencil is live). `erase` makes the pencil lay
-//     transparent; `picking` arms the eyedropper for the next canvas click; `size`
-//     is the pencil's N×N tip footprint (in texels).
+//   - brush: shared { tool, color:{r,g,b}, swatchIndex, erase, picking, size,
+//     chosen } — persisted by the caller across face swaps. `tool` is the drawing
+//     op ('pencil'|'rect'|'fill'; only pencil is live). `erase` makes the pencil
+//     lay transparent; `picking` arms the eyedropper for the next canvas click;
+//     `size` is the pencil's N×N tip footprint (in texels). `chosen` is set once
+//     the user actively picks an ink (modal / eyedrop / used swatch): that ink then
+//     shows as a SELECTED tile in the palette row even before it's painted — vs.
+//     the untouched mount default, which stays hidden until something is drawn.
 //   - sizeMin/sizeMax: inclusive integer bounds for the TILE-size stepper.
 //   - focusSize: the stepper's key ('Tile') to refocus after a resize re-mount (typed entry flow).
 //   - openPaletteOnMount: dev hook (?palette=1) — open the "+" palette modal
@@ -51,6 +54,9 @@
 //   - previewCursor: dev hook (?cursor=N) — set the pencil size to N and draw its
 //     footprint outline at the tile center on mount, so a headless shot (which has
 //     no pointer to hover) can show the preview. Consumed once by the caller.
+//   - pickIndex: dev hook (?pick=N) — select palette256[N] as the ink on mount, as
+//     if picked from the "+" modal, so a headless shot (which can't click a swatch)
+//     can show it landing as the selected palette-row tile. Consumed once.
 //   - onLive(workingTile, dirty): fired on each actual pixel change.
 //   - onSelectFace(name): the user clicked another face tab.
 //   - onResizeTile(size): the user changed the tile size. Tiles are locked SQUARE,
@@ -185,6 +191,7 @@ export function createTileEditor(
     focusSize,
     openPaletteOnMount = false,
     previewCursor = null,
+    pickIndex = null,
     onLive,
     onSelectFace,
     onResizeTile,
@@ -207,6 +214,7 @@ export function createTileEditor(
   if (brush.picking == null) brush.picking = false;
   if (brush.swatchIndex == null) brush.swatchIndex = 0;
   if (brush.size == null) brush.size = 1;
+  if (brush.chosen == null) brush.chosen = false;
 
   // The pencil tip is capped at the tile edge (a single stamp can't exceed the
   // canvas). `previewCursor` (?cursor=N) sets the size up front; either way we
@@ -357,6 +365,8 @@ export function createTileEditor(
     brush.swatchIndex = swatchIndex;
     brush.erase = false;
     brush.picking = false;
+    brush.chosen = true; // pin as the selected palette tile even if not painted yet
+    renderUsed(); // surface the pick in the palette row now, not only once drawn
     syncUI();
   }
 
@@ -478,9 +488,16 @@ export function createTileEditor(
   }
   let usedEls = []; // { el, rgb } for active-color highlighting
   function renderUsed() {
-    const map = new Map();
-    for (const c of usedColors) map.set(rkey(c), c);
-    for (const c of distinctWorkColors()) map.set(rkey(c), c);
+    // Colors actually painted somewhere: the other faces (usedColors) unioned with
+    // this tile's own live pixels. This set alone drives the modal's "in sprite" rings.
+    const painted = new Map();
+    for (const c of usedColors) painted.set(rkey(c), c);
+    for (const c of distinctWorkColors()) painted.set(rkey(c), c);
+    // The row ALSO carries the actively-chosen ink even before it's painted, so a
+    // color picked from the "+" modal (or eyedropped) shows immediately as the
+    // selected tile. `brush.chosen` gates out the untouched mount default.
+    const map = new Map(painted);
+    if (brush.chosen && brush.color) map.set(rkey(brush.color), { ...brush.color });
     const list = [...map.values()].sort((a, b) => rkey(a) - rkey(b));
     const sig = list.map(rkey).join(',');
     if (sig === lastUsedSig) return; // set unchanged → skip DOM churn mid-stroke
@@ -498,7 +515,7 @@ export function createTileEditor(
       usedEls.push({ el: s, rgb: c });
     }
     syncActiveSwatch();
-    markInSprite(new Set(list.map(rkey)));
+    markInSprite(new Set(painted.keys())); // in-sprite rings = painted colors only
   }
 
   // Ring the palette-modal swatches whose color is already painted in the sprite,
@@ -616,6 +633,13 @@ export function createTileEditor(
 
   renderUsed();
   syncUI();
+  // Dev hook (?pick=N): select palette256[N] as if picked from the modal, so a
+  // headless shot (which can't click a swatch) shows it landing as the selected
+  // palette-row tile. Runs before the ?palette=1 open so the modal reflects it too.
+  if (pickIndex != null && palette256[pickIndex]) {
+    const rgb = hexToRgb(palette256[pickIndex].css);
+    selectColor(rgb, matchPaletteIndex(rgb));
+  }
   // Dev hook (?palette=1): open the picker right away so the capture tool — which
   // can't click the "+" — can screenshot it. Consumed once by the caller.
   if (openPaletteOnMount) openPalette();
