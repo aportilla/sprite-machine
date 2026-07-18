@@ -384,12 +384,23 @@ body {
   font-weight: 700;
   cursor: default;
 }
-/* The canvas CONTAINER — a stable box the tabs cap: editor.js layout() pins its
-   height to 60% of the sidebar height and it spans the full panel width. Its
-   lighter-dark fill (shared with the active tab) frames the canvas, so the selected
-   tab reads as a structural extension of it. The square pixel canvas is centered
-   inside as large as an integer scale fits. Square top corners (the tab strip sits
-   there), rounded bottom. */
+/* The framed CARD the tabs cap: it holds the canvas container AND the tool footer
+   as one unit. Its lighter-dark fill (shared with the active tab) frames the whole
+   thing, so the selected tab reads as a structural extension of it. Square top
+   corners (the tab strip sits there), rounded bottom (the footer's edge); overflow
+   hidden clips the footer's corners to that radius. */
+.editor-canvas-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--widget-bg);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28); /* lift the card off the panel */
+}
+/* The canvas CONTAINER — a stable box inside the card: editor.js layout() pins its
+   height to 60% of the sidebar height and it spans the full card width. The square
+   pixel canvas is centered inside as large as an integer scale fits. */
 .editor-canvas-wrap {
   position: relative;
   display: flex;
@@ -397,10 +408,17 @@ body {
   justify-content: center;
   padding: 10px;
   overflow: hidden; /* clip if a tiny container forces the min (scale 1) canvas over */
-  background: var(--widget-bg);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 0 0 8px 8px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28); /* lift the card off the panel */
+}
+/* The tool FOOTER inside the card, below the canvas: a hairline separator + a faint
+   tray fill set the tools apart from the canvas while keeping them in the same card.
+   Stacks the tool strip over the per-tool options row. */
+.editor-canvas-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
 }
 /* The centered square holding the four aligned canvas layers; sized by layout(). */
 .editor-canvas-stack {
@@ -479,18 +497,15 @@ body {
     0 0 0 4px rgba(0, 0, 0, 0.55);
 }
 
-/* ---- tool strip + per-tool options ---- */
+/* ---- tool strip + per-tool options (rows inside the card footer) ---- */
 /* The tool strip: first-class tools (pencil; rect/fill disabled) on the left, the
-   square tile-size stepper docked on the right. */
+   square tile-size stepper docked on the right. The footer supplies the framing, so
+   this is just a bare row. */
 .editor-toolstrip {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 7px;
 }
 .editor-toolgroup {
   display: flex;
@@ -520,17 +535,14 @@ body {
   cursor: default;
 }
 
-/* Per-tool options row (contextual). A fixed min-height keeps the layout stable
-   even for a tool with no options. For the pencil: the tip-size stepper. */
+/* Per-tool options row (contextual), the second footer row. A fixed min-height keeps
+   the layout stable even for a tool with no options. For the pencil: the tip-size
+   stepper. */
 .editor-tool-opts {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 30px;
-  padding: 4px 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 7px;
+  min-height: 28px;
 }
 
 /* ---- palette row (colors + ink pickers) + palette modal ---- */

@@ -4,12 +4,14 @@
 // interactive on the left. Self-contained, pure DOM; no imports from the voxel
 // pipeline.
 //
-// Top to bottom: the six face tabs capping the framed pixel canvas, then a TOOL
-// STRIP of first-class tools (pencil; rect + fill are stubbed in but disabled)
-// with the square tile-size stepper docked at its right, a per-tool OPTIONS row
-// (the pencil's tip-SIZE stepper), and finally the PALETTE row — every color
-// currently painted on ANY face, so you can match existing colors — led by a "+"
-// that opens the full 256-color modal, then the eyedropper and the eraser. The
+// The face tabs, the pixel canvas, and the tools are ONE framed card: the six
+// tabs cap it, the canvas fills its body, and a FOOTER inside the same card holds
+// the TOOL STRIP of first-class tools (pencil; rect + fill are stubbed in but
+// disabled) with the square tile-size stepper docked at its right, above a
+// per-tool OPTIONS row (the pencil's tip-SIZE stepper). Only the PALETTE row lives
+// BELOW the card — every color currently painted on ANY face, so you can match
+// existing colors — led by a "+" that opens the full 256-color modal, then the
+// eyedropper and the eraser. The
 // eyedropper and eraser live with the colors, not the tools, because they choose
 // the pencil's INK (a sampled color, or transparent "clear color") rather than a
 // drawing tool. The brush selection is held in the caller-owned `brush` object so
@@ -218,7 +220,7 @@ export function createTileEditor(
   const root = el('div', 'editor');
   container.appendChild(root);
 
-  // --- canvas widget: tabs + framed canvas as one self-contained unit --------
+  // --- canvas widget: tabs + framed card (canvas + tool footer) as one unit --
   const widget = el('div', 'editor-canvas-panel');
   root.appendChild(widget);
 
@@ -282,7 +284,16 @@ export function createTileEditor(
   const cursorCtx = cursor.getContext('2d');
 
   wrap.appendChild(stack);
-  widget.appendChild(wrap);
+
+  // The bordered CARD frames the canvas container AND the tool footer together, so
+  // the tools read as part of the same unit the tabs cap (the footer supplies the
+  // card's rounded bottom edge). The tabs overlap this card's top border; the
+  // footer is filled with the tool strip + per-tool options further down.
+  const canvasCard = el('div', 'editor-canvas-card');
+  canvasCard.appendChild(wrap);
+  const footer = el('div', 'editor-canvas-footer');
+  canvasCard.appendChild(footer);
+  widget.appendChild(canvasCard);
 
   const ctx = canvas.getContext('2d');
   const imgData = new ImageData(work, tileW, tileH); // shares `work` by reference
@@ -310,8 +321,14 @@ export function createTileEditor(
     // `boxH` would overstate the content height by the border and could round the
     // integer scale one step too big (the stack would then clip under overflow:hidden).
     const cs = getComputedStyle(wrap);
-    const availW = Math.max(1, wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
-    const availH = Math.max(1, wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
+    const availW = Math.max(
+      1,
+      wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+    );
+    const availH = Math.max(
+      1,
+      wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
+    );
     const s = Math.max(1, Math.floor(Math.min(availW / tileW, availH / tileH)) || 1);
     if (laidOut && s === scale) return; // scale unchanged → layers already correct
     laidOut = true;
@@ -344,9 +361,10 @@ export function createTileEditor(
   }
 
   // --- tool strip: first-class tools + docked tile-size stepper --------------
-  // The pencil is the only live tool; rect + fill are stubbed in but disabled so
-  // the strip already shows where they'll live. The square tile-size stepper docks
-  // at the right (tiles are locked SQUARE, so a resize is always alignment-safe).
+  // Lives in the card FOOTER (below the canvas). The pencil is the only live tool;
+  // rect + fill are stubbed in but disabled so the strip already shows where they'll
+  // live. The square tile-size stepper docks at the right (tiles are locked SQUARE,
+  // so a resize is always alignment-safe).
   const toolstrip = el('div', 'editor-toolstrip');
   const toolGroup = el('div', 'editor-toolgroup');
   const pencilBtn = el('button', 'editor-tool', 'pencil');
@@ -372,7 +390,7 @@ export function createTileEditor(
       onCommit: (n) => onResizeTile?.(n),
     })
   );
-  root.appendChild(toolstrip);
+  footer.appendChild(toolstrip);
   // Selecting the pencil returns you to drawing with the current color (out of the
   // eraser / eyedropper), matching the classic B behavior.
   pencilBtn.onclick = () => {
@@ -389,7 +407,7 @@ export function createTileEditor(
   // stepper: N means an N×N square footprint, stamped along the stroke and
   // previewed as a hairline outline under the cursor.
   const toolOpts = el('div', 'editor-tool-opts');
-  root.appendChild(toolOpts);
+  footer.appendChild(toolOpts);
   function setPencilSize(n) {
     brush.size = clampBrush(n);
     drawCursor(hoverTexel); // reflect the new footprint immediately if hovering
@@ -413,7 +431,8 @@ export function createTileEditor(
   renderToolOptions();
 
   // --- palette row: ink pickers ---------------------------------------------
-  // Every color painted anywhere in the sprite, so you can match existing colors.
+  // The only row BELOW the canvas card: every color painted anywhere in the sprite,
+  // so you can match existing colors.
   // The eyedropper and eraser sit here (not in the tool strip) because they pick
   // the pencil's INK — a sampled color, or transparent ("clear color") — rather
   // than a drawing tool. A leading "+" opens the full 256-color palette modal.

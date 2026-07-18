@@ -65,20 +65,23 @@ face; the 3D view stays live on the left and rebuilds as you draw. Pick a face
 with the **tabs**; a **header strip** across the top holds the brand, the
 _pick atlas ▾_ menu, and _download_.
 
-- **Canvas area** — below the tabs the pixel canvas lives in a **stable,
-  full-bleed container** whose height is always **60% of the sidebar height**, so
-  the tool strip and palette below it never shift as the tile size — and thus the
+- **Canvas card** — the face tabs, the pixel canvas, and the tools are **one framed
+  card**. Directly below the tabs the pixel canvas lives in a **stable container**
+  whose height is always **60% of the sidebar height**, so the **tool footer** below
+  it (and the palette below the card) never shift as the tile size — and thus the
   drawn canvas — changes. The square editable canvas is **centered** in that box and
   drawn **as large as an integer texel scale fits** (crisp, never a fractional
   pixel), and it **re-fits responsively** when the window resizes. See `layout()` in
   `src/editor.js`.
-- **Tools & palette** — a **tool strip** of first-class tools (**pencil `B`**;
-  **rect** and **fill** are present but **disabled** for now) with the square
-  **tile-size stepper** docked at its right, above a **per-tool options** row — for
-  the pencil, a **tip-size stepper** (`size: N px`) that stamps an **N×N** square
-  footprint and **previews it** as a hairline outline on the canvas as you hover.
-  Below is the **palette row** — every color currently painted on _any_ face, so
-  you can match existing colors — led by a **+** that opens a **modal picker** over
+- **Tools & palette** — a **tool footer inside the canvas card** (below the pixel
+  canvas, set off by a hairline separator): a **tool strip** of first-class tools
+  (**pencil `B`**; **rect** and **fill** are present but **disabled** for now) with
+  the square **tile-size stepper** docked at its right, above a **per-tool options**
+  row — for the pencil, a **tip-size stepper** (`size: N px`) that stamps an **N×N**
+  square footprint and **previews it** as a hairline outline on the canvas as you
+  hover. **Below the card** is the **palette row** — every color currently painted on
+  _any_ face, so you can match existing colors — led by a **+** that opens a **modal
+  picker** over
   the **full 256-color palette**, then the **eyedropper** (`I` / hold **Alt** to
   sample mid-stroke) and the **eraser** (`E` / **right-click**): these two sit
   _among the colors_, not with the tools, because they pick the pencil's **ink** —
@@ -269,7 +272,7 @@ src/lib/
 src/
   main.js         scene, lights, ground, framing, render loop + always-on editor wiring
   ui.js           header strip (samples, pick/drop atlas, download) + stage overlays (options, stats)
-  editor.js       tools panel (right half): face tabs + stable-size canvas container (layout(): 60% of the sidebar height, centered integer-scaled canvas), tool strip (pencil; rect/fill stubbed) with docked tile-size stepper, per-tool options (pencil size + hover footprint preview), palette row (colors + eyedropper/eraser/"+" 256-palette modal), align guides
+  editor.js       tools panel (right half): one framed CARD of face tabs + stable-size canvas container (layout(): 60% of the sidebar height, centered integer-scaled canvas) + a tool FOOTER (tool strip — pencil; rect/fill stubbed — with docked tile-size stepper, and per-tool options: pencil size + hover footprint preview); palette row (colors + eyedropper/eraser/"+" 256-palette modal) sits below the card; align guides
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
 ```
 
