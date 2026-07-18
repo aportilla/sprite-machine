@@ -7,7 +7,7 @@
 // first-class, distinct from the colors; the pencil button's icon is a live
 // swatch of the color it would paint. Below them, in-flow (no overlay): a dynamic
 // "in sprite" row (every color currently painted on ANY face) and then the full
-// 256-color wedge-safe palette as a 16x16 grid. The brush selection is held in the
+// 256-color palette as a 16x16 grid. The brush selection is held in the
 // caller-owned `brush` object so it survives a mirror-partner face swap (which
 // destroys + re-mounts this editor). Every stroke is HARD-pixel (alpha 0 or 255)
 // so downstream ingest (alpha>=128) and atlas.isBlank (alpha!==0) can never
@@ -25,9 +25,12 @@
 //     as hairline rules over the canvas so you can align to the stricter carve.
 //   - faces: the ordered list of all six atlas faces, shown as tabs across the
 //     top; the edited `name` is the active tab and clicking another switches.
-//   - palette256: the full 256-color wedge-safe palette ({ css }[]) shown
-//     persistently as a 16x16 grid. `palette` (DB16) is no longer displayed; it
-//     still seeds the default brush color and the `B` shortcut.
+//   - palette256: the full 256-color editor palette ({ css }[]) shown
+//     persistently as a 16x16 grid. It arrives already laid out along a Hilbert
+//     curve (constants.js PALETTE_256), so iterating it row-major clusters
+//     similar colors both across and down — this editor never reorders it.
+//     `palette` (DB16) is no longer displayed; it still seeds the default brush
+//     color and `B`.
 //   - usedColors: [{r,g,b}] colors already painted on the OTHER faces; the editor
 //     unions the current tile's live pixels on top for the dynamic "in sprite" row.
 //   - brush: shared { mode, color:{r,g,b}, swatchIndex } — persisted by the
@@ -359,8 +362,10 @@ export function createTileEditor(
   }
 
   // --- palette (persistent, in-flow below the tools) ------------------------
-  // The full 256-color wedge-safe palette lives right here in the sidebar — no
-  // overlay — as a 16x16 grid. The panel scrolls if the viewport is short.
+  // The full 256-color palette lives right here in the sidebar — no overlay — as
+  // a 16x16 grid. The panel scrolls if the viewport is short. The array is
+  // pre-laid along a Hilbert curve (constants.js PALETTE_256), so a plain
+  // row-major fill of this grid clusters similar colors both across and down.
   const pal = el('div', 'editor-palette');
   pal.appendChild(el('div', 'editor-pal-label', `Palette (${palette256.length})`));
   const cubeWrap = el('div', 'editor-cube');

@@ -65,12 +65,20 @@ right-side panel; the 3D view stays live beside it and rebuilds as you draw.
   live swatch of the current color; **eyedropper `I`** / hold **Alt** to sample
   mid-stroke; **eraser `E`** / **right-click**), then, in-flow below, a dynamic
   **in sprite** row (every color currently painted on _any_ face, so you can match
-  existing colors) and the **full 256-color palette** as a 16×16 grid. The 256 is
-  an **8×8×4 RGB grid** (the classic 8-bit "3-3-2" layout) rather than a dense
-  artist ramp _on purpose_: the low-poly wedge merges two touching faces within
-  ~12/channel (`sameMat`), so every swatch here is ≥36 apart and can never
-  false-merge a corner you wanted sharp. Every stroke is hard-pixel: fully opaque
-  or fully erased, never anti-aliased.
+  existing colors) and the **full 256-color palette** as a 16×16 grid. The colors
+  are the standard **xterm-256** set, **laid out along a Hilbert curve** — a
+  locality-preserving 1-D color order poured into the grid along a 2-D Hilbert
+  curve, so similar shades stay adjacent both across and down (organic clusters,
+  not strict bands): grayscale in the top-left, magentas/reds across the top,
+  blues down the right, greens/cyans sweeping the bottom. The arrangement is a
+  fixed, hand-verified layout spelled out in `src/lib/constants.js`
+  (`PALETTE_256`). **Wedge-safety caveat:** xterm-256's grayscale ramp steps
+  ~10/channel, which is _within_ the low-poly wedge merge tolerance (`sameMat`,
+  ~12/channel), so a staircase of adjacent gray shades can now auto-smooth into a
+  wedge — the 6×6×6 color-cube levels stay ≥40 apart and remain wedge-safe, only
+  near-neutrals are affected (the earlier sparse 8×8×4 grid kept _every_ swatch
+  ≥36 apart). Every stroke is hard-pixel: fully opaque or fully erased, never
+  anti-aliased.
 - **Mirror-pair tabs** — a `[front|back]` / `[left|right]` / `[top|bottom]` pill
   under the canvas switches which face of the pair you're editing, so you can flip
   back and forth for reference. A **mirror-derived** face (one with no art of its
@@ -208,11 +216,12 @@ to gate the low-poly wedge engine (the Helium canvas-farbling regression), and
 `test/atlas.test.mjs` locks the tile write-back inverse (slice → `blitTile`
 round-trip) that the drawing editor depends on. `test/guides.test.mjs` pins the
 editor's cross-axis alignment guides (and that `VIEW_IMAGE_AXES` can't drift from
-the projections it's probed from).
+the projections it's probed from). `test/palette.test.mjs` pins the editor's
+256-color palette: 256 entries, valid `#rrggbb`, and `packed` derived from `css`.
 
 ```
 src/lib/
-  constants.js    default mirror (all-on) / world-size + DB16 pencil palette (pure)
+  constants.js    default mirror (all-on) / world-size + DB16 pencil palette + Hilbert-laid xterm-256 palette (pure)
   views.js        6 view definitions: normals, axes, projections, front-edge meta
   atlas.js        slice a 3x2 sheet <-> face tiles: blitTile write-back, cellOf (pure)
   ingest.js       sprite -> occupancy/color arrays (full tile, no crop), place, reorient

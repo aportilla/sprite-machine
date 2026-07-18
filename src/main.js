@@ -20,7 +20,7 @@ import {
   VIEW_MIRROR_AXIS,
   VIEW_DISPLAY_ORDER,
 } from './lib/views.js';
-import { PENCIL_PALETTE, WEDGE_SAFE_256 } from './lib/constants.js';
+import { PENCIL_PALETTE, PALETTE_256 } from './lib/constants.js';
 import { faceGuides } from './lib/guides.js';
 import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
 import { createUI, mirrorImage } from './ui.js';
@@ -317,7 +317,7 @@ function mountEditor(name, focusSize) {
     tileW: state.tileW,
     tileH: state.tileH,
     palette: PENCIL_PALETTE,
-    palette256: WEDGE_SAFE_256,
+    palette256: PALETTE_256,
     usedColors: usedColorsExcept(name),
     mirrorBehind,
     guides,
