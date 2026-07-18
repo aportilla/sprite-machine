@@ -75,16 +75,29 @@ _pick atlas ▾_ menu, and _download_.
   `src/editor.js`.
 - **Tools & palette** — a **tool footer inside the canvas card** (below the pixel
   canvas, set off by a hairline separator): a **tool strip** of first-class tools
-  (**pencil `B`**; **rect** and **fill** are present but **disabled** for now) —
-  each an **icon button** drawn from the open-source **Adobe Spectrum _workflow_**
-  icon set (`draw` / `rectangle` / `color-fill`; the ink pickers below use
-  `sampler` for the eyedropper and `erase` for the eraser) — with
+  (**pencil `B`** and **rect `R`** are live; **fill** is present but **disabled** for
+  now) — each an **icon button** drawn from the open-source **Adobe Spectrum
+  _workflow_** icon set (`draw` / `rectangle` / `color-fill`; the ink pickers below
+  use `sampler` for the eyedropper and `erase` for the eraser) — with
   the square **tile-size stepper** docked at its right, above a **per-tool options**
-  row — for the pencil, a **tip-size stepper** (`size: N px`) that stamps an **N×N**
-  square footprint and **previews it** as a hairline outline on the canvas as you
-  hover. While the pencil is active the **OS cursor is hidden** over the canvas, so
-  that hover outline _is_ the cursor — the exact texels a stamp will cover, nothing
-  else floating over them. **Below the card** is the **palette row** — every color currently painted on
+  row. For the **pencil**, a **tip-size stepper** (`size: N px`) that stamps an
+  **N×N** square footprint and **previews it** as a hairline outline on the canvas
+  as you hover; while the pencil is active the **OS cursor is hidden** over the
+  canvas, so that hover outline _is_ the cursor — the exact texels a stamp will
+  cover, nothing else floating over them. For the **rect**, a **corner-radius
+  stepper** (`radius: N px`, `0` = sharp): **drag** a box and a **live preview**
+  (the exact filled texels, tinted by the ink — red while erasing — under a haloed
+  bounding box) tracks the drag on the top overlay; **release** commits it, and
+  **Esc** (or switching tool with `B`/`R`) **cancels** the in-flight box with
+  nothing written. Hold **Shift** while dragging to lock the box to a **square** (the
+  shorter extent wins, anchored at the start corner) — toggleable mid-drag, so the
+  preview re-fits the instant you press or release Shift. Each corner rounds with a **convex** quarter-circle arc (bulging
+  outward like a real rounded rectangle, not a concave scoop; clamped to half the
+  shorter side), so even `radius: 1` clips the corner texel; the rect
+  respects the active ink, so a **right-drag** (or the eraser ink) drags a
+  rectangular **erase**. The rounded-rect rasterization is a pure, Node-tested
+  primitive (`src/lib/rect.js`) shared by the preview and the commit, so what you
+  see is exactly what lands. **Below the card** is the **palette row** — every color currently painted on
   _any_ face, so you can match existing colors, **plus your currently selected ink**
   (so a color picked from the modal lands here as the **selected tile** right away,
   before you've drawn a single pixel with it) — led by a **+** that opens a **modal
@@ -164,9 +177,13 @@ locked-square UI can't produce) to apply one **centered** tile resize (the same
 `anchor:'center'` path the stepper drives) after the first build,
 `?palette=1` to open the **+** palette modal on the first mount, `?cursor=<N>`
 to set the pencil size to N and draw its footprint outline at the tile center on
-mount, and `?pick=<N>` to select `PALETTE_256[N]` as the ink on mount (as if picked
-from the modal) so a shot can show it landing as the selected palette-row tile — the
-stepper, tabs, modal, swatch pick, and hover preview can't be driven headlessly.
+mount, `?pick=<N>` to select `PALETTE_256[N]` as the ink on mount (as if picked
+from the modal) so a shot can show it landing as the selected palette-row tile, and
+`?rect=<x0,y0,x1,y1[,r[,sq]]>` to select the rect tool and draw its live drag preview
+for that box (corner radius `r`; `sq=1` for the Shift square-lock) on mount so a shot
+can show the tool mid-drag — the
+stepper, tabs, modal, swatch pick, hover preview, and rect drag can't be driven
+headlessly.
 
 ---
 
@@ -264,7 +281,10 @@ to gate the low-poly wedge engine (the Helium canvas-farbling regression), and
 `test/atlas.test.mjs` locks the tile write-back inverse (slice → `blitTile`
 round-trip) that the drawing editor depends on. `test/guides.test.mjs` pins the
 editor's cross-axis alignment guides (and that `VIEW_IMAGE_AXES` can't drift from
-the projections it's probed from). `test/palette.test.mjs` pins the editor's
+the projections it's probed from). `test/rect.test.mjs` pins the rect tool's
+rounded-rectangle rasterization (radius clamp, convex corners, per-row symmetry) and
+the Shift square-lock.
+`test/palette.test.mjs` pins the editor's
 256-color palette: 256 entries, all distinct, valid `#rrggbb`, and `packed`
 derived from `css`.
 
@@ -278,6 +298,7 @@ src/lib/
   colorize.js     depth-aware first-hit surface coloring + palette snap
   faces.js        surface voxels -> quads: greedy-merged or culled (pure)
   guides.js       editor alignment guides: per-face cross-axis extent (pure)
+  rect.js         editor rect tool: rounded-rectangle rasterization, per-row runs (pure)
   pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
   t-junction.js   lattice-exact T-junction repair for merged+wedge meshes (pure)
   mesh-util.js    shared vertex-color linearizer + mesh finishing (THREE)
@@ -288,7 +309,7 @@ src/lib/
 src/
   main.js         scene, lights, ground, framing, render loop + always-on editor wiring
   ui.js           header strip (samples, pick/drop atlas, download) + stage overlays (options, stats)
-  editor.js       tools panel (right half): one framed CARD of face tabs + stable-size canvas container (layout(): 60% of the sidebar height, centered integer-scaled canvas) + a tool FOOTER (tool strip — pencil; rect/fill stubbed — with docked tile-size stepper, and per-tool options: pencil size + hover footprint preview); palette row (colors + eyedropper/eraser/"+" 256-palette modal) sits below the card; align guides
+  editor.js       tools panel (right half): one framed CARD of face tabs + stable-size canvas container (layout(): 60% of the sidebar height, centered integer-scaled canvas) + a tool FOOTER (tool strip — pencil + rect live, fill stubbed — with docked tile-size stepper, and per-tool options: pencil size + hover footprint preview, or rect corner-radius + live drag preview / Esc-cancel); palette row (colors + eyedropper/eraser/"+" 256-palette modal) sits below the card; align guides
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
   icons.js        real UI glyphs — registers the Adobe Spectrum workflow <sp-icon-*> elements used by ui.js + editor.js (color via currentColor, size via --mod-icon-size; no sp-theme)
 ```

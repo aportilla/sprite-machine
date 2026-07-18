@@ -106,6 +106,10 @@ let pendingCursor = null;
 // if picked from the "+" modal (the capture tool can't click a swatch), so a shot
 // can show it landing as the selected palette-row tile. Consumed once.
 let pendingPick = null;
+// Dev hook: ?rect=x0,y0,x1,y1[,r[,sq]] selects the rect tool and draws its live drag
+// preview for that box (radius r; sq=1 for the Shift square-lock) on the first editor
+// mount (the capture tool can't drag), so a shot can show the tool mid-drag. Consumed once.
+let pendingRect = null;
 
 const camParam = params.get('cam');
 const ISO_DIR = new THREE.Vector3(
@@ -281,8 +285,9 @@ function applyTileEdit(name, wasDerived, tile, dirty) {
 // --- editor session -------------------------------------------------------
 // The editor is permanently docked in the right-half panel; the 3D view stays
 // live on the left. The brush selection is shared so it survives a face swap:
-// `tool` is the drawing op (only 'pencil' is live), `color`/`swatchIndex` the ink,
-// `erase`/`picking` the eraser-ink / eyedropper flags, `size` the pencil footprint.
+// `tool` is the drawing op ('pencil' + 'rect' are live), `color`/`swatchIndex` the
+// ink, `erase`/`picking` the eraser-ink / eyedropper flags, `size` the pencil
+// footprint, `cornerRadius` the rect tool's corner radius (texels, 0 = sharp).
 const brush = {
   tool: 'pencil',
   color: null,
@@ -290,6 +295,7 @@ const brush = {
   erase: false,
   picking: false,
   size: 1,
+  cornerRadius: 0,
 };
 let currentEditor = null;
 let editingName = null;
@@ -356,6 +362,7 @@ function mountEditor(name, focusSize) {
     focusSize,
     openPaletteOnMount: pendingOpenPalette,
     previewCursor: pendingCursor,
+    previewRect: pendingRect,
     pickIndex: pendingPick,
     onLive: (working, dirty) => applyTileEdit(name, wasDerived, working, dirty),
     onSelectFace: (target) => enterDrawing(target),
@@ -363,6 +370,7 @@ function mountEditor(name, focusSize) {
   });
   pendingOpenPalette = false; // one-shot: don't re-open on face swap / resize
   pendingCursor = null; // one-shot: only preview on the first mount
+  pendingRect = null; // one-shot: only preview on the first mount
   pendingPick = null; // one-shot: only pre-select on the first mount
 }
 
@@ -490,6 +498,20 @@ const pickParam = params.get('pick');
 if (pickParam != null) {
   const n = parseInt(pickParam, 10);
   if (n >= 0 && n < PALETTE_256.length) pendingPick = n;
+}
+const rectParam = params.get('rect');
+if (rectParam) {
+  const p = rectParam.split(',').map((s) => parseInt(s, 10));
+  if (p.length >= 4 && p.slice(0, 4).every(Number.isFinite)) {
+    pendingRect = {
+      x0: p[0],
+      y0: p[1],
+      x1: p[2],
+      y1: p[3],
+      r: p.length > 4 ? p[4] : 0,
+      square: p.length > 5 && p[5] > 0,
+    };
+  }
 }
 const q = params.get('sample');
 let startIndex = 0;

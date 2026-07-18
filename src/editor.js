@@ -6,9 +6,10 @@
 //
 // The face tabs, the pixel canvas, and the tools are ONE framed card: the six
 // tabs cap it, the canvas fills its body, and a FOOTER inside the same card holds
-// the TOOL STRIP of first-class tools (pencil; rect + fill are stubbed in but
-// disabled) with the square tile-size stepper docked at its right, above a
-// per-tool OPTIONS row (the pencil's tip-SIZE stepper). Only the PALETTE row lives
+// the TOOL STRIP of first-class tools (pencil + rect are live; fill is stubbed in
+// but disabled) with the square tile-size stepper docked at its right, above a
+// per-tool OPTIONS row (the pencil's tip-SIZE stepper; the rect's corner-RADIUS
+// stepper). Only the PALETTE row lives
 // BELOW the card — every color currently painted on ANY face, so you can match
 // existing colors — led by a "+" that opens the full 256-color modal, then the
 // eyedropper and the eraser. The
@@ -40,10 +41,12 @@
 //   - usedColors: [{r,g,b}] colors already painted on the OTHER faces; the editor
 //     unions the current tile's live pixels on top for the dynamic palette row.
 //   - brush: shared { tool, color:{r,g,b}, swatchIndex, erase, picking, size,
-//     chosen } — persisted by the caller across face swaps. `tool` is the drawing
-//     op ('pencil'|'rect'|'fill'; only pencil is live). `erase` makes the pencil
-//     lay transparent; `picking` arms the eyedropper for the next canvas click;
-//     `size` is the pencil's N×N tip footprint (in texels). `chosen` is set once
+//     cornerRadius, chosen } — persisted by the caller across face swaps. `tool` is
+//     the drawing op ('pencil'|'rect'|'fill'; pencil + rect are live). `erase` makes
+//     the stroke/rect lay transparent; `picking` arms the eyedropper for the next
+//     canvas click; `size` is the pencil's N×N tip footprint (in texels);
+//     `cornerRadius` is the rect tool's corner radius (in texels, 0 = sharp).
+//     `chosen` is set once
 //     the user actively picks an ink (modal / eyedrop / used swatch): that ink then
 //     shows as a SELECTED tile in the palette row even before it's painted — vs.
 //     the untouched mount default, which stays hidden until something is drawn.
@@ -54,6 +57,10 @@
 //   - previewCursor: dev hook (?cursor=N) — set the pencil size to N and draw its
 //     footprint outline at the tile center on mount, so a headless shot (which has
 //     no pointer to hover) can show the preview. Consumed once by the caller.
+//   - previewRect: dev hook (?rect=x0,y0,x1,y1[,r[,sq]]) — select the rect tool and
+//     draw its live drag preview for that box (radius r; sq=1 for the Shift square-
+//     lock) on mount, so a headless shot (which can't drag) can show the tool
+//     mid-drag. Consumed once by the caller.
 //   - pickIndex: dev hook (?pick=N) — select palette256[N] as the ink on mount, as
 //     if picked from the "+" modal, so a headless shot (which can't click a swatch)
 //     can show it landing as the selected palette-row tile. Consumed once.
@@ -67,6 +74,7 @@
 // ---------------------------------------------------------------------------
 
 import { icon } from './icons.js';
+import { roundedRectRows, maxCornerRadius, squareEnd } from './lib/rect.js';
 
 // The pixel-canvas CONTAINER is a stable box: its height is pinned to a fixed
 // fraction of the sidebar (panel) height, full-bleed below the tabs, so nothing
@@ -191,6 +199,7 @@ export function createTileEditor(
     focusSize,
     openPaletteOnMount = false,
     previewCursor = null,
+    previewRect = null,
     pickIndex = null,
     onLive,
     onSelectFace,
@@ -214,6 +223,7 @@ export function createTileEditor(
   if (brush.picking == null) brush.picking = false;
   if (brush.swatchIndex == null) brush.swatchIndex = 0;
   if (brush.size == null) brush.size = 1;
+  if (brush.cornerRadius == null) brush.cornerRadius = 0;
   if (brush.chosen == null) brush.chosen = false;
 
   // The pencil tip is capped at the tile edge (a single stamp can't exceed the
@@ -223,6 +233,13 @@ export function createTileEditor(
   const clampBrush = (n) => Math.max(1, Math.min(brushMax, Math.round(Number(n) || 1)));
   if (previewCursor) brush.size = clampBrush(previewCursor);
   brush.size = clampBrush(brush.size);
+
+  // The rect's corner radius can't exceed half the shorter tile side (the biggest a
+  // full-tile rect could use); a per-rect clamp in roundedRectRows handles smaller
+  // rects. Clamp a persisted radius down after a shrink to a smaller tile.
+  const radiusMax = maxCornerRadius(tileW, tileH);
+  const clampRadius = (n) => Math.max(0, Math.min(radiusMax, Math.round(Number(n) || 0)));
+  brush.cornerRadius = clampRadius(brush.cornerRadius);
 
   container.innerHTML = '';
   const root = el('div', 'editor');
@@ -320,7 +337,7 @@ export function createTileEditor(
   // integer-scaled tile rect inside its content box, size every layer to it, and
   // redraw the screen-res overlays. Called on mount and whenever the panel resizes;
   // idempotent — a re-run at the same scale only re-pins the (stable) height. Reads
-  // `drawCursor`/`hoverTexel`, defined below, but is only CALLED after they exist.
+  // `redrawCursorLayer`/`hoverTexel`, defined below, but is only CALLED after they exist.
   function layout() {
     const boxH = Math.max(0, Math.round((container.clientHeight || 0) * CANVAS_FRACTION));
     wrap.style.height = `${boxH}px`;
@@ -350,7 +367,7 @@ export function createTileEditor(
     cursor.width = cssW;
     cursor.height = cssH;
     drawGuides(overlayCtx, guides, scale, cssW, cssH);
-    drawCursor(hoverTexel); // re-stroke the footprint at the new scale (or clear it)
+    redrawCursorLayer(); // re-stroke the footprint / rect preview at the new scale
   }
 
   const rgbEq = (a, b) => a.r === b.r && a.g === b.g && a.b === b.b;
@@ -371,10 +388,10 @@ export function createTileEditor(
   }
 
   // --- tool strip: first-class tools + docked tile-size stepper --------------
-  // Lives in the card FOOTER (below the canvas). The pencil is the only live tool;
-  // rect + fill are stubbed in but disabled so the strip already shows where they'll
-  // live. The square tile-size stepper docks at the right (tiles are locked SQUARE,
-  // so a resize is always alignment-safe).
+  // Lives in the card FOOTER (below the canvas). The pencil + rect are live tools;
+  // fill is stubbed in but disabled so the strip already shows where it'll live. The
+  // square tile-size stepper docks at the right (tiles are locked SQUARE, so a resize
+  // is always alignment-safe).
   const toolstrip = el('div', 'editor-toolstrip');
   const toolGroup = el('div', 'editor-toolgroup');
   // Icon-only tool buttons (Spectrum workflow glyphs). The icon is decorative;
@@ -386,8 +403,7 @@ export function createTileEditor(
   pencilBtn.appendChild(icon('draw'));
   const rectBtn = el('button', 'editor-tool editor-tool-icon');
   rectBtn.type = 'button';
-  rectBtn.disabled = true;
-  rectBtn.title = 'rectangle — coming soon';
+  rectBtn.title = 'rectangle — drag a box (R)';
   rectBtn.setAttribute('aria-label', 'rectangle');
   rectBtn.appendChild(icon('rectangle'));
   const fillBtn = el('button', 'editor-tool editor-tool-icon');
@@ -412,7 +428,20 @@ export function createTileEditor(
   // Selecting the pencil returns you to drawing with the current color (out of the
   // eraser / eyedropper), matching the classic B behavior.
   pencilBtn.onclick = () => {
+    cancelRect(); // switching tool mid-drag abandons the box (matches the B/R keys)
     brush.tool = 'pencil';
+    brush.erase = false;
+    brush.picking = false;
+    if (!brush.color) brush.color = hexToRgb(palette[0].css);
+    renderToolOptions();
+    syncUI();
+  };
+  // The rect tool drags a filled (optionally rounded) box; like the pencil, picking
+  // it returns you to drawing with the current color. A rectangular ERASE is still
+  // available via right-drag, or by selecting the eraser ink after the tool.
+  rectBtn.onclick = () => {
+    cancelRect(); // abandon any in-flight box before re-arming the tool
+    brush.tool = 'rect';
     brush.erase = false;
     brush.picking = false;
     if (!brush.color) brush.color = hexToRgb(palette[0].css);
@@ -430,6 +459,10 @@ export function createTileEditor(
     brush.size = clampBrush(n);
     drawCursor(hoverTexel); // reflect the new footprint immediately if hovering
   }
+  function setCornerRadius(n) {
+    brush.cornerRadius = clampRadius(n);
+    if (rectDragging) drawRectPreview(); // re-round the in-flight box live
+  }
   function renderToolOptions() {
     toolOpts.innerHTML = '';
     if (brush.tool === 'pencil') {
@@ -442,6 +475,18 @@ export function createTileEditor(
           max: brushMax,
           unit: 'px',
           onCommit: setPencilSize,
+        })
+      );
+    } else if (brush.tool === 'rect') {
+      toolOpts.appendChild(
+        sizeStepper({
+          key: 'Radius',
+          label: 'radius',
+          value: brush.cornerRadius,
+          min: 0,
+          max: radiusMax,
+          unit: 'px',
+          onCommit: setCornerRadius,
         })
       );
     }
@@ -604,30 +649,56 @@ export function createTileEditor(
   }
   function syncUI() {
     pencilBtn.classList.toggle('active', brush.tool === 'pencil');
+    rectBtn.classList.toggle('active', brush.tool === 'rect');
     eyeBtn.classList.toggle('active', brush.picking);
     eraserSw.classList.toggle('active', brush.erase && !brush.picking);
     // With the pencil (its eraser/eyedropper ink modes included) the hover
     // footprint outline stands in for the pointer, so hide the OS cursor over the
-    // canvas — CSS `.pencil-active { cursor: none }` leaves only the outline.
+    // canvas — CSS `.pencil-active { cursor: none }` leaves only the outline. The
+    // rect tool keeps the default crosshair (its drag preview stands apart).
     canvas.classList.toggle('pencil-active', brush.tool === 'pencil');
     syncActiveSwatch();
   }
 
-  // keyboard: B / I / E pick pencil / eyedropper / eraser-ink; Esc closes the
-  // palette modal. Suppressed while a text/number input (a stepper) is focused so
-  // typing there is never hijacked; torn down in destroy().
+  // keyboard: B / R / I / E pick pencil / rect / eyedropper / eraser-ink; Esc
+  // closes the palette modal, or aborts an in-flight rect drag (nothing committed).
+  // Escape is handled before the input guard so it fires even from a focused
+  // stepper; the rest are suppressed while a text/number input (a stepper) is
+  // focused so typing there is never hijacked. Torn down in destroy().
   function onKeyDown(e) {
-    if (e.key === 'Escape' && modalOpen) {
-      closePalette();
-      e.preventDefault();
+    if (e.key === 'Escape') {
+      if (modalOpen) {
+        closePalette();
+        e.preventDefault();
+        return;
+      }
+      if (rectDragging) {
+        cancelRect(); // discard the box mid-drag — no pixels written
+        e.preventDefault();
+        return;
+      }
+    }
+    // Shift held mid-drag locks the box to a square, even with the pointer still —
+    // re-derive the preview from the raw corner (keydown repeats, so guard churn).
+    if (e.key === 'Shift' && rectDragging && !shiftLock) {
+      shiftLock = true;
+      drawRectPreview();
       return;
     }
     const tag = e.target && e.target.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key.toLowerCase();
+    // Switching tools mid rect-drag abandons the box (nothing committed) — same as
+    // ESC, so B/R can't leave a half-dragged rect wired to the old pointer.
+    if (rectDragging && (k === 'b' || k === 'r')) cancelRect();
     if (k === 'b') {
       brush.tool = 'pencil';
+      brush.erase = false;
+      brush.picking = false;
+      if (!brush.color) brush.color = hexToRgb(palette[0].css);
+    } else if (k === 'r') {
+      brush.tool = 'rect';
       brush.erase = false;
       brush.picking = false;
       if (!brush.color) brush.color = hexToRgb(palette[0].css);
@@ -640,11 +711,20 @@ export function createTileEditor(
     } else {
       return;
     }
+    renderToolOptions(); // swap the per-tool options row to match the new tool
     syncUI();
-    drawCursor(hoverTexel); // erasing recolors the footprint outline; eyedrop shrinks it
+    redrawCursorLayer(); // erasing recolors the footprint; a tool swap clears/redraws it
     e.preventDefault();
   }
+  // Releasing Shift mid-drag drops the square-lock and re-derives the free box.
+  function onKeyUp(e) {
+    if (e.key === 'Shift' && rectDragging && shiftLock) {
+      shiftLock = false;
+      drawRectPreview();
+    }
+  }
   document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('keyup', onKeyUp);
 
   renderUsed();
   syncUI();
@@ -660,10 +740,17 @@ export function createTileEditor(
   if (openPaletteOnMount) openPalette();
 
   // --- drawing --------------------------------------------------------------
-  let drawing = false;
+  let drawing = false; // a pencil stroke is in progress
   let prev = null; // last painted texel this stroke, for line interpolation
   let forceErase = false; // right-click erases regardless of the active ink
   let hoverTexel = null; // last hovered texel, for the footprint preview
+  // Rect-tool drag state: the anchor + moving corner, and the pointer we captured
+  // (kept so ESC / pointercancel can release it). rectStart != null ⟺ dragging.
+  let rectDragging = false;
+  let rectStart = null; // anchor corner texel {px,py}
+  let rectEnd = null; // raw moving corner texel {px,py} (pre square-lock)
+  let rectPointer = null; // captured pointerId, for release on cancel
+  let shiftLock = false; // Shift held → constrain the drag to a square
 
   function toTexel(e) {
     const rect = canvas.getBoundingClientRect();
@@ -671,6 +758,19 @@ export function createTileEditor(
     const py = Math.floor(((e.clientY - rect.top) / rect.height) * tileH);
     if (px < 0 || py < 0 || px >= tileW || py >= tileH) return null;
     return { px, py };
+  }
+
+  // Like toTexel but clamps to the tile instead of rejecting out-of-bounds, so a
+  // rect drag that runs past the canvas edge (with the pointer captured) extends to
+  // the edge rather than freezing.
+  function toTexelClamped(e) {
+    const rect = canvas.getBoundingClientRect();
+    const px = Math.floor(((e.clientX - rect.left) / rect.width) * tileW);
+    const py = Math.floor(((e.clientY - rect.top) / rect.height) * tileH);
+    return {
+      px: Math.max(0, Math.min(tileW - 1, px)),
+      py: Math.max(0, Math.min(tileH - 1, py)),
+    };
   }
 
   // Brush footprint: an N×N square anchored so the hovered texel stays inside and
@@ -758,11 +858,13 @@ export function createTileEditor(
   // Hairline outline of the footprint the pencil would stamp, drawn on the topmost
   // overlay under the cursor (a haloed white rect; red while erasing). The
   // eyedropper previews a single cell (its sample target). Cleared with t == null
-  // when the pointer leaves the canvas.
+  // when the pointer leaves the canvas. Only the PENCIL has a hover footprint — the
+  // rect tool relies on the OS crosshair when idle and its own drag preview when
+  // dragging — so for any other tool this just clears the overlay.
   function drawCursor(t) {
     hoverTexel = t;
     cursorCtx.clearRect(0, 0, cssW, cssH);
-    if (!t) return;
+    if (!t || brush.tool !== 'pencil') return;
     const size = brush.picking ? 1 : brush.size;
     const b = brushBounds(t.px, t.py, size);
     const x0 = Math.max(0, b.x0);
@@ -783,6 +885,98 @@ export function createTileEditor(
         ? 'rgba(255, 120, 120, 0.95)'
         : 'rgba(255, 255, 255, 0.95)';
     cursorCtx.strokeRect(rx, ry, rw, rh);
+  }
+
+  // The moving corner after any Shift square-lock (raw corner when unlocked).
+  function effectiveEnd() {
+    if (shiftLock && rectStart && rectEnd) return squareEnd(rectStart, rectEnd);
+    return rectEnd;
+  }
+
+  // The current rect bounds (anchor + effective end normalized to top-left →
+  // bottom-right), or null when not dragging. Preview + commit both read this, so
+  // the Shift square-lock applies identically to what you see and what you paint.
+  function rectBounds() {
+    const end = effectiveEnd();
+    if (!rectStart || !end) return null;
+    return {
+      x0: Math.min(rectStart.px, end.px),
+      y0: Math.min(rectStart.py, end.py),
+      x1: Math.max(rectStart.px, end.px),
+      y1: Math.max(rectStart.py, end.py),
+    };
+  }
+
+  // Live preview of the rect on the cursor overlay: the exact texels a commit will
+  // fill (via the shared roundedRectRows — so rounded corners show precisely),
+  // tinted by the active ink (red while erasing), under a haloed hairline of the
+  // drag bounding box so the extent reads on any art even before the fill is
+  // obvious. Nothing is written to `work` until commitRect() on pointer-up.
+  function drawRectPreview() {
+    cursorCtx.clearRect(0, 0, cssW, cssH);
+    const b = rectBounds();
+    if (!b) return;
+    const erasing = forceErase || brush.erase;
+    cursorCtx.fillStyle = erasing
+      ? 'rgba(255, 120, 120, 0.35)'
+      : `rgba(${brush.color.r}, ${brush.color.g}, ${brush.color.b}, 0.5)`;
+    roundedRectRows(b.x0, b.y0, b.x1, b.y1, brush.cornerRadius, (y, xl, xr) => {
+      if (xr < xl) return; // empty row at an extreme radius
+      cursorCtx.fillRect(xl * scale, y * scale, (xr - xl + 1) * scale, scale);
+    });
+    const rx = b.x0 * scale + 0.5;
+    const ry = b.y0 * scale + 0.5;
+    const rw = (b.x1 - b.x0 + 1) * scale - 1;
+    const rh = (b.y1 - b.y0 + 1) * scale - 1;
+    cursorCtx.lineWidth = 3; // dark halo so the box reads on any art color
+    cursorCtx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+    cursorCtx.strokeRect(rx, ry, rw, rh);
+    cursorCtx.lineWidth = 1;
+    cursorCtx.strokeStyle = erasing
+      ? 'rgba(255, 120, 120, 0.95)'
+      : 'rgba(255, 255, 255, 0.95)';
+    cursorCtx.strokeRect(rx, ry, rw, rh);
+  }
+
+  // Rasterize the finished rect into `work` (same roundedRectRows the preview used,
+  // so what you saw is what you get), then repaint + notify if anything changed.
+  function commitRect() {
+    const b = rectBounds();
+    if (!b) return;
+    let changed = false;
+    roundedRectRows(b.x0, b.y0, b.x1, b.y1, brush.cornerRadius, (y, xl, xr) => {
+      for (let x = xl; x <= xr; x++) if (writeTexel(x, y)) changed = true;
+    });
+    if (changed) {
+      dirty = true;
+      repaint();
+      renderUsed(); // a rect can add / remove a color from the sprite
+      onLive?.(workingTile, dirty);
+    }
+  }
+
+  // Abort an in-flight rect drag: drop the state, clear the preview, release the
+  // captured pointer. Nothing is written to `work` — ESC / pointercancel land here.
+  function cancelRect() {
+    if (!rectDragging) return;
+    rectDragging = false;
+    rectStart = rectEnd = null;
+    forceErase = false;
+    shiftLock = false;
+    cursorCtx.clearRect(0, 0, cssW, cssH);
+    if (rectPointer != null) {
+      canvas.releasePointerCapture?.(rectPointer);
+      rectPointer = null;
+    }
+  }
+
+  // Redraw the top (cursor) overlay for the current state: the rect drag preview
+  // while dragging, else the pencil hover footprint (a no-op clear for the idle
+  // rect tool). Used by layout() and the keyboard tool-switch so a re-fit or a
+  // B/R/E press repaints the right thing.
+  function redrawCursorLayer() {
+    if (rectDragging) drawRectPreview();
+    else drawCursor(hoverTexel);
   }
 
   function sampleAt(px, py) {
@@ -808,9 +1002,24 @@ export function createTileEditor(
     e.preventDefault();
     drawCursor(t);
     // Alt-hold = momentary eyedropper (sample without switching ink first);
-    // a right-click still erases even with Alt down.
+    // a right-click still erases even with Alt down. Works with any tool.
     if (e.button !== 2 && (e.altKey || brush.picking)) {
       sampleAt(t.px, t.py);
+      return;
+    }
+    if (brush.tool === 'rect') {
+      // A real drag owns exactly one pointer; a second concurrent pointer (a stray
+      // finger on a touch screen) must not hijack it. The ?rect dev-hook leaves a
+      // phantom drag with no owner (rectPointer null), which a real down may take over.
+      if (rectDragging && rectPointer != null) return;
+      forceErase = e.button === 2;
+      shiftLock = e.shiftKey; // Shift held at press → start square-locked
+      rectDragging = true;
+      rectStart = t;
+      rectEnd = t;
+      rectPointer = e.pointerId;
+      canvas.setPointerCapture?.(e.pointerId);
+      drawRectPreview();
       return;
     }
     forceErase = e.button === 2;
@@ -820,12 +1029,47 @@ export function createTileEditor(
     stroke(t.px, t.py);
   }
   function onPointerMove(e) {
+    if (rectDragging) {
+      // Only the drag-owning pointer rubber-bands the box; a non-owner move (or a
+      // bare hover over the ownerless dev-hook phantom) leaves the preview pinned.
+      if (e.pointerId !== rectPointer) return;
+      shiftLock = e.shiftKey; // track Shift held during the drag
+      rectEnd = toTexelClamped(e); // clamp so a past-the-edge drag pins to the edge
+      drawRectPreview();
+      return;
+    }
     const t = toTexel(e);
     drawCursor(t); // keep the footprint preview under the cursor (hover + drag)
     if (!drawing || !t) return;
     stroke(t.px, t.py);
   }
   function onPointerUp(e) {
+    if (rectDragging) {
+      if (e.pointerId !== rectPointer) return; // ignore a stray second pointer's up
+      rectEnd = toTexelClamped(e);
+      commitRect();
+      rectDragging = false;
+      rectStart = rectEnd = null;
+      forceErase = false;
+      shiftLock = false;
+      canvas.releasePointerCapture?.(rectPointer); // release the owner, not e.pointerId
+      rectPointer = null;
+      cursorCtx.clearRect(0, 0, cssW, cssH); // drop the preview; commit is on `work`
+      return;
+    }
+    drawing = false;
+    prev = null;
+    forceErase = false;
+    canvas.releasePointerCapture?.(e.pointerId);
+  }
+  // pointercancel (gesture interrupted) discards an in-flight rect rather than
+  // committing a box the user didn't finish; a pencil stroke is already committed.
+  function onPointerCancel(e) {
+    if (rectDragging) {
+      if (e.pointerId !== rectPointer) return; // a non-owner cancel can't abort the drag
+      cancelRect();
+      return;
+    }
     drawing = false;
     prev = null;
     forceErase = false;
@@ -834,8 +1078,12 @@ export function createTileEditor(
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
-  canvas.addEventListener('pointercancel', onPointerUp);
-  canvas.addEventListener('pointerleave', () => drawCursor(null)); // clear the preview
+  canvas.addEventListener('pointercancel', onPointerCancel);
+  // Clear the pencil hover footprint when the pointer leaves — but not mid rect
+  // drag (capture keeps the events coming; the preview must survive an edge cross).
+  canvas.addEventListener('pointerleave', () => {
+    if (!rectDragging) drawCursor(null);
+  });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // right-click = erase
 
   // Size everything now, and re-fit whenever the sidebar (this panel) resizes — the
@@ -853,6 +1101,25 @@ export function createTileEditor(
   // Dev hook (?cursor=N): draw the footprint at the tile center on mount so a
   // headless shot — which has no pointer to hover — can show the preview.
   if (previewCursor) drawCursor({ px: tileW >> 1, py: tileH >> 1 });
+
+  // Dev hook (?rect=x0,y0,x1,y1[,r[,sq]]): select the rect tool, set the radius, and
+  // draw the live drag preview for that box so a headless shot (which can't drag)
+  // shows the tool mid-drag (sq=1 shows the Shift square-lock). Modeled as an active
+  // drag with no captured pointer, so the preview survives a re-layout and pressing
+  // ESC still demonstrates cancel.
+  if (previewRect) {
+    brush.tool = 'rect';
+    if (previewRect.r != null) brush.cornerRadius = clampRadius(previewRect.r);
+    renderToolOptions();
+    syncUI();
+    const clampX = (v) => Math.max(0, Math.min(tileW - 1, v | 0));
+    const clampY = (v) => Math.max(0, Math.min(tileH - 1, v | 0));
+    rectStart = { px: clampX(previewRect.x0), py: clampY(previewRect.y0) };
+    rectEnd = { px: clampX(previewRect.x1), py: clampY(previewRect.y1) };
+    shiftLock = !!previewRect.square; // ?rect=...,sq demos the Shift square-lock
+    rectDragging = true;
+    drawRectPreview();
+  }
 
   // A resize re-mounts the whole editor, which would drop keyboard focus off the
   // stepper the user was typing in. Restore it to the matching new field (and
@@ -873,6 +1140,7 @@ export function createTileEditor(
     // The keydown listener isn't on `container`, so drop it explicitly — a face
     // swap / resize re-mounts this editor often, and it would otherwise leak.
     document.removeEventListener('keydown', onKeyDown);
+    document.removeEventListener('keyup', onKeyUp);
     resizeObs?.disconnect(); // stop observing the panel (we observe it, not a child)
     modal.remove(); // the modal lives on <body>, outside `container`
     container.innerHTML = ''; // removes the canvas + its pointer listeners with it
