@@ -79,7 +79,9 @@ _pick atlas ▾_ menu, and _download_.
   the square **tile-size stepper** docked at its right, above a **per-tool options**
   row — for the pencil, a **tip-size stepper** (`size: N px`) that stamps an **N×N**
   square footprint and **previews it** as a hairline outline on the canvas as you
-  hover. **Below the card** is the **palette row** — every color currently painted on
+  hover. While the pencil is active the **OS cursor is hidden** over the canvas, so
+  that hover outline _is_ the cursor — the exact texels a stamp will cover, nothing
+  else floating over them. **Below the card** is the **palette row** — every color currently painted on
   _any_ face, so you can match existing colors — led by a **+** that opens a **modal
   picker** over
   the **full 256-color palette**, then the **eyedropper** (`I` / hold **Alt** to

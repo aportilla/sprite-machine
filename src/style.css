@@ -443,6 +443,11 @@ body {
   cursor: crosshair;
   touch-action: none;
 }
+/* With the pencil active, the hover footprint outline IS the cursor, so hide the
+   OS pointer over the canvas — only the hairline outline shows what will be drawn. */
+.editor-canvas.pencil-active {
+  cursor: none;
+}
 /* Faded onion-skin (drawn) over a checkerboard (CSS), UNDER the transparent pixel
    canvas so both show through unpainted texels. */
 .editor-canvas-bg {

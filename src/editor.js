@@ -574,6 +574,10 @@ export function createTileEditor(
     pencilBtn.classList.toggle('active', brush.tool === 'pencil');
     eyeBtn.classList.toggle('active', brush.picking);
     eraserSw.classList.toggle('active', brush.erase && !brush.picking);
+    // With the pencil (its eraser/eyedropper ink modes included) the hover
+    // footprint outline stands in for the pointer, so hide the OS cursor over the
+    // canvas — CSS `.pencil-active { cursor: none }` leaves only the outline.
+    canvas.classList.toggle('pencil-active', brush.tool === 'pencil');
     syncActiveSwatch();
   }
 
