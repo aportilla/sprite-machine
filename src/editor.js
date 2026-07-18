@@ -57,8 +57,11 @@
 //     keeps its lattice coords and nothing shears out of registration.
 // ---------------------------------------------------------------------------
 
-const EDIT_MAX = 512; // max on-screen size of the drawing canvas, px
-const CANVAS_PAD = 48; // editor + canvas-wrap padding budget, subtracted from panel width
+// The pixel-canvas CONTAINER is a stable box: its height is pinned to a fixed
+// fraction of the sidebar (panel) height, full-bleed below the tabs, so nothing
+// below it shifts as the tile size — and thus the drawn canvas — changes. The
+// square canvas is centered inside at the largest integer texel scale that fits.
+const CANVAS_FRACTION = 0.6; // container height = 60% of the sidebar height
 
 // Hairline extent rules: translucent cyan so they read as guides distinct from
 // the sprite art. MIRROR_ALPHA keeps the onion-skin a faint hint.
@@ -230,26 +233,23 @@ export function createTileEditor(
   }
   widget.appendChild(tabs);
 
-  // --- canvas (backing store at native tile resolution, CSS-upscaled crisp) --
-  // Four stacked layers in the wrap: a background (checkerboard via CSS + faded
-  // opposite-face onion-skin), the transparent pixel canvas, a hairline guide
-  // overlay, and a cursor overlay (the hover footprint). Only the pixel canvas
-  // takes pointer events. The on-screen scale fills the panel (integer, so pixels
-  // stay crisp) up to EDIT_MAX.
-  const cap = Math.min(
-    EDIT_MAX,
-    Math.max(160, (container.clientWidth || EDIT_MAX) - CANVAS_PAD)
-  );
-  const scale = Math.max(1, Math.floor(Math.min(cap / tileW, cap / tileH)));
-  const cssW = tileW * scale;
-  const cssH = tileH * scale;
+  // --- canvas: stable-size container + centered, maximal pixel canvas ---------
+  // The CONTAINER (.editor-canvas-wrap) is a fixed box — layout() pins its height to
+  // CANVAS_FRACTION of the sidebar height and it spans the full panel width below the
+  // tabs — so nothing below it shifts when the tile size (and thus the drawn canvas)
+  // changes. Inside it, a .editor-canvas-stack holds four aligned layers, centered
+  // and scaled by layout() to the largest integer texel size that fits: a background
+  // (checkerboard via CSS + faded opposite-face onion-skin), the transparent pixel
+  // canvas, a hairline guide overlay, and a cursor overlay (the hover footprint).
+  // Only the pixel canvas takes pointer events. The pixel + bg canvases keep a native
+  // tileW×tileH backing store (CSS upscales them crisp); the overlay + cursor are
+  // SCREEN-res (backing tracks the on-screen px) so their 1px lines stay crisp.
   const wrap = el('div', 'editor-canvas-wrap');
+  const stack = el('div', 'editor-canvas-stack'); // the centered square; JS-sized
 
   const bg = el('canvas', 'editor-canvas-bg');
   bg.width = tileW;
   bg.height = tileH;
-  bg.style.width = `${cssW}px`;
-  bg.style.height = `${cssH}px`;
   if (mirrorBehind) {
     const tmp = document.createElement('canvas');
     tmp.width = tileW;
@@ -266,37 +266,67 @@ export function createTileEditor(
     bgx.globalAlpha = MIRROR_ALPHA; // putImageData ignores alpha; drawImage honors it
     bgx.drawImage(tmp, 0, 0);
   }
-  wrap.appendChild(bg);
+  stack.appendChild(bg);
 
   const canvas = el('canvas', 'editor-canvas');
   canvas.width = tileW;
   canvas.height = tileH;
-  canvas.style.width = `${cssW}px`;
-  canvas.style.height = `${cssH}px`;
-  wrap.appendChild(canvas);
+  stack.appendChild(canvas);
 
   const overlay = el('canvas', 'editor-canvas-overlay');
-  overlay.width = cssW; // screen-res so hairlines stay 1px crisp
-  overlay.height = cssH;
-  overlay.style.width = `${cssW}px`;
-  overlay.style.height = `${cssH}px`;
-  wrap.appendChild(overlay);
-  drawGuides(overlay.getContext('2d'), guides, scale, cssW, cssH);
+  stack.appendChild(overlay);
+  const overlayCtx = overlay.getContext('2d');
 
   const cursor = el('canvas', 'editor-canvas-cursor');
-  cursor.width = cssW; // screen-res so the footprint outline stays crisp
-  cursor.height = cssH;
-  cursor.style.width = `${cssW}px`;
-  cursor.style.height = `${cssH}px`;
-  wrap.appendChild(cursor);
+  stack.appendChild(cursor);
   const cursorCtx = cursor.getContext('2d');
 
+  wrap.appendChild(stack);
   widget.appendChild(wrap);
 
   const ctx = canvas.getContext('2d');
   const imgData = new ImageData(work, tileW, tileH); // shares `work` by reference
   const repaint = () => ctx.putImageData(imgData, 0, 0);
   repaint();
+
+  // Live on-screen geometry, re-derived by layout(): `scale` is the integer texel
+  // size, `cssW`/`cssH` the pixel canvas's on-screen px. The guide + cursor overlays
+  // draw in this screen space, so they read these.
+  let scale = 1;
+  let cssW = tileW;
+  let cssH = tileH;
+  let laidOut = false;
+
+  // Pin the container to CANVAS_FRACTION of the sidebar height, then fit the largest
+  // integer-scaled tile rect inside its content box, size every layer to it, and
+  // redraw the screen-res overlays. Called on mount and whenever the panel resizes;
+  // idempotent — a re-run at the same scale only re-pins the (stable) height. Reads
+  // `drawCursor`/`hoverTexel`, defined below, but is only CALLED after they exist.
+  function layout() {
+    const boxH = Math.max(0, Math.round((container.clientHeight || 0) * CANVAS_FRACTION));
+    wrap.style.height = `${boxH}px`;
+    // Measure BOTH axes from the post-reflow client box (border-excluded), so the
+    // 1px border isn't double-counted on one axis: availH from the raw border-box
+    // `boxH` would overstate the content height by the border and could round the
+    // integer scale one step too big (the stack would then clip under overflow:hidden).
+    const cs = getComputedStyle(wrap);
+    const availW = Math.max(1, wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+    const availH = Math.max(1, wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
+    const s = Math.max(1, Math.floor(Math.min(availW / tileW, availH / tileH)) || 1);
+    if (laidOut && s === scale) return; // scale unchanged → layers already correct
+    laidOut = true;
+    scale = s;
+    cssW = tileW * s;
+    cssH = tileH * s;
+    stack.style.width = `${cssW}px`;
+    stack.style.height = `${cssH}px`;
+    overlay.width = cssW; // screen-res backing so hairlines stay 1px crisp
+    overlay.height = cssH;
+    cursor.width = cssW;
+    cursor.height = cssH;
+    drawGuides(overlayCtx, guides, scale, cssW, cssH);
+    drawCursor(hoverTexel); // re-stroke the footprint at the new scale (or clear it)
+  }
 
   const rgbEq = (a, b) => a.r === b.r && a.g === b.g && a.b === b.b;
   const matchPaletteIndex = (color) =>
@@ -746,6 +776,18 @@ export function createTileEditor(
   canvas.addEventListener('pointerleave', () => drawCursor(null)); // clear the preview
   canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // right-click = erase
 
+  // Size everything now, and re-fit whenever the sidebar (this panel) resizes — the
+  // container is a fixed fraction of the panel height, so a window resize changes it
+  // and the centered canvas must re-scale. Observing the panel is safe from feedback:
+  // the layers we resize live inside it and never change ITS box, and a no-op re-run
+  // (same scale) early-returns.
+  layout();
+  let resizeObs = null;
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObs = new ResizeObserver(() => layout());
+    resizeObs.observe(container);
+  }
+
   // Dev hook (?cursor=N): draw the footprint at the tile center on mount so a
   // headless shot — which has no pointer to hover — can show the preview.
   if (previewCursor) drawCursor({ px: tileW >> 1, py: tileH >> 1 });
@@ -769,6 +811,7 @@ export function createTileEditor(
     // The keydown listener isn't on `container`, so drop it explicitly — a face
     // swap / resize re-mounts this editor often, and it would otherwise leak.
     document.removeEventListener('keydown', onKeyDown);
+    resizeObs?.disconnect(); // stop observing the panel (we observe it, not a child)
     modal.remove(); // the modal lives on <body>, outside `container`
     container.innerHTML = ''; // removes the canvas + its pointer listeners with it
   }

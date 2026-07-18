@@ -65,6 +65,13 @@ face; the 3D view stays live on the left and rebuilds as you draw. Pick a face
 with the **tabs**; a **header strip** across the top holds the brand, the
 _pick atlas ▾_ menu, and _download_.
 
+- **Canvas area** — below the tabs the pixel canvas lives in a **stable,
+  full-bleed container** whose height is always **60% of the sidebar height**, so
+  the tool strip and palette below it never shift as the tile size — and thus the
+  drawn canvas — changes. The square editable canvas is **centered** in that box and
+  drawn **as large as an integer texel scale fits** (crisp, never a fractional
+  pixel), and it **re-fits responsively** when the window resizes. See `layout()` in
+  `src/editor.js`.
 - **Tools & palette** — a **tool strip** of first-class tools (**pencil `B`**;
   **rect** and **fill** are present but **disabled** for now) with the square
   **tile-size stepper** docked at its right, above a **per-tool options** row — for
@@ -262,7 +269,7 @@ src/lib/
 src/
   main.js         scene, lights, ground, framing, render loop + always-on editor wiring
   ui.js           header strip (samples, pick/drop atlas, download) + stage overlays (options, stats)
-  editor.js       tools panel (right half): face tabs + canvas, tool strip (pencil; rect/fill stubbed) with docked tile-size stepper, per-tool options (pencil size + hover footprint preview), palette row (colors + eyedropper/eraser/"+" 256-palette modal), align guides
+  editor.js       tools panel (right half): face tabs + stable-size canvas container (layout(): 60% of the sidebar height, centered integer-scaled canvas), tool strip (pencil; rect/fill stubbed) with docked tile-size stepper, per-tool options (pencil size + hover footprint preview), palette row (colors + eyedropper/eraser/"+" 256-palette modal), align guides
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
 ```
 
