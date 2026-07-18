@@ -14,13 +14,15 @@ npm run build    # static bundle in dist/
 ```
 
 **Pick a built-in sample**, or load your own **3×2 sprite sheet** — click _pick
-atlas…_ or drop a PNG anywhere on the window. **Smooth slopes** (low-poly
-additive 45° wedges) is on by default and toggles live; greedy meshing is always
-on. Sprites are hard pixel art — every texel is fully opaque or fully transparent
-— and every face with no view of its own is mirror-filled from its opposite at
-render time (the faces preview shows only the tiles actually drawn — an honest
-view of the sheet). Click any face in that preview to **edit its pixels in-app**
-— see [Drawing editor](#drawing-editor).
+atlas ▾_ in the header or drop a PNG anywhere on the window. **Smooth slopes**
+(low-poly additive 45° wedges) is on by default and toggles live; greedy meshing
+is always on. Sprites are hard pixel art — every texel is fully opaque or fully
+transparent — and every face with no view of its own is mirror-filled from its
+opposite at render time. The app is a **header strip** over a **50/50 split**:
+the live 3D object on the left, and on the right a **tools panel** always open on
+one face. The face **tabs** switch which of the six you're editing (a
+mirror-derived face reads empty — an honest view of the sheet) — see
+[Drawing editor](#drawing-editor).
 
 ## Input: a 3×2 atlas
 
@@ -58,15 +60,24 @@ follow the convention.
 
 ## Drawing editor
 
-Click any tile in the **faces** preview to open an in-app pixel editor in a
-right-side panel; the 3D view stays live beside it and rebuilds as you draw.
+The **tools panel** fills the right half of the window and is always open on one
+face; the 3D view stays live on the left and rebuilds as you draw. Pick a face
+with the **tabs**; a **header strip** across the top holds the brand, the
+_pick atlas ▾_ menu, and _download_.
 
-- **Tools & palette** — a persistent tool strip (**pencil `B`**, whose icon is a
-  live swatch of the current color; **eyedropper `I`** / hold **Alt** to sample
-  mid-stroke; **eraser `E`** / **right-click**), then, in-flow below, a dynamic
-  **in sprite** row (every color currently painted on _any_ face, so you can match
-  existing colors) and the **full 256-color palette** as a 16×16 grid of **256
-  distinct** swatches. The base is the standard **xterm-256** set — but xterm-256
+- **Tools & palette** — a **tool strip** of first-class tools (**pencil `B`**;
+  **rect** and **fill** are present but **disabled** for now) with the square
+  **tile-size stepper** docked at its right, above a **per-tool options** row — for
+  the pencil, a **tip-size stepper** (`size: N px`) that stamps an **N×N** square
+  footprint and **previews it** as a hairline outline on the canvas as you hover.
+  Below is the **palette row** — every color currently painted on _any_ face, so
+  you can match existing colors — led by a **+** that opens a **modal picker** over
+  the **full 256-color palette**, then the **eyedropper** (`I` / hold **Alt** to
+  sample mid-stroke) and the **eraser** (`E` / **right-click**): these two sit
+  _among the colors_, not with the tools, because they pick the pencil's **ink** —
+  a sampled color, or transparent ("clear color") — rather than a drawing tool. The
+  modal is a 16×16 grid of **256 distinct** swatches (**Esc**, the backdrop, or
+  **✕** closes it). The base is the standard **xterm-256** set — but xterm-256
   names 256 indexed _slots_ and only 247 _distinct_ colors (nine values, e.g.
   `#808080`/`#000000`/`#ffffff`, repeat where its system, cube, and grayscale
   ranges overlap), so the nine redundant cells are backfilled with shades
@@ -85,27 +96,28 @@ right-side panel; the 3D view stays live beside it and rebuilds as you draw.
   except the two near-neutral grays, so only near-neutrals are affected (the
   earlier sparse 8×8×4 grid kept _every_ swatch ≥36 apart). Every stroke is hard-pixel: fully opaque or fully erased, never
   anti-aliased.
-- **Mirror-pair tabs** — a `[front|back]` / `[left|right]` / `[top|bottom]` pill
-  under the canvas switches which face of the pair you're editing, so you can flip
-  back and forth for reference. A **mirror-derived** face (one with no art of its
-  own) opens with an **empty canvas** and a **faded onion-skin** of the mirrored
-  opposite behind it for reference; it becomes its own independent art only once
-  you actually change a pixel — open-and-close leaves it derived, and erasing it
-  fully reverts it to derived.
+- **Face tabs** — six tabs across the top of the canvas box switch which face you
+  edit, laid out as mirror pairs (`left`/`right`, `front`/`back`, `top`/`bottom`)
+  so you can flip between a pair for reference. A **mirror-derived** face (one with
+  no art of its own) opens with an **empty canvas** and a **faded onion-skin** of
+  the mirrored opposite behind it for reference; it becomes its own independent art
+  only once you actually change a pixel — switching away and back leaves it derived,
+  and erasing it fully reverts it to derived.
 - **Live + canonical** — edits write straight back into the current sheet, so the
   **download** button saves the edited atlas as `atlas.png`, and the model
   rebuilds (rAF-debounced) with no camera jump.
-- **Tile size** — **W / H steppers** in the editor header retile the whole atlas
-  to any integer **1–256** per axis, **independently**. A **proportional (square)**
-  change is **alignment-preserving**: every axis keeps its origin line fixed and
-  grows / shrinks only at the far edge, so a voxel keeps its lattice coordinates,
-  the object stays ground-rested (`y=0` pinned), and no sprite shears out of
-  registration (growing pads with transparency, shrinking crops the far edges). An
-  **asymmetric** change (`W≠H`) is allowed but **falls out of registration** — a
-  3×2 atlas shares its depth axis between the side tile's width and the top tile's
-  height, so a non-square tile over-constrains that axis: the depth **shears** and
-  it **warns** (the accepted trade-off for independent axes). See `resizeAtlas` in
-  `src/lib/atlas.js`.
+- **Tile size** — a single **square-tile stepper** docked at the right of the tool
+  strip retiles the whole atlas to any integer **1–256**. Tiles are **locked square**, so
+  every resize is **alignment-preserving**: each axis keeps its origin line fixed and
+  grows / shrinks only at the far edge, so a voxel keeps its lattice coordinates, the
+  object stays ground-rested (`y=0` pinned), and no sprite shears out of registration
+  (growing pads with transparency, shrinking crops the far edges). Square is the
+  **only registering shape** — a 3×2 atlas shares its depth axis between the side
+  tile's width and the top tile's height, so a non-square tile would over-constrain
+  that axis and shear the depth; locking the stepper square makes that impossible from
+  the UI. The pure `resizeAtlas` in `src/lib/atlas.js` still accepts an asymmetric
+  pair (used only by the `?tile=WxH` dev hook, which **warns** and shears) so the
+  shear path stays testable.
 
 Drawn pixels map 1:1 to voxels at their **literal tile position** — `buildVoxels`
 reads each view at full size (no crop, no re-centering) and the carve intersects
@@ -118,13 +130,17 @@ you paint it (paint at the tile's bottom to rest on the ground). The editor is
 pure authoring — no changes to the carve / colorize / mesh pipeline. See
 `src/editor.js` and `src/lib/guides.js`.
 
-**Dev hook:** append `?edit=<face>` (e.g. `?edit=front`) to open the editor on
-that face right after the first build. It's how the editor gets exercised in
-headless screenshots (the capture tool can't click), and it's handy for jumping
-straight to a face while iterating. It joins the other test-only URL params:
-`?sample=<index|name>`, `?rotate=0`, `?lowpoly=0|1`, `?flat=1`, `?diag=1`
-(watertightness self-check), `?cam=top|front|fq|bq`, and `?tile=<N>` (or `<W>x<H>`) to apply one tile resize
-after the first build — the steppers can't be clicked headlessly.
+**Dev hook:** append `?edit=<face>` (e.g. `?edit=front`) to boot with the editor
+on that face — it's always open now, so this just picks the starting tab. It's how
+the editor gets exercised in headless screenshots (the capture tool can't click),
+and it's handy for jumping straight to a face while iterating. It joins the other
+test-only URL params: `?sample=<index|name>`, `?rotate=0`, `?lowpoly=0|1`,
+`?flat=1`, `?diag=1` (watertightness self-check), `?cam=top|front|fq|bq`,
+`?tile=<N>` (or `<W>x<H>` to force an asymmetric, out-of-registration resize the
+locked-square UI can't produce) to apply one tile resize after the first build,
+`?palette=1` to open the **+** palette modal on the first mount, and `?cursor=<N>`
+to set the pencil size to N and draw its footprint outline at the tile center on
+mount — the stepper, tabs, modal, and hover preview can't be driven headlessly.
 
 ---
 
@@ -244,9 +260,9 @@ src/lib/
   sprite-data.js  built-in samples (as atlases) + grid->ImageData helper
   diag.js         geometry watertightness self-check (dev only; ?diag=1)
 src/
-  main.js         scene, lights, ground, framing, render loop + drawing-editor wiring
-  ui.js           left panel: samples, pick/drop atlas, clickable faces, options, stats
-  editor.js       inline tile editor (right panel): tool strip + in-sprite row + 256 palette, eyedropper/eraser, face tabs, align guides
+  main.js         scene, lights, ground, framing, render loop + always-on editor wiring
+  ui.js           header strip (samples, pick/drop atlas, download) + stage overlays (options, stats)
+  editor.js       tools panel (right half): face tabs + canvas, tool strip (pencil; rect/fill stubbed) with docked tile-size stepper, per-tool options (pencil size + hover footprint preview), palette row (colors + eyedropper/eraser/"+" 256-palette modal), align guides
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
 ```
 

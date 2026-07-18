@@ -14,12 +14,7 @@ import {
   TILE_MIN,
   TILE_MAX,
 } from './lib/atlas.js';
-import {
-  VIEW_NAMES,
-  VIEW_OPPOSITE,
-  VIEW_MIRROR_AXIS,
-  VIEW_DISPLAY_ORDER,
-} from './lib/views.js';
+import { VIEW_NAMES, VIEW_OPPOSITE, VIEW_MIRROR_AXIS } from './lib/views.js';
 import { PENCIL_PALETTE, PALETTE_256 } from './lib/constants.js';
 import { faceGuides } from './lib/guides.js';
 import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
@@ -98,8 +93,15 @@ const RENDER_SCALE = 0.5; // low-res render, crisply upscaled by CSS
 // build (handy for screenshots / the manual test checklist).
 let pendingEditFace = null;
 // Dev hook: ?tile=N (square) or ?tile=WxH applies one resize after the first build
-// (the capture tool can't click the steppers).
+// (the capture tool can't click the stepper).
 let pendingTileResize = null;
+// Dev hook: ?palette=1 opens the "+" palette modal on the first editor mount
+// (the capture tool can't click "+"). Consumed once.
+let pendingOpenPalette = false;
+// Dev hook: ?cursor=N sets the pencil size to N and draws its footprint outline at
+// the tile center on the first editor mount (the capture tool has no pointer to
+// hover). Consumed once.
+let pendingCursor = null;
 
 const camParam = params.get('cam');
 const ISO_DIR = new THREE.Vector3(
@@ -195,35 +197,38 @@ function refreshFromAtlas(reframe) {
   state.cols = sliced.cols;
   state.rows = sliced.rows;
   if (reframe) frameNext = true;
-  ui.setAtlasInfo(sliced);
-  ui.setThumbnails(sliced.views);
   rebuild();
 }
 
 // Load a NEW sheet (sample / dropped atlas / blank): it replaces every view
-// wholesale, so any open editor is now stale — close it, refresh, then honor a
-// pending ?edit= face.
+// wholesale, so any pending live stroke from the old sheet is now stale — drop
+// it, refresh, then re-mount the always-on editor on the active face (a pending
+// ?edit= face, else whatever was open, else the default).
 function sliceAndBuild(reframe) {
   if (!state.atlasImage) return;
-  exitDrawing();
+  dropLive();
   refreshFromAtlas(reframe);
   // Dev hook: ?tile=WxH resizes the fresh sheet once (the capture tool can't click
-  // the steppers) before any ?edit face opens, so a headless shot shows the result.
+  // the stepper) before the editor opens, so a headless shot shows the result.
   if (pendingTileResize) {
     const { w, h } = pendingTileResize;
     pendingTileResize = null;
     resizeTiles(w, h);
   }
-  if (pendingEditFace) {
-    const f = pendingEditFace;
-    pendingEditFace = null;
-    enterDrawing(f);
-  }
+  const face = pendingEditFace || editingName || DEFAULT_FACE;
+  pendingEditFace = null;
+  enterDrawing(face);
 }
 
 // --------------------------------------------------------------------------
 // Tile editor wiring (see docs/drawing-editor-plan.md)
 // --------------------------------------------------------------------------
+// The tools panel (right half) always shows the editor for one face. Boot and
+// sheet-swaps fall back to this face; the tabs switch which face is active. Tabs
+// are laid out as mirror pairs (left/right, front/back, top/bottom).
+const DEFAULT_FACE = 'left';
+const TAB_ORDER = ['left', 'right', 'front', 'back', 'top', 'bottom'];
+
 const isAllTransparent = (tile) => {
   const d = tile.data;
   for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return false;
@@ -244,8 +249,18 @@ function flushLive() {
   if (cell && state.atlasImage) {
     blitTile(state.atlasImage, p.tile, cell.c * state.tileW, cell.r * state.tileH);
   }
-  ui.setThumbnails(state.views);
   rebuild();
+}
+
+// Discard any pending live rebuild without flushing it — used before a wholesale
+// sheet swap so a stale tile can't blit into a freshly loaded atlas (which may
+// have a different tile size) on the next frame.
+function dropLive() {
+  if (liveRAF) {
+    cancelAnimationFrame(liveRAF);
+    liveRAF = 0;
+  }
+  livePending = null;
 }
 
 // Apply one live/committed tile edit. `wasDerived` = the face had no independent
@@ -259,10 +274,19 @@ function applyTileEdit(name, wasDerived, tile, dirty) {
   if (!liveRAF) liveRAF = requestAnimationFrame(flushLive);
 }
 
-// --- drawing-mode session -------------------------------------------------
-// The editor is docked in the sidebar (not modal); the 3D view stays live. The
-// brush selection is shared so it survives a mirror-partner face swap.
-const brush = { mode: 'pencil', color: null, swatchIndex: 0 };
+// --- editor session -------------------------------------------------------
+// The editor is permanently docked in the right-half panel; the 3D view stays
+// live on the left. The brush selection is shared so it survives a face swap:
+// `tool` is the drawing op (only 'pencil' is live), `color`/`swatchIndex` the ink,
+// `erase`/`picking` the eraser-ink / eyedropper flags, `size` the pencil footprint.
+const brush = {
+  tool: 'pencil',
+  color: null,
+  swatchIndex: 0,
+  erase: false,
+  picking: false,
+  size: 1,
+};
 let currentEditor = null;
 let editingName = null;
 
@@ -321,26 +345,28 @@ function mountEditor(name, focusSize) {
     usedColors: usedColorsExcept(name),
     mirrorBehind,
     guides,
-    faces: VIEW_DISPLAY_ORDER,
+    faces: TAB_ORDER,
     brush,
     sizeMin: TILE_MIN,
     sizeMax: TILE_MAX,
     focusSize,
+    openPaletteOnMount: pendingOpenPalette,
+    previewCursor: pendingCursor,
     onLive: (working, dirty) => applyTileEdit(name, wasDerived, working, dirty),
     onSelectFace: (target) => enterDrawing(target),
-    onResizeTile: resizeTiles,
-    onClose: () => exitDrawing(),
+    onResizeTile: (n) => resizeTiles(n, n, 'Tile'),
   });
-  ui.setActiveFace(name);
+  pendingOpenPalette = false; // one-shot: don't re-open on face swap / resize
+  pendingCursor = null; // one-shot: only preview on the first mount
 }
 
-// Change a tile dimension from the editor's W/H steppers. Resizes the WHOLE atlas
-// so every face moves together, then re-slices and re-opens the editor on the same
-// face at the new size (restoring focus to the edited stepper for typed entry).
-// A PROPORTIONAL (square) change keeps the object ground-rested and every voxel at
-// its lattice coords; an asymmetric W≠H change is allowed but over-constrains the
-// shared depth axis, so it shears and warns (accepted trade-off). The control only
-// shows while editing, but this guards defensively.
+// Resize every tile from the editor's tile-size stepper. Tiles are locked SQUARE, so
+// the editor always calls this with newW===newH: it resizes the WHOLE atlas so every
+// face moves together, then re-slices and re-opens the editor on the same face at the
+// new size (restoring focus to the stepper for typed entry). A square change keeps the
+// object ground-rested and every voxel at its lattice coords — no shear, no warning.
+// (The ?tile=WxH dev hook can still pass an asymmetric pair to exercise resizeAtlas's
+// shear path.) The control only shows while editing, but this guards defensively.
 function resizeTiles(newW, newH, focusSize) {
   if (!state.atlasImage) return;
   const w = clampTile(newW);
@@ -358,32 +384,11 @@ function resizeTiles(newW, newH, focusSize) {
   if (face) mountEditor(face, focusSize); // re-open at the new size, refocus the stepper
 }
 
-// Clicking a face tile enters (or, if already editing, switches to) drawing mode.
+// Select a face for editing: (re)mount the always-on editor on it. Called by a
+// tab click, a sheet swap, a tile resize, and boot.
 function enterDrawing(name) {
   if (!state.atlasImage || !state.tileW || !state.tileH) return;
-  ui.setDrawingMode(true);
   mountEditor(name);
-}
-
-function exitDrawing() {
-  if (currentEditor) {
-    currentEditor.destroy();
-    currentEditor = null;
-  }
-  // Drop any pending live rebuild so a stale tile can't blit into a freshly
-  // loaded atlas (which may have a different tile size) on the next frame.
-  if (liveRAF) {
-    cancelAnimationFrame(liveRAF);
-    liveRAF = 0;
-  }
-  livePending = null;
-  editingName = null;
-  ui.setDrawingMode(false);
-  ui.setActiveFace(null);
-}
-
-function onTileEdit(name) {
-  enterDrawing(name);
 }
 
 function onDownload() {
@@ -416,7 +421,6 @@ const ui = createUI({
     sliceAndBuild(true);
   },
   onOptionChange: () => rebuild(),
-  onTileEdit,
   onDownload,
 });
 
@@ -440,9 +444,9 @@ function resize() {
   }
 }
 window.addEventListener('resize', resize);
-// The viewport is a flex child: entering drawing mode widens the sidebar and
-// shrinks it. Observe its box directly so the render buffer + camera aspect stay
-// correct without a window resize event.
+// The viewport fills the 50% stage, which can change width (e.g. a window
+// resize). Observe its box directly so the render buffer + camera aspect stay
+// correct without waiting on a window resize event.
 if (typeof ResizeObserver !== 'undefined') {
   new ResizeObserver(() => resize()).observe(canvas);
 }
@@ -463,6 +467,12 @@ const tileParam = params.get('tile');
 if (tileParam) {
   const m = /^(\d+)(?:x(\d+))?$/i.exec(tileParam.trim());
   if (m) pendingTileResize = { w: clampTile(+m[1]), h: clampTile(+(m[2] ?? m[1])) };
+}
+if (params.get('palette') === '1') pendingOpenPalette = true;
+const cursorParam = params.get('cursor');
+if (cursorParam) {
+  const n = parseInt(cursorParam, 10);
+  if (n > 0) pendingCursor = n;
 }
 const q = params.get('sample');
 let startIndex = 0;

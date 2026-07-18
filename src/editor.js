@@ -1,21 +1,25 @@
 // ---------------------------------------------------------------------------
-// Inline (docked) tile editor: a pixel canvas for one atlas face, rendered into
-// a container in the sidebar — NOT a modal. The 3D view stays live + interactive
-// beside it. Self-contained, pure DOM; no imports from the voxel pipeline.
+// The tools panel (right half of the workspace): a pixel editor for one atlas
+// face. Permanently docked — a face is always selected; the 3D view stays live +
+// interactive on the left. Self-contained, pure DOM; no imports from the voxel
+// pipeline.
 //
-// Tools (pencil / eyedropper / eraser) live in a persistent strip so they are
-// first-class, distinct from the colors; the pencil button's icon is a live
-// swatch of the color it would paint. Below them, in-flow (no overlay): a dynamic
-// "in sprite" row (every color currently painted on ANY face) and then the full
-// 256-color palette as a 16x16 grid. The brush selection is held in the
-// caller-owned `brush` object so it survives a mirror-partner face swap (which
-// destroys + re-mounts this editor). Every stroke is HARD-pixel (alpha 0 or 255)
-// so downstream ingest (alpha>=128) and atlas.isBlank (alpha!==0) can never
-// diverge.
+// Top to bottom: the six face tabs capping the framed pixel canvas, then a TOOL
+// STRIP of first-class tools (pencil; rect + fill are stubbed in but disabled)
+// with the square tile-size stepper docked at its right, a per-tool OPTIONS row
+// (the pencil's tip-SIZE stepper), and finally the PALETTE row — every color
+// currently painted on ANY face, so you can match existing colors — led by a "+"
+// that opens the full 256-color modal, then the eyedropper and the eraser. The
+// eyedropper and eraser live with the colors, not the tools, because they choose
+// the pencil's INK (a sampled color, or transparent "clear color") rather than a
+// drawing tool. The brush selection is held in the caller-owned `brush` object so
+// it survives a face swap (which destroys + re-mounts this editor). Every stroke
+// is HARD-pixel (alpha 0 or 255) so downstream ingest (alpha>=128) and
+// atlas.isBlank (alpha!==0) can never diverge.
 //
 // createTileEditor(container, { name, tile, tileW, tileH, palette, palette256,
-//   mirrorBehind, guides, faces, brush, sizeMin, sizeMax,
-//   onLive, onSelectFace, onResizeTile, onClose })
+//   usedColors, mirrorBehind, guides, faces, brush, sizeMin, sizeMax, focusSize,
+//   onLive, onSelectFace, onResizeTile })
 //   -> { destroy }
 //   - mirrorBehind: {width,height,data} onion-skin of the opposite face drawn
 //     faded UNDER the pixel canvas (display only — never written to `work`). null
@@ -25,27 +29,36 @@
 //     as hairline rules over the canvas so you can align to the stricter carve.
 //   - faces: the ordered list of all six atlas faces, shown as tabs across the
 //     top; the edited `name` is the active tab and clicking another switches.
-//   - palette256: the full 256-color editor palette ({ css }[]) shown
-//     persistently as a 16x16 grid. It arrives already laid out along a Hilbert
+//   - palette256: the full 256-color editor palette ({ css }[]) shown in the
+//     "+" modal as a 16x16 grid. It arrives already laid out along a Hilbert
 //     curve (constants.js PALETTE_256), so iterating it row-major clusters
 //     similar colors both across and down — this editor never reorders it.
 //     `palette` (DB16) is no longer displayed; it still seeds the default brush
 //     color and `B`.
 //   - usedColors: [{r,g,b}] colors already painted on the OTHER faces; the editor
-//     unions the current tile's live pixels on top for the dynamic "in sprite" row.
-//   - brush: shared { mode, color:{r,g,b}, swatchIndex } — persisted by the
-//     caller across face swaps.
-//   - sizeMin/sizeMax: inclusive integer bounds for the W/H steppers.
+//     unions the current tile's live pixels on top for the dynamic palette row.
+//   - brush: shared { tool, color:{r,g,b}, swatchIndex, erase, picking, size } —
+//     persisted by the caller across face swaps. `tool` is the drawing op
+//     ('pencil'|'rect'|'fill'; only pencil is live). `erase` makes the pencil lay
+//     transparent; `picking` arms the eyedropper for the next canvas click; `size`
+//     is the pencil's N×N tip footprint (in texels).
+//   - sizeMin/sizeMax: inclusive integer bounds for the TILE-size stepper.
+//   - focusSize: the stepper's key ('Tile') to refocus after a resize re-mount (typed entry flow).
+//   - openPaletteOnMount: dev hook (?palette=1) — open the "+" palette modal
+//     immediately so headless screenshots (which can't click "+") can show it.
+//   - previewCursor: dev hook (?cursor=N) — set the pencil size to N and draw its
+//     footprint outline at the tile center on mount, so a headless shot (which has
+//     no pointer to hover) can show the preview. Consumed once by the caller.
 //   - onLive(workingTile, dirty): fired on each actual pixel change.
-//   - onSelectFace(name): the user clicked the other face tab.
-//   - onResizeTile(newW, newH, axis): the user changed a tile dimension ('W' or
-//     'H'). The caller resizes the whole atlas and re-mounts. A PROPORTIONAL
-//     (square) change is alignment-preserving; an asymmetric W≠H change is allowed
-//     but falls out of registration and warns (see atlas.js resizeAtlas).
-//   - onClose(): the user clicked "done".
+//   - onSelectFace(name): the user clicked another face tab.
+//   - onResizeTile(size): the user changed the tile size. Tiles are locked SQUARE,
+//     so the caller resizes the whole atlas to size×size and re-mounts — always the
+//     alignment-preserving proportional case (see atlas.js resizeAtlas), so a voxel
+//     keeps its lattice coords and nothing shears out of registration.
 // ---------------------------------------------------------------------------
 
-const EDIT_MAX = 384; // max on-screen size of the drawing canvas, px
+const EDIT_MAX = 512; // max on-screen size of the drawing canvas, px
+const CANVAS_PAD = 48; // editor + canvas-wrap padding budget, subtracted from panel width
 
 // Hairline extent rules: translucent cyan so they read as guides distinct from
 // the sprite art. MIRROR_ALPHA keeps the onion-skin a faint hint.
@@ -68,19 +81,12 @@ function drawGuides(g, guides, scale, cssW, cssH) {
   if (vMax != null) g.fillRect(0, (vMax + 1) * scale - T, cssW, T); // bottom extent
 }
 
-// Simple pipette glyph for the eyedropper tile (strokes `currentColor`).
+// Simple pipette glyph for the eyedropper button (strokes `currentColor`).
 const EYEDROPPER_SVG =
-  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+  '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" ' +
   'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
   '<path d="M2 22l1.2-4L14 7.2l2.8 2.8L6 20.8 2 22z"/><path d="M14 7l3 3"/>' +
   '<path d="M17.5 3.5l3 3-2.3 2.3-3-3 2.3-2.3z"/></svg>';
-
-// Eraser glyph for the persistent tool strip (strokes `currentColor`). The
-// pencil button uses a live color swatch as its icon instead of a glyph.
-const ERASER_SVG =
-  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
-  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-  '<path d="M20 20H8.5L3 14.5a2 2 0 0 1 0-3L12 3l9 9-8 8"/><path d="M7 12l5 5"/></svg>';
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -100,15 +106,24 @@ function hexToRgb(css) {
 const toHex2 = (n) => n.toString(16).padStart(2, '0');
 const rgbHex = ({ r, g, b }) => `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
 
-// A compact [cap] [−] [value] [+] integer stepper for a tile dimension. Commits
-// on the buttons and on the field's `change` (blur/Enter) — never per keystroke,
-// so the caller's re-mount can't fight the user mid-type. The value is clamped
-// and the field normalized on every commit, and a commit that resolves to the
-// current value is a no-op (so tapping + at the max, or retyping the same number,
-// doesn't churn a rebuild). `value` is the dimension at mount time.
-function sizeStepper(cap, value, min, max, onCommit) {
+// A compact [−] [value] [+] integer stepper with an external "label:" caption and
+// an optional unit suffix ("px"). Commits on the buttons and on the field's
+// `change` (blur/Enter) — never per keystroke, so a caller re-mount can't fight the
+// user mid-type. The value is clamped + normalized on every commit, and a commit
+// that resolves to the current value is a no-op (so tapping + at the max, or
+// retyping the same number, doesn't churn). `key` tags the input (data-axis) so the
+// caller can restore focus here after a re-mount; `value` is the amount at mount.
+//
+// The live value is tracked LOCALLY (`cur`) so the stepper keeps working whether or
+// not the caller re-mounts on commit. The tile stepper re-mounts the whole editor on
+// each change (a fresh instance every time), but the pencil-size stepper stays put —
+// so without this it would freeze after the first click (its captured `value` never
+// advancing, ± always deltaing off the mount value).
+function sizeStepper({ key, label, value, min, max, unit, onCommit }) {
   const clamp = (n) => Math.max(min, Math.min(max, Math.round(Number(n) || 0)));
-  const wrap = el('div', 'editor-stepper');
+  const field = el('div', 'editor-field');
+  field.append(el('span', 'editor-field-cap', `${label}:`));
+  const box = el('div', 'editor-stepper');
   const dec = el('button', 'editor-step', '−');
   const inc = el('button', 'editor-step', '+');
   const input = el('input', 'editor-step-val');
@@ -116,22 +131,34 @@ function sizeStepper(cap, value, min, max, onCommit) {
   input.min = String(min);
   input.max = String(max);
   input.step = '1';
-  input.value = String(value);
-  input.dataset.axis = cap; // so the caller can restore focus here after a re-mount
-  input.setAttribute('aria-label', `tile ${cap} (${min}–${max})`);
+  input.dataset.axis = key; // so the caller can restore focus here after a re-mount
+  input.setAttribute('aria-label', `${label} (${min}–${max})`);
   dec.type = inc.type = 'button';
-  dec.disabled = value <= min;
-  inc.disabled = value >= max;
+  let cur = clamp(value);
+  const sync = () => {
+    input.value = String(cur);
+    dec.disabled = cur <= min;
+    inc.disabled = cur >= max;
+  };
   const commit = (n) => {
     const v = clamp(n);
-    input.value = String(v); // normalize even when the caller no-ops the resize
-    if (v !== value) onCommit(v);
+    if (v === cur) {
+      input.value = String(cur); // normalize a same-value / out-of-range entry
+      return;
+    }
+    cur = v;
+    sync(); // advance our own value + ±-disabled state, even if the caller doesn't re-mount
+    onCommit(v);
   };
-  dec.onclick = () => commit(value - 1);
-  inc.onclick = () => commit(value + 1);
+  dec.onclick = () => commit(cur - 1);
+  inc.onclick = () => commit(cur + 1);
   input.onchange = () => commit(input.value);
-  wrap.append(el('span', 'editor-step-cap', cap), dec, input, inc);
-  return wrap;
+  sync();
+  box.append(dec, input);
+  if (unit) box.append(el('span', 'editor-step-unit', unit));
+  box.append(inc);
+  field.append(box);
+  return field;
 }
 
 export function createTileEditor(
@@ -151,10 +178,11 @@ export function createTileEditor(
     sizeMin = 1,
     sizeMax = 256,
     focusSize,
+    openPaletteOnMount = false,
+    previewCursor = null,
     onLive,
     onSelectFace,
     onResizeTile,
-    onClose,
   }
 ) {
   // Working copy of the tile's pixels — starts from the face's own art, or empty
@@ -166,37 +194,28 @@ export function createTileEditor(
   const workingTile = { width: tileW, height: tileH, data: work };
   let dirty = false;
 
-  // Brush defaults (first mount of a session).
+  // Brush defaults (first mount of a session). `tool` is the drawing op, `erase`
+  // and `picking` the ink/sample flags, `size` the pencil's N×N footprint.
   if (!brush.color) brush.color = hexToRgb(palette[0].css);
-  if (brush.mode == null) brush.mode = 'pencil';
+  if (brush.tool == null) brush.tool = 'pencil';
+  if (brush.erase == null) brush.erase = false;
+  if (brush.picking == null) brush.picking = false;
   if (brush.swatchIndex == null) brush.swatchIndex = 0;
+  if (brush.size == null) brush.size = 1;
+
+  // The pencil tip is capped at the tile edge (a single stamp can't exceed the
+  // canvas). `previewCursor` (?cursor=N) sets the size up front; either way we
+  // clamp a persisted size down after a shrink to a smaller tile.
+  const brushMax = Math.max(1, Math.min(tileW, tileH));
+  const clampBrush = (n) => Math.max(1, Math.min(brushMax, Math.round(Number(n) || 1)));
+  if (previewCursor) brush.size = clampBrush(previewCursor);
+  brush.size = clampBrush(brush.size);
 
   container.innerHTML = '';
   const root = el('div', 'editor');
   container.appendChild(root);
 
-  // --- header: done (left) + editable W/H tile size (right) ------------------
-  // Each stepper resizes the WHOLE atlas (all six tiles); the caller re-mounts
-  // this editor at the new size. A PROPORTIONAL (square) change stays
-  // alignment-preserving; an asymmetric W≠H change is allowed but falls out of
-  // registration and warns — a 3×2 atlas can't hold three independent lattice axes
-  // in two tile dimensions (its depth is the side width AND the top height).
-  const header = el('div', 'editor-header');
-  const doneBtn = el('button', 'editor-btn-done');
-  doneBtn.append(el('span', 'editor-done-mark', '✓'), el('span', null, 'Done Editing'));
-  doneBtn.onclick = () => onClose?.();
-  const sizeCtl = el('div', 'editor-size');
-  sizeCtl.append(
-    sizeStepper('W', tileW, sizeMin, sizeMax, (w) => onResizeTile?.(w, tileH, 'W')),
-    sizeStepper('H', tileH, sizeMin, sizeMax, (h) => onResizeTile?.(tileW, h, 'H'))
-  );
-  header.append(doneBtn, sizeCtl);
-  root.appendChild(header);
-
   // --- canvas widget: tabs + framed canvas as one self-contained unit --------
-  // A bordered card that groups the face tabs on top of the canvas box. The tabs
-  // scope ONLY the canvas — the header above and the palette below are separate.
-  // The active tab merges into the box below it.
   const widget = el('div', 'editor-canvas-panel');
   root.appendChild(widget);
 
@@ -212,10 +231,16 @@ export function createTileEditor(
   widget.appendChild(tabs);
 
   // --- canvas (backing store at native tile resolution, CSS-upscaled crisp) --
-  // Three stacked layers in the wrap: a background (checkerboard via CSS + faded
-  // opposite-face onion-skin), the transparent pixel canvas, and a hairline
-  // overlay. Only the pixel canvas takes pointer events.
-  const scale = Math.max(1, Math.floor(Math.min(EDIT_MAX / tileW, EDIT_MAX / tileH)));
+  // Four stacked layers in the wrap: a background (checkerboard via CSS + faded
+  // opposite-face onion-skin), the transparent pixel canvas, a hairline guide
+  // overlay, and a cursor overlay (the hover footprint). Only the pixel canvas
+  // takes pointer events. The on-screen scale fills the panel (integer, so pixels
+  // stay crisp) up to EDIT_MAX.
+  const cap = Math.min(
+    EDIT_MAX,
+    Math.max(160, (container.clientWidth || EDIT_MAX) - CANVAS_PAD)
+  );
+  const scale = Math.max(1, Math.floor(Math.min(cap / tileW, cap / tileH)));
   const cssW = tileW * scale;
   const cssH = tileH * scale;
   const wrap = el('div', 'editor-canvas-wrap');
@@ -258,6 +283,14 @@ export function createTileEditor(
   wrap.appendChild(overlay);
   drawGuides(overlay.getContext('2d'), guides, scale, cssW, cssH);
 
+  const cursor = el('canvas', 'editor-canvas-cursor');
+  cursor.width = cssW; // screen-res so the footprint outline stays crisp
+  cursor.height = cssH;
+  cursor.style.width = `${cssW}px`;
+  cursor.style.height = `${cssH}px`;
+  wrap.appendChild(cursor);
+  const cursorCtx = cursor.getContext('2d');
+
   widget.appendChild(wrap);
 
   const ctx = canvas.getContext('2d');
@@ -265,65 +298,121 @@ export function createTileEditor(
   const repaint = () => ctx.putImageData(imgData, 0, 0);
   repaint();
 
-  // --- color + tool bar (below the canvas) ----------------------------------
-  // Everything under the canvas: the tool strip, the dynamic "in sprite" row, and
-  // the full palette — all in-flow (the #editor-panel scrolls if it overflows).
-  const colorbar = el('div', 'editor-colorbar');
-  root.appendChild(colorbar);
-
   const rgbEq = (a, b) => a.r === b.r && a.g === b.g && a.b === b.b;
   const matchPaletteIndex = (color) =>
     palette.findIndex((p) => rgbEq(hexToRgb(p.css), color));
   const rkey = (c) => (c.r << 16) | (c.g << 8) | c.b;
 
-  // The single path every color pick funnels through (palette, in-sprite,
-  // eyedrop): become a pencil of `color` and refresh the UI.
+  // The single path every color pick funnels through (palette modal, in-sprite,
+  // eyedrop): make `color` the pencil's ink and clear the erase/eyedropper flags.
   function selectColor(color, swatchIndex) {
-    brush.mode = 'pencil';
     brush.color = { r: color.r, g: color.g, b: color.b };
     brush.swatchIndex = swatchIndex;
+    brush.erase = false;
+    brush.picking = false;
     syncUI();
   }
 
-  // tool strip: pencil / eyedropper / eraser — persistent, first-class ---------
-  const tools = el('div', 'editor-tools');
-  const pencilBtn = el('button', 'editor-tool');
+  // --- tool strip: first-class tools + docked tile-size stepper --------------
+  // The pencil is the only live tool; rect + fill are stubbed in but disabled so
+  // the strip already shows where they'll live. The square tile-size stepper docks
+  // at the right (tiles are locked SQUARE, so a resize is always alignment-safe).
+  const toolstrip = el('div', 'editor-toolstrip');
+  const toolGroup = el('div', 'editor-toolgroup');
+  const pencilBtn = el('button', 'editor-tool', 'pencil');
   pencilBtn.type = 'button';
-  const pencilSw = el('span', 'editor-tool-sw'); // tiny live current-color preview
-  pencilBtn.append(pencilSw, el('span', null, 'Pencil'));
   pencilBtn.title = 'pencil — draw (B)';
-  const eyeBtn = el('button', 'editor-tool');
-  eyeBtn.type = 'button';
-  eyeBtn.innerHTML = EYEDROPPER_SVG + '<span>Eyedrop</span>';
-  eyeBtn.title = 'eyedropper — click the sprite to sample (I, or hold Alt while drawing)';
-  const eraseBtn = el('button', 'editor-tool');
-  eraseBtn.type = 'button';
-  eraseBtn.innerHTML = ERASER_SVG + '<span>Eraser</span>';
-  eraseBtn.title = 'eraser — erase to transparent (E, or right-click)';
-  tools.append(pencilBtn, eyeBtn, eraseBtn);
-  colorbar.appendChild(tools);
+  const rectBtn = el('button', 'editor-tool', 'rect');
+  rectBtn.type = 'button';
+  rectBtn.disabled = true;
+  rectBtn.title = 'rectangle — coming soon';
+  const fillBtn = el('button', 'editor-tool', 'fill');
+  fillBtn.type = 'button';
+  fillBtn.disabled = true;
+  fillBtn.title = 'fill — coming soon';
+  toolGroup.append(pencilBtn, rectBtn, fillBtn);
+  toolstrip.append(
+    toolGroup,
+    sizeStepper({
+      key: 'Tile',
+      label: 'tile',
+      value: tileW,
+      min: sizeMin,
+      max: sizeMax,
+      onCommit: (n) => onResizeTile?.(n),
+    })
+  );
+  root.appendChild(toolstrip);
+  // Selecting the pencil returns you to drawing with the current color (out of the
+  // eraser / eyedropper), matching the classic B behavior.
   pencilBtn.onclick = () => {
-    brush.mode = 'pencil';
+    brush.tool = 'pencil';
+    brush.erase = false;
+    brush.picking = false;
     if (!brush.color) brush.color = hexToRgb(palette[0].css);
-    syncUI();
-  };
-  eyeBtn.onclick = () => {
-    brush.mode = 'eyedropper';
-    syncUI();
-  };
-  eraseBtn.onclick = () => {
-    brush.mode = 'eraser';
-    brush.swatchIndex = -1;
+    renderToolOptions();
     syncUI();
   };
 
-  // "In sprite" — a DYNAMIC palette of every color currently painted anywhere in
-  // the sprite (all faces). `usedColors` carries the OTHER faces' colors (passed
-  // at mount); this editor unions the CURRENT tile's live pixels on top, so the
-  // row reflects the whole sprite and updates as you draw or erase.
-  colorbar.appendChild(el('div', 'editor-pal-label', 'In sprite'));
+  // --- per-tool options row (contextual) ------------------------------------
+  // Different tools expose different settings here. The pencil gets a tip-SIZE
+  // stepper: N means an N×N square footprint, stamped along the stroke and
+  // previewed as a hairline outline under the cursor.
+  const toolOpts = el('div', 'editor-tool-opts');
+  root.appendChild(toolOpts);
+  function setPencilSize(n) {
+    brush.size = clampBrush(n);
+    drawCursor(hoverTexel); // reflect the new footprint immediately if hovering
+  }
+  function renderToolOptions() {
+    toolOpts.innerHTML = '';
+    if (brush.tool === 'pencil') {
+      toolOpts.appendChild(
+        sizeStepper({
+          key: 'Size',
+          label: 'size',
+          value: brush.size,
+          min: 1,
+          max: brushMax,
+          unit: 'px',
+          onCommit: setPencilSize,
+        })
+      );
+    }
+  }
+  renderToolOptions();
+
+  // --- palette row: ink pickers ---------------------------------------------
+  // Every color painted anywhere in the sprite, so you can match existing colors.
+  // The eyedropper and eraser sit here (not in the tool strip) because they pick
+  // the pencil's INK — a sampled color, or transparent ("clear color") — rather
+  // than a drawing tool. A leading "+" opens the full 256-color palette modal.
   const usedRow = el('div', 'editor-used-row');
-  colorbar.appendChild(usedRow);
+  const addBtn = el('button', 'editor-add', '+');
+  addBtn.type = 'button';
+  addBtn.title = 'add a color from the 256 palette';
+  addBtn.onclick = () => openPalette();
+  const eyeBtn = el('button', 'editor-pal-tool');
+  eyeBtn.type = 'button';
+  eyeBtn.innerHTML = EYEDROPPER_SVG;
+  eyeBtn.title = 'eyedropper — click the sprite to sample (I, or hold Alt while drawing)';
+  eyeBtn.onclick = () => {
+    brush.picking = true;
+    syncUI();
+  };
+  const eraserSw = el('button', 'editor-swatch editor-used-sw editor-erase-sw');
+  eraserSw.type = 'button';
+  eraserSw.title = 'eraser — clear color / erase to transparent (E, or right-click)';
+  eraserSw.onclick = () => {
+    brush.erase = true;
+    brush.picking = false;
+    brush.swatchIndex = -1;
+    syncUI();
+  };
+  usedRow.append(addBtn, eyeBtn, eraserSw);
+  const FIXED_LEAD = usedRow.children.length; // fixed controls kept ahead of the swatches
+  root.appendChild(usedRow);
+
   let lastUsedSig = null;
   function distinctWorkColors() {
     const seen = new Set();
@@ -338,6 +427,7 @@ export function createTileEditor(
     }
     return out;
   }
+  let usedEls = []; // { el, rgb } for active-color highlighting
   function renderUsed() {
     const map = new Map();
     for (const c of usedColors) map.set(rkey(c), c);
@@ -346,11 +436,9 @@ export function createTileEditor(
     const sig = list.map(rkey).join(',');
     if (sig === lastUsedSig) return; // set unchanged → skip DOM churn mid-stroke
     lastUsedSig = sig;
-    usedRow.innerHTML = '';
-    if (!list.length) {
-      usedRow.appendChild(el('span', 'tiny', 'nothing drawn yet'));
-      return;
-    }
+    // Rebuild the swatches but keep the leading fixed controls (+ / eyedrop / erase).
+    while (usedRow.children.length > FIXED_LEAD) usedRow.removeChild(usedRow.lastChild);
+    usedEls = [];
     for (const c of list) {
       const s = el('button', 'editor-swatch editor-used-sw');
       s.type = 'button';
@@ -358,16 +446,38 @@ export function createTileEditor(
       s.title = rgbHex(c);
       s.onclick = () => selectColor(c, matchPaletteIndex(c));
       usedRow.appendChild(s);
+      usedEls.push({ el: s, rgb: c });
+    }
+    syncActiveSwatch();
+    markInSprite(new Set(list.map(rkey)));
+  }
+
+  // Ring the palette-modal swatches whose color is already painted in the sprite,
+  // so the picker shows at a glance what's in use. An OUTLINE only — never dim the
+  // rest; every one of the 256 must stay clearly visible. Recomputed by renderUsed
+  // whenever the in-sprite set changes (a stroke can add or drop a color).
+  function markInSprite(keySet) {
+    for (const { el: e, rgb } of cubeEls) {
+      e.classList.toggle('in-sprite', keySet.has(rkey(rgb)));
     }
   }
 
-  // --- palette (persistent, in-flow below the tools) ------------------------
-  // The full 256-color palette lives right here in the sidebar — no overlay — as
-  // a 16x16 grid. The panel scrolls if the viewport is short. The array is
-  // pre-laid along a Hilbert curve (constants.js PALETTE_256), so a plain
-  // row-major fill of this grid clusters similar colors both across and down.
-  const pal = el('div', 'editor-palette');
-  pal.appendChild(el('div', 'editor-pal-label', `Palette (${palette256.length})`));
+  // --- full-palette modal (opened by "+") -----------------------------------
+  // The 256-color palette lives in a modal overlay (appended to <body> so it is
+  // never clipped by the scrolling panel) as a 16x16 grid. The array is pre-laid
+  // along a Hilbert curve (constants.js PALETTE_256), so a plain row-major fill
+  // clusters similar colors both across and down.
+  const modal = el('div', 'palette-modal');
+  const backdrop = el('div', 'palette-modal-backdrop');
+  backdrop.onclick = () => closePalette();
+  const card = el('div', 'palette-modal-card');
+  const head = el('div', 'palette-modal-head');
+  head.append(el('span', null, `Palette · ${palette256.length}`));
+  const closeX = el('button', 'palette-modal-close', '✕');
+  closeX.type = 'button';
+  closeX.title = 'close (Esc)';
+  closeX.onclick = () => closePalette();
+  head.appendChild(closeX);
   const cubeWrap = el('div', 'editor-cube');
   const cubeEls = [];
   for (const p of palette256) {
@@ -376,62 +486,92 @@ export function createTileEditor(
     s.type = 'button';
     s.style.background = p.css;
     s.title = p.css;
-    s.onclick = () => selectColor(rgb, matchPaletteIndex(rgb));
+    s.onclick = () => {
+      selectColor(rgb, matchPaletteIndex(rgb));
+      closePalette();
+    };
     cubeWrap.appendChild(s);
     cubeEls.push({ el: s, rgb });
   }
-  pal.appendChild(cubeWrap);
+  card.append(head, cubeWrap);
+  modal.append(backdrop, card);
+  document.body.appendChild(modal);
 
-  colorbar.appendChild(pal);
+  let modalOpen = false;
+  function openPalette() {
+    modalOpen = true;
+    modal.classList.add('open');
+    syncActiveSwatch();
+  }
+  function closePalette() {
+    modalOpen = false;
+    modal.classList.remove('open');
+  }
 
   // active-brush + tool state --------------------------------------------------
-  function syncUI() {
-    pencilBtn.classList.toggle('active', brush.mode === 'pencil');
-    eyeBtn.classList.toggle('active', brush.mode === 'eyedropper');
-    eraseBtn.classList.toggle('active', brush.mode === 'eraser');
-    // the pencil button's swatch always shows the color it would paint
-    const c = brush.color || { r: 0, g: 0, b: 0 };
-    pencilSw.style.background = rgbHex(c);
-    pencilSw.title = rgbHex(c);
-    const pencilColor = brush.mode === 'pencil' ? brush.color : null;
+  // A swatch reads "active" only while the pencil is actually painting that color
+  // (not while erasing or eyedropping), so the ink highlight can't lie.
+  function syncActiveSwatch() {
+    const painting = !brush.erase && !brush.picking;
+    const pencilColor = painting ? brush.color : null;
     cubeEls.forEach(({ el: e, rgb }) =>
       e.classList.toggle('active', !!pencilColor && rgbEq(rgb, pencilColor))
     );
+    usedEls.forEach(({ el: e, rgb }) =>
+      e.classList.toggle('active', !!pencilColor && rgbEq(rgb, pencilColor))
+    );
+  }
+  function syncUI() {
+    pencilBtn.classList.toggle('active', brush.tool === 'pencil');
+    eyeBtn.classList.toggle('active', brush.picking);
+    eraserSw.classList.toggle('active', brush.erase && !brush.picking);
+    syncActiveSwatch();
   }
 
-  // keyboard: B / I / E select pencil / eyedropper / eraser. Suppressed while a
-  // text/number input (the W/H steppers) is focused so typing there is never
-  // hijacked; torn down in destroy().
+  // keyboard: B / I / E pick pencil / eyedropper / eraser-ink; Esc closes the
+  // palette modal. Suppressed while a text/number input (a stepper) is focused so
+  // typing there is never hijacked; torn down in destroy().
   function onKeyDown(e) {
+    if (e.key === 'Escape' && modalOpen) {
+      closePalette();
+      e.preventDefault();
+      return;
+    }
     const tag = e.target && e.target.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key.toLowerCase();
     if (k === 'b') {
-      brush.mode = 'pencil';
+      brush.tool = 'pencil';
+      brush.erase = false;
+      brush.picking = false;
       if (!brush.color) brush.color = hexToRgb(palette[0].css);
-      syncUI();
     } else if (k === 'i') {
-      brush.mode = 'eyedropper';
-      syncUI();
+      brush.picking = true;
     } else if (k === 'e') {
-      brush.mode = 'eraser';
+      brush.erase = true;
+      brush.picking = false;
       brush.swatchIndex = -1;
-      syncUI();
     } else {
       return;
     }
+    syncUI();
+    drawCursor(hoverTexel); // erasing recolors the footprint outline; eyedrop shrinks it
     e.preventDefault();
   }
   document.addEventListener('keydown', onKeyDown);
 
   renderUsed();
   syncUI();
+  // Dev hook (?palette=1): open the picker right away so the capture tool — which
+  // can't click the "+" — can screenshot it. Consumed once by the caller.
+  if (openPaletteOnMount) openPalette();
 
   // --- drawing --------------------------------------------------------------
   let drawing = false;
   let prev = null; // last painted texel this stroke, for line interpolation
-  let forceErase = false; // right-click erases regardless of the active tool
+  let forceErase = false; // right-click erases regardless of the active ink
+  let hoverTexel = null; // last hovered texel, for the footprint preview
 
   function toTexel(e) {
     const rect = canvas.getBoundingClientRect();
@@ -441,13 +581,21 @@ export function createTileEditor(
     return { px, py };
   }
 
+  // Brush footprint: an N×N square anchored so the hovered texel stays inside and
+  // odd sizes center exactly (even sizes bias up-left). Shared by the stamp and the
+  // hover preview so what you see is what you paint. Returned bounds are unclamped.
+  const brushBounds = (cx, cy, size) => {
+    const o = Math.floor((size - 1) / 2);
+    return { x0: cx - o, y0: cy - o, x1: cx - o + size - 1, y1: cy - o + size - 1 };
+  };
+
   // Write one texel; returns true only if the bytes actually changed. Any two
   // fully-transparent texels are treated as equal regardless of stray RGB left
   // under alpha 0, so erasing an already-invisible texel is a true no-op and
   // never dirties a mirror-derived face into real art.
   function writeTexel(px, py) {
     const i = (py * tileW + px) * 4;
-    const paint = !forceErase && brush.mode !== 'eraser';
+    const paint = !forceErase && !brush.erase;
     const r = paint ? brush.color.r : 0;
     const g = paint ? brush.color.g : 0;
     const b = paint ? brush.color.b : 0;
@@ -463,7 +611,23 @@ export function createTileEditor(
     return true;
   }
 
-  // Bresenham so a fast drag lays down a continuous stroke, not dotted samples.
+  // Stamp the whole pencil footprint centered on (cx,cy), clipped to the tile;
+  // returns true if any texel changed.
+  function stampBrush(cx, cy) {
+    const b = brushBounds(cx, cy, brush.size);
+    const x1 = Math.min(tileW - 1, b.x1);
+    const y1 = Math.min(tileH - 1, b.y1);
+    let changed = false;
+    for (let py = Math.max(0, b.y0); py <= y1; py++) {
+      for (let px = Math.max(0, b.x0); px <= x1; px++) {
+        if (writeTexel(px, py)) changed = true;
+      }
+    }
+    return changed;
+  }
+
+  // Bresenham so a fast drag lays down a continuous stroke, not dotted samples —
+  // stamping the full footprint at each step along the line.
   function stroke(px, py) {
     let changed = false;
     if (prev) {
@@ -475,7 +639,7 @@ export function createTileEditor(
       const sy = y0 < py ? 1 : -1;
       let err = dx + dy;
       for (;;) {
-        if (writeTexel(x0, y0)) changed = true;
+        if (stampBrush(x0, y0)) changed = true;
         if (x0 === px && y0 === py) break;
         const e2 = 2 * err;
         if (e2 >= dy) {
@@ -487,7 +651,7 @@ export function createTileEditor(
           y0 += sy;
         }
       }
-    } else if (writeTexel(px, py)) {
+    } else if (stampBrush(px, py)) {
       changed = true;
     }
     prev = { px, py };
@@ -499,27 +663,61 @@ export function createTileEditor(
     }
   }
 
+  // Hairline outline of the footprint the pencil would stamp, drawn on the topmost
+  // overlay under the cursor (a haloed white rect; red while erasing). The
+  // eyedropper previews a single cell (its sample target). Cleared with t == null
+  // when the pointer leaves the canvas.
+  function drawCursor(t) {
+    hoverTexel = t;
+    cursorCtx.clearRect(0, 0, cssW, cssH);
+    if (!t) return;
+    const size = brush.picking ? 1 : brush.size;
+    const b = brushBounds(t.px, t.py, size);
+    const x0 = Math.max(0, b.x0);
+    const y0 = Math.max(0, b.y0);
+    const x1 = Math.min(tileW - 1, b.x1);
+    const y1 = Math.min(tileH - 1, b.y1);
+    if (x1 < x0 || y1 < y0) return;
+    const rx = x0 * scale + 0.5;
+    const ry = y0 * scale + 0.5;
+    const rw = (x1 - x0 + 1) * scale - 1;
+    const rh = (y1 - y0 + 1) * scale - 1;
+    cursorCtx.lineWidth = 3; // dark halo so the outline reads on any art color
+    cursorCtx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+    cursorCtx.strokeRect(rx, ry, rw, rh);
+    cursorCtx.lineWidth = 1;
+    cursorCtx.strokeStyle =
+      brush.erase && !brush.picking
+        ? 'rgba(255, 120, 120, 0.95)'
+        : 'rgba(255, 255, 255, 0.95)';
+    cursorCtx.strokeRect(rx, ry, rw, rh);
+  }
+
   function sampleAt(px, py) {
     const i = (py * tileW + px) * 4;
     if (work[i + 3] === 0) {
-      brush.mode = 'eraser';
+      // Sampling empty space picks the eraser ink (clear color).
+      brush.erase = true;
+      brush.picking = false;
       brush.swatchIndex = -1;
       syncUI();
     } else {
       // Route through selectColor so an off-palette (imported) sample becomes the
-      // pencil color (and shows up in the "in sprite" row) just like any pick.
+      // pencil color (and shows up in the palette row) just like any pick.
       const c = { r: work[i], g: work[i + 1], b: work[i + 2] };
       selectColor(c, matchPaletteIndex(c));
     }
+    drawCursor(hoverTexel); // sampling ends eyedrop mode → footprint returns to size
   }
 
   function onPointerDown(e) {
     const t = toTexel(e);
     if (!t) return;
     e.preventDefault();
-    // Alt-hold = momentary eyedropper (sample without switching to the tool);
+    drawCursor(t);
+    // Alt-hold = momentary eyedropper (sample without switching ink first);
     // a right-click still erases even with Alt down.
-    if (e.button !== 2 && (e.altKey || brush.mode === 'eyedropper')) {
+    if (e.button !== 2 && (e.altKey || brush.picking)) {
       sampleAt(t.px, t.py);
       return;
     }
@@ -530,9 +728,9 @@ export function createTileEditor(
     stroke(t.px, t.py);
   }
   function onPointerMove(e) {
-    if (!drawing) return;
     const t = toTexel(e);
-    if (!t) return;
+    drawCursor(t); // keep the footprint preview under the cursor (hover + drag)
+    if (!drawing || !t) return;
     stroke(t.px, t.py);
   }
   function onPointerUp(e) {
@@ -545,7 +743,12 @@ export function createTileEditor(
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerUp);
+  canvas.addEventListener('pointerleave', () => drawCursor(null)); // clear the preview
   canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // right-click = erase
+
+  // Dev hook (?cursor=N): draw the footprint at the tile center on mount so a
+  // headless shot — which has no pointer to hover — can show the preview.
+  if (previewCursor) drawCursor({ px: tileW >> 1, py: tileH >> 1 });
 
   // A resize re-mounts the whole editor, which would drop keyboard focus off the
   // stepper the user was typing in. Restore it to the matching new field (and
@@ -566,6 +769,7 @@ export function createTileEditor(
     // The keydown listener isn't on `container`, so drop it explicitly — a face
     // swap / resize re-mounts this editor often, and it would otherwise leak.
     document.removeEventListener('keydown', onKeyDown);
+    modal.remove(); // the modal lives on <body>, outside `container`
     container.innerHTML = ''; // removes the canvas + its pointer listeners with it
   }
   return { destroy };

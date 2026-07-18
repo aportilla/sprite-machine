@@ -1,8 +1,7 @@
 :root {
   color-scheme: dark;
   --bg: #4a4a52;
-  --sidebar-w: 248px;
-  --editor-w: 420px;
+  --topbar-h: 52px;
   /* Opaque panel fill (matches the old rgba(24,24,30,.96) composited over --bg).
      Solid so the active folder-tab can blend into it exactly. */
   --panel-bg: #1a1a20;
@@ -27,106 +26,126 @@ body {
   overflow: hidden;
 }
 
-/* ---- app shell: left sidebar | main 3D view ---- */
+/* ---- app shell: header strip over a 50/50 workspace (3D stage | tools) ---- */
 #app {
   position: fixed;
   inset: 0;
   display: flex;
+  flex-direction: column;
 }
 
-#sidebar {
+/* Full-width header: brand (left) + atlas actions (right). */
+#topbar {
   flex: 0 0 auto;
-  width: var(--sidebar-w);
-  height: 100%;
-  overflow-y: auto;
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 16px;
   background: var(--panel-bg);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  user-select: none;
+}
+.brand {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #f0f0f4;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-/* Right-side editor panel: collapsed to zero width until drawing mode opens it;
-   the 3D viewport (flex: 1) flexes to make room. */
-#editor-panel {
-  flex: 0 0 auto;
-  width: 0;
-  height: 100%;
-  overflow: hidden;
-  background: var(--panel-bg);
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
-  transition: width 0.16s ease;
-}
-#editor-panel.open {
-  width: var(--editor-w);
-  overflow-y: auto;
+/* The 50/50 split below the header. */
+#workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
 }
 
-#viewport {
-  flex: 1 1 0;
+/* Left half: the live 3D view, with floating overlays (toggles + stats). */
+#stage {
+  position: relative;
+  flex: 1 1 50%;
   min-width: 0;
   height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+#viewport {
   display: block;
+  width: 100%;
+  height: 100%;
   /* Keep upscaled pixels crisp, not blurred. */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 
-/* ---- control panel (content of the sidebar) ---- */
-.panel {
-  padding: 14px;
-  font-size: 11px;
-  line-height: 1.4;
-  user-select: none;
-}
-.panel-title {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-.panel-sub {
-  color: #9a9aa6;
-  margin-bottom: 8px;
-}
-.label {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 9px;
-  color: #8a8a96;
-  margin: 12px 0 5px;
-}
-.label-row {
+/* Render toggles float bottom-left over the stage. */
+.stage-controls {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 5;
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
   gap: 8px;
 }
-.row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
+.stage-controls .toggle {
+  flex: 0 0 auto;
 }
-.chip {
-  flex: 1;
+
+/* Compact live stats / warnings float bottom-right; never eat pointer events so
+   orbit-drag over that corner still works. */
+.stage-stats {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 5;
+  max-width: 44%;
+  text-align: right;
+  font-size: 10px;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Right half: the tools panel (inline tile editor, mounted by main.js). */
+#editor-panel {
+  flex: 1 1 50%;
   min-width: 0;
-  padding: 5px 8px;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--panel-bg);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ---- shared bits ---- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
   color: #e8e8ea;
   font: inherit;
+  font-size: 12px;
   cursor: pointer;
 }
 .chip:hover {
   background: rgba(255, 255, 255, 0.12);
 }
+.picker-caret {
+  font-size: 9px;
+  color: #b8b8c0;
+}
 
-/* Atlas action menu: "pick atlas…" trigger + a dropdown of load actions. */
+/* Atlas action menu: "pick atlas ▾" trigger + a dropdown of load actions. */
 .picker {
   position: relative;
-  flex: 1;
-  min-width: 0;
-}
-.picker-trigger {
-  width: 100%;
 }
 .picker.open .picker-trigger {
   background: rgba(255, 255, 255, 0.12);
@@ -136,8 +155,9 @@ body {
   display: none;
   position: absolute;
   top: calc(100% + 4px);
-  left: 0;
   right: 0;
+  left: auto;
+  min-width: 170px;
   z-index: 50;
   flex-direction: column;
   gap: 2px;
@@ -163,72 +183,16 @@ body {
 .picker-item:hover {
   background: rgba(199, 125, 214, 0.28);
 }
-.tiny {
-  font-size: 10px;
-  color: #9a9aa6;
-}
-.hint {
-  margin-top: 5px;
-}
-.tile-val {
-  color: #a9dcd6;
-  text-transform: none;
-  letter-spacing: normal;
-  font-size: 10px;
-}
 
-/* ---- faces preview (click a tile to edit) ---- */
-.slots {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-.slot {
-  position: relative;
-  aspect-ratio: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px dashed rgba(255, 255, 255, 0.16);
-  border-radius: 6px;
-  cursor: pointer;
-}
-.slot:hover {
-  border-color: rgba(255, 255, 255, 0.42);
-}
-.slot.filled {
-  border-style: solid;
-  border-color: rgba(255, 255, 255, 0.28);
-}
-.slot.editing {
-  border-style: solid;
-  border-color: #c77dd6;
-  box-shadow: 0 0 0 1px #c77dd6;
-}
-.thumb {
-  image-rendering: pixelated;
-  width: 48px;
-  height: 48px;
-}
-.slot-cap {
-  font-size: 8px;
-  color: #9a9aa6;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-/* Pill toggle buttons (options row) — subtle when off, accent-filled when on. */
+/* Pill toggle buttons — subtle when off, accent-filled when on. */
 .toggle {
-  flex: 1;
-  min-width: 0;
-  padding: 6px 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 6px 10px;
+  background: rgba(20, 20, 26, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
-  color: #b8b8c0;
+  color: #cfcfd6;
   font: inherit;
+  font-size: 11px;
   cursor: pointer;
   transition:
     background 0.12s ease,
@@ -236,7 +200,7 @@ body {
     border-color 0.12s ease;
 }
 .toggle:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(40, 40, 48, 0.82);
   color: #e8e8ea;
 }
 .toggle.on {
@@ -245,25 +209,22 @@ body {
   color: #201025;
   font-weight: 600;
 }
-.stats {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
+
+/* Live stats readout (in the stage overlay). */
 .stat {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
 }
 .stat .k {
-  color: #8a8a96;
+  color: #b6b6c0;
 }
 .stat .v {
-  color: #d8d8de;
+  color: #eaeaf0;
   text-align: right;
 }
 .warn {
-  color: #e8c07a;
+  color: #f0c883;
   margin-top: 6px;
   font-size: 10px;
 }
@@ -296,23 +257,22 @@ body {
 .editor {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 12px;
   padding: 14px;
-  /* Hold layout width while the panel collapses so content slides, not reflows. */
-  min-width: var(--editor-w);
 }
-.editor-header {
-  display: flex;
+/* A labeled integer stepper — a "label:" caption + a bordered [−][value][unit?][+]
+   box. Used for the tile size (docked in the tool strip) and the pencil tip size
+   (in the per-tool options row). */
+.editor-field {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
-/* Editable tile size on the right of the header: a W and an H stepper. Changing
-   either resizes the whole atlas (alignment-preserving) and re-mounts the editor. */
-.editor-size {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.editor-field-cap {
+  font-size: 10px;
+  font-weight: 600;
+  color: #9a9aa6;
+  letter-spacing: 0.02em;
 }
 .editor-stepper {
   display: inline-flex;
@@ -323,17 +283,15 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
 }
-.editor-step-cap {
-  padding: 0 3px 0 4px;
-  font-size: 9px;
-  font-weight: 700;
+/* Unit suffix inside the stepper box (e.g. "px"), between the value and "+". */
+.editor-step-unit {
+  padding: 0 5px 0 1px;
+  font-size: 10px;
   color: #8a8a96;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 .editor-step {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -356,14 +314,14 @@ body {
   cursor: default;
 }
 .editor-step-val {
-  width: 36px;
-  height: 18px;
+  width: 40px;
+  height: 20px;
   padding: 0;
   background: transparent;
   border: none;
   color: #e8e8ea;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   text-align: center;
   -moz-appearance: textfield;
   appearance: textfield;
@@ -379,8 +337,8 @@ body {
   margin: 0;
 }
 /* Self-contained canvas widget: the tabs + framed canvas box as one card,
-   centered and hugging the canvas so it reads as distinct from the full-width
-   header above and palette below. */
+   centered and hugging the canvas so it reads as distinct from the size bar
+   above and palette below. */
 .editor-canvas-panel {
   align-self: center;
 }
@@ -423,47 +381,6 @@ body {
   font-weight: 700;
   cursor: default;
 }
-/* Done button — the primary exit from drawing mode. Accent-filled, with a clear
-   hover (brighten + lift-glow) and pressed (darken + sink) state. */
-.editor-btn-done {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 13px;
-  background: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 7px;
-  color: #201025;
-  font: inherit;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  cursor: pointer;
-  transition:
-    background 0.12s ease,
-    border-color 0.12s ease,
-    box-shadow 0.12s ease,
-    transform 0.06s ease;
-}
-.editor-btn-done:hover {
-  background: #d79ce3;
-  border-color: #d79ce3;
-  box-shadow: 0 2px 10px rgba(199, 125, 214, 0.45);
-}
-.editor-btn-done:active {
-  background: #b568c9;
-  border-color: #b568c9;
-  transform: translateY(1px);
-  box-shadow: 0 1px 3px rgba(199, 125, 214, 0.3);
-}
-.editor-btn-done:focus-visible {
-  outline: 2px solid #e6c2ef;
-  outline-offset: 2px;
-}
-.editor-done-mark {
-  font-size: 11px;
-  line-height: 1;
-}
 /* The canvas box — the widget's content area the tabs cap. Its lighter-dark fill
    (shared with the active tab) frames the canvas, so the selected tab reads as a
    structural extension of this panel. Square top corners (the tab strip sits
@@ -486,9 +403,11 @@ body {
   touch-action: none;
 }
 /* Faded onion-skin (drawn) over a checkerboard (CSS), UNDER the transparent
-   pixel canvas so both show through unpainted texels. */
+   pixel canvas so both show through unpainted texels. The cursor overlay (the
+   pencil footprint preview) rides on top of everything. */
 .editor-canvas-bg,
-.editor-canvas-overlay {
+.editor-canvas-overlay,
+.editor-canvas-cursor {
   position: absolute;
   top: 9px; /* matches .editor-canvas-wrap padding */
   left: 9px;
@@ -511,9 +430,12 @@ body {
     0 0,
     8px 8px;
 }
-/* Hairline extent rules sit ABOVE the pixel canvas. */
+/* Hairline extent rules sit ABOVE the pixel canvas; the cursor preview above them. */
 .editor-canvas-overlay {
   z-index: 2;
+}
+.editor-canvas-cursor {
+  z-index: 3;
 }
 .editor-swatch {
   aspect-ratio: 1;
@@ -527,26 +449,40 @@ body {
   border-color: #fff;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
 }
-
-/* ---- color + tool bar (tools strip, current-color chip, recents, palette) ---- */
-.editor-colorbar {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* Colors already painted in the sprite get an outline ring in the 256 palette
+   modal — never a dim, so all 256 stay clearly visible. An OUTER two-tone ring
+   (dark hug + light stroke) sits in the grid gap, so it reads against any swatch
+   color; z-index lifts it over neighbors. Declared after .active so a swatch that
+   is both keeps its white "active" border AND this ring. */
+.editor-swatch.in-sprite {
+  position: relative;
+  z-index: 1;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.8),
+    0 0 0 3px #ffffff,
+    0 0 0 4px rgba(0, 0, 0, 0.55);
 }
 
-/* Persistent tool strip: pencil / eyedropper / eraser, always visible. */
-.editor-tools {
+/* ---- tool strip + per-tool options ---- */
+/* The tool strip: first-class tools (pencil; rect/fill disabled) on the left, the
+   square tile-size stepper docked on the right. */
+.editor-toolstrip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 7px;
+}
+.editor-toolgroup {
   display: flex;
   gap: 6px;
 }
 .editor-tool {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 7px 6px;
+  flex: 0 0 auto;
+  padding: 6px 12px;
   font: inherit;
   font-size: 11px;
   color: #cfcfd6;
@@ -555,10 +491,7 @@ body {
   border-radius: 6px;
   cursor: pointer;
 }
-.editor-tool svg {
-  display: block;
-}
-.editor-tool:hover {
+.editor-tool:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.08);
 }
 .editor-tool.active {
@@ -566,44 +499,173 @@ body {
   border-color: var(--accent);
   background: rgba(199, 125, 214, 0.16);
 }
-
-/* Tiny live current-color swatch — the pencil button's icon (shows the color it
-   would paint). */
-.editor-tool-sw {
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+.editor-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
-/* "In sprite" — dynamic colors currently painted anywhere in the sprite. Wraps,
-   since it can hold anywhere from nothing to a few dozen colors. */
+/* Per-tool options row (contextual). A fixed min-height keeps the layout stable
+   even for a tool with no options. For the pencil: the tip-size stepper. */
+.editor-tool-opts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 7px;
+}
+
+/* ---- palette row (colors + ink pickers) + palette modal ---- */
+/* The palette row — every color painted anywhere
+   in the sprite, led by a "+" that opens the full-palette modal. Wraps, since it
+   can hold anywhere from nothing to a few dozen colors. */
 .editor-used-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 5px;
   min-height: 26px;
 }
 .editor-used-sw {
   flex: 0 0 auto;
   width: 26px;
+  height: 26px;
+}
+.editor-add {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  color: #cfcfd6;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.editor-add:hover {
+  background: rgba(199, 125, 214, 0.16);
+  border-color: var(--accent);
+  color: #fff;
 }
 
-/* Persistent palette — always visible in-flow below the tools (no overlay). The
-   #editor-panel scrolls if the viewport is short. */
-.editor-palette {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* Eyedropper — a compact icon button sitting with the colors (it picks an ink). */
+.editor-pal-tool {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #cfcfd6;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  cursor: pointer;
 }
-.editor-pal-label {
-  margin-top: 2px;
-  font-size: 9px;
+.editor-pal-tool svg {
+  display: block;
+}
+.editor-pal-tool:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.editor-pal-tool.active {
+  color: #fff;
+  border-color: var(--accent);
+  background: rgba(199, 125, 214, 0.18);
+}
+
+/* Eraser swatch — the "clear color" ink: a transparency checkerboard crossed by a
+   red slash, so it reads as "no color" alongside the real color swatches. Picks up
+   .editor-swatch.active (white ring) when erasing. */
+.editor-erase-sw {
+  background-color: #2a2a30;
+  background-image: linear-gradient(
+      135deg,
+      transparent 43%,
+      #e5484d 43%,
+      #e5484d 57%,
+      transparent 57%
+    ),
+    linear-gradient(45deg, #3a3a42 25%, transparent 25%, transparent 75%, #3a3a42 75%),
+    linear-gradient(45deg, #3a3a42 25%, transparent 25%, transparent 75%, #3a3a42 75%);
+  background-size:
+    100% 100%,
+    10px 10px,
+    10px 10px;
+  background-position:
+    0 0,
+    0 0,
+    5px 5px;
+}
+
+/* ---- full 256-color palette modal (opened by the "+") ---- */
+.palette-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.palette-modal.open {
+  display: flex;
+}
+.palette-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 8, 12, 0.66);
+  backdrop-filter: blur(2px);
+}
+.palette-modal-card {
+  position: relative;
+  z-index: 1;
+  width: min(92vw, 560px);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 16px;
+  background: var(--panel-bg);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
+.palette-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 11px;
   font-weight: 700;
-  color: #8a8a96;
-  text-transform: uppercase;
   letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #b8b8c0;
+}
+.palette-modal-close {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #e8e8ea;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.palette-modal-close:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 /* The full 256-color palette as a 16x16 grid. */

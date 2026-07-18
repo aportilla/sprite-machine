@@ -1,17 +1,13 @@
 // ---------------------------------------------------------------------------
-// UI: the left sidebar panel (sample picker, atlas pick button, an editable face
-// preview laid out like the sheet, low-poly / auto-rotate toggles, live stats)
-// plus a docked slot below it for the inline tile editor. The whole app window is
-// a drop target for sprite sheets. Pure DOM; talks to main.js via callbacks.
+// UI chrome around the editor: a full-width header strip (brand + atlas action
+// menu + download) and, floating over the 3D stage, the render toggles
+// (smooth-slopes / auto-rotate) and a compact live-stats/warnings readout. The
+// tools panel itself (right half) is the inline tile editor, mounted by main.js
+// into #editor-panel. The whole app window is a drop target for sprite sheets.
+// Pure DOM; talks to main.js via callbacks.
 // ---------------------------------------------------------------------------
 
 import { fileToImageData } from './image-io.js';
-import { VIEW_DISPLAY_ORDER as SLOT_ORDER } from './lib/views.js';
-
-// Thumbnail canvas size and the box the sprite is fit into — the gap leaves a
-// little breathing room so the art doesn't sit flush against the tile border.
-const THUMB = 48;
-const THUMB_FIT = 40;
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -26,8 +22,7 @@ function setToggle(btn, on) {
   btn.setAttribute('aria-pressed', String(!!on));
 }
 
-// A pill toggle button: clicking flips it and reports the new state. Nicer than
-// a bare checkbox and matches the sample/atlas chips.
+// A pill toggle button: clicking flips it and reports the new state.
 function toggleBtn(label, initial, onToggle) {
   const b = el('button', 'toggle', label);
   b.type = 'button';
@@ -40,35 +35,10 @@ function toggleBtn(label, initial, onToggle) {
   return b;
 }
 
-// Draw a pixel-art tile centered in the canvas, fit within a boxW×boxH area.
-// Returns the drawn rectangle {ox, oy, w, h} so callers can place a marker
-// beside the sprite (or null when there's nothing to draw).
-function drawPixels(canvas, img, boxW, boxH) {
-  const g = canvas.getContext('2d');
-  g.clearRect(0, 0, canvas.width, canvas.height);
-  if (!img) return null;
-  const id =
-    img instanceof ImageData
-      ? img
-      : new ImageData(new Uint8ClampedArray(img.data), img.width, img.height);
-  const tmp = document.createElement('canvas');
-  tmp.width = img.width;
-  tmp.height = img.height;
-  tmp.getContext('2d').putImageData(id, 0, 0);
-  const scale = Math.max(1, Math.floor(Math.min(boxW / img.width, boxH / img.height)));
-  const w = img.width * scale;
-  const h = img.height * scale;
-  const ox = Math.floor((canvas.width - w) / 2);
-  const oy = Math.floor((canvas.height - h) / 2);
-  g.imageSmoothingEnabled = false;
-  g.drawImage(tmp, ox, oy, w, h);
-  return { ox, oy, w, h };
-}
-
 // Mirror a tile for display (an axis-flip in image space), so a mirror-derived
 // face shows the way we actually render it. `axis` is 'x' (horizontal) or 'y'.
 // Exported so main.js can seed the tile editor's canvas with the same mirrored
-// image the thumbnail shows.
+// image the onion-skin shows.
 export function mirrorImage(img, axis) {
   const { width: W, height: H, data } = img;
   const out = new Uint8ClampedArray(W * H * 4);
@@ -96,30 +66,22 @@ export function createUI({
   onSample,
   onAtlas,
   onOptionChange,
-  onTileEdit,
   onDownload,
 }) {
   const app = document.getElementById('app');
-  const sidebar = document.getElementById('sidebar');
-  const panel = el('div', 'panel');
-  sidebar.appendChild(panel);
+  const topbar = document.getElementById('topbar');
+  const stage = document.getElementById('stage');
+  const editorDock = document.getElementById('editor-panel');
 
   // Whole-app drop overlay (shown while a file is dragged anywhere over the app).
   const dropOverlay = el('div', 'drop-overlay');
   dropOverlay.appendChild(el('div', 'drop-overlay-msg', 'drop a sprite sheet to load'));
   app.appendChild(dropOverlay);
 
-  panel.appendChild(el('div', 'panel-title', 'sprite machine'));
-  panel.appendChild(el('div', 'panel-sub', 'pixel atlas → 3D voxel object'));
-
-  // --- atlas: an action menu (samples / blank / from disk) + download --------
-  // The "pick atlas…" trigger opens a menu of actions; its label never changes.
-  // The whole app is also a drop target.
-  const atlasLabel = el('div', 'label label-row');
-  atlasLabel.appendChild(el('span', null, 'atlas'));
-  const tileText = el('span', 'tile-val', '—');
-  atlasLabel.appendChild(tileText);
-  panel.appendChild(atlasLabel);
+  // --- header strip: brand (left) + atlas actions (right) --------------------
+  topbar.appendChild(el('div', 'brand', 'SPRITE MACHINE'));
+  const actions = el('div', 'topbar-actions');
+  topbar.appendChild(actions);
 
   const fileInput = el('input');
   fileInput.type = 'file';
@@ -130,13 +92,18 @@ export function createUI({
     fileInput.value = '';
     if (f) await loadFile(f);
   };
+  topbar.appendChild(fileInput);
 
   // A fresh 3x2 sheet of empty (transparent) square 40×40 tiles to draw from
   // scratch — every face reads empty until you paint it.
   const loadBlank = () => onAtlas(new ImageData(120, 80));
 
+  // "pick atlas ▾" — a trigger that opens a menu of load actions (samples /
+  // blank / from disk). Its label never changes. The whole app is also a drop
+  // target.
   const picker = el('div', 'picker');
-  const pickBtn = el('button', 'chip picker-trigger', 'pick atlas…');
+  const pickBtn = el('button', 'chip picker-trigger');
+  pickBtn.append(el('span', null, 'pick atlas'), el('span', 'picker-caret', '▾'));
   const menu = el('div', 'picker-menu');
   picker.append(pickBtn, menu);
 
@@ -166,10 +133,7 @@ export function createUI({
 
   const dlBtn = el('button', 'chip', 'download');
   dlBtn.onclick = () => onDownload?.();
-  const atlasRow = el('div', 'row');
-  atlasRow.append(picker, dlBtn);
-  panel.append(fileInput, atlasRow);
-  panel.appendChild(el('div', 'tiny hint', 'or drop a sprite sheet anywhere'));
+  actions.append(picker, dlBtn);
 
   // Decode a dropped/picked file, surfacing failures instead of swallowing them
   // as an unhandled promise rejection (bad/corrupt images just no-op otherwise).
@@ -205,41 +169,20 @@ export function createUI({
     if (f) await loadFile(f);
   });
 
-  // --- editable face preview (laid out like the sheet; click a tile to edit) -
-  panel.appendChild(el('div', 'label', 'faces'));
-  const slotGrid = el('div', 'slots');
-  const slotEls = {};
-  for (const name of SLOT_ORDER) {
-    const slot = el('div', 'slot');
-    const cv = el('canvas', 'thumb');
-    cv.width = cv.height = THUMB;
-    slot.append(cv, el('div', 'slot-cap', name));
-    slot.title = `edit ${name}`;
-    slot.onclick = () => onTileEdit?.(name);
-    slotGrid.appendChild(slot);
-    slotEls[name] = { slot, cv };
-  }
-  panel.appendChild(slotGrid);
-
-  // --- options (pill toggle buttons) ----------------------------------------
-  panel.appendChild(el('div', 'label', 'options'));
-  const toggleRow = el('div', 'row');
+  // --- stage overlays: render toggles (bottom-left) + live stats (corner) -----
+  const controls = el('div', 'stage-controls');
   const lowpolyBtn = toggleBtn('smooth slopes', state.lowpoly, (on) => {
     state.lowpoly = on;
     onOptionChange();
   });
-  const rotBtn = toggleBtn('auto-rotate', state.autoRotate, (on) => {
+  const rotBtn = toggleBtn('auto rotate', state.autoRotate, (on) => {
     state.autoRotate = on;
   });
-  toggleRow.append(lowpolyBtn, rotBtn);
-  panel.appendChild(toggleRow);
+  controls.append(lowpolyBtn, rotBtn);
+  stage.appendChild(controls);
 
-  // --- stats ----------------------------------------------------------------
-  const stats = el('div', 'stats');
-  panel.appendChild(stats);
-
-  // --- editor panel (the right-side sidebar; populated by main.js on edit) ----
-  const editorDock = document.getElementById('editor-panel');
+  const stats = el('div', 'stage-stats');
+  stage.appendChild(stats);
 
   // --- methods --------------------------------------------------------------
   function selectSample(i) {
@@ -251,22 +194,6 @@ export function createUI({
     setToggle(rotBtn, state.autoRotate);
   }
 
-  function setAtlasInfo({ tileW: tw, tileH: th }) {
-    tileText.textContent = `${tw} × ${th} px`;
-  }
-
-  function setThumbnails(views) {
-    for (const name of SLOT_ORDER) {
-      const { slot, cv } = slotEls[name];
-      // Show ONLY the face's actual atlas pixels — a face with no art of its own
-      // reads as empty (an honest view of state; it's still mirror-filled when the
-      // model renders, but the sheet genuinely has nothing there yet).
-      const img = (views && views[name]) || null;
-      slot.classList.toggle('filled', !!img);
-      drawPixels(cv, img, THUMB_FIT, THUMB_FIT);
-    }
-  }
-
   function setStats({ dims, voxels, triangles, warnings }) {
     stats.innerHTML = '';
     const line = (k, v) => {
@@ -274,39 +201,29 @@ export function createUI({
       r.append(el('span', 'k', k), el('span', 'v', String(v)));
       stats.appendChild(r);
     };
-    if (dims) line('grid', `${dims.nx}×${dims.ny}×${dims.nz}`);
+    // Tiles are locked square, so a well-formed sheet carves to an N³ grid — show the
+    // single edge in px. A non-square (warned) load still reports its full nx×ny×nz.
+    if (dims) {
+      const { nx, ny, nz } = dims;
+      line('grid', nx === ny && ny === nz ? `${nx}px` : `${nx}×${ny}×${nz}`);
+    }
     if (voxels) line('voxels', voxels);
     if (triangles) line('tris', triangles);
     for (const w of warnings || []) stats.appendChild(el('div', 'warn', '⚠ ' + w));
   }
 
-  // Show a one-off error (e.g. a failed image decode) in the stats panel; it
-  // persists until the next successful build overwrites the panel.
+  // Show a one-off error (e.g. a failed image decode) in the stats overlay; it
+  // persists until the next successful build overwrites it.
   function setError(msg) {
     stats.innerHTML = '';
     stats.appendChild(el('div', 'warn', '⚠ ' + msg));
   }
 
-  // Enter/leave drawing mode: slide the right-side editor panel open/closed (the
-  // 3D viewport flexes to make room).
-  function setDrawingMode(on) {
-    editorDock.classList.toggle('open', !!on);
-  }
-
-  // Highlight the face currently open in the editor (null clears it).
-  function setActiveFace(name) {
-    for (const n of SLOT_ORDER) slotEls[n].slot.classList.toggle('editing', n === name);
-  }
-
   return {
     selectSample,
     syncControls,
-    setThumbnails,
     setStats,
     setError,
-    setAtlasInfo,
     editorDock,
-    setDrawingMode,
-    setActiveFace,
   };
 }
