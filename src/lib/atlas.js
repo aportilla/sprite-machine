@@ -149,27 +149,22 @@ export function blitTile(sheet, tile, sx, sy) {
 }
 
 /**
- * Resize ONE tile's pixels to (newW,newH), anchoring the existing art at a chosen
- * corner and padding the opposite edges with transparency (or cropping them when
- * shrinking). Pure — returns a fresh tile.
- *
- * The anchor is what keeps a resize alignment-safe: a tile is a literal lattice
- * slice, so to hold a texel's world position we must add/remove lattice lines at
- * the FAR end of each axis and leave the anchored end fixed. `anchorRight`/
- * `anchorBottom` pick which image edge stays put (the rest pad/crop).
+ * Core tile-pixel placement: copy `tile` into a fresh (newW×newH) buffer with its
+ * top-left corner at (offX, offY), padding the uncovered cells transparent and
+ * clipping anything outside (so a NEGATIVE offset crops that edge). Pure — returns a
+ * fresh tile. The general primitive under both corner-anchored `resizeTile` and the
+ * centered whole-atlas resize.
  * @param {{width:number,height:number,data:ArrayLike<number>}} tile
  * @param {number} newW @param {number} newH
- * @param {boolean} anchorRight @param {boolean} anchorBottom
+ * @param {number} offX @param {number} offY
  * @returns {{width:number,height:number,data:Uint8ClampedArray}}
  */
-export function resizeTile(tile, newW, newH, anchorRight, anchorBottom) {
+export function resizeTileTo(tile, newW, newH, offX, offY) {
   const { width: w, height: h, data: sd } = tile;
   const out = new Uint8ClampedArray(newW * newH * 4);
-  const offX = anchorRight ? newW - w : 0; // shift source so the anchored edge lines up
-  const offY = anchorBottom ? newH - h : 0;
   for (let sy = 0; sy < h; sy++) {
     const dy = sy + offY;
-    if (dy < 0 || dy >= newH) continue; // clipped when shrinking
+    if (dy < 0 || dy >= newH) continue; // clipped when shrinking / negative offset
     for (let sx = 0; sx < w; sx++) {
       const dx = sx + offX;
       if (dx < 0 || dx >= newW) continue;
@@ -185,27 +180,78 @@ export function resizeTile(tile, newW, newH, anchorRight, anchorBottom) {
 }
 
 /**
- * Resize the whole 3x2 sheet to new per-tile dimensions. Each cell's tile is
- * resized with an anchor derived from its view's image-axis flips
- * (VIEW_IMAGE_AXES): every axis keeps its origin line fixed and grows/shrinks only
- * at the far edge (padding transparent on grow, cropping on shrink), so the object
- * stays ground-rested (y=0 pinned).
+ * Resize ONE tile's pixels to (newW,newH), anchoring the existing art at a chosen
+ * corner and padding the opposite edges with transparency (or cropping them when
+ * shrinking). Pure — returns a fresh tile.
  *
- * A PROPORTIONAL (square, newTileW===newTileH) resize is fully registration-safe:
- * a voxel keeps its (x,y,z) and opposite faces never shear. An ASYMMETRIC resize
- * (newTileW!==newTileH) intentionally falls OUT of registration — a uniform 3x2
- * atlas has only two tile dimensions but three lattice axes, and the depth axis nz
- * is the side tile's WIDTH and the top tile's HEIGHT at once, so W!=H gives
- * reconcileDims two disagreeing nz candidates: the carve shears the shared depth
- * axis (dropping voxels) and warns. That trade-off is accepted — the editor lets
- * W and H move independently. Pure — returns a fresh sheet.
+ * The anchor is what keeps a resize alignment-safe: a tile is a literal lattice
+ * slice, so to hold a texel's world position we must add/remove lattice lines at
+ * the FAR end of each axis and leave the anchored end fixed. `anchorRight`/
+ * `anchorBottom` pick which image edge stays put (the rest pad/crop). A thin wrapper
+ * over resizeTileTo — a corner is just the offset that puts all pad/crop on one end.
+ * @param {{width:number,height:number,data:ArrayLike<number>}} tile
+ * @param {number} newW @param {number} newH
+ * @param {boolean} anchorRight @param {boolean} anchorBottom
+ * @returns {{width:number,height:number,data:Uint8ClampedArray}}
+ */
+export function resizeTile(tile, newW, newH, anchorRight, anchorBottom) {
+  const offX = anchorRight ? newW - tile.width : 0; // all pad/crop lands on the far end
+  const offY = anchorBottom ? newH - tile.height : 0;
+  return resizeTileTo(tile, newW, newH, offX, offY);
+}
+
+/**
+ * How many lattice lines to add (+) or remove (−) at the world-LOW (origin) end of
+ * an axis to keep the art CENTERED as a tile resizes; the rest of the change lands
+ * at the far end. The odd leftover of an odd-sized change is biased by the parity of
+ * the NEW size, so consecutive ±1 steps alternate which end moves and the art can't
+ * drift into a corner over repeated clicks (an even change always splits evenly, and
+ * a typed jump divides the difference as evenly as it can).
+ *   splitLow(4,5)=1  splitLow(5,6)=0   grow: alternate the extra line
+ *   splitLow(4,6)=1                    even grow: one line each end
+ *   splitLow(5,4)=0  splitLow(4,3)=−1  shrink: alternate the cropped line
+ * @param {number} oldSize @param {number} newSize
+ * @returns {number}
+ */
+export function splitLow(oldSize, newSize) {
+  const delta = newSize - oldSize;
+  const half = Math.trunc(delta / 2); // even split, toward zero
+  const rem = delta - 2 * half; // 0 (even delta) or ±1 (odd delta)
+  return half + (rem && newSize % 2 === 1 ? rem : 0);
+}
+
+/**
+ * Resize the whole 3x2 sheet to new per-tile dimensions. Each cell's tile is placed
+ * with an offset derived from its view's image-axis flips (VIEW_IMAGE_AXES) so every
+ * face sharing a world axis shifts IDENTICALLY (registration held) — the padding just
+ * lands at a different image edge per face.
+ *
+ * `opts.anchor` picks how the size change is distributed on each axis:
+ *   'origin' (default) — keep the origin line fixed, grow/shrink only at the far edge.
+ *     A square resize is fully registration-safe AND keeps the object ground-rested
+ *     (y=0 pinned) at its exact lattice coords. Used by the pipeline; the primitive's
+ *     stable default (also what the byte-identical-pin test locks).
+ *   'center' — split the change around the art on ALL axes (see splitLow) so it stays
+ *     centered as the tile grows/shrinks. Still registration-safe for a square resize
+ *     (the whole solid just TRANSLATES by the per-axis pad), but it no longer pins y=0,
+ *     so a ground-rested sprite floats up as the tile grows. This is what the editor's
+ *     tile stepper uses (the author asked for centered artwork).
+ *
+ * A PROPORTIONAL (square, newTileW===newTileH) resize keeps registration for either
+ * anchor. An ASYMMETRIC resize (newTileW!==newTileH) intentionally falls OUT of
+ * registration — a uniform 3x2 atlas has only two tile dimensions but three lattice
+ * axes, and the depth axis nz is the side tile's WIDTH and the top tile's HEIGHT at
+ * once, so W!=H gives reconcileDims two disagreeing nz candidates: the carve shears
+ * the shared depth axis (dropping voxels) and warns. That trade-off is accepted — the
+ * editor lets W and H move independently. Pure — returns a fresh sheet.
  * @param {{width:number,height:number,data:ArrayLike<number>}} img
  * @param {number} newTileW @param {number} newTileH
- * @param {{layout?:string[][]}} [opts]
+ * @param {{layout?:string[][], anchor?:'origin'|'center'}} [opts]
  * @returns {{width:number,height:number,data:Uint8ClampedArray}}
  */
 export function resizeAtlas(img, newTileW, newTileH, opts = {}) {
   const layout = opts.layout || DEFAULT_ATLAS_LAYOUT;
+  const center = opts.anchor === 'center';
   const {
     cols,
     rows,
@@ -214,6 +260,12 @@ export function resizeAtlas(img, newTileW, newTileH, opts = {}) {
   } = deriveTileSize(img.width, img.height, layout);
   const oldW = Math.round(ow);
   const oldH = Math.round(oh);
+  const dW = newTileW - oldW;
+  const dH = newTileH - oldH;
+  // Per world axis: how many lattice lines to add/crop at the LOW (origin) end.
+  // 'origin' leaves it 0 (all change at the far end); 'center' splits around the art.
+  const padLowCol = center ? splitLow(oldW, newTileW) : 0;
+  const padLowRow = center ? splitLow(oldH, newTileH) : 0;
   const W = cols * newTileW;
   const H = rows * newTileH;
   const sheet = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4) };
@@ -226,7 +278,13 @@ export function resizeAtlas(img, newTileW, newTileH, opts = {}) {
       if (sx + oldW > img.width || sy + oldH > img.height) continue; // guard a ragged sheet
       const src = subTile(img, sx, sy, oldW, oldH);
       const { colFlip, rowFlip } = VIEW_IMAGE_AXES[name];
-      const resized = resizeTile(src, newTileW, newTileH, colFlip, rowFlip);
+      // Map the world-low pad to this face's image corner: a flipped image axis has its
+      // low pixel at the world-HIGH end, so it takes the complementary (far) pad. This
+      // keeps every face on a shared axis moving together. With 'origin' (padLow=0)
+      // this is exactly the old resizeTile(colFlip, rowFlip) corner anchor.
+      const offX = colFlip ? dW - padLowCol : padLowCol;
+      const offY = rowFlip ? dH - padLowRow : padLowRow;
+      const resized = resizeTileTo(src, newTileW, newTileH, offX, offY);
       blitTile(sheet, resized, c * newTileW, r * newTileH);
     }
   }

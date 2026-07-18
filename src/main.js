@@ -369,11 +369,17 @@ function mountEditor(name, focusSize) {
 // Resize every tile from the editor's tile-size stepper. Tiles are locked SQUARE, so
 // the editor always calls this with newW===newH: it resizes the WHOLE atlas so every
 // face moves together, then re-slices and re-opens the editor on the same face at the
-// new size (restoring focus to the stepper for typed entry). A square change keeps the
-// object ground-rested and every voxel at its lattice coords — no shear, no warning.
-// (The ?tile=WxH dev hook can still pass an asymmetric pair to exercise resizeAtlas's
-// shear path.) The control only shows while editing, but this guards defensively.
-function resizeTiles(newW, newH, focusSize) {
+// new size (restoring focus to the stepper for typed entry). It CENTERS the art on
+// every axis (anchor 'center') so the sprite stays put in the canvas as the tile grows
+// or shrinks instead of hugging a corner — a square resize stays in registration (the
+// whole solid just translates), though centering the vertical axis means a ground-rested
+// sprite no longer pins to y=0 and floats up as the tile grows (accepted: the author
+// wanted centered artwork). The ?tile / ?tile=WxH dev hook drives this same path; an
+// asymmetric pair still shears the shared depth axis and warns. The control only shows
+// while editing, but this guards defensively.
+/** @param {number} newW @param {number} newH @param {string} [focusSize]
+ *  @param {'origin'|'center'} [anchor] */
+function resizeTiles(newW, newH, focusSize, anchor = 'center') {
   if (!state.atlasImage) return;
   const w = clampTile(newW);
   const h = clampTile(newH);
@@ -384,7 +390,7 @@ function resizeTiles(newW, newH, focusSize) {
     cancelAnimationFrame(liveRAF);
     flushLive();
   }
-  state.atlasImage = resizeAtlas(state.atlasImage, w, h);
+  state.atlasImage = resizeAtlas(state.atlasImage, w, h, { anchor });
   const face = editingName;
   refreshFromAtlas(false); // keep the camera — the world size is normalized anyway
   if (face) mountEditor(face, focusSize); // re-open at the new size, refocus the stepper

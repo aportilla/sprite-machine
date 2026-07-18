@@ -60,9 +60,10 @@
 //   - onLive(workingTile, dirty): fired on each actual pixel change.
 //   - onSelectFace(name): the user clicked another face tab.
 //   - onResizeTile(size): the user changed the tile size. Tiles are locked SQUARE,
-//     so the caller resizes the whole atlas to size×size and re-mounts — always the
-//     alignment-preserving proportional case (see atlas.js resizeAtlas), so a voxel
-//     keeps its lattice coords and nothing shears out of registration.
+//     so the caller resizes the whole atlas to size×size (CENTERED — see resizeAtlas
+//     anchor:'center') and re-mounts. A square resize stays in registration (the solid
+//     just translates to keep the art centered); it no longer pins y=0, so a
+//     ground-rested sprite floats up as the tile grows.
 // ---------------------------------------------------------------------------
 
 // The pixel-canvas CONTAINER is a stable box: its height is pinned to a fixed
@@ -130,6 +131,10 @@ const rgbHex = ({ r, g, b }) => `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
 // each change (a fresh instance every time), but the pencil-size stepper stays put —
 // so without this it would freeze after the first click (its captured `value` never
 // advancing, ± always deltaing off the mount value).
+/**
+ * @param {{key:string, label:string, value:number, min:number, max:number,
+ *   unit?:string, onCommit:(v:number)=>void}} opts
+ */
 function sizeStepper({ key, label, value, min, max, unit, onCommit }) {
   const clamp = (n) => Math.max(min, Math.min(max, Math.round(Number(n) || 0)));
   const field = el('div', 'editor-field');

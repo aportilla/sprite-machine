@@ -122,16 +122,22 @@ _pick atlas ▾_ menu, and _download_.
   rebuilds (rAF-debounced) with no camera jump.
 - **Tile size** — a single **square-tile stepper** docked at the right of the tool
   strip retiles the whole atlas to any integer **1–256**. Tiles are **locked square**, so
-  every resize is **alignment-preserving**: each axis keeps its origin line fixed and
-  grows / shrinks only at the far edge, so a voxel keeps its lattice coordinates, the
-  object stays ground-rested (`y=0` pinned), and no sprite shears out of registration
-  (growing pads with transparency, shrinking crops the far edges). Square is the
-  **only registering shape** — a 3×2 atlas shares its depth axis between the side
-  tile's width and the top tile's height, so a non-square tile would over-constrain
-  that axis and shear the depth; locking the stepper square makes that impossible from
-  the UI. The pure `resizeAtlas` in `src/lib/atlas.js` still accepts an asymmetric
-  pair (used only by the `?tile=WxH` dev hook, which **warns** and shears) so the
-  shear path stays testable.
+  every resize is **registration-preserving**, and the stepper **keeps the art centered**:
+  each axis splits the size change around the sprite (`resizeAtlas` with `anchor:'center'`)
+  so it stays put in the canvas as the tile grows / shrinks instead of hugging a corner —
+  growing pads transparency on **both** sides, shrinking crops **both**. The odd texel of
+  an odd-sized ± step **alternates ends** (by the new size's parity) so repeated clicks
+  can't drift the art off-center, and a **typed jump divides the difference** as evenly as
+  it can (`splitLow`). Because a square resize just **translates** the whole solid, no
+  sprite shears out of registration — but centering the **vertical** axis means the object
+  no longer pins to `y=0`, so a ground-rested sprite **floats up off the shadow plane** as
+  the tile grows (an accepted trade for centered authoring). Square is the **only
+  registering shape** — a 3×2 atlas shares its depth axis between the side tile's width and
+  the top tile's height, so a non-square tile would over-constrain that axis and shear the
+  depth; locking the stepper square makes that impossible from the UI. The pure
+  `resizeAtlas` in `src/lib/atlas.js` still **defaults to origin-anchored** (each axis's
+  origin line fixed, `y=0` pinned) for the pipeline, and still accepts an asymmetric pair
+  (the `?tile=WxH` dev hook, which **warns** and shears) so the shear path stays testable.
 
 Drawn pixels map 1:1 to voxels at their **literal tile position** — `buildVoxels`
 reads each view at full size (no crop, no re-centering) and the carve intersects
@@ -151,7 +157,8 @@ and it's handy for jumping straight to a face while iterating. It joins the othe
 test-only URL params: `?sample=<index|name>`, `?rotate=0`, `?lowpoly=0|1`,
 `?flat=1`, `?diag=1` (watertightness self-check), `?cam=top|front|fq|bq`,
 `?tile=<N>` (or `<W>x<H>` to force an asymmetric, out-of-registration resize the
-locked-square UI can't produce) to apply one tile resize after the first build,
+locked-square UI can't produce) to apply one **centered** tile resize (the same
+`anchor:'center'` path the stepper drives) after the first build,
 `?palette=1` to open the **+** palette modal on the first mount, `?cursor=<N>`
 to set the pencil size to N and draw its footprint outline at the tile center on
 mount, and `?pick=<N>` to select `PALETTE_256[N]` as the ink on mount (as if picked

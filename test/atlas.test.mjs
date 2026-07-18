@@ -9,7 +9,9 @@ import {
   blitTile,
   cellOf,
   resizeTile,
+  resizeTileTo,
   resizeAtlas,
+  splitLow,
   clampTile,
   TILE_MIN,
   TILE_MAX,
@@ -256,6 +258,119 @@ test('resizeAtlas: shrinking below the object extent crops without throwing', ()
   const small = voxelsOf(resizeAtlas(artSheet(4), 2, 2));
   assert.deepEqual(small.dims, { nx: 2, ny: 2, nz: 2 });
   assert.ok(small.solidCount <= 8, 'solid is clamped to the smaller lattice');
+});
+
+// --- centered resize (the editor's tile stepper, anchor:'center') ----------
+
+test('splitLow: ±1 steps alternate ends; any change divides within one texel', () => {
+  // grow: consecutive single steps put the extra line at alternating ends, so the
+  // art can't drift to one corner over repeated clicks.
+  assert.equal(splitLow(4, 5), 1); // old even → pad the low end
+  assert.equal(splitLow(5, 6), 0); // old odd  → pad the high end
+  assert.equal(splitLow(6, 7), 1);
+  assert.equal(splitLow(7, 8), 0);
+  // shrink alternates too (a negative result crops the low end)
+  assert.equal(splitLow(5, 4), 0);
+  assert.equal(splitLow(4, 3), -1);
+  // an even change always splits evenly; a typed jump divides as evenly as it can.
+  for (const [o, n] of [
+    [4, 6],
+    [4, 7],
+    [4, 8],
+    [10, 3],
+    [3, 10],
+    [40, 41],
+    [41, 40],
+  ]) {
+    const low = splitLow(o, n);
+    const high = n - o - low;
+    assert.ok(Math.abs(low - high) <= 1, `${o}->${n}: ${low}/${high} within one texel`);
+  }
+});
+
+test('resizeTileTo: places a tile at an explicit offset, padding + clipping', () => {
+  const out = resizeTileTo(markerTile(), 4, 4, 1, 1); // 2×2 marker offset into a 4×4
+  assert.equal(alphaAt(out, 1, 1), 255, 'marker moved to (1,1)');
+  assert.equal(out.data[(1 * 4 + 1) * 4], 11, 'RGB carried to the new position');
+  assert.equal(alphaAt(out, 0, 0), 0, 'origin padded transparent');
+  // A negative offset crops that edge instead of padding it.
+  const crop = resizeTileTo(markerTile(), 2, 2, -1, 0);
+  assert.equal(alphaAt(crop, 0, 0), 0, 'the (0,0) marker was cropped from the left');
+});
+
+test('resizeAtlas center: a square grow keeps the solid intact, just translated to center', () => {
+  const base = voxelsOf(artSheet(4));
+  const grown = voxelsOf(resizeAtlas(artSheet(4), 6, 6, { anchor: 'center' }));
+  // +2 on every axis; splitLow(4,6)=1 adds one line at the LOW end of each axis, so
+  // the whole solid shifts +1 on x, y and z (and gains one padded line beyond it).
+  assert.deepEqual(grown.dims, {
+    nx: base.dims.nx + 2,
+    ny: base.dims.ny + 2,
+    nz: base.dims.nz + 2,
+  });
+  assert.equal(grown.solidCount, base.solidCount, 'no voxel lost — registration held');
+  const off = 1; // splitLow(4, 6)
+  for (let z = 0; z < base.dims.nz; z++) {
+    for (let y = 0; y < base.dims.ny; y++) {
+      for (let x = 0; x < base.dims.nx; x++) {
+        const bi = voxIndex(x, y, z, base.dims);
+        const gi = voxIndex(x + off, y + off, z + off, grown.dims);
+        assert.equal(grown.solid[gi], base.solid[bi], `solid @ ${x},${y},${z}`);
+        for (let f = 0; f < 6; f++) {
+          assert.equal(
+            grown.faceColor.get(gi * 6 + f),
+            base.faceColor.get(bi * 6 + f),
+            `face ${f} color @ ${x},${y},${z}`
+          );
+        }
+      }
+    }
+  }
+});
+
+test("resizeAtlas center: a grow keeps the object centered (where 'origin' hugs the corner)", () => {
+  // Empty lattice on the low vs high side of the solid along an axis.
+  const gaps = ({ dims, solid }, axis) => {
+    let lo = Infinity;
+    let hi = -1;
+    for (let z = 0; z < dims.nz; z++) {
+      for (let y = 0; y < dims.ny; y++) {
+        for (let x = 0; x < dims.nx; x++) {
+          if (!solid[voxIndex(x, y, z, dims)]) continue;
+          const c = axis === 'x' ? x : axis === 'y' ? y : z;
+          if (c < lo) lo = c;
+          if (c > hi) hi = c;
+        }
+      }
+    }
+    const size = axis === 'x' ? dims.nx : axis === 'y' ? dims.ny : dims.nz;
+    return { loGap: lo, hiGap: size - 1 - hi };
+  };
+  const centered = voxelsOf(resizeAtlas(artSheet(4), 10, 10, { anchor: 'center' }));
+  const origin = voxelsOf(resizeAtlas(artSheet(4), 10, 10)); // default anchor
+  for (const axis of ['x', 'y', 'z']) {
+    const c = gaps(centered, axis);
+    const o = gaps(origin, axis);
+    assert.ok(
+      Math.abs(c.loGap - c.hiGap) <= 1,
+      `centered ${axis}: ${c.loGap}/${c.hiGap} balanced around the middle`
+    );
+    // splitLow(4,10)=3, so centering pushed the art three lines off the low corner
+    // the origin anchor keeps it pinned to.
+    assert.ok(
+      c.loGap > o.loGap,
+      `centered ${axis} sits off the low corner (origin loGap ${o.loGap} < ${c.loGap})`
+    );
+  }
+});
+
+test("resizeAtlas: the default anchor stays 'origin' (opt-in centering can't change the pipeline)", () => {
+  // Same sheet, default vs explicit 'origin' → byte-identical; 'center' differs.
+  const def = resizeAtlas(artSheet(4), 6, 6);
+  const origin = resizeAtlas(artSheet(4), 6, 6, { anchor: 'origin' });
+  const center = resizeAtlas(artSheet(4), 6, 6, { anchor: 'center' });
+  assert.deepEqual(def.data, origin.data, 'default resize == origin-anchored');
+  assert.notDeepEqual(center.data, origin.data, "'center' actually shifts the pixels");
 });
 
 test('clampTile: rounds and clamps to the integer tile range', () => {
