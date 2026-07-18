@@ -17,6 +17,23 @@ test('PALETTE_256 is a full 16×16 grid of well-formed entries', () => {
   }
 });
 
+// All 256 cells are DISTINCT. xterm-256 names 256 indexed slots but only 247
+// distinct colors (its system/cube/grayscale ranges overlap on 9 values); the 9
+// redundant cells carry Hilbert-neighbor-interpolated fillers so no swatch is
+// ever wasted on a repeat. If a future edit reintroduces a duplicate (or a filler
+// collides), this fails.
+test('PALETTE_256 has 256 distinct colors (no duplicate swatches)', () => {
+  const seen = new Map();
+  PALETTE_256.forEach(({ css }, i) => {
+    if (seen.has(css)) {
+      const j = seen.get(css);
+      assert.fail(`duplicate swatch ${css} at index ${j} (r${(j / 16) | 0}c${j % 16}) and ${i} (r${(i / 16) | 0}c${i % 16})`);
+    }
+    seen.set(css, i);
+  });
+  assert.equal(seen.size, 256, 'all 256 swatches distinct');
+});
+
 // Pin the exact Hilbert layout corners so a transcription/ordering slip is caught:
 // grayscale in the top-left, the light-cyan corner at the bottom-right.
 test('PALETTE_256 keeps the intended layout orientation', () => {
