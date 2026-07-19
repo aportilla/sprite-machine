@@ -13,9 +13,9 @@
 // Pure (ImageData-like views in, plain typed arrays out) so it's Node-testable.
 // ---------------------------------------------------------------------------
 import { VIEW_NAMES, VIEW_AXES, VIEW_IMAGE_AXES } from './views.js';
+import { ALPHA_SOLID } from './ingest.js';
 
 const ALL_AXES = ['nx', 'ny', 'nz'];
-const ALPHA_SOLID = 128; // matches ingest.js hard-pixel threshold
 
 // The (up to two) views whose projection plane is spanned by world axes {a, b}.
 function viewsOnPlane(a, b) {

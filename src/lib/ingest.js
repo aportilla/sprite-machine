@@ -17,8 +17,9 @@
 // Sprites are assumed to be HARD pixel art: every texel is either fully opaque
 // or fully transparent, no partial coverage. A pixel counts as solid at alpha
 // >= 128 — the 50%-coverage midpoint, robust to privacy-browser canvas farbling
-// that perturbs a 0/255 alpha by ±1 (see the wedge-mesh farbling note).
-const ALPHA_SOLID = 128;
+// that perturbs a 0/255 alpha by ±1 (see the wedge-mesh farbling note). Exported
+// so guides.js shares the exact threshold instead of re-declaring it.
+export const ALPHA_SOLID = 128;
 
 export const packRGBA = (r, g, b, a = 255) =>
   ((r & 255) | ((g & 255) << 8) | ((b & 255) << 16) | ((a & 255) << 24)) >>> 0;
@@ -50,7 +51,10 @@ function rot90cw(img) {
   return { width: nW, height: nH, data: out };
 }
 
-function flip(img, flipX, flipY) {
+// Axis-flip blit: mirror an image horizontally (flipX) and/or vertically (flipY).
+// Exported so ui.js's display-only mirrorImage reuses one flip implementation.
+// A no-op (both false) returns the SAME object; any flip returns a fresh copy.
+export function flip(img, flipX, flipY) {
   if (!flipX && !flipY) return img;
   const { width: W, height: H, data } = img;
   const out = new Uint8ClampedArray(W * H * 4);

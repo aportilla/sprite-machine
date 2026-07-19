@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { packRGBA } from './ingest.js';
+import { hexToRgb } from './color.js';
 
 /**
  * Per-axis mirror-fill: a face with no view of its own is always filled from the
@@ -27,8 +28,9 @@ export const DEFAULT_WORLD_SIZE = 2.5;
 // pairwise distance is ~47 (between #442434 and #4e4a4e), so no two distinct
 // swatches can ever false-merge into a smooth wedge. Its neutral grays also keep
 // palette[0] body-color fallbacks
-// sensible. Each entry is { packed:uint32 (a=255), css:'#rrggbb' }; `css` is the
-// source of truth and `packed` is derived from it so the two can't drift.
+// sensible. Each entry is { packed:uint32 (a=255), css:'#rrggbb', rgb:{r,g,b} };
+// `css` is the source of truth and `packed`/`rgb` are derived from it so they
+// can't drift (and the editor reads `rgb` directly instead of re-parsing css).
 // ---------------------------------------------------------------------------
 const DB16_HEX = [
   '#140c1c',
@@ -50,10 +52,8 @@ const DB16_HEX = [
 ];
 
 export const PENCIL_PALETTE = DB16_HEX.map((css) => {
-  const r = parseInt(css.slice(1, 3), 16);
-  const g = parseInt(css.slice(3, 5), 16);
-  const b = parseInt(css.slice(5, 7), 16);
-  return { packed: packRGBA(r, g, b, 255), css };
+  const rgb = hexToRgb(css);
+  return { packed: packRGBA(rgb.r, rgb.g, rgb.b, 255), css, rgb };
 });
 
 // ---------------------------------------------------------------------------
@@ -112,9 +112,8 @@ const PALETTE_256_ROWS = [
 
 export const PALETTE_256 = PALETTE_256_ROWS.flatMap((row) =>
   row.split(' ').map((h) => {
-    const r = parseInt(h.slice(0, 2), 16);
-    const g = parseInt(h.slice(2, 4), 16);
-    const b = parseInt(h.slice(4, 6), 16);
-    return { packed: packRGBA(r, g, b, 255), css: `#${h}` };
+    const css = `#${h}`;
+    const rgb = hexToRgb(css);
+    return { packed: packRGBA(rgb.r, rgb.g, rgb.b, 255), css, rgb };
   })
 );

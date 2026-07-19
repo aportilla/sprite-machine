@@ -91,6 +91,7 @@
 import { icon } from './icons.js';
 import { roundedRectRows, maxCornerRadius, squareEnd } from './lib/rect.js';
 import { keyAt, floodFill, replaceColor } from './lib/fill.js';
+import { distinctColors, rgbKey } from './lib/color.js';
 
 // The pixel-canvas CONTAINER is a stable box: its height is pinned to a fixed
 // fraction of the sidebar (panel) height, full-bleed below the tabs, so nothing
@@ -124,14 +125,6 @@ function el(tag, cls, text) {
   if (cls) n.className = cls;
   if (text != null) n.textContent = text;
   return n;
-}
-
-function hexToRgb(css) {
-  return {
-    r: parseInt(css.slice(1, 3), 16),
-    g: parseInt(css.slice(3, 5), 16),
-    b: parseInt(css.slice(5, 7), 16),
-  };
 }
 
 const toHex2 = (n) => n.toString(16).padStart(2, '0');
@@ -255,7 +248,7 @@ export function createTileEditor(
 
   // Brush defaults (first mount of a session). `tool` is the drawing op, `erase`
   // and `picking` the ink/sample flags, `size` the pencil's N×N footprint.
-  if (!brush.color) brush.color = hexToRgb(palette[0].css);
+  if (!brush.color) brush.color = { ...palette[0].rgb };
   if (brush.tool == null) brush.tool = 'pencil';
   if (brush.erase == null) brush.erase = false;
   if (brush.picking == null) brush.picking = false;
@@ -411,9 +404,8 @@ export function createTileEditor(
   }
 
   const rgbEq = (a, b) => a.r === b.r && a.g === b.g && a.b === b.b;
-  const matchPaletteIndex = (color) =>
-    palette.findIndex((p) => rgbEq(hexToRgb(p.css), color));
-  const rkey = (c) => (c.r << 16) | (c.g << 8) | c.b;
+  const matchPaletteIndex = (color) => palette.findIndex((p) => rgbEq(p.rgb, color));
+  const rkey = rgbKey;
 
   // The single path every color pick funnels through (palette modal, in-sprite,
   // eyedrop): make `color` the pencil's ink and clear the erase/eyedropper flags.
@@ -470,7 +462,7 @@ export function createTileEditor(
     brush.tool = 'pencil';
     brush.erase = false;
     brush.picking = false;
-    if (!brush.color) brush.color = hexToRgb(palette[0].css);
+    if (!brush.color) brush.color = { ...palette[0].rgb };
     renderToolOptions();
     syncUI();
   };
@@ -482,7 +474,7 @@ export function createTileEditor(
     brush.tool = 'rect';
     brush.erase = false;
     brush.picking = false;
-    if (!brush.color) brush.color = hexToRgb(palette[0].css);
+    if (!brush.color) brush.color = { ...palette[0].rgb };
     renderToolOptions();
     syncUI();
   };
@@ -494,7 +486,7 @@ export function createTileEditor(
     brush.tool = 'fill';
     brush.erase = false;
     brush.picking = false;
-    if (!brush.color) brush.color = hexToRgb(palette[0].css);
+    if (!brush.color) brush.color = { ...palette[0].rgb };
     renderToolOptions();
     syncUI();
   };
@@ -613,19 +605,7 @@ export function createTileEditor(
   root.appendChild(usedRow);
 
   let lastUsedSig = null;
-  function distinctWorkColors() {
-    const seen = new Set();
-    const out = [];
-    for (let i = 0; i < work.length; i += 4) {
-      if (work[i + 3] === 0) continue;
-      const c = { r: work[i], g: work[i + 1], b: work[i + 2] };
-      const k = rkey(c);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      out.push(c);
-    }
-    return out;
-  }
+  const distinctWorkColors = () => distinctColors(work);
   let usedEls = []; // { el, rgb } for active-color highlighting
   function renderUsed() {
     // Colors actually painted somewhere: the other faces (usedColors) unioned with
@@ -689,7 +669,7 @@ export function createTileEditor(
   const cubeWrap = el('div', 'editor-cube');
   const cubeEls = [];
   for (const p of palette256) {
-    const rgb = hexToRgb(p.css);
+    const rgb = p.rgb;
     const s = el('button', 'editor-swatch');
     s.type = 'button';
     s.style.background = p.css;
@@ -779,17 +759,17 @@ export function createTileEditor(
       brush.tool = 'pencil';
       brush.erase = false;
       brush.picking = false;
-      if (!brush.color) brush.color = hexToRgb(palette[0].css);
+      if (!brush.color) brush.color = { ...palette[0].rgb };
     } else if (k === 'r') {
       brush.tool = 'rect';
       brush.erase = false;
       brush.picking = false;
-      if (!brush.color) brush.color = hexToRgb(palette[0].css);
+      if (!brush.color) brush.color = { ...palette[0].rgb };
     } else if (k === 'g') {
       brush.tool = 'fill';
       brush.erase = false;
       brush.picking = false;
-      if (!brush.color) brush.color = hexToRgb(palette[0].css);
+      if (!brush.color) brush.color = { ...palette[0].rgb };
     } else if (k === 'i') {
       brush.picking = true;
     } else if (k === 'e') {
@@ -820,7 +800,7 @@ export function createTileEditor(
   // headless shot (which can't click a swatch) shows it landing as the selected
   // palette-row tile. Runs before the ?palette=1 open so the modal reflects it too.
   if (pickIndex != null && palette256[pickIndex]) {
-    const rgb = hexToRgb(palette256[pickIndex].css);
+    const rgb = palette256[pickIndex].rgb;
     selectColor(rgb, matchPaletteIndex(rgb));
   }
   // Dev hook (?palette=1): open the picker right away so the capture tool — which

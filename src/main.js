@@ -11,11 +11,14 @@ import {
   cellOf,
   resizeAtlas,
   clampTile,
+  isBlank,
+  validateSheet,
   TILE_MIN,
   TILE_MAX,
 } from './lib/atlas.js';
 import { VIEW_NAMES, VIEW_OPPOSITE, MIRROR_AXIS } from './lib/views.js';
 import { replaceColorInRect } from './lib/fill.js';
+import { distinctColors, rgbKey } from './lib/color.js';
 import { PENCIL_PALETTE, PALETTE_256 } from './lib/constants.js';
 import { faceGuides } from './lib/guides.js';
 import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
@@ -242,12 +245,6 @@ function sliceAndBuild(reframe) {
 const DEFAULT_FACE = 'left';
 const TAB_ORDER = ['left', 'right', 'front', 'back', 'top', 'bottom'];
 
-const isAllTransparent = (tile) => {
-  const d = tile.data;
-  for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return false;
-  return true;
-};
-
 // Coalesce live edits to at most one voxel rebuild per animation frame. The
 // editor's own 2D canvas repaints per pixel; only the (heavier) blit + preview +
 // mesh rebuild is throttled here.
@@ -282,7 +279,7 @@ function dropLive() {
 // real art — or null again if fully erased, reverting it to mirror-derived.
 function applyTileEdit(name, wasDerived, tile, dirty) {
   if (wasDerived && !dirty) return; // untouched derived/empty face: leave as-is
-  state.views[name] = isAllTransparent(tile) ? null : tile;
+  state.views[name] = isBlank(tile) ? null : tile;
   livePending = { name, tile };
   if (!liveRAF) liveRAF = requestAnimationFrame(flushLive);
 }
@@ -324,13 +321,11 @@ function usedColorsExcept(exceptName) {
     if (name === exceptName) continue;
     const view = state.views[name];
     if (!view) continue;
-    const d = view.data;
-    for (let i = 0; i < d.length; i += 4) {
-      if (d[i + 3] === 0) continue;
-      const key = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+    for (const c of distinctColors(view.data)) {
+      const key = rgbKey(c);
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ r: d[i], g: d[i + 1], b: d[i + 2] });
+      out.push(c);
     }
   }
   return out;
@@ -475,17 +470,29 @@ const ui = createUI({
   samples: SAMPLES,
   state,
   onSample: async (sample) => {
+    let image;
     try {
-      state.atlasImage = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
+      image = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
     } catch (err) {
       ui.setError(`Couldn't load sample "${sample.name}": ${err.message}`);
       return;
     }
+    const bad = validateSheet(image);
+    if (bad) {
+      ui.setError(`Sample "${sample.name}" is unusable: ${bad}`);
+      return;
+    }
+    state.atlasImage = image;
     state.transforms = { ...(sample.transforms || {}) };
     ui.syncControls();
     sliceAndBuild(true);
   },
   onAtlas: (imageData) => {
+    const bad = validateSheet(imageData);
+    if (bad) {
+      ui.setError(bad);
+      return;
+    }
     state.atlasImage = imageData;
     state.transforms = {};
     sliceAndBuild(true);

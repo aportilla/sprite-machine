@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { fileToImageData } from './image-io.js';
+import { flip } from './lib/ingest.js';
 import { icon } from './icons.js';
 
 function el(tag, cls, text) {
@@ -47,23 +48,10 @@ function toggleBtn(label, initial, onToggle) {
 // Mirror a tile for display (an axis-flip in image space), so a mirror-derived
 // face shows the way we actually render it. `axis` is 'x' (horizontal) or 'y'.
 // Exported so main.js can seed the tile editor's canvas with the same mirrored
-// image the onion-skin shows.
+// image the onion-skin shows. A thin wrapper over the pipeline's `flip` blit so
+// there is one mirror implementation. (In practice MIRROR_AXIS is always 'x'.)
 export function mirrorImage(img, axis) {
-  const { width: W, height: H, data } = img;
-  const out = new Uint8ClampedArray(W * H * 4);
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const sx = axis === 'x' ? W - 1 - x : x;
-      const sy = axis === 'y' ? H - 1 - y : y;
-      const s = (sy * W + sx) * 4;
-      const d = (y * W + x) * 4;
-      out[d] = data[s];
-      out[d + 1] = data[s + 1];
-      out[d + 2] = data[s + 2];
-      out[d + 3] = data[s + 3];
-    }
-  }
-  return { width: W, height: H, data: out };
+  return flip(img, axis === 'x', axis === 'y');
 }
 
 const dragHasFiles = (e) =>

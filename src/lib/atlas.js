@@ -53,10 +53,38 @@ function subTile(img, sx, sy, w, h) {
   return { width: w, height: h, data: out };
 }
 
-const isBlank = (tile) => {
+// Is a tile fully transparent? (alpha 0 everywhere — stray RGB under alpha 0 is
+// ignored, matching the editor's hard-pixel rule). Exported as the single "is this
+// empty?" predicate so main.js's applyTileEdit doesn't roll its own copy.
+export const isBlank = (tile) => {
   for (let i = 3; i < tile.data.length; i += 4) if (tile.data[i] !== 0) return false;
   return true;
 };
+
+/**
+ * Validate an ImageData-like sheet at an ingestion boundary: finite positive
+ * dimensions and a data buffer long enough for width*height RGBA texels. Returns
+ * an error string (surfaced to the user), or null when the sheet is usable — so
+ * sliceAtlas/resizeAtlas downstream can trust their input's shape.
+ * @param {{width:number,height:number,data:ArrayLike<number>}|null|undefined} img
+ * @returns {string|null}
+ */
+export function validateSheet(img) {
+  if (!img || !Number.isFinite(img.width) || !Number.isFinite(img.height)) {
+    return 'Sprite sheet has no valid dimensions.';
+  }
+  if (!(img.width > 0) || !(img.height > 0)) {
+    return `Sprite sheet is empty (${img.width}×${img.height}px).`;
+  }
+  const need = img.width * img.height * 4;
+  if (!img.data || img.data.length < need) {
+    return (
+      `Sprite sheet data is too short: got ${img.data ? img.data.length : 0} bytes, ` +
+      `need ${need} for a ${img.width}×${img.height}px sheet.`
+    );
+  }
+  return null;
+}
 
 /**
  * @param {{width:number,height:number,data:ArrayLike<number>}} img
