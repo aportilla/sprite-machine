@@ -81,10 +81,12 @@ function firstHitFromFace(solid, dims, x, y, z, faceKey) {
   return true;
 }
 
+// One reused scratch — sampleView reads the projection immediately, so mutating a
+// shared object avoids a per-exposed-face allocation.
+const _sampleP = { u: 0, v: 0 };
 function sampleView(gv, name, x, y, z, dims) {
-  const spec = VIEWS[name];
-  const p = spec.project(x, y, z, dims);
-  const i = p.v * gv.imgW + p.u;
+  VIEWS[name].projectInto(x, y, z, dims, _sampleP);
+  const i = _sampleP.v * gv.imgW + _sampleP.u;
   return gv.occ[i] ? gv.rgb[i] >>> 0 : null;
 }
 

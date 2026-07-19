@@ -21,8 +21,10 @@
 
 /** @typedef {{nx:number, ny:number, nz:number}} Dims */
 
-// Human-facing view names <-> face normals.
-export const VIEW_TO_FACE = {
+// Human-facing view names -> face normals. File-local: only its inverse
+// FACE_TO_VIEW is consumed outside this module (by colorize); nothing needs the
+// forward direction, and every pair is already implied by the face metadata below.
+const VIEW_TO_FACE = {
   right: 'nx',
   left: 'px',
   top: 'py',
@@ -34,7 +36,10 @@ export const FACE_TO_VIEW = Object.fromEntries(
   Object.entries(VIEW_TO_FACE).map(([k, v]) => [v, k])
 );
 
-// Outward unit normals per face key.
+// Outward unit normals per face key. The single source of truth for per-face
+// axis/direction — FACE_AXIS, carve's NEIGHBORS, and faces.js's quad normals are
+// all derived from this so they can't drift from the convention the 6-bit surface
+// mask and the faceColor keying (idx*6+f) depend on.
 export const FACE_NORMAL = {
   px: [1, 0, 0],
   nx: [-1, 0, 0],
@@ -43,6 +48,22 @@ export const FACE_NORMAL = {
   pz: [0, 0, 1],
   nz: [0, 0, -1],
 };
+
+// Canonical face-key order: the 6-bit surface-exposure mask and the faceColor map
+// (keyed idx*6+f) both index by this position, so it is load-bearing. Co-located
+// with FACE_NORMAL; carve.js re-exports it for the consumers that read it there.
+export const FACE_KEYS = ['px', 'nx', 'py', 'ny', 'pz', 'nz'];
+
+// Face key -> its index in FACE_KEYS (memoized indexOf).
+export const FACE_INDEX = Object.fromEntries(FACE_KEYS.map((k, i) => [k, i]));
+
+// World-axis name -> its index in an [x, y, z] triple.
+export const AXIS_INDEX = { x: 0, y: 1, z: 2 };
+
+// The face key whose outward normal points along world `axis` with `sign` (±1).
+// Derived from FACE_NORMAL so an (axis, sign) pair can never drift from the normals.
+export const faceKeyOf = (axis, sign) =>
+  FACE_KEYS.find((k) => FACE_NORMAL[k][AXIS_INDEX[axis]] === sign);
 
 // Which world axis each face's outward normal lies on. Derived from
 // FACE_NORMAL so it can't drift; used by colorize for mirror-fill.
@@ -60,32 +81,34 @@ export const FACE_OPPOSITE = {
   nz: 'pz',
 };
 
-// For each face/view: the image dimensions in grid units, the march axis &
-// direction used for first-hit visibility, and the pixel projection.
+// For each face/view: the image dimensions in grid units and the pixel projection.
+// The march axis + direction used for first-hit visibility is NOT stored here — it
+// is derived from FACE_NORMAL in colorize.firstHitFromFace, the single source of
+// truth (a `step`/`from` field here would be a silent drift hazard).
 //
-// project() returns integer image coords. `imgW`/`imgH` give the expected view
-// image size for a grid, so carve can place each view at native scale (padding,
-// never stretching) and index it 1:1.
+// projectInto(x,y,z,d,out) writes integer image coords into the reused `out` (no
+// per-voxel allocation in carve's hot triple loop); project() is the allocating
+// convenience that delegates to it, so each view has exactly ONE formula. `imgW`/
+// `imgH` give the expected view image size for a grid, so carve can place each view
+// at native scale (padding, never stretching) and index it 1:1.
 export const VIEWS = {
   // FRONT: looks toward -z from +z. Sees +z face. Image = X (right) by Y (up).
   front: {
-    face: 'pz',
-    axis: 'z',
-    step: -1, // marching inward from the camera: z decreases
-    from: 'max', // first-hit search starts at max z
     imgW: (d) => d.nx,
     imgH: (d) => d.ny,
-    project: (x, y, z, d) => ({ u: x, v: d.ny - 1 - y }),
+    projectInto: (x, y, z, d, o) => ((o.u = x), (o.v = d.ny - 1 - y), o),
+    project(x, y, z, d) {
+      return this.projectInto(x, y, z, d, { u: 0, v: 0 });
+    },
   },
   // BACK: looks toward +z from -z. Sees -z face. Left-right mirrored vs front.
   back: {
-    face: 'nz',
-    axis: 'z',
-    step: 1,
-    from: 'min',
     imgW: (d) => d.nx,
     imgH: (d) => d.ny,
-    project: (x, y, z, d) => ({ u: d.nx - 1 - x, v: d.ny - 1 - y }),
+    projectInto: (x, y, z, d, o) => ((o.u = d.nx - 1 - x), (o.v = d.ny - 1 - y), o),
+    project(x, y, z, d) {
+      return this.projectInto(x, y, z, d, { u: 0, v: 0 });
+    },
   },
   // LEFT: the atlas tile drawn as the object's LEFT side. It colors the +x face
   // — viewed straight-on from +x that face reads as a left-side profile, so the
@@ -93,49 +116,45 @@ export const VIEWS = {
   // not by the world axis it happens to occupy. Image = Z by Y. u = nz-1-z puts
   // the object's front (+z) at the left column, matching a nose-left profile.
   left: {
-    face: 'px',
-    axis: 'x',
-    step: -1,
-    from: 'max',
     imgW: (d) => d.nz,
     imgH: (d) => d.ny,
-    project: (x, y, z, d) => ({ u: d.nz - 1 - z, v: d.ny - 1 - y }),
+    projectInto: (x, y, z, d, o) => ((o.u = d.nz - 1 - z), (o.v = d.ny - 1 - y), o),
+    project(x, y, z, d) {
+      return this.projectInto(x, y, z, d, { u: 0, v: 0 });
+    },
   },
   // RIGHT: the object's RIGHT side; colors the -x face, which reads as a
   // right-side profile. Mirror of left along z — u = z puts front at the right column.
   right: {
-    face: 'nx',
-    axis: 'x',
-    step: 1,
-    from: 'min',
     imgW: (d) => d.nz,
     imgH: (d) => d.ny,
-    project: (x, y, z, d) => ({ u: z, v: d.ny - 1 - y }),
+    projectInto: (x, y, z, d, o) => ((o.u = z), (o.v = d.ny - 1 - y), o),
+    project(x, y, z, d) {
+      return this.projectInto(x, y, z, d, { u: 0, v: 0 });
+    },
   },
   // TOP: looks toward -y from +y. Sees +y face. Image = X by Z.
   // Looking straight down: v = nz-1-z puts the object's front (+z, z=nz-1) on
   // the TOP row of the image (v=0), matching the FRONT view's top-is-v=0.
   top: {
-    face: 'py',
-    axis: 'y',
-    step: -1,
-    from: 'max',
     imgW: (d) => d.nx,
     imgH: (d) => d.nz,
-    project: (x, y, z, d) => ({ u: x, v: d.nz - 1 - z }),
+    projectInto: (x, y, z, d, o) => ((o.u = x), (o.v = d.nz - 1 - z), o),
+    project(x, y, z, d) {
+      return this.projectInto(x, y, z, d, { u: 0, v: 0 });
+    },
   },
   // BOTTOM: looks toward +y from -y. Sees -y face. The car is flipped SIDEWAYS
   // (rolled about its front-back axis), NOT end-over-end — so the front stays on
   // the TOP row like TOP (v = nz-1-z) and only left/right swap (u = nx-1-x). That
   // way the TOP and BOTTOM tiles register front-to-front on the same edge.
   bottom: {
-    face: 'ny',
-    axis: 'y',
-    step: 1,
-    from: 'min',
     imgW: (d) => d.nx,
     imgH: (d) => d.nz,
-    project: (x, y, z, d) => ({ u: d.nx - 1 - x, v: d.nz - 1 - z }),
+    projectInto: (x, y, z, d, o) => ((o.u = d.nx - 1 - x), (o.v = d.nz - 1 - z), o),
+    project(x, y, z, d) {
+      return this.projectInto(x, y, z, d, { u: 0, v: 0 });
+    },
   },
 };
 
@@ -172,17 +191,12 @@ export const VIEW_OPPOSITE = {
 };
 
 // To DISPLAY a mirror-derived face, flip its opposite view's tile along this
-// IMAGE axis. Follows the projections: every pair now mirrors HORIZONTALLY —
-// left↔right and front↔back on the X/Z planes, and top↔bottom too because BOTTOM
-// is the sideways (left/right) flip of TOP, not an end-over-end one.
-export const VIEW_MIRROR_AXIS = {
-  right: 'x',
-  left: 'x',
-  front: 'x',
-  back: 'x',
-  top: 'x',
-  bottom: 'x',
-};
+// IMAGE axis. It is 'x' for EVERY pair (a single constant, not a per-view table
+// that would imply the axis varies): the projections make each pair mirror
+// HORIZONTALLY — left↔right and front↔back on the X/Z planes, and top↔bottom too
+// because BOTTOM is the sideways (left/right) flip of TOP, not an end-over-end one.
+// (mirrorImage's 'y' branch in ui.js is therefore unexercised in practice.)
+export const MIRROR_AXIS = 'x';
 
 // Which grid axes a view's (imgW, imgH) constrain. Used by dimension
 // reconciliation. Each entry: [axisForImgW, axisForImgH].

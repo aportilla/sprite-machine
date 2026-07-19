@@ -10,13 +10,14 @@
 // ---------------------------------------------------------------------------
 
 import { voxIndex, FACE_KEYS } from './carve.js';
+import { FACE_NORMAL } from './views.js';
 
-// Per-face geometry: outward normal, tangent axes, and a quad builder for a
-// rectangle spanning tangent voxel range [aMin..aMax]x[bMin..bMax] on slice s.
-// lo = min index, hi = max index + 1 (so a single voxel -> a unit quad).
+// Per-face geometry: tangent axes and a quad builder for a rectangle spanning
+// tangent voxel range [aMin..aMax]x[bMin..bMax] on slice s (lo = min index,
+// hi = max index + 1, so a single voxel -> a unit quad). The outward normal is
+// read from the shared FACE_NORMAL (views.js), not restated here.
 export const FACE_GEO = {
   px: {
-    normal: [1, 0, 0],
     N: 'x',
     A: 'y',
     B: 'z',
@@ -35,7 +36,6 @@ export const FACE_GEO = {
     },
   },
   nx: {
-    normal: [-1, 0, 0],
     N: 'x',
     A: 'y',
     B: 'z',
@@ -54,7 +54,6 @@ export const FACE_GEO = {
     },
   },
   py: {
-    normal: [0, 1, 0],
     N: 'y',
     A: 'x',
     B: 'z',
@@ -73,7 +72,6 @@ export const FACE_GEO = {
     },
   },
   ny: {
-    normal: [0, -1, 0],
     N: 'y',
     A: 'x',
     B: 'z',
@@ -92,7 +90,6 @@ export const FACE_GEO = {
     },
   },
   pz: {
-    normal: [0, 0, 1],
     N: 'z',
     A: 'x',
     B: 'y',
@@ -111,7 +108,6 @@ export const FACE_GEO = {
     },
   },
   nz: {
-    normal: [0, 0, -1],
     N: 'z',
     A: 'x',
     B: 'y',
@@ -143,8 +139,9 @@ function idxFor(face, a, b, s, dims) {
   return voxIndex(c.x, c.y, c.z, dims);
 }
 
-function faceColorAt(face, a, b, s, dims, surfaceMask, faceColor) {
-  const f = FACE_KEYS.indexOf(face);
+// `f` is the caller's known FACE_KEYS index for `face` (constant across a whole
+// per-face pass), threaded in so the greedy triple loop never re-scans for it.
+function faceColorAt(face, f, a, b, s, dims, surfaceMask, faceColor) {
   const idx = idxFor(face, a, b, s, dims);
   if (!(surfaceMask[idx] & (1 << f))) return -1;
   const c = faceColor.get(idx * 6 + f);
@@ -154,27 +151,29 @@ function faceColorAt(face, a, b, s, dims, surfaceMask, faceColor) {
 /** One quad per exposed face. */
 export function culledQuads(dims, surfaceMask, faceColor) {
   const quads = [];
-  for (const face of FACE_KEYS) {
+  FACE_KEYS.forEach((face, f) => {
     const g = FACE_GEO[face];
+    const normal = FACE_NORMAL[face];
     const dimN = DIM(dims, g.N);
     const dimA = DIM(dims, g.A);
     const dimB = DIM(dims, g.B);
     for (let s = 0; s < dimN; s++)
       for (let b = 0; b < dimB; b++)
         for (let a = 0; a < dimA; a++) {
-          const c = faceColorAt(face, a, b, s, dims, surfaceMask, faceColor);
+          const c = faceColorAt(face, f, a, b, s, dims, surfaceMask, faceColor);
           if (c < 0) continue;
-          quads.push({ normal: g.normal, color: c, corners: g.quad(a, a, b, b, s) });
+          quads.push({ normal, color: c, corners: g.quad(a, a, b, b, s) });
         }
-  }
+  });
   return quads;
 }
 
 /** Merge coplanar same-color faces per slice (classic greedy meshing). */
 export function greedyQuads(dims, surfaceMask, faceColor) {
   const quads = [];
-  for (const face of FACE_KEYS) {
+  FACE_KEYS.forEach((face, f) => {
     const g = FACE_GEO[face];
+    const normal = FACE_NORMAL[face];
     const dimN = DIM(dims, g.N);
     const dimA = DIM(dims, g.A);
     const dimB = DIM(dims, g.B);
@@ -189,7 +188,7 @@ export function greedyQuads(dims, surfaceMask, faceColor) {
       used.fill(0);
       for (let b = 0; b < dimB; b++)
         for (let a = 0; a < dimA; a++) {
-          const c = faceColorAt(face, a, b, s, dims, surfaceMask, faceColor);
+          const c = faceColorAt(face, f, a, b, s, dims, surfaceMask, faceColor);
           const j = b * dimA + a;
           has[j] = c < 0 ? 0 : 1;
           cell[j] = c < 0 ? 0 : c;
@@ -219,14 +218,14 @@ export function greedyQuads(dims, surfaceMask, faceColor) {
             for (let da = 0; da < w; da++) used[(b + db) * dimA + a + da] = 1;
 
           quads.push({
-            normal: g.normal,
+            normal,
             color: c,
             corners: g.quad(a, a + w - 1, b, b + h - 1, s),
           });
         }
       }
     }
-  }
+  });
   return quads;
 }
 

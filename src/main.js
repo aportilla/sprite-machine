@@ -14,7 +14,7 @@ import {
   TILE_MIN,
   TILE_MAX,
 } from './lib/atlas.js';
-import { VIEW_NAMES, VIEW_OPPOSITE, VIEW_MIRROR_AXIS } from './lib/views.js';
+import { VIEW_NAMES, VIEW_OPPOSITE, MIRROR_AXIS } from './lib/views.js';
 import { replaceColorInRect } from './lib/fill.js';
 import { PENCIL_PALETTE, PALETTE_256 } from './lib/constants.js';
 import { faceGuides } from './lib/guides.js';
@@ -348,7 +348,7 @@ function mountEditor(name, focusSize) {
   // mirror, so it would overlay identically and add nothing). A derived face
   // opens with an empty canvas and relies on this faded mirror as its reference.
   const oppArt = state.views[VIEW_OPPOSITE[name]];
-  const mirrorBehind = oppArt ? mirrorImage(oppArt, VIEW_MIRROR_AXIS[name]) : null;
+  const mirrorBehind = oppArt ? mirrorImage(oppArt, MIRROR_AXIS) : null;
   // Hairline extent rules from the orthogonal faces sharing each of this face's
   // axes — where a painted pixel can survive the (now strict) carve.
   const guides = faceGuides(state.views, name, state.tileW, state.tileH);

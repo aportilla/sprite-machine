@@ -32,14 +32,13 @@ export function buildVoxels(rawViews, opts = {}) {
   }
   const gviews = gridViews(ingested, dims);
   const solid = carve(gviews, dims);
-  const { surfaceMask, count } = extractSurface(solid, dims);
+  // extractSurface already visits + gates every voxel on `solid`, so it returns
+  // solidCount too (no separate full-grid pass needed here).
+  const { surfaceMask, count, solidCount } = extractSurface(solid, dims);
   const { faceColor, palette } = colorize(solid, surfaceMask, gviews, dims, opts);
   if (palette.length === 0 && Object.keys(ingested).length > 0) {
     warnings.push('No opaque pixels found — every provided sprite is fully transparent.');
   }
-
-  let solidCount = 0;
-  for (let i = 0; i < solid.length; i++) solidCount += solid[i];
 
   return {
     dims,

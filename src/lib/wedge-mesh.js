@@ -27,25 +27,15 @@
 
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { voxIndex, FACE_KEYS } from './carve.js';
+import { voxIndex } from './carve.js';
 import { faceQuads } from './faces.js';
 import { unpackRGBA } from './ingest.js';
 import { eliminateTJunctions } from './t-junction.js';
 import { makeVertexColorLinearizer, finishVoxelMesh } from './mesh-util.js';
+import { AXIS_INDEX, FACE_INDEX, faceKeyOf } from './views.js';
 import { DEFAULT_WORLD_SIZE } from './constants.js';
 
-const AXI = { x: 0, y: 1, z: 2 };
-// face key from axis name + sign (+1/-1)
-const FKEY = {
-  x1: 'px',
-  'x-1': 'nx',
-  y1: 'py',
-  'y-1': 'ny',
-  z1: 'pz',
-  'z-1': 'nz',
-};
-const FIDX = {};
-FACE_KEYS.forEach((k, i) => (FIDX[k] = i));
+const AXI = AXIS_INDEX; // world-axis name -> [x,y,z] index
 const FLAT_COLOR = 0xffcfcfd6;
 
 // The three ridge axes (the axis a wedge prism extends along) and their two
@@ -58,12 +48,11 @@ const RIDGES = [
 ];
 
 export function wedgeMesh(result, opts = {}) {
-  const { dims, solid, surfaceMask, faceColor, palette } = result;
+  const { dims, solid, surfaceMask, faceColor } = result;
   const { nx, ny, nz } = dims;
   const flat = !!opts.flat;
   const worldSize = opts.worldSize ?? DEFAULT_WORLD_SIZE;
   const s = worldSize / Math.max(nx, ny, nz);
-  const dominant = (palette && palette.length ? palette[0] : FLAT_COLOR) >>> 0;
 
   // The wedge fires only where its two covered faces are the same material.
   // Those faceColor values are already palette-snapped by colorize, but privacy
@@ -114,10 +103,10 @@ export function wedgeMesh(result, opts = {}) {
               if (solidAt(...step(x, y, z, B, -sB))) continue;
 
               // faces the wedge covers = each neighbour's face pointing back at C
-              const faceA = FKEY[A + -sA];
-              const faceB = FKEY[B + -sB];
-              const aKey = voxIndex(...aN, dims) * 6 + FIDX[faceA];
-              const bKey = voxIndex(...bN, dims) * 6 + FIDX[faceB];
+              const faceA = faceKeyOf(A, -sA);
+              const faceB = faceKeyOf(B, -sB);
+              const aKey = voxIndex(...aN, dims) * 6 + FACE_INDEX[faceA];
+              const bKey = voxIndex(...bN, dims) * 6 + FACE_INDEX[faceB];
               const cA = faceColor.get(aKey);
               const cB = faceColor.get(bKey);
 
@@ -135,9 +124,10 @@ export function wedgeMesh(result, opts = {}) {
               wedgeCell.set(cidx, { R, A, B, sA, sB });
               removed.add(aKey);
               removed.add(bKey);
-              // The gate guarantees cA and cB agree, so either is the surface's
-              // true colour; fall back only if a covered face was left uncoloured.
-              const color = (cA != null ? cA : cB != null ? cB : dominant) >>> 0;
+              // The non-flat gate guarantees cA and cB agree, so either is the
+              // surface's true colour. (In flat mode the wedge colour is overridden
+              // to FLAT_COLOR downstream, so a null here can never render.)
+              const color = (cA != null ? cA : cB) >>> 0;
               wedges.push({ x, y, z, R, A, B, sA, sB, color });
               placed = true;
               break;

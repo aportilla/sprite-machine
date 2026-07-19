@@ -13,7 +13,12 @@
 // ---------------------------------------------------------------------------
 
 import { placeView } from './ingest.js';
-import { VIEWS, VIEW_AXES } from './views.js';
+import { VIEWS, VIEW_AXES, FACE_KEYS, FACE_NORMAL } from './views.js';
+
+// FACE_KEYS lives with FACE_NORMAL in views.js (the face-metadata module) but is
+// re-exported here so its long-standing consumers (faces.js, colorize.js,
+// wedge-mesh.js) keep importing it from carve.js unchanged.
+export { FACE_KEYS };
 
 export const voxIndex = (x, y, z, d) => x + d.nx * (y + d.ny * z);
 
@@ -128,6 +133,9 @@ export function carve(gviews, dims) {
   }
   const planeList = [...planes.values()];
 
+  // One reused scratch for the projection (projectInto mutates it) so the hot
+  // triple loop below allocates nothing per voxel × view.
+  const p = { u: 0, v: 0 };
   for (let z = 0; z < nz; z++) {
     for (let y = 0; y < ny; y++) {
       for (let x = 0; x < nx; x++) {
@@ -135,7 +143,7 @@ export function carve(gviews, dims) {
         for (const group of planeList) {
           let covered = false;
           for (const { spec, occ, imgW } of group) {
-            const p = spec.project(x, y, z, dims);
+            spec.projectInto(x, y, z, dims, p);
             if (occ[p.v * imgW + p.u]) {
               covered = true;
               break;
@@ -152,31 +160,29 @@ export function carve(gviews, dims) {
   return solid;
 }
 
-// 6 axis-neighbor offsets matching FACE order px,nx,py,ny,pz,nz.
-const NEIGHBORS = [
-  [1, 0, 0],
-  [-1, 0, 0],
-  [0, 1, 0],
-  [0, -1, 0],
-  [0, 0, 1],
-  [0, 0, -1],
-];
-export const FACE_KEYS = ['px', 'nx', 'py', 'ny', 'pz', 'nz'];
+// 6 axis-neighbor offsets in FACE_KEYS order — the outward normals themselves.
+// Derived from FACE_NORMAL so they can't drift from the face convention.
+const NEIGHBORS = FACE_KEYS.map((k) => FACE_NORMAL[k]);
 
 /**
  * Extract surface voxels: a solid voxel with >=1 empty/out-of-bounds neighbor.
- * @returns {{surfaceMask:Uint8Array, count:number}}
- *   surfaceMask[idx] holds a 6-bit exposure mask (bit i => FACE_KEYS[i] exposed).
+ * Also tallies the total solid count in the same pass (every voxel is visited and
+ * gated on solid here), so the pipeline needn't re-walk the grid a third time.
+ * @returns {{surfaceMask:Uint8Array, count:number, solidCount:number}}
+ *   surfaceMask[idx] holds a 6-bit exposure mask (bit i => FACE_KEYS[i] exposed);
+ *   count = surface voxels; solidCount = all solid voxels (surface + interior).
  */
 export function extractSurface(solid, dims) {
   const { nx, ny, nz } = dims;
   const surfaceMask = new Uint8Array(nx * ny * nz);
   let count = 0;
+  let solidCount = 0;
   for (let z = 0; z < nz; z++) {
     for (let y = 0; y < ny; y++) {
       for (let x = 0; x < nx; x++) {
         const idx = voxIndex(x, y, z, dims);
         if (!solid[idx]) continue;
+        solidCount++;
         let mask = 0;
         for (let f = 0; f < 6; f++) {
           const [dx, dy, dz] = NEIGHBORS[f];
@@ -193,5 +199,5 @@ export function extractSurface(solid, dims) {
       }
     }
   }
-  return { surfaceMask, count };
+  return { surfaceMask, count, solidCount };
 }
