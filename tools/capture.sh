@@ -67,6 +67,7 @@ trap 'reap_run "$DIR"' EXIT INT TERM
 
 COMMON=(--headless=new --disable-gpu --use-gl=angle --use-angle=swiftshader
   --hide-scrollbars --window-size=1000,850 --virtual-time-budget=4000
+  --force-device-scale-factor="${CAPTURE_DSF:-1}"
   --no-first-run --no-default-browser-check --user-data-dir="$DIR")
 
 ARGS=("${COMMON[@]}")
