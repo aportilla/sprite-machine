@@ -160,17 +160,19 @@ export const VIEWS = {
 
 export const VIEW_NAMES = Object.keys(VIEWS);
 
-// The six view names in the order the UI's face-preview grid lays them out
-// (a 3x2 arrangement). Matches the atlas layout (atlas.js DEFAULT_ATLAS_LAYOUT:
-// LEFT FRONT TOP / RIGHT BACK BOTTOM) so the preview reads like the sheet.
+// The six view names in atlas-sheet (row-major) order, matching atlas.js
+// DEFAULT_ATLAS_LAYOUT (LEFT FRONT TOP / RIGHT BACK BOTTOM). A pinned convention
+// (a test asserts it equals the layout) — there is no on-screen faces-preview
+// grid; the editor switches faces with text tabs.
 export const VIEW_DISPLAY_ORDER = ['left', 'front', 'top', 'right', 'back', 'bottom'];
 
 // Which image edge of a view's tile the object's FRONT (+z, the "nose") points
-// toward — used by the UI to mark orientation on each face thumbnail. Derived
-// from the projections in VIEWS: e.g. in LEFT, front (z=nz-1) maps to u=0, the
-// left column. TOP and BOTTOM both put the front on their TOP edge (BOTTOM is the
-// sideways flip of TOP). FRONT/BACK look straight down +z/-z, so their nose
-// points out of / into the screen — there is no in-plane front edge (null).
+// toward. A projection-convention pin (a test checks it against VIEWS' projections)
+// and the reference behind the README's per-face "Front points" column. Derived
+// meaning: in LEFT, front (z=nz-1) maps to u=0, the left column; TOP and BOTTOM
+// both put the front on their TOP edge (BOTTOM is the sideways flip of TOP);
+// FRONT/BACK look straight down +z/-z, so their nose points out of / into the
+// screen — there is no in-plane front edge (null).
 export const VIEW_FRONT_EDGE = {
   right: 'right',
   left: 'left',

@@ -8,9 +8,11 @@ geometry, not faked by a shader.
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-npm test         # pipeline + wedge-mesh + atlas round-trip (node --test)
-npm run build    # static bundle in dist/
+npm run dev        # http://localhost:5173
+npm test           # unit + integration suites (node --test)
+npm run typecheck  # tsc checkJs over src/ (JSDoc types)
+npm run lint       # prettier --check .   (npm run format to fix)
+npm run build      # static bundle in dist/
 ```
 
 **Pick a built-in sample**, or load your own **3×2 sprite sheet** — click _pick
@@ -53,8 +55,9 @@ draw each tile this way for a zero-transform ingest:
 | TOP          | plan view, width horizontal                             | top edge     | width × depth  |
 | BOTTOM       | plan from below (car rolled sideways, not end-over-end) | top edge     | width × depth  |
 
-The UI's **faces** preview lays the sliced tiles out like the sheet, so you can
-eyeball each tile's orientation against this table's **Front points** column.
+The editor's face **tabs** switch which tile you're editing; check each tile's
+orientation against this table's **Front points** column, using the faded
+onion-skin of the mirrored opposite and the alignment guides behind the canvas.
 Per-tile `rot`/`flip` transforms exist in the pipeline for sheets that don't
 follow the convention.
 
@@ -154,7 +157,8 @@ _pick atlas ▾_ menu, and _download_.
   **download** button saves the edited atlas as `atlas.png`, and the model
   rebuilds (rAF-debounced) with no camera jump.
 - **Tile size** — a single **square-tile stepper** docked at the right of the tool
-  strip retiles the whole atlas to any integer **1–256**. Tiles are **locked square**, so
+  strip retiles the whole atlas to any integer **1–64** (the ceiling keeps the
+  live per-stroke carve — a synchronous O(n³) walk — tractable). Tiles are **locked square**, so
   every resize is **registration-preserving**, and the stepper **keeps the art centered**:
   each axis splits the size change around the sprite (`resizeAtlas` with `anchor:'center'`)
   so it stays put in the canvas as the tile grows / shrinks instead of hugging a corner —

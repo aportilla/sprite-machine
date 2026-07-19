@@ -1,5 +1,13 @@
 # Plan: in-app tile drawing editor
 
+> ⚠️ **SUPERSEDED — history only.** This early design (and even its own "Update"
+> note below) no longer matches the shipped editor. What actually ships: an
+> always-open editor docked in the **right half** of a **50/50 split** (no modal,
+> no `ui.setDrawingMode`), with **pencil / rect / fill** tools and a **256-color
+> palette modal** (DB16 only seeds the default brush). For the current design read
+> the **"Drawing editor"** section of `README.md` and the header comment of
+> `src/editor.js`. Kept only as a record of how the feature was scoped.
+
 **Status:** implemented, then evolved past this plan (see note) · **Date:** 2026-07-16
 
 > **Update — shipped design differs from this plan.** The editor was first built

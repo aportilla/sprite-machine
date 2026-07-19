@@ -30,14 +30,16 @@ export function makeVertexColorLinearizer() {
 
 /**
  * Shared final assembly for the vertex-colored builders: center the geometry on
- * X/Z, rest its base on the ground (y=0), compute bounds, and wrap it in the
- * standard flat-shaded vertex-color material with shadows on.
+ * X/Z, leave Y exactly as authored (no ground-rest — the Y translate is a hard 0;
+ * where the object sits vertically is wherever the artist painted it, see
+ * carve.js), compute bounds, and wrap it in the standard flat-shaded vertex-color
+ * material with shadows on.
  * @param {THREE.BufferGeometry} geo
  * @param {{nx:number, nz:number, s:number, userData?:Record<string,unknown>}} opts
  * @returns {THREE.Mesh}
  */
 export function finishVoxelMesh(geo, { nx, nz, s, userData = {} }) {
-  geo.translate((-nx * s) / 2, 0, (-nz * s) / 2);
+  geo.translate((-nx * s) / 2, 0, (-nz * s) / 2); // center X/Z; Y left as authored
   geo.computeBoundingBox();
   geo.computeBoundingSphere();
 

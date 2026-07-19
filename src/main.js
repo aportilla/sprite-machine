@@ -253,7 +253,9 @@ function sliceAndBuild(reframe) {
 }
 
 // --------------------------------------------------------------------------
-// Tile editor wiring (see docs/drawing-editor-plan.md)
+// Tile editor wiring (see the "Drawing editor" section of README.md and the
+// header comment of editor.js — docs/drawing-editor-plan.md is a superseded
+// early design, kept for history only).
 // --------------------------------------------------------------------------
 // The tools panel (right half) always shows the editor for one face. Boot and
 // sheet-swaps fall back to this face; the tabs switch which face is active. Tabs

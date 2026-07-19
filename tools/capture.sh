@@ -86,10 +86,17 @@ case "$MODE" in
 esac
 ARGS+=("$URL")
 
-# Launch Chrome in the background (stderr hushed; stdout kept so `dom` mode prints
-# the DOM to our stdout). The watchdog is a DETACHED subshell: if THIS script is
+# Launch Chrome in the background (stderr hushed). `dom` mode's stdout (the DOM)
+# is captured to a file so it can be validated non-empty before we hand it to the
+# caller — a dead dev server or a Chrome failure otherwise prints nothing and still
+# exits 0, a false success. The watchdog is a DETACHED subshell: if THIS script is
 # SIGKILLed it is reparented and still runs, guaranteeing this run is reaped.
-"$CHROME" "${ARGS[@]}" 2>/dev/null &
+DOMOUT="$DIR/dom.html"
+if [ "$MODE" = "dom" ]; then
+  "$CHROME" "${ARGS[@]}" >"$DOMOUT" 2>/dev/null &
+else
+  "$CHROME" "${ARGS[@]}" 2>/dev/null &
+fi
 CHROME_PID=$!
 ( sleep "$DEADLINE"; reap_run "$DIR" ) 2>/dev/null &
 WATCHDOG=$!
@@ -110,5 +117,20 @@ kill "$WATCHDOG" 2>/dev/null || true # normal path: cancel the watchdog
 
 if [ "$MODE" = "shot" ]; then
   [ -s "$OUT" ] && echo "shot -> $OUT" || { echo "capture failed: no $OUT written" >&2; exit 1; }
+elif [ "$MODE" = "dom" ]; then
+  # Validate before handing the DOM to the caller (the cat runs before the EXIT
+  # trap removes $DIR), so a failed capture is a non-zero exit, not a false success.
+  if [ ! -s "$DOMOUT" ]; then
+    echo "capture failed: empty DOM (Chrome produced no output)" >&2
+    exit 1
+  fi
+  # A failed navigation (dev server down, bad URL) still dumps a DOM — Chrome's
+  # net-error interstitial, identifiable by the stable Chromium error-page id.
+  # Reject it rather than hand back a bogus page that looks like success.
+  if grep -q 'id="main-frame-error"' "$DOMOUT"; then
+    echo "capture failed: Chrome error page (dev server down or bad URL?)" >&2
+    exit 1
+  fi
+  cat "$DOMOUT"
 fi
 # The EXIT trap reaps this run's Chrome + temp dir.

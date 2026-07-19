@@ -1,5 +1,15 @@
 # TODO — sprite-machine cleanup & improvement hit-list
 
+> 🗄️ **ARCHIVED HISTORICAL REVIEW — do not action from this file.** This was an
+> earlier sweep, since **superseded by `hit-list.md`** (which reflects the current
+> tree). Most items here are done or obsolete: every reference to a **deleted file**
+> (`textured-box.js` / box mode, and the vectorize → lowpoly → diagonalize →
+> diag-preview chain) is **N/A (file removed)**; the Tier 4 `mesh-util` extraction,
+> Tier 7 CI / tsconfig / prettier / editorconfig, and the Tier 3 README fixes are
+> all **applied**. The one genuinely-open item is a **LICENSE file + package.json
+> license field** (still absent — needs an owner's license choice). The banners
+> below are kept verbatim as history.
+
 > **✅ Executed** on branch `cleanup/todo-sweep`. All tiers applied. Gates:
 > `npm test` 22 pass (7 added by this work), `npm run typecheck` clean,
 > `npm run build` OK, and voxel / low-poly / box modes screenshot-verified.
