@@ -1,8 +1,11 @@
 // computeDiag — the geometry self-check behind ?diag=1 and the watertightness
 // asserts. It reads position-based edge parity (a closed surface uses every
-// undirected edge an even number of times; boundary/odd edges are real holes)
-// plus a per-face normal histogram bucketed by dominant axis + sign. It is pure
-// and duck-types the geometry, so THREE is never needed — plain stubs suffice.
+// undirected edge an even number of times; boundary/odd edges are a hole in a
+// mesh that should be closed — but the greedy-voxel mesh legitimately reports
+// nonzero counts from its unrepaired step T-junctions, so computeDiag only
+// COUNTS, it never asserts watertightness on its own — see diag.js) plus a
+// per-face normal histogram bucketed by dominant axis + sign. It is pure and
+// duck-types the geometry, so THREE is never needed — plain stubs suffice.
 // Run: node --test test/diag.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

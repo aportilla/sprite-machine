@@ -40,7 +40,7 @@
 //     color and `B`.
 //   - usedColors: [{r,g,b}] colors already painted on the OTHER faces; the editor
 //     unions the current tile's live pixels on top for the dynamic palette row.
-//   - brush: shared { tool, color:{r,g,b}, swatchIndex, erase, picking, size,
+//   - brush: shared { tool, color:{r,g,b}, erase, picking, size,
 //     cornerRadius, fillReplace, fillAllTiles, chosen } — persisted by the caller
 //     across face swaps. `tool` is the drawing op ('pencil'|'rect'|'fill'; all live).
 //     `erase` makes the stroke/rect/fill lay transparent; `picking` arms the
@@ -252,7 +252,6 @@ export function createTileEditor(
   if (brush.tool == null) brush.tool = 'pencil';
   if (brush.erase == null) brush.erase = false;
   if (brush.picking == null) brush.picking = false;
-  if (brush.swatchIndex == null) brush.swatchIndex = 0;
   if (brush.size == null) brush.size = 1;
   if (brush.cornerRadius == null) brush.cornerRadius = 0;
   if (brush.fillReplace == null) brush.fillReplace = false;
@@ -404,14 +403,12 @@ export function createTileEditor(
   }
 
   const rgbEq = (a, b) => a.r === b.r && a.g === b.g && a.b === b.b;
-  const matchPaletteIndex = (color) => palette.findIndex((p) => rgbEq(p.rgb, color));
   const rkey = rgbKey;
 
   // The single path every color pick funnels through (palette modal, in-sprite,
   // eyedrop): make `color` the pencil's ink and clear the erase/eyedropper flags.
-  function selectColor(color, swatchIndex) {
+  function selectColor(color) {
     brush.color = { r: color.r, g: color.g, b: color.b };
-    brush.swatchIndex = swatchIndex;
     brush.erase = false;
     brush.picking = false;
     brush.chosen = true; // pin as the selected palette tile even if not painted yet
@@ -569,6 +566,7 @@ export function createTileEditor(
   eyeBtn.onclick = () => {
     brush.picking = true;
     syncUI();
+    redrawCursorLayer(); // arming pick reshapes the hover footprint (picking → size 1)
   };
   // The "transparent" swatch: a checkerboard tile that reads as a first-class
   // COLOR (empty / clear), not an eraser tool. Selecting it makes the pencil / rect
@@ -585,8 +583,8 @@ export function createTileEditor(
   transparentSw.onclick = () => {
     brush.erase = true;
     brush.picking = false;
-    brush.swatchIndex = -1;
     syncUI();
+    redrawCursorLayer(); // erasing recolors the hover footprint outline red
   };
   usedRow.append(addBtn, eyeBtn, transparentSw);
   const FIXED_LEAD = usedRow.children.length; // fixed controls kept ahead of the swatches
@@ -629,7 +627,7 @@ export function createTileEditor(
       s.type = 'button';
       s.style.background = rgbHex(c);
       s.title = rgbHex(c);
-      s.onclick = () => selectColor(c, matchPaletteIndex(c));
+      s.onclick = () => selectColor(c);
       usedRow.appendChild(s);
       usedEls.push({ el: s, rgb: c });
     }
@@ -673,7 +671,7 @@ export function createTileEditor(
     s.style.background = p.css;
     s.title = p.css;
     s.onclick = () => {
-      selectColor(rgb, matchPaletteIndex(rgb));
+      selectColor(rgb);
       closePalette();
     };
     cubeWrap.appendChild(s);
@@ -773,7 +771,6 @@ export function createTileEditor(
     } else if (k === 'e') {
       brush.erase = true;
       brush.picking = false;
-      brush.swatchIndex = -1;
     } else {
       return;
     }
@@ -799,7 +796,7 @@ export function createTileEditor(
   // palette-row tile. Runs before the ?palette=1 open so the modal reflects it too.
   if (pickIndex != null && palette256[pickIndex]) {
     const rgb = palette256[pickIndex].rgb;
-    selectColor(rgb, matchPaletteIndex(rgb));
+    selectColor(rgb);
   }
   // Dev hook (?palette=1): open the picker right away so the capture tool — which
   // can't click the "+" — can screenshot it. Consumed once by the caller.
@@ -1051,13 +1048,12 @@ export function createTileEditor(
       // Sampling empty space picks the transparent ink (clear color).
       brush.erase = true;
       brush.picking = false;
-      brush.swatchIndex = -1;
       syncUI();
     } else {
       // Route through selectColor so an off-palette (imported) sample becomes the
       // pencil color (and shows up in the palette row) just like any pick.
       const c = { r: work[i], g: work[i + 1], b: work[i + 2] };
-      selectColor(c, matchPaletteIndex(c));
+      selectColor(c);
     }
     drawCursor(hoverTexel); // sampling ends eyedrop mode → footprint returns to size
   }

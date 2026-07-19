@@ -138,13 +138,19 @@ _pick atlas ▾_ menu, and _download_.
   (organic clusters, not strict bands): grayscale in the top-left, magentas/reds
   across the top, blues down the right, greens/cyans sweeping the bottom. The
   arrangement is a fixed, hand-verified layout spelled out in
-  `src/lib/constants.js` (`PALETTE_256`). **Wedge-safety caveat:** xterm-256's
-  grayscale ramp steps ~10/channel, which is _within_ the low-poly wedge merge
-  tolerance (`sameMat`, ~12/channel), so a staircase of adjacent gray shades can
-  now auto-smooth into a wedge — the 6×6×6 color-cube levels stay ≥40 apart and
-  remain wedge-safe, and the nine fillers keep ≥~23/channel from their neighbors
-  except the two near-neutral grays, so only near-neutrals are affected (the
-  earlier sparse 8×8×4 grid kept _every_ swatch ≥36 apart). Every stroke is hard-pixel: fully opaque or fully erased, never
+  `src/lib/constants.js` (`PALETTE_256`). **Wedge-safety caveat:** xterm-256 is dense
+  enough that some adjacent swatches fall _within_ the low-poly wedge merge tolerance
+  (`sameMat`, `TOL2 = 12²` squared-L2), so a staircase of two such shades can now
+  auto-smooth into a wedge. Recomputed against the real palette + gate there are **16
+  within-tolerance pairs**: ten near-neutral grays (the grayscale ramp steps ~10/channel)
+  **plus six fully _saturated_ dark primaries/secondaries** — an xterm system color
+  (`0x80`=128) lands ~7–10 units from the matching 6×6×6-cube level (`0x87`=135) at the
+  same hue (maroon, navy, green, purple, olive, teal). So it's **not only near-neutrals**:
+  an author can place two of those on adjacent staircase voxels and get an unintended (but
+  near-imperceptible) wedge. The 6×6×6 cube _levels_ still stay ≥40 apart _within_ the
+  cube; it's the system-vs-cube overlap at the low end that adds the saturated pairs (the
+  earlier sparse 8×8×4 grid kept _every_ swatch ≥36 apart, so none merged).
+  `test/palette.test.mjs` pins the exact set. Every stroke is hard-pixel: fully opaque or fully erased, never
   anti-aliased.
 - **Face tabs** — six tabs across the top of the canvas box switch which face you
   edit, laid out as mirror pairs (`left`/`right`, `front`/`back`, `top`/`bottom`)
@@ -192,7 +198,10 @@ on that face — it's always open now, so this just picks the starting tab. It's
 the editor gets exercised in headless screenshots (the capture tool can't click),
 and it's handy for jumping straight to a face while iterating. It joins the other
 test-only URL params: `?sample=<index|name>`, `?rotate=0`, `?lowpoly=0|1`,
-`?flat=1`, `?diag=1` (watertightness self-check), `?cam=top|front|fq|bq`,
+`?flat=1`, `?diag=1` (watertightness self-check — only the default low-poly/wedge
+mesh is guaranteed watertight; with `?lowpoly=0` the greedy-voxel mesh's unrepaired
+step T-junctions show as _expected_ nonzero boundary/odd edges, not holes, so the
+`DIAG` title is tagged with the mode), `?cam=top|front|fq|bq`,
 `?tile=<N>` (or `<W>x<H>` to force an asymmetric, out-of-registration resize the
 locked-square UI can't produce) to apply one **centered** tile resize (the same
 `anchor:'center'` path the stepper drives) after the first build,
@@ -311,8 +320,9 @@ the Shift square-lock. `test/fill.test.mjs` pins the fill tool's flood + replace
 primitives (4-connectivity, contiguous vs. global scope, transparent-as-a-color,
 the no-op guards, and a full-tile flood that can't overflow the stack).
 `test/palette.test.mjs` pins the editor's
-256-color palette: 256 entries, all distinct, valid `#rrggbb`, and `packed`
-derived from `css`.
+256-color palette: 256 entries, all distinct, valid `#rrggbb`, `packed`
+derived from `css`, and the exact set of within-wedge-tolerance color pairs (the
+six saturated system-vs-cube overlaps included) so the wedge-safety note can't drift.
 
 Beyond that pipeline integration, the pure modules also have direct unit suites:
 `test/carve.test.mjs` (vox/unvox round-trip, `extractSurface` masks + counts,
@@ -321,7 +331,9 @@ guard), `test/colorize.test.mjs` (the mirror-fill / relaxation / dominant-body
 fallback tiers, on all three axes), `test/ingest.test.mjs`
 (`applyTransform`/`flip` + the `ingestSprite` throw path), and
 `test/t-junction.test.mjs` (multi-vertex edge splits with area + colour/normal
-preservation). `test/mesh.test.mjs` loads THREE to check `voxelMesh` welds
+preservation), and `test/color.test.mjs` (the shared `rgbKey`/`distinctColors`
+helpers — big-endian 24-bit keying, first-seen dedup, and the deliberately looser
+`alpha===0`-only skip vs. ingest's `alpha>=128`). `test/mesh.test.mjs` loads THREE to check `voxelMesh` welds
 watertight, centres X/Z, and leaves Y as authored, plus the shared vertex-color
 linearizer cache; `test/diag.test.mjs` exercises the `?diag=1` watertightness
 self-check on closed vs. open surfaces.

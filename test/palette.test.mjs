@@ -36,6 +36,72 @@ test('PALETTE_256 has 256 distinct colors (no duplicate swatches)', () => {
   assert.equal(seen.size, 256, 'all 256 swatches distinct');
 });
 
+// The low-poly wedge gate (wedge-mesh.js sameMat) fuses two faces whose colors are
+// within TOL2 = 12*12 squared-L2 on RGB. xterm-256 is dense enough that a handful of
+// ADJACENT swatches fall inside that gate, so an author CAN place two on a staircase
+// and get an unintended wedge. Pin the EXACT within-tolerance set (recomputed here
+// against the real palette + the real gate) so the constants.js/README wedge-safety
+// note stays honest — any future palette edit that introduces a new near-duplicate
+// must update this list, i.e. be consciously accepted. Crucially it is NOT "only
+// near-neutrals": six of the pairs are fully SATURATED dark primaries/secondaries
+// (an xterm system color 0x80=128 vs the 6×6×6-cube level 0x87=135 at the same hue).
+const WEDGE_TOL2 = 12 * 12; // must track wedge-mesh.js TOL2
+test('PALETTE_256 within-wedge-tolerance pairs match the reviewed set', () => {
+  const canon = (a, b) => [a, b].sort().join('|');
+  const expected = new Set([
+    // 10 near-neutral grays (grayscale ramp + the two near-neutral fillers)
+    canon('#5f5f5f', '#626262'),
+    canon('#878787', '#8a8a8a'),
+    canon('#afafaf', '#b2b2b2'),
+    canon('#d7d7d7', '#dadada'),
+    canon('#bcbcbc', '#c0c0c0'),
+    canon('#3a3a3a', '#3f3f3f'),
+    canon('#3f3f3f', '#444444'),
+    canon('#767676', '#7b7b7b'),
+    canon('#7b7b7b', '#808080'),
+    canon('#c0c0c0', '#c6c6c6'),
+    // 6 fully saturated dark primaries/secondaries (system 0x80 vs cube 0x87)
+    canon('#800000', '#870000'), // maroon
+    canon('#000080', '#000087'), // navy
+    canon('#008000', '#008700'), // green
+    canon('#800080', '#870087'), // purple
+    canon('#808000', '#878700'), // olive
+    canon('#008080', '#008787'), // teal
+  ]);
+  const actual = new Set();
+  for (let i = 0; i < PALETTE_256.length; i++) {
+    for (let j = i + 1; j < PALETTE_256.length; j++) {
+      const a = PALETTE_256[i].rgb;
+      const b = PALETTE_256[j].rgb;
+      const dr = a.r - b.r;
+      const dg = a.g - b.g;
+      const db = a.b - b.b;
+      if (dr * dr + dg * dg + db * db <= WEDGE_TOL2) {
+        actual.add(canon(PALETTE_256[i].css, PALETTE_256[j].css));
+      }
+    }
+  }
+  assert.deepEqual(
+    [...actual].sort(),
+    [...expected].sort(),
+    'within-tolerance palette pairs drifted from the reviewed wedge-safety set'
+  );
+  // Guard the corrected doc claim directly: exactly six of the merge-able pairs are
+  // fully saturated, so "only near-neutrals are wedge-mergeable" is false.
+  const chroma = ({ r, g, b }) => Math.max(r, g, b) - Math.min(r, g, b);
+  const byCss = new Map(PALETTE_256.map((p) => [p.css, p.rgb]));
+  let saturated = 0;
+  for (const keyPair of actual) {
+    const [ca, cb] = keyPair.split('|');
+    if (Math.min(chroma(byCss.get(ca)), chroma(byCss.get(cb))) >= 100) saturated++;
+  }
+  assert.equal(
+    saturated,
+    6,
+    'six saturated dark primary/secondary pairs are wedge-mergeable'
+  );
+});
+
 // Pin the exact Hilbert layout corners so a transcription/ordering slip is caught:
 // grayscale in the top-left, the light-cyan corner at the bottom-right.
 test('PALETTE_256 keeps the intended layout orientation', () => {

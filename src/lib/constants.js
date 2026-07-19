@@ -81,14 +81,24 @@ export const PENCIL_PALETTE = DB16_HEX.map((css) => {
 //
 // WEDGE-SAFETY: the previous palette was a sparse 8x8x4 grid whose swatches were
 // all >=36/channel apart, so the low-poly wedge gate (wedge-mesh.js sameMat,
-// ~12/channel) could never fuse two DISTINCT swatches — the artist had exact
-// control over which corners smooth vs. stay crisp. xterm-256 is denser: its
-// grayscale ramp steps ~10/channel (within the tolerance), so a staircase of
-// ADJACENT gray shades can auto-smooth into a wedge. The 6x6x6 color-cube levels
-// {0,95,135,175,215,255} stay >=40 apart and remain wedge-safe; the nine fillers
-// keep >=~23/channel from their neighbors EXCEPT the two near-neutral grays
-// (#3f3f3f, #7b7b7b), which join the grayscale ramp's existing near-neutral
-// tolerance. Net: only near-neutrals are wedge-mergeable, exactly as before.
+// TOL2 = 12*12 squared-L2 on RGB) could never fuse two DISTINCT swatches — the
+// artist had exact control over which corners smooth vs. stay crisp. xterm-256 is
+// denser, so some adjacent swatches DO fall within the gate. Recomputed against the
+// real PALETTE_256 with the real TOL2 there are 16 within-tolerance pairs:
+//   - 10 near-neutral grays (the grayscale ramp + the two near-neutral fillers
+//     #3f3f3f/#7b7b7b step ~5-10/channel), plus
+//   - 6 FULLY SATURATED dark primaries/secondaries, where an xterm SYSTEM color
+//     (channel 0x80=128) lands ~7-10 units from the matching 6x6x6-cube level
+//     (0x87=135) at the same hue: #800000/#870000 (maroon), #000080/#000087 (navy),
+//     #008000/#008700 (green), #800080/#870087 (purple), #808000/#878700 (olive),
+//     #008080/#008787 (teal).
+// So an author CAN place two of these on adjacent staircase voxels and get an
+// unintended wedge — it's NOT "only near-neutrals". Impact is narrow (near-identical
+// dark colors; a ~7-10 unit false-merge is nearly imperceptible). The 6x6x6 cube
+// LEVELS {0,95,135,175,215,255} still stay >=40 apart *within* the cube; it's the
+// system-vs-cube overlap at the low end that adds the six saturated pairs.
+// test/palette.test.mjs pins the exact within-tolerance set, so any future palette
+// edit that introduces a new near-duplicate must be consciously accepted.
 // ---------------------------------------------------------------------------
 // prettier-ignore — one row per grid row keeps the source mirroring the layout.
 const PALETTE_256_ROWS = [

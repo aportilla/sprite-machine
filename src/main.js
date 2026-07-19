@@ -202,7 +202,11 @@ function rebuild() {
       // the dynamic import settles; skip a stale read rather than measure a mesh
       // that's already been replaced.
       if (geo !== current?.geometry) return;
-      document.title = 'DIAG ' + JSON.stringify(computeDiag(geo));
+      // Tag the mode: only the low-poly (wedge) mesh is guaranteed watertight. The
+      // greedy-voxel mesh (lowpoly off) deliberately leaves its step-riser T-junctions
+      // unrepaired, so nonzero boundary/odd edges there are expected artifacts, not holes.
+      const mode = state.lowpoly ? 'lowpoly' : 'voxel';
+      document.title = `DIAG ${mode} ` + JSON.stringify(computeDiag(geo));
     });
   }
   scene.add(current);
@@ -305,14 +309,13 @@ function applyTileEdit(name, wasDerived, tile, dirty) {
 // --- editor session -------------------------------------------------------
 // The editor is permanently docked in the right-half panel; the 3D view stays
 // live on the left. The brush selection is shared so it survives a face swap:
-// `tool` is the drawing op ('pencil', 'rect', 'fill' all live), `color`/`swatchIndex`
-// the ink, `erase`/`picking` the eraser-ink / eyedropper flags, `size` the pencil
+// `tool` is the drawing op ('pencil', 'rect', 'fill' all live), `color` the ink,
+// `erase`/`picking` the eraser-ink / eyedropper flags, `size` the pencil
 // footprint, `cornerRadius` the rect tool's corner radius (texels, 0 = sharp),
 // `fillReplace`/`fillAllTiles` the fill tool's two option checkboxes.
 const brush = {
   tool: 'pencil',
   color: null,
-  swatchIndex: 0,
   erase: false,
   picking: false,
   size: 1,
@@ -476,6 +479,14 @@ function enterDrawing(name) {
 
 function onDownload() {
   if (!state.atlasImage) return;
+  // Fold any un-flushed live stroke into the canonical sheet BEFORE snapshotting
+  // it — applyTileEdit only schedules the blit via rAF (paused in a backgrounded
+  // tab), so without this drain the last stroke could be dropped from atlas.png.
+  // Same guard as resizeTiles / replaceColorAllTiles, the sibling canonical consumers.
+  if (liveRAF) {
+    cancelAnimationFrame(liveRAF);
+    flushLive();
+  }
   imageDataToBlob(state.atlasImage)
     .then((b) => downloadBlob(b, 'atlas.png'))
     .catch((err) => ui.setError(`Download failed: ${err.message}`));

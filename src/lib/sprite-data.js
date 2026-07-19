@@ -24,6 +24,8 @@ export function gridToImageData(rows, palette) {
       const ch = rows[y][x];
       if (ch === '.' || ch === ' ') continue;
       const c = palette[ch];
+      if (!c)
+        throw new Error(`gridToImageData: no palette entry for '${ch}' at (${x},${y}).`);
       const i = (y * w + x) * 4;
       data[i] = c[0];
       data[i + 1] = c[1];
