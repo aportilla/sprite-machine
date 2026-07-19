@@ -314,11 +314,24 @@ the no-op guards, and a full-tile flood that can't overflow the stack).
 256-color palette: 256 entries, all distinct, valid `#rrggbb`, and `packed`
 derived from `css`.
 
+Beyond that pipeline integration, the pure modules also have direct unit suites:
+`test/carve.test.mjs` (vox/unvox round-trip, `extractSurface` masks + counts,
+`reconcileDims`, `placeView`, plane-union, and a `projectInto`↔`project` drift
+guard), `test/colorize.test.mjs` (the mirror-fill / relaxation / dominant-body
+fallback tiers, on all three axes), `test/ingest.test.mjs`
+(`applyTransform`/`flip` + the `ingestSprite` throw path), and
+`test/t-junction.test.mjs` (multi-vertex edge splits with area + colour/normal
+preservation). `test/mesh.test.mjs` loads THREE to check `voxelMesh` welds
+watertight, centres X/Z, and leaves Y as authored, plus the shared vertex-color
+linearizer cache; `test/diag.test.mjs` exercises the `?diag=1` watertightness
+self-check on closed vs. open surfaces.
+
 ```
 src/lib/
   constants.js    default mirror (all-on) / world-size + DB16 pencil palette + Hilbert-laid xterm-256 palette (pure)
-  views.js        6 view definitions: normals, axes, projections, front-edge meta
-  atlas.js        slice a 3x2 sheet <-> face tiles: blitTile write-back, cellOf (pure)
+  color.js        shared color helpers: hexToRgb, rgbKey (24-bit dedup), distinctColors (pure)
+  views.js        6 view defs + the face vocabulary (keys/normals/index/axis) all derive from FACE_NORMAL; projections, front-edge meta
+  atlas.js        slice a 3x2 sheet <-> face tiles: blitTile write-back, cellOf, validateSheet (pure)
   ingest.js       sprite -> occupancy/color arrays (full tile, no crop), place, reorient
   carve.js        dim reconciliation, visual-hull AND, surface extraction
   colorize.js     depth-aware first-hit surface coloring + palette snap
@@ -355,9 +368,11 @@ src/
   (`t-junction.js`), so the result stays watertight (a regression test asserts
   zero boundary edges).
 - **Perf** — hidden-face culling + greedy meshing (both on) keep it to one draw
-  call and a handful of triangles; for a scene of _many_ objects, batch identical
-  ones with an object-level `InstancedMesh`, and move `buildVoxels` to a Web
-  Worker (it's pure typed-array code, trivially transferable) if rebuilds ever
-  stall the main thread.
+  call and a handful of triangles, and the render loop only redraws on change
+  (idle scenes don't repaint). The carve is a synchronous O(n³) walk, so the tile
+  stepper is capped at **64** (a 64³ grid still rebuilds live per stroke); to lift
+  that ceiling, move `buildVoxels` to a Web Worker (it's pure typed-array code,
+  trivially transferable). For a scene of _many_ objects, batch identical ones
+  with an object-level `InstancedMesh`.
 - **Export** — the merged mesh is glTF-ready (`GLTFExporter`) for use in other
   engines / animation.
