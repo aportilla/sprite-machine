@@ -15,6 +15,7 @@ import {
   TILE_MAX,
 } from './lib/atlas.js';
 import { VIEW_NAMES, VIEW_OPPOSITE, VIEW_MIRROR_AXIS } from './lib/views.js';
+import { replaceColorInRect } from './lib/fill.js';
 import { PENCIL_PALETTE, PALETTE_256 } from './lib/constants.js';
 import { faceGuides } from './lib/guides.js';
 import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
@@ -110,6 +111,10 @@ let pendingPick = null;
 // preview for that box (radius r; sq=1 for the Shift square-lock) on the first editor
 // mount (the capture tool can't drag), so a shot can show the tool mid-drag. Consumed once.
 let pendingRect = null;
+// Dev hook: ?fill=x,y[,r[,a]] selects the fill tool, sets its checkboxes (replace=r,
+// all-tiles=a), and fills at (x,y) on the first editor mount (the capture tool can't
+// click), so a shot can show the tool + result. Consumed once.
+let pendingFill = null;
 
 const camParam = params.get('cam');
 const ISO_DIR = new THREE.Vector3(
@@ -285,9 +290,10 @@ function applyTileEdit(name, wasDerived, tile, dirty) {
 // --- editor session -------------------------------------------------------
 // The editor is permanently docked in the right-half panel; the 3D view stays
 // live on the left. The brush selection is shared so it survives a face swap:
-// `tool` is the drawing op ('pencil' + 'rect' are live), `color`/`swatchIndex` the
-// ink, `erase`/`picking` the eraser-ink / eyedropper flags, `size` the pencil
-// footprint, `cornerRadius` the rect tool's corner radius (texels, 0 = sharp).
+// `tool` is the drawing op ('pencil', 'rect', 'fill' all live), `color`/`swatchIndex`
+// the ink, `erase`/`picking` the eraser-ink / eyedropper flags, `size` the pencil
+// footprint, `cornerRadius` the rect tool's corner radius (texels, 0 = sharp),
+// `fillReplace`/`fillAllTiles` the fill tool's two option checkboxes.
 const brush = {
   tool: 'pencil',
   color: null,
@@ -296,6 +302,8 @@ const brush = {
   picking: false,
   size: 1,
   cornerRadius: 0,
+  fillReplace: false,
+  fillAllTiles: false,
 };
 let currentEditor = null;
 let editingName = null;
@@ -345,6 +353,11 @@ function mountEditor(name, focusSize) {
   // axes — where a painted pixel can survive the (now strict) carve.
   const guides = faceGuides(state.views, name, state.tileW, state.tileH);
   editingName = name;
+  // Consume the one-shot ?fill hook BEFORE constructing the editor: it never re-mounts
+  // (its mount fill is local), but reading it into a local + nulling the field first
+  // keeps the one-shot honest against any re-entrant mount.
+  const fillOnMount = pendingFill;
+  pendingFill = null;
   currentEditor = createTileEditor(ui.editorDock, {
     name,
     tile: existing || freshTile(),
@@ -364,14 +377,51 @@ function mountEditor(name, focusSize) {
     previewCursor: pendingCursor,
     previewRect: pendingRect,
     pickIndex: pendingPick,
+    fillOnMount,
     onLive: (working, dirty) => applyTileEdit(name, wasDerived, working, dirty),
     onSelectFace: (target) => enterDrawing(target),
     onResizeTile: (n) => resizeTiles(n, n, 'Tile'),
+    onReplaceAllTiles: (target, fill) => replaceColorAllTiles(target, fill),
   });
   pendingOpenPalette = false; // one-shot: don't re-open on face swap / resize
   pendingCursor = null; // one-shot: only preview on the first mount
   pendingRect = null; // one-shot: only preview on the first mount
   pendingPick = null; // one-shot: only pre-select on the first mount
+}
+
+// Fill with BOTH "replace" and "all tiles" on: replace every `target` texel with
+// `fill` across all six tiles, then re-slice + rebuild + re-open the editor on the
+// same face so its working buffer reflects the replaced current tile. `target`/`fill`
+// are color keys ({transparent:true} | {r,g,b}). Scoped to the tiled region (the
+// top-left cols*tileW × rows*tileH block — the six tiles are contiguous there) rather
+// than the whole ImageData, so a non-divisible sheet's remainder pixels (outside every
+// tile, invisible to the carve but present in a download) are left untouched. Any
+// un-flushed live stroke is folded in first (same guard as resizeTiles) so the replace
+// sees the latest pixels and none are dropped on the re-mount. Called from the editor's
+// fill click — never during its construction — so the re-mount is a clean (post-event)
+// swap, like a tab click or a tile resize.
+function replaceColorAllTiles(target, fill) {
+  if (!state.atlasImage) return;
+  if (liveRAF) {
+    cancelAnimationFrame(liveRAF);
+    flushLive();
+  }
+  const { data, width, height } = state.atlasImage;
+  const changed = replaceColorInRect(
+    data,
+    width,
+    height,
+    0,
+    0,
+    state.cols * state.tileW,
+    state.rows * state.tileH,
+    target,
+    fill
+  );
+  if (!changed) return;
+  const face = editingName;
+  refreshFromAtlas(false); // re-slice all views + rebuild the mesh (keep the camera)
+  if (face) mountEditor(face); // re-open on the same face at the replaced pixels
 }
 
 // Resize every tile from the editor's tile-size stepper. Tiles are locked SQUARE, so
@@ -510,6 +560,18 @@ if (rectParam) {
       y1: p[3],
       r: p.length > 4 ? p[4] : 0,
       square: p.length > 5 && p[5] > 0,
+    };
+  }
+}
+const fillParam = params.get('fill');
+if (fillParam) {
+  const p = fillParam.split(',').map((s) => parseInt(s, 10));
+  if (p.length >= 2 && p.slice(0, 2).every(Number.isFinite)) {
+    pendingFill = {
+      x: p[0],
+      y: p[1],
+      replace: p.length > 2 && p[2] > 0,
+      all: p.length > 3 && p[3] > 0,
     };
   }
 }

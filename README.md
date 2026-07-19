@@ -75,8 +75,8 @@ _pick atlas ▾_ menu, and _download_.
   `src/editor.js`.
 - **Tools & palette** — a **tool footer inside the canvas card** (below the pixel
   canvas, set off by a hairline separator): a **tool strip** of first-class tools
-  (**pencil `B`** and **rect `R`** are live; **fill** is present but **disabled** for
-  now) — each an **icon button** drawn from the open-source **Adobe Spectrum
+  (**pencil `B`**, **rect `R`**, and **fill `G`** are all live) — each an **icon
+  button** drawn from the open-source **Adobe Spectrum
   _workflow_** icon set (`draw` / `rectangle` / `color-fill`; the ink pickers below
   use `sampler` for the eyedropper and `erase` for the eraser) — with
   the square **tile-size stepper** docked at its right, above a **per-tool options**
@@ -97,7 +97,18 @@ _pick atlas ▾_ menu, and _download_.
   respects the active ink, so a **right-drag** (or the eraser ink) drags a
   rectangular **erase**. The rounded-rect rasterization is a pure, Node-tested
   primitive (`src/lib/rect.js`) shared by the preview and the commit, so what you
-  see is exactly what lands. **Below the card** is the **palette row** — every color currently painted on
+  see is exactly what lands. For the **fill** (paint-bucket), two **checkboxes**:
+  a plain click is a **contiguous 4-connected flood** from the clicked texel (the
+  connected region sharing its color becomes the active ink). **replace** upgrades
+  that to a **whole-tile recolor** — _every_ texel matching the clicked color on the
+  tile, contiguous or not. **all tiles** (only active while **replace** is on)
+  extends the recolor across **every tile in the atlas**, so it's a global
+  find-and-replace of one color. Transparency is a first-class "color": clicking
+  empty space targets transparent (so **replace** floods every empty texel with the
+  ink), and a **right-click** / the eraser ink fills _to_ transparent (delete a
+  color). The flood + replace are pure, Node-tested primitives (`src/lib/fill.js`).
+  There's **no undo**, so an all-tiles replace is committed immediately — reload the
+  sample to revert. **Below the card** is the **palette row** — every color currently painted on
   _any_ face, so you can match existing colors, **plus your currently selected ink**
   (so a color picked from the modal lands here as the **selected tile** right away,
   before you've drawn a single pixel with it) — led by a **+** that opens a **modal
@@ -181,9 +192,12 @@ mount, `?pick=<N>` to select `PALETTE_256[N]` as the ink on mount (as if picked
 from the modal) so a shot can show it landing as the selected palette-row tile, and
 `?rect=<x0,y0,x1,y1[,r[,sq]]>` to select the rect tool and draw its live drag preview
 for that box (corner radius `r`; `sq=1` for the Shift square-lock) on mount so a shot
-can show the tool mid-drag — the
-stepper, tabs, modal, swatch pick, hover preview, and rect drag can't be driven
-headlessly.
+can show the tool mid-drag, and `?fill=<x,y[,r[,a]]>` to select the fill tool, set its
+checkboxes (`replace=r`, `all-tiles=a`), and fill at `(x,y)` on mount (the mount fill
+is always applied to the current tile only — combine with `?pick=<N>` to fill with a
+specific palette color) so a shot can show the tool + result — the
+stepper, tabs, modal, swatch pick, hover preview, rect drag, and fill click can't be
+driven headlessly.
 
 ---
 
@@ -283,7 +297,9 @@ round-trip) that the drawing editor depends on. `test/guides.test.mjs` pins the
 editor's cross-axis alignment guides (and that `VIEW_IMAGE_AXES` can't drift from
 the projections it's probed from). `test/rect.test.mjs` pins the rect tool's
 rounded-rectangle rasterization (radius clamp, convex corners, per-row symmetry) and
-the Shift square-lock.
+the Shift square-lock. `test/fill.test.mjs` pins the fill tool's flood + replace
+primitives (4-connectivity, contiguous vs. global scope, transparent-as-a-color,
+the no-op guards, and a full-tile flood that can't overflow the stack).
 `test/palette.test.mjs` pins the editor's
 256-color palette: 256 entries, all distinct, valid `#rrggbb`, and `packed`
 derived from `css`.
@@ -299,6 +315,7 @@ src/lib/
   faces.js        surface voxels -> quads: greedy-merged or culled (pure)
   guides.js       editor alignment guides: per-face cross-axis extent (pure)
   rect.js         editor rect tool: rounded-rectangle rasterization, per-row runs (pure)
+  fill.js         editor fill tool: contiguous flood + global color replace (pure)
   pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
   t-junction.js   lattice-exact T-junction repair for merged+wedge meshes (pure)
   mesh-util.js    shared vertex-color linearizer + mesh finishing (THREE)
@@ -309,7 +326,7 @@ src/lib/
 src/
   main.js         scene, lights, ground, framing, render loop + always-on editor wiring
   ui.js           header strip (samples, pick/drop atlas, download) + stage overlays (options, stats)
-  editor.js       tools panel (right half): one framed CARD of face tabs + stable-size canvas container (layout(): 60% of the sidebar height, centered integer-scaled canvas) + a tool FOOTER (tool strip — pencil + rect live, fill stubbed — with docked tile-size stepper, and per-tool options: pencil size + hover footprint preview, or rect corner-radius + live drag preview / Esc-cancel); palette row (colors + eyedropper/eraser/"+" 256-palette modal) sits below the card; align guides
+  editor.js       tools panel (right half): one framed CARD of face tabs + stable-size canvas container (layout(): 60% of the sidebar height, centered integer-scaled canvas) + a tool FOOTER (tool strip — pencil + rect + fill live — with docked tile-size stepper, and per-tool options: pencil size + hover footprint preview, rect corner-radius + live drag preview / Esc-cancel, or fill replace / all-tiles checkboxes); palette row (colors + eyedropper/eraser/"+" 256-palette modal) sits below the card; align guides
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
   icons.js        real UI glyphs — registers the Adobe Spectrum workflow <sp-icon-*> elements used by ui.js + editor.js (color via currentColor, size via --mod-icon-size; no sp-theme)
 ```

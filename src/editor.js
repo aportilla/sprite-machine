@@ -6,10 +6,10 @@
 //
 // The face tabs, the pixel canvas, and the tools are ONE framed card: the six
 // tabs cap it, the canvas fills its body, and a FOOTER inside the same card holds
-// the TOOL STRIP of first-class tools (pencil + rect are live; fill is stubbed in
-// but disabled) with the square tile-size stepper docked at its right, above a
-// per-tool OPTIONS row (the pencil's tip-SIZE stepper; the rect's corner-RADIUS
-// stepper). Only the PALETTE row lives
+// the TOOL STRIP of first-class tools (pencil, rect, and fill are all live) with
+// the square tile-size stepper docked at its right, above a per-tool OPTIONS row
+// (the pencil's tip-SIZE stepper; the rect's corner-RADIUS stepper; the fill's two
+// checkboxes). Only the PALETTE row lives
 // BELOW the card — every color currently painted on ANY face, so you can match
 // existing colors — led by a "+" that opens the full 256-color modal, then the
 // eyedropper and the eraser. The
@@ -41,11 +41,14 @@
 //   - usedColors: [{r,g,b}] colors already painted on the OTHER faces; the editor
 //     unions the current tile's live pixels on top for the dynamic palette row.
 //   - brush: shared { tool, color:{r,g,b}, swatchIndex, erase, picking, size,
-//     cornerRadius, chosen } — persisted by the caller across face swaps. `tool` is
-//     the drawing op ('pencil'|'rect'|'fill'; pencil + rect are live). `erase` makes
-//     the stroke/rect lay transparent; `picking` arms the eyedropper for the next
-//     canvas click; `size` is the pencil's N×N tip footprint (in texels);
-//     `cornerRadius` is the rect tool's corner radius (in texels, 0 = sharp).
+//     cornerRadius, fillReplace, fillAllTiles, chosen } — persisted by the caller
+//     across face swaps. `tool` is the drawing op ('pencil'|'rect'|'fill'; all live).
+//     `erase` makes the stroke/rect/fill lay transparent; `picking` arms the
+//     eyedropper for the next canvas click; `size` is the pencil's N×N tip footprint
+//     (in texels); `cornerRadius` is the rect tool's corner radius (in texels, 0 =
+//     sharp). `fillReplace` upgrades the fill from a contiguous flood to a whole-tile
+//     recolor of every matching texel; `fillAllTiles` (only meaningful when
+//     `fillReplace` is on) extends that recolor across every tile in the atlas.
 //     `chosen` is set once
 //     the user actively picks an ink (modal / eyedrop / used swatch): that ink then
 //     shows as a SELECTED tile in the palette row even before it's painted — vs.
@@ -64,6 +67,12 @@
 //   - pickIndex: dev hook (?pick=N) — select palette256[N] as the ink on mount, as
 //     if picked from the "+" modal, so a headless shot (which can't click a swatch)
 //     can show it landing as the selected palette-row tile. Consumed once.
+//   - fillOnMount: dev hook (?fill=x,y[,r[,a]]) — select the fill tool, set its two
+//     checkboxes (replace=r, all-tiles=a), and perform a fill at (x,y) on mount, so a
+//     headless shot (which can't click) can show the tool + result. The mount fill is
+//     always applied LOCALLY (to this tile only) even with a=1 — a single editor shot
+//     shows only the current tile anyway, and a local fill avoids a re-mount mid-mount.
+//     Consumed once by the caller.
 //   - onLive(workingTile, dirty): fired on each actual pixel change.
 //   - onSelectFace(name): the user clicked another face tab.
 //   - onResizeTile(size): the user changed the tile size. Tiles are locked SQUARE,
@@ -71,10 +80,17 @@
 //     anchor:'center') and re-mounts. A square resize stays in registration (the solid
 //     just translates to keep the art centered); it no longer pins y=0, so a
 //     ground-rested sprite floats up as the tile grows.
+//   - onReplaceAllTiles(target, fill): the user committed a fill with BOTH the
+//     "replace" and "all tiles" checkboxes on. `target`/`fill` are color keys
+//     ({transparent:true} | {r,g,b}); the caller replaces every `target` texel with
+//     `fill` across the whole atlas sheet and re-mounts this editor on the same face.
+//     The single-tile fill modes (contiguous flood, or whole-tile replace) never call
+//     this — they mutate the working tile directly and fire onLive like any stroke.
 // ---------------------------------------------------------------------------
 
 import { icon } from './icons.js';
 import { roundedRectRows, maxCornerRadius, squareEnd } from './lib/rect.js';
+import { keyAt, floodFill, replaceColor } from './lib/fill.js';
 
 // The pixel-canvas CONTAINER is a stable box: its height is pinned to a fixed
 // fraction of the sidebar (panel) height, full-bleed below the tabs, so nothing
@@ -180,6 +196,26 @@ function sizeStepper({ key, label, value, min, max, unit, onCommit }) {
   return field;
 }
 
+// A labeled checkbox for the per-tool options row (the fill tool's two toggles). A
+// disabled box greys out and ignores clicks but keeps showing its checked state, so
+// "all tiles" can stay remembered while "replace" (its gate) is off. Fires onToggle
+// with the new boolean on each change.
+/**
+ * @param {{label:string, checked:boolean, disabled?:boolean, title?:string,
+ *   onToggle:(v:boolean)=>void}} opts
+ */
+function checkbox({ label, checked, disabled, title, onToggle }) {
+  const wrap = el('label', 'editor-check' + (disabled ? ' disabled' : ''));
+  if (title) wrap.title = title;
+  const input = el('input');
+  input.type = 'checkbox';
+  input.checked = !!checked;
+  input.disabled = !!disabled;
+  input.onchange = () => onToggle(input.checked);
+  wrap.append(input, el('span', 'editor-check-cap', label));
+  return wrap;
+}
+
 export function createTileEditor(
   container,
   {
@@ -201,9 +237,11 @@ export function createTileEditor(
     previewCursor = null,
     previewRect = null,
     pickIndex = null,
+    fillOnMount = null,
     onLive,
     onSelectFace,
     onResizeTile,
+    onReplaceAllTiles,
   }
 ) {
   // Working copy of the tile's pixels — starts from the face's own art, or empty
@@ -224,6 +262,8 @@ export function createTileEditor(
   if (brush.swatchIndex == null) brush.swatchIndex = 0;
   if (brush.size == null) brush.size = 1;
   if (brush.cornerRadius == null) brush.cornerRadius = 0;
+  if (brush.fillReplace == null) brush.fillReplace = false;
+  if (brush.fillAllTiles == null) brush.fillAllTiles = false;
   if (brush.chosen == null) brush.chosen = false;
 
   // The pencil tip is capped at the tile edge (a single stamp can't exceed the
@@ -388,10 +428,9 @@ export function createTileEditor(
   }
 
   // --- tool strip: first-class tools + docked tile-size stepper --------------
-  // Lives in the card FOOTER (below the canvas). The pencil + rect are live tools;
-  // fill is stubbed in but disabled so the strip already shows where it'll live. The
-  // square tile-size stepper docks at the right (tiles are locked SQUARE, so a resize
-  // is always alignment-safe).
+  // Lives in the card FOOTER (below the canvas). Pencil, rect, and fill are all live
+  // tools. The square tile-size stepper docks at the right (tiles are locked SQUARE,
+  // so a resize is always alignment-safe).
   const toolstrip = el('div', 'editor-toolstrip');
   const toolGroup = el('div', 'editor-toolgroup');
   // Icon-only tool buttons (Spectrum workflow glyphs). The icon is decorative;
@@ -408,8 +447,7 @@ export function createTileEditor(
   rectBtn.appendChild(icon('rectangle'));
   const fillBtn = el('button', 'editor-tool editor-tool-icon');
   fillBtn.type = 'button';
-  fillBtn.disabled = true;
-  fillBtn.title = 'fill — coming soon';
+  fillBtn.title = 'fill — flood a region, or replace a color (G)';
   fillBtn.setAttribute('aria-label', 'fill');
   fillBtn.appendChild(icon('color-fill'));
   toolGroup.append(pencilBtn, rectBtn, fillBtn);
@@ -442,6 +480,18 @@ export function createTileEditor(
   rectBtn.onclick = () => {
     cancelRect(); // abandon any in-flight box before re-arming the tool
     brush.tool = 'rect';
+    brush.erase = false;
+    brush.picking = false;
+    if (!brush.color) brush.color = hexToRgb(palette[0].css);
+    renderToolOptions();
+    syncUI();
+  };
+  // The fill tool floods a contiguous region (or, with "replace", recolors every
+  // matching texel — optionally across all tiles); picking it returns you to drawing
+  // with the current color, and a right-click / eraser ink still fills to transparent.
+  fillBtn.onclick = () => {
+    cancelRect(); // switching tool mid-drag abandons the box (matches the B/R keys)
+    brush.tool = 'fill';
     brush.erase = false;
     brush.picking = false;
     if (!brush.color) brush.color = hexToRgb(palette[0].css);
@@ -487,6 +537,30 @@ export function createTileEditor(
           max: radiusMax,
           unit: 'px',
           onCommit: setCornerRadius,
+        })
+      );
+    } else if (brush.tool === 'fill') {
+      // "replace" upgrades the flood to a whole-tile recolor of every matching texel;
+      // "all tiles" (only meaningful with replace on) extends that across the atlas.
+      toolOpts.append(
+        checkbox({
+          label: 'replace',
+          checked: brush.fillReplace,
+          title:
+            'recolor every matching texel on this tile (not just the contiguous region)',
+          onToggle: (v) => {
+            brush.fillReplace = v;
+            renderToolOptions(); // re-render so "all tiles" enables/disables with it
+          },
+        }),
+        checkbox({
+          label: 'all tiles',
+          checked: brush.fillAllTiles,
+          disabled: !brush.fillReplace,
+          title: 'replace the clicked color across every tile in the atlas',
+          onToggle: (v) => {
+            brush.fillAllTiles = v;
+          },
         })
       );
     }
@@ -650,6 +724,7 @@ export function createTileEditor(
   function syncUI() {
     pencilBtn.classList.toggle('active', brush.tool === 'pencil');
     rectBtn.classList.toggle('active', brush.tool === 'rect');
+    fillBtn.classList.toggle('active', brush.tool === 'fill');
     eyeBtn.classList.toggle('active', brush.picking);
     eraserSw.classList.toggle('active', brush.erase && !brush.picking);
     // With the pencil (its eraser/eyedropper ink modes included) the hover
@@ -690,8 +765,8 @@ export function createTileEditor(
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key.toLowerCase();
     // Switching tools mid rect-drag abandons the box (nothing committed) — same as
-    // ESC, so B/R can't leave a half-dragged rect wired to the old pointer.
-    if (rectDragging && (k === 'b' || k === 'r')) cancelRect();
+    // ESC, so B/R/G can't leave a half-dragged rect wired to the old pointer.
+    if (rectDragging && (k === 'b' || k === 'r' || k === 'g')) cancelRect();
     if (k === 'b') {
       brush.tool = 'pencil';
       brush.erase = false;
@@ -699,6 +774,11 @@ export function createTileEditor(
       if (!brush.color) brush.color = hexToRgb(palette[0].css);
     } else if (k === 'r') {
       brush.tool = 'rect';
+      brush.erase = false;
+      brush.picking = false;
+      if (!brush.color) brush.color = hexToRgb(palette[0].css);
+    } else if (k === 'g') {
+      brush.tool = 'fill';
       brush.erase = false;
       brush.picking = false;
       if (!brush.color) brush.color = hexToRgb(palette[0].css);
@@ -996,6 +1076,44 @@ export function createTileEditor(
     drawCursor(hoverTexel); // sampling ends eyedrop mode → footprint returns to size
   }
 
+  // The ink a fill lays down: the active color, or transparent when erasing (a
+  // right-click, or the eraser ink) — mirrors the pencil / rect erase rule.
+  const fillInk = (rightClick) =>
+    rightClick || brush.erase
+      ? { transparent: true }
+      : { r: brush.color.r, g: brush.color.g, b: brush.color.b };
+
+  // Apply a fill to THIS tile's working buffer: a contiguous flood from (t), or —
+  // with "replace" on — a whole-tile recolor of every texel matching the clicked
+  // color. Repaints + notifies like any stroke if anything changed. This is the
+  // whole op for the single-tile modes; the all-tiles mode delegates instead (below).
+  function applyLocalFill(t, rightClick) {
+    const fill = fillInk(rightClick);
+    const i0 = (t.py * tileW + t.px) * 4;
+    const changed = brush.fillReplace
+      ? replaceColor(work, keyAt(work, i0), fill)
+      : floodFill(work, tileW, tileH, t.px, t.py, fill);
+    if (changed) {
+      dirty = true;
+      repaint();
+      renderUsed(); // a fill can add / remove a color from the sprite
+      onLive?.(workingTile, dirty);
+    }
+  }
+
+  // Route a fill click. "replace" + "all tiles" hands the whole op to the caller
+  // (it recolors the clicked color across every tile and re-mounts this editor);
+  // the target color is read from the clicked texel here so the caller doesn't have
+  // to. Every other mode fills this tile in place.
+  function doFill(t, rightClick) {
+    if (brush.fillReplace && brush.fillAllTiles) {
+      const target = keyAt(work, (t.py * tileW + t.px) * 4);
+      onReplaceAllTiles?.(target, fillInk(rightClick));
+      return;
+    }
+    applyLocalFill(t, rightClick);
+  }
+
   function onPointerDown(e) {
     const t = toTexel(e);
     if (!t) return;
@@ -1005,6 +1123,10 @@ export function createTileEditor(
     // a right-click still erases even with Alt down. Works with any tool.
     if (e.button !== 2 && (e.altKey || brush.picking)) {
       sampleAt(t.px, t.py);
+      return;
+    }
+    if (brush.tool === 'fill') {
+      doFill(t, e.button === 2); // single click — no drag, no pointer capture
       return;
     }
     if (brush.tool === 'rect') {
@@ -1119,6 +1241,24 @@ export function createTileEditor(
     shiftLock = !!previewRect.square; // ?rect=...,sq demos the Shift square-lock
     rectDragging = true;
     drawRectPreview();
+  }
+
+  // Dev hook (?fill=x,y[,r[,a]]): select the fill tool, set its checkboxes (replace=r,
+  // all-tiles=a), and fill at (x,y) so a headless shot (which can't click) shows the
+  // tool + result. Runs AFTER ?pick so ?pick=N&fill=x,y fills with palette color N.
+  // The mount fill is always LOCAL (never the all-tiles delegation) — a single editor
+  // shot only shows the current tile, and a local fill avoids a re-mount mid-mount.
+  if (fillOnMount) {
+    brush.tool = 'fill';
+    brush.erase = false; // match every tool-select handler: a fill paints, not erases
+    brush.picking = false;
+    brush.fillReplace = !!fillOnMount.replace;
+    brush.fillAllTiles = !!fillOnMount.all;
+    renderToolOptions();
+    syncUI();
+    const fx = Math.max(0, Math.min(tileW - 1, fillOnMount.x | 0));
+    const fy = Math.max(0, Math.min(tileH - 1, fillOnMount.y | 0));
+    applyLocalFill({ px: fx, py: fy }, false);
   }
 
   // A resize re-mounts the whole editor, which would drop keyboard focus off the

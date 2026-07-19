@@ -567,12 +567,41 @@ body {
 
 /* Per-tool options row (contextual), the second footer row. A fixed min-height keeps
    the layout stable even for a tool with no options. For the pencil: the tip-size
-   stepper. */
+   stepper; for the rect: the corner-radius stepper; for the fill: two checkboxes. */
 .editor-tool-opts {
   display: flex;
   align-items: center;
   gap: 10px;
   min-height: 28px;
+}
+/* Fill-tool option checkboxes ("replace" + "all tiles"). A tinted accent marks a
+   checked box; a disabled box ("all tiles" while "replace" is off) dims and blocks
+   pointer events but keeps showing its remembered state. */
+.editor-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+}
+.editor-check input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.editor-check-cap {
+  font-size: 11px;
+  color: #cfcfd6;
+}
+.editor-check.disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+.editor-check.disabled input,
+.editor-check.disabled .editor-check-cap {
+  cursor: default;
 }
 
 /* ---- palette row (colors + ink pickers) + palette modal ---- */
