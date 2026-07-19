@@ -68,23 +68,24 @@ face; the 3D view stays live on the left and rebuilds as you draw. Pick a face
 with the **tabs**; a **header strip** across the top holds the brand, the
 _pick atlas ▾_ menu, and _download_.
 
-- **Canvas card** — the face tabs, the pixel canvas, and the tools are **one framed
-  card**. Directly below the tabs the pixel canvas lives in a **stable container**
-  whose height is always **60% of the sidebar height**, so the **tool footer** below
-  it (and the palette below the card) never shift as the tile size — and thus the
-  drawn canvas — changes. The square editable canvas is **centered** in that box and
-  drawn **as large as an integer texel scale fits** (crisp, never a fractional
-  pixel), and it **re-fits responsively** when the window resizes. See `layout()` in
-  `src/editor.js`.
-- **Tools & palette** — a **tool footer inside the canvas card** (below the pixel
-  canvas, set off by a hairline separator): a **tool strip** of first-class tools
-  (**pencil `B`**, **rect `R`**, and **fill `G`** are all live) — each an **icon
-  button** drawn from the open-source **Adobe Spectrum
+- **Panel layout** — the panel is a **classic Photoshop tool panel**: a fixed
+  **3-region flex column** that exactly fills the panel height. A **settings header**
+  (top, fixed) holds the tools; a **draw section** (middle) **grows to fill all
+  remaining height**; a **colors tray** (bottom, fixed) reserves space for the
+  palette. The pixel canvas fills the draw section below the tabs — its height is
+  **CSS-driven** (the flex draw region), no longer a JS fraction — and the square
+  editable canvas is **centered** in it and drawn **as large as an integer texel
+  scale fits** (crisp, never a fractional pixel), **re-fitting responsively** when the
+  window resizes. See `layout()` in `src/editor.js`.
+- **Tools** — the **settings header** holds a **tool strip** of first-class tools
+  (**pencil `B`**, **rect `R`**, and **fill `G`** are all live) — each a **square
+  icon button** drawn from the open-source **Adobe Spectrum
   _workflow_** icon set (`draw` / `rectangle` / `color-fill`; the eyedropper ink
-  picker below uses `sampler`, and transparent is a checkerboard swatch, not an
-  icon) — with
-  the square **tile-size stepper** docked at its right, above a **per-tool options**
-  row. For the **pencil**, a **tip-size stepper** (`size: N px`) that stamps an
+  picker in the colors tray uses `sampler`, and transparent is a checkerboard swatch,
+  not an icon) — with
+  the **tile-size stepper** (`tile size`) docked at its right, above a **per-tool options**
+  row. For the **pencil**, a **tip-size slider** (`size: N px`, with a boxed readout)
+  that stamps an
   **N×N** square footprint and **previews it** as a hairline outline on the canvas
   as you hover; while the pencil is active the **OS cursor is hidden** over the
   canvas, so that hover outline _is_ the cursor — the exact texels a stamp will
@@ -112,20 +113,21 @@ _pick atlas ▾_ menu, and _download_.
   ink), and a **right-click** / the transparent ink fills _to_ transparent (delete a
   color). The flood + replace are pure, Node-tested primitives (`src/lib/fill.js`).
   There's **no undo**, so an all-tiles replace is committed immediately — reload the
-  sample to revert. **Below the card** is the **palette row** — every color currently painted on
-  _any_ face, so you can match existing colors, **plus your currently selected ink**
-  (so a color picked from the modal lands here as the **selected tile** right away,
-  before you've drawn a single pixel with it) — led by a **+** that opens a **modal
-  picker** over
-  the **full 256-color palette**, then the **eyedropper** (`I` / hold **Alt** to
-  sample mid-stroke) and a **transparent** swatch (`E` / **right-click**) — a
+  sample to revert. The bottom **colors tray** has a left **ink strip** — the
+  **eyedropper** (`I` / hold **Alt** to sample mid-stroke) and a **selected-color
+  preview** box that shows your current ink and, **clicked**, opens the **modal
+  picker** over the **full 256-color palette** — beside a **scrollable palette box**:
+  every color currently painted on _any_ face, so you can match existing colors,
+  **plus your currently selected ink** (so a color picked from the modal lands here as
+  the **selected tile** right away, before you've drawn a single pixel with it), led
+  by a **transparent** swatch (`E` / **right-click**) — a
   **checkerboard tile** (the same checker the canvas shows through unpainted texels,
   so it previews what it paints) that selects the **empty / clear color**, not an
-  eraser _tool_: these two sit _among the colors_, not with the tools, because they
-  pick the pencil's **ink** — a sampled color, or transparent ("clear color") —
-  rather than a drawing tool. Selecting transparent then drawing (or a right-click,
-  or the `E` ink) lays clear texels, so it reads as painting a color, not wielding
-  an eraser. The
+  eraser _tool_. The eyedropper and transparent swatch pick the pencil's **ink** — a
+  sampled color, or transparent ("clear color") — rather than a drawing tool, so they
+  sit _with the colors_, not the tools. Selecting transparent then drawing (or a
+  right-click, or the `E` ink) lays clear texels, so it reads as painting a color, not
+  wielding an eraser. The
   modal is a 16×16 grid of **256 distinct** swatches (**Esc**, the backdrop, or
   **✕** closes it). The base is the standard **xterm-256** set — but xterm-256
   names 256 indexed _slots_ and only 247 _distinct_ colors (nine values, e.g.
@@ -152,8 +154,9 @@ _pick atlas ▾_ menu, and _download_.
   earlier sparse 8×8×4 grid kept _every_ swatch ≥36 apart, so none merged).
   `test/palette.test.mjs` pins the exact set. Every stroke is hard-pixel: fully opaque or fully erased, never
   anti-aliased.
-- **Face tabs** — six tabs across the top of the canvas box switch which face you
-  edit, laid out as mirror pairs (`left`/`right`, `front`/`back`, `top`/`bottom`)
+- **Face tabs** — six **angled folder tabs** (skewed parallelograms) across the top
+  of the draw section switch which face you edit, laid out as mirror pairs
+  (`left`/`right`, `front`/`back`, `top`/`bottom`)
   so you can flip between a pair for reference. A **mirror-derived** face (one with
   no art of its own) opens with an **empty canvas** and a **faded onion-skin** of
   the mirrored opposite behind it for reference; it becomes its own independent art
@@ -205,10 +208,10 @@ step T-junctions show as _expected_ nonzero boundary/odd edges, not holes, so th
 `?tile=<N>` (or `<W>x<H>` to force an asymmetric, out-of-registration resize the
 locked-square UI can't produce) to apply one **centered** tile resize (the same
 `anchor:'center'` path the stepper drives) after the first build,
-`?palette=1` to open the **+** palette modal on the first mount, `?cursor=<N>`
+`?palette=1` to open the 256-color palette modal on the first mount, `?cursor=<N>`
 to set the pencil size to N and draw its footprint outline at the tile center on
 mount, `?pick=<N>` to select `PALETTE_256[N]` as the ink on mount (as if picked
-from the modal) so a shot can show it landing as the selected palette-row tile, and
+from the modal) so a shot can show it landing as the selected-color preview + palette tile, and
 `?rect=<x0,y0,x1,y1[,r[,sq]]>` to select the rect tool and draw its live drag preview
 for that box (corner radius `r`; `sq=1` for the Shift square-lock) on mount so a shot
 can show the tool mid-drag, and `?fill=<x,y[,r[,a]]>` to select the fill tool, set its
@@ -361,7 +364,7 @@ src/lib/
 src/
   main.js         scene, lights, ground, framing, render loop + always-on editor wiring
   ui.js           header strip (samples, pick/drop atlas, download) + stage overlays (options, stats)
-  editor.js       tools panel (right half): one framed CARD of face tabs + stable-size canvas container (layout(): 60% of the sidebar height, centered integer-scaled canvas) + a tool FOOTER (tool strip — pencil + rect + fill live — with docked tile-size stepper, and per-tool options: pencil size + hover footprint preview, rect corner-radius + live drag preview / Esc-cancel, or fill replace / all-tiles checkboxes); palette row (colors + eyedropper/transparent-swatch/"+" 256-palette modal) sits below the card; align guides
+  editor.js       tools panel (right half): a fixed 3-region flex column — SETTINGS header (tool strip: pencil + rect + fill live, docked tile-size stepper; per-tool options: pencil size SLIDER + hover footprint preview, rect corner-radius + live drag preview / Esc-cancel, or fill replace / all-tiles checkboxes), DRAW section (angled face tabs + canvas that fills the region via layout(): centered integer-scaled canvas), COLORS tray (ink strip: eyedropper + selected-color preview opening the 256 modal; scrollable palette box led by the transparent swatch); align guides
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
   icons.js        real UI glyphs — registers the Adobe Spectrum workflow <sp-icon-*> elements used by ui.js + editor.js (color via currentColor, size via --mod-icon-size; no sp-theme)
 ```

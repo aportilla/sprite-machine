@@ -111,14 +111,19 @@ body {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-/* Right half: the tools panel (inline tile editor, mounted by main.js). */
+/* Right half: the tools panel (inline tile editor, mounted by main.js). A fixed
+   3-region flex column (settings / draw / colors) that exactly fills the panel
+   height — the draw region grows and the canvas fills it, so nothing page-scrolls
+   at normal sizes. overflow-y:auto is a short-window safety valve (the draw region
+   carries a min-height); scrollbar-gutter keeps a late scrollbar from shrinking the
+   content width and oscillating the canvas ResizeObserver. */
 #editor-panel {
   flex: 1 1 50%;
   min-width: 0;
   height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
-  /* Reserve the scrollbar gutter always, so a scrollbar appearing can't shrink the
-     content width and retrigger the canvas ResizeObserver into an oscillation. */
   scrollbar-gutter: stable;
   background: var(--panel-bg);
   border-left: 1px solid rgba(255, 255, 255, 0.08);
@@ -271,11 +276,39 @@ body {
 }
 
 /* ---- inline tile editor (content of the right-side #editor-panel) ---- */
+/* The editor root fills the panel as a flex column; min-height:0 lets the draw
+   region shrink so the canvas can be measured/clamped instead of overflowing. */
 .editor {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
+}
+/* Region 1 — settings header: tools + tile size + per-tool options. Fixed height. */
+.editor-settings {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* Region 2 — draw section: face tabs + the canvas, which grows to fill the panel.
+   min-height guards a short window (the panel then scrolls rather than starving the
+   canvas); min-height:0 on the flex item lets it shrink to that floor. */
+.editor-draw {
+  flex: 1 1 auto;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+}
+/* Region 3 — colors tray: ink strip + scrollable palette. Fixed, reserved height. */
+.editor-colors {
+  flex: 0 0 auto;
+  height: 140px;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
 }
 /* A labeled integer stepper — a "label:" caption + a bordered [−][value][unit?][+]
    box. Used for the tile size (docked in the tool strip) and the pencil tip size
@@ -353,30 +386,26 @@ body {
   -webkit-appearance: none;
   margin: 0;
 }
-/* Self-contained canvas widget: the tabs + the stable-size canvas box as one
-   full-bleed card spanning the panel width, so the canvas area reads as distinct
-   from the tool strip / palette below. */
-.editor-canvas-panel {
-  align-self: stretch;
-}
-/* Six face tabs across the top of the canvas box — traditional folder tabs that
-   scope ONLY the canvas: inactive tabs recede, the active tab lifts to the box
-   color and breaks the box's top border so it reads as part of the canvas. */
+/* Six face tabs across the top of the draw region — angled Photoshop-style folder
+   tabs (skewed parallelograms via clip-path) that overlap left-to-right; the active
+   tab lifts to the canvas fill (--widget-bg) and rides over its neighbours so it
+   reads as one structure with the canvas surface it caps. */
 .editor-tabs {
   display: flex;
-  gap: 2px;
   position: relative;
-  z-index: 1; /* tabs sit over the box's top border */
+  z-index: 1; /* tabs sit over the canvas box's top edge */
+  padding-left: 8px; /* room for the first tab's left slant */
 }
 .editor-tab {
   flex: 1 1 0;
   min-width: 0;
-  margin-bottom: -1px; /* overlap the box's top border so active can break it */
-  padding: 8px 3px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-bottom: none; /* the box below supplies the bottom edge */
-  border-radius: 7px 7px 0 0;
+  margin-right: 3px; /* a thin gap between the slanted parallelograms */
+  margin-bottom: -1px; /* overlap the canvas box's top edge so active merges into it */
+  padding: 7px 6px 7px 14px;
+  /* Parallelogram: top edge inset from the left, bottom edge inset from the right. */
+  clip-path: polygon(13px 0, 100% 0, calc(100% - 13px) 100%, 0 100%);
+  background: rgba(255, 255, 255, 0.045);
+  border: none; /* clip-path would clip a border; the shape + fill carry the read */
   color: #9a9aa6;
   font: inherit;
   font-size: 9px;
@@ -388,51 +417,37 @@ body {
     color 0.12s ease;
 }
 .editor-tab:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.11);
   color: #d8d8de;
 }
 .editor-tab.active {
-  background: var(--widget-bg); /* same fill as the box → merges into it */
-  border-color: rgba(255, 255, 255, 0.2); /* continues the box's border */
+  background: var(--widget-bg); /* same fill as the canvas box → merges into it */
   color: #f0f0f4; /* bright label marks the selected tab */
   font-weight: 700;
   cursor: default;
+  z-index: 2; /* the active tab rides over both neighbours' slanted edges */
 }
-/* The framed CARD the tabs cap: it holds the canvas container AND the tool footer
-   as one unit. Its lighter-dark fill (shared with the active tab) frames the whole
-   thing, so the selected tab reads as a structural extension of it. Square top
-   corners (the tab strip sits there), rounded bottom (the footer's edge); overflow
-   hidden clips the footer's corners to that radius. */
-.editor-canvas-card {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--widget-bg);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 0 0 8px 8px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28); /* lift the card off the panel */
+/* clip-path clips the focus outline, so give keyboard focus an inset ring instead. */
+.editor-tab:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: #f0f0f4;
 }
-/* The canvas CONTAINER — a stable box inside the card: editor.js layout() pins its
-   height to 60% of the sidebar height and it spans the full card width. The square
-   pixel canvas is centered inside as large as an integer scale fits. */
+/* The canvas CONTAINER: fills the draw region below the tabs (flex:1), framed with
+   the same lighter-dark fill the active tab lifts to so tab + canvas read as one. */
 .editor-canvas-wrap {
+  flex: 1 1 auto;
+  min-height: 0; /* let it shrink so layout() can integer-fit the canvas inside */
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 10px;
   overflow: hidden; /* clip if a tiny container forces the min (scale 1) canvas over */
-}
-/* The tool FOOTER inside the card, below the canvas: a hairline separator + a faint
-   tray fill set the tools apart from the canvas while keeping them in the same card.
-   Stacks the tool strip over the per-tool options row. */
-.editor-canvas-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--widget-bg);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0 6px 6px 6px; /* square top-left where the first tab sits */
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28); /* lift the canvas off the panel */
 }
 /* The centered square holding the four aligned canvas layers; sized by layout(). */
 .editor-canvas-stack {
@@ -516,10 +531,9 @@ body {
     0 0 0 4px rgba(0, 0, 0, 0.55);
 }
 
-/* ---- tool strip + per-tool options (rows inside the card footer) ---- */
-/* The tool strip: first-class tools (pencil; rect/fill disabled) on the left, the
-   square tile-size stepper docked on the right. The footer supplies the framing, so
-   this is just a bare row. */
+/* ---- tool strip + per-tool options (rows in the settings header) ---- */
+/* The tool strip: first-class tools (pencil / rect / fill) as square icon buttons on
+   the left, the tile-size stepper docked on the right. */
 .editor-toolstrip {
   display: flex;
   align-items: center;
@@ -553,15 +567,17 @@ body {
   opacity: 0.4;
   cursor: default;
 }
-/* Icon-only tool buttons: center the Spectrum workflow glyph. The icons ship no
-   size without an <sp-theme>, so --mod-icon-size is the theme-free hook they
-   honor; color comes from the button's text color via currentColor, so .active
-   and :disabled restyle the glyph for free. */
+/* Square bordered icon tool buttons (Photoshop-style). The icons ship no size
+   without an <sp-theme>, so --mod-icon-size is the theme-free hook they honor; color
+   comes from the button's text color via currentColor, so .active / :disabled
+   restyle the glyph for free. */
 .editor-tool-icon {
+  width: 34px;
+  height: 34px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 5px 12px;
   --mod-icon-size: 18px;
 }
 
@@ -573,6 +589,30 @@ body {
   align-items: center;
   gap: 10px;
   min-height: 28px;
+}
+/* The pencil tip-size SLIDER (Photoshop-style): the range fills the row, a boxed
+   readout ("Npx") docks at its right. Grows to fill the settings width. */
+.editor-slider-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.editor-slider {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.editor-slider-val {
+  flex: 0 0 auto;
+  min-width: 40px;
+  padding: 2px 6px;
+  text-align: center;
+  font-size: 11px;
+  color: #e8e8ea;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
 }
 /* Fill-tool option checkboxes ("replace" + "all tiles"). A tinted accent marks a
    checked box; a disabled box ("all tiles" while "replace" is off) dims and blocks
@@ -604,48 +644,58 @@ body {
   cursor: default;
 }
 
-/* ---- palette row (colors + ink pickers) + palette modal ---- */
-/* The palette row — every color painted anywhere
-   in the sprite, led by a "+" that opens the full-palette modal. Wraps, since it
-   can hold anywhere from nothing to a few dozen colors. */
-.editor-used-row {
+/* ---- colors tray (ink strip + scrollable palette) + palette modal ---- */
+/* The left ink STRIP: the eyedropper button on top, the selected-color preview
+   filling the rest. Fixed narrow column at the tray's left. */
+.editor-ink-strip {
+  flex: 0 0 auto;
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* The selected-color PREVIEW: a big swatch of the current ink; a click opens the
+   256-color modal (replacing the old "+"). Fills the strip below the eyedropper. */
+.editor-selected-preview {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border-radius: 5px;
+}
+/* The scrollable "colors…" box: the transparent lead swatch + every color painted
+   in the sprite. Scrolls when the colors overflow its fixed-height tray. */
+.editor-palette-box {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-content: flex-start;
   gap: 5px;
-  min-height: 26px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+}
+/* Empty-state hint (no sprite colors yet — only the transparent lead swatch). */
+.editor-palette-box.is-empty::after {
+  content: 'colors…';
+  align-self: center;
+  color: #7a7a86;
+  font-size: 11px;
 }
 .editor-used-sw {
   flex: 0 0 auto;
   width: 26px;
   height: 26px;
 }
-.editor-add {
-  flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  color: #cfcfd6;
-  --mod-icon-size: 16px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px dashed rgba(255, 255, 255, 0.3);
-  border-radius: 5px;
-  cursor: pointer;
-}
-.editor-add:hover {
-  background: rgba(199, 125, 214, 0.16);
-  border-color: var(--accent);
-  color: #fff;
-}
 
-/* Eyedropper — a compact icon button sitting with the colors (it picks an ink). */
+/* Eyedropper — a compact icon button at the top of the ink strip (it picks an ink). */
 .editor-pal-tool {
   flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
+  width: 100%;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
