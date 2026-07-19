@@ -45,6 +45,16 @@ const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.target.set(0, 0.9, 0);
 
+// Render on demand: redraw only when something actually changed (a control move,
+// a rebuild, a resize, or an autoRotate tick) instead of re-rendering the full
+// scene — 2048² shadow maps + PCF — at 60fps forever while idle. OrbitControls
+// emits 'change' throughout a drag AND the damping tail, so motion stays smooth.
+let needsRender = true;
+const requestRender = () => {
+  needsRender = true;
+};
+controls.addEventListener('change', requestRender);
+
 scene.add(new THREE.AmbientLight(0xffffff, 0.85));
 const key = new THREE.DirectionalLight(0xffffff, 1.5);
 key.position.set(4, 8, 3);
@@ -166,6 +176,7 @@ function rebuild() {
   let stats = { dims: null, voxels: 0, triangles: 0, warnings: [] };
   if (provided.length === 0) {
     ui.setStats(stats);
+    requestRender(); // the old mesh (if any) was just removed — redraw the empty scene
     return;
   }
 
@@ -187,6 +198,10 @@ function rebuild() {
   if (DIAG && current?.geometry) {
     const geo = current.geometry; // captured: current may change before load resolves
     import('./lib/diag.js').then(({ computeDiag }) => {
+      // A fast live edit can run another rebuild() (disposing this geometry) before
+      // the dynamic import settles; skip a stale read rather than measure a mesh
+      // that's already been replaced.
+      if (geo !== current?.geometry) return;
       document.title = 'DIAG ' + JSON.stringify(computeDiag(geo));
     });
   }
@@ -198,6 +213,7 @@ function rebuild() {
     current.rotation.y = prevRotY;
   }
   ui.setStats(stats);
+  requestRender(); // the mesh changed — redraw once even if the camera is idle
 }
 
 // Re-slice the canonical atlas into face views (at its current tile size) and
@@ -509,8 +525,10 @@ function resize() {
   const h = canvas.clientHeight;
   const rw = Math.max(1, Math.floor(w * RENDER_SCALE));
   const rh = Math.max(1, Math.floor(h * RENDER_SCALE));
+  let changed = false;
   if (canvas.width !== rw || canvas.height !== rh) {
     renderer.setSize(rw, rh, false);
+    changed = true;
   }
   // Track CSS aspect independently of the (rounded) render-buffer size so an
   // odd one-pixel resize can't leave the projection matrix stale.
@@ -518,21 +536,43 @@ function resize() {
   if (camera.aspect !== aspect) {
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
+    changed = true;
   }
+  if (changed) requestRender();
 }
 window.addEventListener('resize', resize);
 // The viewport fills the 50% stage, which can change width (e.g. a window
 // resize). Observe its box directly so the render buffer + camera aspect stay
 // correct without waiting on a window resize event.
-if (typeof ResizeObserver !== 'undefined') {
-  new ResizeObserver(() => resize()).observe(canvas);
+const canvasResizeObs =
+  typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => resize()) : null;
+canvasResizeObs?.observe(canvas);
+
+let rafId = 0;
+function tick() {
+  if (state.autoRotate && current) {
+    current.rotation.y += 0.006;
+    needsRender = true;
+  }
+  controls.update(); // advance damping every frame; it emits 'change' while moving
+  if (needsRender) {
+    renderer.render(scene, camera);
+    needsRender = false;
+  }
+  rafId = requestAnimationFrame(tick);
 }
 
-function tick() {
-  if (state.autoRotate && current) current.rotation.y += 0.006;
-  controls.update();
-  renderer.render(scene, camera);
-  requestAnimationFrame(tick);
+// Vite HMR re-executes this module's top level on edit without unloading the old
+// instance; without teardown the window resize handler, the ResizeObserver, the
+// controls listener, and the rAF loop would accumulate a duplicate each edit.
+const hot = /** @type {any} */ (import.meta).hot;
+if (hot) {
+  hot.dispose(() => {
+    window.removeEventListener('resize', resize);
+    canvasResizeObs?.disconnect();
+    controls.removeEventListener('change', requestRender);
+    cancelAnimationFrame(rafId);
+  });
 }
 
 // Boot with a sample (?sample=<index|name> overrides, handy for testing).
