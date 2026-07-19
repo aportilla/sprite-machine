@@ -1,5 +1,22 @@
 # hit-list — sprite-machine review (2026-07-18)
 
+> ✅ **ADDRESSED on branch `hit-list`** (2026-07-18). All 40 items below are checked
+> off across 7 commits (each gated: `npm test` 80 → **141** green, `typecheck` +
+> `lint` clean, `build` OK; render / editor / low-poly watertightness screenshot-
+> verified). **Two honest partials**, core fix landed in both:
+>
+> - **Tier 2 · `gridToImageData` guard** — the empty/ragged **guard is in the
+>   code**, but the requested Node unit test isn't feasible: `sprite-data.js` isn't
+>   Node-importable (it eagerly builds `ImageData` and imports a PNG via the Vite
+>   loader). Delivered the guard; skipped the untestable test.
+> - **Tier 5 · tsconfig excludes `test/`** — the README now documents
+>   `lint`/`typecheck`; adding `test/` to the tsconfig `include` was **deliberately
+>   skipped** because the test files import `node:test`/`node:assert` and there is
+>   no `@types/node`, so it would turn `npm run typecheck` red.
+>
+> A `LICENSE` file + `package.json` `license` field (flagged via TODO.md) remain
+> open — they need the owner's license choice, not a code change.
+
 Prioritized backlog from a fresh, whole-codebase review of `src/`, `test/`, docs,
 and tooling. Every item was **adversarially verified against the code on disk** —
 a second agent re-opened each cited location and confirmed the issue is real and
@@ -78,7 +95,7 @@ or the editor UI — tests don't cover the render output or interactions.
 
 ## Tier 1 — Correctness bugs
 
-- [ ] **🔴 M · Max tile size 256 drives a synchronous 256³ = 16.7 M-voxel carve that freezes the tab.**
+- [x] **🔴 M · Max tile size 256 drives a synchronous 256³ = 16.7 M-voxel carve that freezes the tab.**
       `TILE_MAX = 256` (`src/lib/atlas.js:20-21`) and the editor stepper exposes the
       whole range (`src/editor.js:234` `sizeMax=256`, passed at `:461`). A square 256px
       tile carves an `nx=ny=nz=256` grid: `carve()` (`src/lib/carve.js:103-153`) runs a
@@ -94,7 +111,7 @@ or the editor UI — tests don't cover the render output or interactions.
       transferable). At minimum, stop freezing silently.
       _Gate: `npm test`; `?tile=200` no longer hangs; `?tile=64` still builds._
 
-- [ ] **⚪ S · Toolbar tool-switch leaves a stale pencil footprint outline on the canvas.**
+- [x] **⚪ S · Toolbar tool-switch leaves a stale pencil footprint outline on the canvas.**
       The keyboard tool-switch (`onKeyDown`, `src/editor.js`) ends with
       `redrawCursorLayer()` (`:804`) which clears the pencil hover footprint. The three
       toolbar buttons `pencilBtn/rectBtn/fillBtn.onclick` (`src/editor.js:468-500`) call
@@ -107,7 +124,7 @@ or the editor UI — tests don't cover the render output or interactions.
       fold the shared switch body (cancelRect + set brush + `renderToolOptions` + `syncUI` + `redrawCursorLayer`) into one helper both paths call.
       _Gate: `?edit=front` + manual button click; visual (no ghost outline)._
 
-- [ ] **⚪ S · `renderUsed` early-return skips the "in-sprite" ring refresh when erasing the last pixel of the pinned ink.**
+- [x] **⚪ S · `renderUsed` early-return skips the "in-sprite" ring refresh when erasing the last pixel of the pinned ink.**
       `renderUsed()` (`src/editor.js:630-659`) builds a signature from
       `painted ∪ {brush.color}` (`:640-642`) and early-returns at `:643` when unchanged,
       skipping `syncActiveSwatch()` **and** `markInSprite()` — but `markInSprite` is fed
@@ -126,7 +143,7 @@ or the editor UI — tests don't cover the render output or interactions.
 _(Both are defensive/latent — no current caller triggers them, but they sit at input
 boundaries with no contract.)_
 
-- [ ] **⚪ S · No sheet-shape validation at the atlas ingestion boundary.**
+- [x] **⚪ S · No sheet-shape validation at the atlas ingestion boundary.**
       `onAtlas` (`src/main.js:488-491`) assigns `state.atlasImage` and builds with zero
       shape validation; the sample path (`:479`) resolves an arbitrary image.
       `deriveTileSize` (`src/lib/atlas.js:36-39`) computes `width/cols` with no
@@ -141,7 +158,7 @@ boundaries with no contract.)_
       can trust their input.
       _Gate: `npm test` + a new degenerate-sheet test asserting the warning/error path._
 
-- [ ] **⚪ S · `gridToImageData` throws on an empty rows array and mis-indexes ragged grids.**
+- [x] **⚪ S · `gridToImageData` throws on an empty rows array and mis-indexes ragged grids.**
       `src/lib/sprite-data.js:10-27`: `h = rows.length; w = rows[0].length` with no guard
       (`:11-12`). Empty `rows` → `rows[0]` undefined → TypeError; a ragged grid
       over/under-indexes silently (`w` from `rows[0]` only). Only `cubeAtlasImage()` feeds
@@ -157,7 +174,7 @@ boundaries with no contract.)_
 _(All low — the app already runs one draw call. These are hot-loop tidiness + an
 idle-GPU fix; note "micro" vs "meaningful" per item.)_
 
-- [ ] **⚪ M · Render loop renders + updates controls every frame even when nothing changes.**
+- [x] **⚪ M · Render loop renders + updates controls every frame even when nothing changes.**
       `tick()` (`src/main.js:524-529`) unconditionally calls `controls.update()` +
       `renderer.render()` every rAF. With `?rotate=0`, no drag, and OrbitControls damping
       settled, the GPU redraws the full scene (2048² shadow maps, PCF) at 60fps forever.
@@ -167,7 +184,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       _Meaningful for battery/idle-GPU; active frame-time unchanged. Gate: visual — object
       still rotates/drags smoothly; `?rotate=1` still spins._
 
-- [ ] **⚪ M · `carve()` allocates a fresh `{u,v}` object per voxel × view in the innermost loop.**
+- [x] **⚪ M · `carve()` allocates a fresh `{u,v}` object per voxel × view in the innermost loop.**
       `src/lib/carve.js:131-151` calls `spec.project(x,y,z,dims)` which returns a new
       object literal (`src/lib/views.js:78/88/102/113/125/138`); `colorize.sampleView`
       (`src/lib/colorize.js:84-89`) has the same shape per exposed face. On a 48³ tile ×
@@ -179,7 +196,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       _Micro — the literal never escapes, so V8 scalar-replacement likely absorbs much of
       it; fix is cheap/correct, practical win uncertain. Gate: `npm test`._
 
-- [ ] **⚪ S · `buildVoxels` recomputes `solidCount` with a third full O(n³) pass.**
+- [x] **⚪ S · `buildVoxels` recomputes `solidCount` with a third full O(n³) pass.**
       `src/lib/pipeline.js:41-42` runs a standalone `for i… solidCount += solid[i]` after
       `carve()` and `extractSurface()` (`src/lib/carve.js:171-197`) have _each_ already
       visited every voxel — `extractSurface` already gates on `if (!solid[idx]) continue`.
@@ -187,7 +204,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       on the passing branch of `extractSurface()`; drop the pipeline loop.
       _Gate: `npm test` (buildVoxels tests assert counts)._
 
-- [ ] **⚪ S · `faceColorAt` recomputes `FACE_KEYS.indexOf(face)` inside the greedy triple loop.**
+- [x] **⚪ S · `faceColorAt` recomputes `FACE_KEYS.indexOf(face)` inside the greedy triple loop.**
       `src/lib/faces.js:147` runs the linear scan on every `(a,b,s)` cell in both
       `culledQuads` (`:165`) and `greedyQuads` (`:192`), though `face` is constant for the
       whole per-face pass (caller iterates `for (const face of FACE_KEYS)`).
@@ -196,7 +213,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
 
 ## Tier 4 — DRY, dead code & cleanup
 
-- [ ] **🟠 M · Face-normal vocabulary is triplicated across `carve.js`, `views.js`, `faces.js`.**
+- [x] **🟠 M · Face-normal vocabulary is triplicated across `carve.js`, `views.js`, `faces.js`.**
       The six outward normals in `px,nx,py,ny,pz,nz` order are hand-spelled three times:
       `carve.js` `NEIGHBORS` (`:156-163`) beside `FACE_KEYS` (`:164`); `views.js`
       `FACE_NORMAL` (`:38-45`); and `faces.js` `FACE_GEO`'s per-face `normal:` literals
@@ -209,7 +226,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       instead of the literal. Consider co-locating `FACE_KEYS` + `FACE_NORMAL`.
       _Gate: `npm test` (pipeline + wedge-mesh cover the normal-dependent paths)._
 
-- [ ] **🟠 S · Distinct-opaque-color extraction + 24-bit key is copy-pasted between `main.js` and `editor.js`.**
+- [x] **🟠 S · Distinct-opaque-color extraction + 24-bit key is copy-pasted between `main.js` and `editor.js`.**
       `editor.js` `distinctWorkColors()` (`:616-628`) and `main.js` `usedColorsExcept()`
       (`:320-337`) have byte-identical inner loops (walk RGBA 4 bytes at a time, skip
       alpha-0, dedup by a 24-bit packed key — `editor.js:416` `rkey`, `main.js:330`
@@ -219,7 +236,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       (`fill.js` or a small color util) + one `rgbKey({r,g,b})`; call from both.
       _Gate: `npm test`; palette row + used-color pips still render (`?palette=1`)._
 
-- [ ] **⚪ S · `isAllTransparent` (main.js) duplicates the non-exported `isBlank` (atlas.js).**
+- [x] **⚪ S · `isAllTransparent` (main.js) duplicates the non-exported `isBlank` (atlas.js).**
       `src/main.js:245-249` scans `for i=3; i<d.length; i+=4` — byte-for-byte
       `atlas.js` `isBlank` (`:56-59`), which isn't exported. Same "is this tile empty?"
       purpose at both call sites (`main.js:285` vs `atlas.js:114`), and `fill.js`/`editor.js`
@@ -228,7 +245,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       → Export `isBlank`, import it in `main.js`, delete `isAllTransparent`, repoint the
       comments. _Gate: `npm test`._
 
-- [ ] **⚪ S · `mirrorImage` (ui.js) and `flip` (ingest.js) are the same axis-flip blit.**
+- [x] **⚪ S · `mirrorImage` (ui.js) and `flip` (ingest.js) are the same axis-flip blit.**
       `ui.js:51-67` `mirrorImage(img, axis)` and `ingest.js:53-70` `flip(img, flipX, flipY)`
       both allocate `W*H*4` and copy with the same mirror math; `mirrorImage` is just `flip`
       with a single-axis boolean from an `'x'/'y'` string. `flip` isn't exported so `ui.js`
@@ -237,7 +254,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       `flip(img, axis==='x', axis==='y')` or drop it. _Gate: `npm test`; onion-skin seed
       still mirrors correctly (`?edit=right`)._
 
-- [ ] **⚪ S · `#rrggbb` hex parsing is reimplemented in `editor.js` and twice in `constants.js`.**
+- [x] **⚪ S · `#rrggbb` hex parsing is reimplemented in `editor.js` and twice in `constants.js`.**
       The `parseInt(css.slice(1,3),16)/…` decode appears as `editor.js` `hexToRgb`
       (`:129-135`) and twice in `constants.js` building `PENCIL_PALETTE` (`:53-56`) and
       `PALETTE_256` (`:115-118`). `constants.js` already computes each swatch's packed
@@ -247,14 +264,14 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       `editor.js` `hexToRgb`. If a css→rgb helper is still wanted, export one shared.
       _Gate: `npm test` (palette suite); colors render correctly (`?palette=1`, `?pick=N`)._
 
-- [ ] **⚪ S · `ALPHA_SOLID = 128` is duplicated in `ingest.js` and `guides.js`.**
+- [x] **⚪ S · `ALPHA_SOLID = 128` is duplicated in `ingest.js` and `guides.js`.**
       `ingest.js:21` defines it; `guides.js:18` redefines the same value with a comment
       "matches ingest.js hard-pixel threshold" — an explicit hand-sync. Both drive
       `data[…+3] >= ALPHA_SOLID` (`ingest.js:107`, `guides.js:32`).
       → Export `ALPHA_SOLID` from `ingest.js` (or `constants.js`), import in `guides.js`,
       drop the literal + comment. _Gate: `npm test` (guides suite)._
 
-- [ ] **⚪ S · Wedge-mesh `FKEY`/`FIDX`/`AXI` re-derive face/axis mappings defined elsewhere.**
+- [x] **⚪ S · Wedge-mesh `FKEY`/`FIDX`/`AXI` re-derive face/axis mappings defined elsewhere.**
       `src/lib/wedge-mesh.js:37-48`: `AXI = {x:0,y:1,z:2}` duplicates `views.js:204`
       `AXIS_ARG` (up to the `n`-prefix); `FKEY` (`:39-46`) restates the
       `FACE_NORMAL`/`FACE_AXIS` correspondence; `FIDX` (`:48`) is `FACE_KEYS.indexOf`
@@ -262,7 +279,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       → Export a shared `FACE_INDEX` (or `faceKeyOf(axis,sign)`) + the axis-index map and
       import them. _Gate: `npm test` (wedge-mesh watertightness)._
 
-- [ ] **⚪ S · `VIEW_TO_FACE` is exported but only self-consumed, and duplicates `VIEWS[*].face`.**
+- [x] **⚪ S · `VIEW_TO_FACE` is exported but only self-consumed, and duplicates `VIEWS[*].face`.**
       `src/lib/views.js:25-35`: `VIEW_TO_FACE` is exported yet its only reference anywhere
       is `:34`, where `views.js` builds `FACE_TO_VIEW` from it; nothing imports the forward
       map, and every pair equals `VIEWS[name].face`. (The inverse `FACE_TO_VIEW` _is_ used
@@ -271,7 +288,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       `FACE_TO_VIEW = Object.fromEntries(VIEW_NAMES.map(n => [VIEWS[n].face, n]))`.
       _Gate: `npm test`._
 
-- [ ] **⚪ S · `VIEW_MIRROR_AXIS` is a six-entry map whose every value is `'x'`.**
+- [x] **⚪ S · `VIEW_MIRROR_AXIS` is a six-entry map whose every value is `'x'`.**
       `src/lib/views.js:178-185`; single consumer `src/main.js:351`. A per-view table that's
       constant reads as if the axis varies when it never does, and `mirrorImage`'s `'y'`
       branch (`ui.js:56-57`) is consequently dead in practice.
@@ -279,7 +296,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       comment); note the unexercised `y` branch. Keep the map only if a view is expected to
       mirror vertically. _Gate: `npm test`; mirror-fill visual unchanged._
 
-- [ ] **⚪ S · `VIEWS` entries carry dead `axis`/`step`/`from`/`face` config that misleads about the depth march.**
+- [x] **⚪ S · `VIEWS` entries carry dead `axis`/`step`/`from`/`face` config that misleads about the depth march.**
       `src/lib/views.js:69-140`: every entry declares `face/axis/step/from` (e.g.
       `front: {…, step:-1, from:'max'}`), but a repo-wide grep shows none are read — the
       only consumers read `spec.project` (+ carve reads `imgW/imgH`). The real first-hit
@@ -289,7 +306,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       → Delete the unused keys, or comment them documentation-only; if kept, add a test
       asserting `step`/`from` agree with `FACE_NORMAL`. _Gate: `npm test`._
 
-- [ ] **⚪ S · Wedge `dominant` fallback is misnamed and effectively unreachable.**
+- [x] **⚪ S · Wedge `dominant` fallback is misnamed and effectively unreachable.**
       `src/lib/wedge-mesh.js:66`: `const dominant = palette?.length ? palette[0] : FLAT_COLOR`
       — named "dominant" but it's the _first_ color inserted (scan order), not the
       most-frequent (unlike `colorize.js:213-214`'s real tally). It's consulted only at
@@ -301,7 +318,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       `bodyFallback` and comment that it's flat-mode-only. _Gate: `npm test` + `?flat=1`
       visual unchanged._
 
-- [ ] **⚪ S · `?diag=1` async import can read geometry a later `rebuild()` already disposed.**
+- [x] **⚪ S · `?diag=1` async import can read geometry a later `rebuild()` already disposed.**
       `src/main.js:185` captures `current.geometry` into `geo` and passes it to a
       dynamically-imported `computeDiag()` in a `.then()`. A fast live edit under `?diag=1`
       can run another `rebuild()` (which does `scene.remove` + `geometry.dispose()`,
@@ -310,7 +327,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       → Gate the `.then()` on `geo === current?.geometry`. Dev-only, low priority.
       _Gate: `?diag=1` still prints the watertightness readout._
 
-- [ ] **⚪ S · App-level listeners are never removed (HMR-only concern).**
+- [x] **⚪ S · App-level listeners are never removed (HMR-only concern).**
       `src/main.js` registers window `resize` (`:516`), a canvas `ResizeObserver` (`:521`,
       handle not retained), the `tick()` rAF (`:528`); `ui.js` registers document `click`
       (`:143`) + app drag/drop (`:163-182`). None are torn down. **Not** a production leak
@@ -323,7 +340,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
 
 ## Tier 5 — Docs & comment drift
 
-- [ ] **🟠 S · README describes a UI "faces preview" that no longer exists.**
+- [x] **🟠 S · README describes a UI "faces preview" that no longer exists.**
       `README.md:56-57` says the UI's "faces" preview "lays the sliced tiles out like the
       sheet, so you can eyeball each tile's orientation against this table's Front points
       column." No such preview exists: `ui.js` renders only the header + stage overlays,
@@ -333,7 +350,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       onion-skin/guides + the table's Front points column); drop the "lays out like the
       sheet" claim; fix the `views.js` comments. _Gate: prose review._
 
-- [ ] **🟠 S · `main.js:237` comment + `docs/drawing-editor-plan.md` point to a superseded design.**
+- [x] **🟠 S · `main.js:237` comment + `docs/drawing-editor-plan.md` point to a superseded design.**
       `src/main.js:237` (`// Tile editor wiring (see docs/drawing-editor-plan.md)`) sends
       readers to a doc describing a design no longer shipped — a **modal** editor opened
       from a "faces" preview, a `ui.setDrawingMode` API that exists **nowhere** in `src`, a
@@ -344,7 +361,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       header; add a stronger "superseded — history only" banner atop the plan doc (or move
       it to `docs/archive/`). _Gate: prose review._
 
-- [ ] **⚪ S · `TODO.md` presents completed/obsolete items as an open, unchecked backlog.**
+- [x] **⚪ S · `TODO.md` presents completed/obsolete items as an open, unchecked backlog.**
       All 34 items are `[ ]` yet the banner says "✅ Executed": Tier 3 README fixes are
       applied, Tier 4 `mesh-util` extraction is done (`mesh-util.js` exists), Tier 7
       CI/tsconfig/prettier/editorconfig all exist. Meanwhile Tiers 1–6 cite **deleted**
@@ -355,7 +372,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       prune to what's live (the missing LICENSE), or archive `TODO.md` as a dated historical
       review. _Gate: prose review._
 
-- [ ] **⚪ S · `finishVoxelMesh` doc claims it rests the base on `y=0`, but the code hard-codes a 0 Y offset.**
+- [x] **⚪ S · `finishVoxelMesh` doc claims it rests the base on `y=0`, but the code hard-codes a 0 Y offset.**
       `src/lib/mesh-util.js:31-34` JSDoc says "center on X/Z, rest its base on the ground
       (y=0)"; `wedge-mesh.js:269` repeats it. The transform is
       `geo.translate((-nx*s)/2, 0, (-nz*s)/2)` (`mesh-util.js:40`) — Y is a hard-coded 0, no
@@ -366,14 +383,14 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       → Reword `mesh-util.js:33` + `wedge-mesh.js:269` to "centers X/Z, leaves Y as
       authored". _Gate: prose review._
 
-- [ ] **⚪ S · README quickstart under-describes the test suite.**
+- [x] **⚪ S · README quickstart under-describes the test suite.**
       `README.md:12` calls `npm test` "pipeline + wedge-mesh + atlas round-trip", but the
       suite is seven files (adds guides, rect, fill, palette; the Architecture section
       `:297-311` lists all seven correctly).
       → Change the quickstart comment to e.g. `# unit + integration tests (node --test)`.
       _Gate: prose review._
 
-- [ ] **⚪ S · `tsconfig` excludes `test/` from typecheck; README omits lint/format/typecheck scripts.**
+- [x] **⚪ S · `tsconfig` excludes `test/` from typecheck; README omits lint/format/typecheck scripts.**
       `tsconfig.json:15` `include: ["src"]` means the seven `test/*.mjs` are never
       type-checked despite `checkJs`. README (`:11-13`) documents dev/test/build but not the
       `typecheck`/`lint`/`format` scripts (`package.json:15-17`).
@@ -382,7 +399,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
 
 ## Tier 6 — Testing gaps
 
-- [ ] **🟠 M · `colorize()` fallback branches (mirror-fill, relaxation, dominant-body) have no value test.**
+- [x] **🟠 M · `colorize()` fallback branches (mirror-fill, relaxation, dominant-body) have no value test.**
       `colorize()` — the module the README calls "most likely to look wrong" — is never
       called directly; only leaf helpers `buildPalette`/`makeSnapper` are unit-tested. Its
       four-tier fallback lacks value assertions: the mirror-fill branch
@@ -398,7 +415,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       Add a `buildVoxels` test toggling `mirror.y`/`mirror.z`.
       _Gate: `npm test`._
 
-- [ ] **🟠 M · `carve`/`extractSurface`/`reconcileDims`/`gridViews`/`placeView`/`unvoxIndex` tested only transitively.**
+- [x] **🟠 M · `carve`/`extractSurface`/`reconcileDims`/`gridViews`/`placeView`/`unvoxIndex` tested only transitively.**
       Tests import only `voxIndex` from `carve.js`. Concretely uncovered: `carve()`'s
       plane-UNION logic (`carve.js:123-152`); `placeView()`'s general padding path
       (`ingest.js:132-146`) incl. negative-offset/clip (gridViews always passes `off=0`);
@@ -409,7 +426,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       (default=1 + "unconstrained" warning); `placeView` with a smaller view + non-zero and
       negative offsets. _Gate: `npm test`._
 
-- [ ] **🟠 M · `mesh.js` `voxelMesh` and `mesh-util.js` (linearizer + `finishVoxelMesh`) have zero tests.**
+- [x] **🟠 M · `mesh.js` `voxelMesh` and `mesh-util.js` (linearizer + `finishVoxelMesh`) have zero tests.**
       `wedge-mesh.test.mjs` proves THREE loads, but the voxel-mode builder `voxelMesh()`
       (`mesh.js:22`) and its shared deps `makeVertexColorLinearizer()` (`mesh-util.js:15`)
       and `finishVoxelMesh()` (`:39`) are untested — extracted "so the two builders can't
@@ -419,7 +436,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       unit-test the linearizer for a known packed color → linear triple + that it caches
       (same array ref for repeat keys). _Gate: `npm test`._
 
-- [ ] **🟠 M · `eliminateTJunctions`: only the single-vertex split is tested.**
+- [x] **🟠 M · `eliminateTJunctions`: only the single-vertex split is tested.**
       The one direct test (`pipeline.test.mjs:473-486`) inserts a single interior vertex.
       Uncovered: an edge with **multiple** interior lattice points
       (`t-junction.js:37-42`) + the multi-vertex ring triangulation; the defensive
@@ -429,7 +446,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       conserved area via shoelace + preserved color/normal); a convex ring with collinear
       boundary points forcing the non-ear-clip path. _Gate: `npm test`._
 
-- [ ] **🟠 S · `applyTransform`: only `rot:1` tested — flips, `rot 2/3`, negative rot, and the pipeline branch uncovered.**
+- [x] **🟠 S · `applyTransform`: only `rot:1` tested — flips, `rot 2/3`, negative rot, and the pipeline branch uncovered.**
       `applyTransform` is the reorientation for non-conforming sheets, but only `rot:1` is
       exercised (`pipeline.test.mjs:282-296`). Untested: `flip()`'s flipX/flipY branches
       (`ingest.js:53-70`); the rot normalization `(((t.rot||0)%4)+4)%4` (`:80`); rot+flip
@@ -439,7 +456,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       rot+flip ordering; one `buildVoxels` test passing `opts.transforms`.
       _Gate: `npm test`._
 
-- [ ] **🟠 S · `sliceAtlas` warning/guard paths (unusable / non-divisible / unknown view) untested.**
+- [x] **🟠 S · `sliceAtlas` warning/guard paths (unusable / non-divisible / unknown view) untested.**
       Only the happy path (clean 3×2) is tested. Three user-facing warning branches are
       unasserted: "Atlas is unusable" for 0-size/sub-1px tiles (`atlas.js:86-92`); the
       non-divisible warning `cols*tileW !== img.width` (`:94-100`); the "Unknown view"
@@ -448,7 +465,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       non-divisible sheet (`/but image is/` warning + top-left reads); a custom layout with
       a bogus view name (`/Unknown view/`). _Gate: `npm test`._
 
-- [ ] **⚪ S · `faceGuides` tested only for `front`.**
+- [x] **⚪ S · `faceGuides` tested only for `front`.**
       `guides.test.mjs:55-78` only calls `name='front'`. The per-face colFlip/rowFlip
       handling (`guides.js:42/54/71`) differs per face — a flip-sign error on `right`/`bottom`
       would mis-place hairlines with no failing test; the both-siblings-present union path
@@ -456,7 +473,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       → Parameterize over all six faces (at least `top` and `right`); add a both-siblings
       case with differing extents. _Gate: `npm test`._
 
-- [ ] **⚪ S · `roundedRectRows` non-zero-origin offset arithmetic barely covered.**
+- [x] **⚪ S · `roundedRectRows` non-zero-origin offset arithmetic barely covered.**
       Only one r>0 test uses a non-zero top-left (1,2); the emitted run `cb(y, x0+clip, x1-clip)`
       (`rect.js:77`) computes `clip` from relative positions, so an origin-translation
       off-by-one is masked at (0,0). No test asserts actual `xl/xr` values at a non-zero
@@ -464,13 +481,13 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       → Add a rounded raster at e.g. `x0=5,y0=7` asserting concrete `xl/xr` for top + middle
       rows. _Gate: `npm test`._
 
-- [ ] **⚪ S · `ingestSprite` malformed-input throw path is not asserted.**
+- [x] **⚪ S · `ingestSprite` malformed-input throw path is not asserted.**
       `ingestSprite`'s validation throw (`ingest.js:95-100`, fired on `width/height<=0` or
       `data.length < w*h*4`) — the module's only error path — has no `assert.throws` test
       (`rg` finds zero `assert.throws` in `test/`).
       → `assert.throws(() => ingestSprite({width:0,height:1,data:new Uint8ClampedArray(4)}))` + a truncated-data case. _Gate: `npm test`._
 
-- [ ] **⚪ S · `mirrorImage` (ui.js) and `computeDiag` (diag.js) pure helpers have no tests.**
+- [x] **⚪ S · `mirrorImage` (ui.js) and `computeDiag` (diag.js) pure helpers have no tests.**
       `mirrorImage` (`ui.js:51-67`) is a pure image-flip main.js uses to seed the editor
       canvas — an x/y mix-up would only surface as a mirrored-face surprise. `computeDiag`
       (`diag.js:10`), the `?diag=1` watertightness self-check, is pure over a geometry-like
@@ -482,7 +499,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
 
 ## Tier 7 — DX & tooling
 
-- [ ] **🔴 S · CI never runs `npm run lint`, so Prettier drift lands unchecked — and the tree is already non-conformant.**
+- [x] **🔴 S · CI never runs `npm run lint`, so Prettier drift lands unchecked — and the tree is already non-conformant.**
       The `lint` script (`prettier --check .`, `package.json:17`) exists but CI
       (`.github/workflows/ci.yml:18-20`) runs only typecheck/test/build. The gap is real,
       not theoretical: **`npm run lint` fails today** on `test/palette.test.mjs:30` (a long
@@ -493,7 +510,7 @@ idle-GPU fix; note "micro" vs "meaningful" per item.)_
       existing drift, then add `- run: npm run lint` to `ci.yml`.
       _Gate: `npm run lint` green; CI step present._
 
-- [ ] **⚪ S · `capture.sh dom` mode never validates output — silent false success.**
+- [x] **⚪ S · `capture.sh dom` mode never validates output — silent false success.**
       Only `shot` mode checks Chrome produced a file (`tools/capture.sh:111-113`, gated on
       `[ -s "$OUT" ]`). The `dom` branch (`:79-80`) relies on
       `wait "$CHROME_PID" 2>/dev/null || true` (`:108`), swallowing Chrome's exit code — so
