@@ -224,7 +224,7 @@ export function createTileEditor(
     faces,
     brush,
     sizeMin = 1,
-    sizeMax = 256,
+    sizeMax = 64,
     focusSize,
     openPaletteOnMount = false,
     previewCursor = null,
@@ -455,41 +455,29 @@ export function createTileEditor(
     })
   );
   footer.appendChild(toolstrip);
-  // Selecting the pencil returns you to drawing with the current color (out of the
-  // eraser / eyedropper), matching the classic B behavior.
-  pencilBtn.onclick = () => {
-    cancelRect(); // switching tool mid-drag abandons the box (matches the B/R keys)
-    brush.tool = 'pencil';
+  // Shared body for the three tool buttons: abandon any in-flight rect (switching
+  // tool mid-drag discards the box, matching the B/R/G keys), select the tool,
+  // return to painting (out of eraser / eyedropper), ensure an ink, then refresh
+  // the options row + UI state + cursor overlay. The last call is what the button
+  // path previously lacked: without it a pencil hover footprint drawn on the cursor
+  // layer lingers after clicking rect/fill (the keyboard path already redraws it).
+  function switchTool(tool) {
+    cancelRect();
+    brush.tool = tool;
     brush.erase = false;
     brush.picking = false;
     if (!brush.color) brush.color = { ...palette[0].rgb };
     renderToolOptions();
     syncUI();
-  };
-  // The rect tool drags a filled (optionally rounded) box; like the pencil, picking
-  // it returns you to drawing with the current color. A rectangular ERASE is still
-  // available via right-drag, or by selecting the eraser ink after the tool.
-  rectBtn.onclick = () => {
-    cancelRect(); // abandon any in-flight box before re-arming the tool
-    brush.tool = 'rect';
-    brush.erase = false;
-    brush.picking = false;
-    if (!brush.color) brush.color = { ...palette[0].rgb };
-    renderToolOptions();
-    syncUI();
-  };
-  // The fill tool floods a contiguous region (or, with "replace", recolors every
-  // matching texel — optionally across all tiles); picking it returns you to drawing
-  // with the current color, and a right-click / eraser ink still fills to transparent.
-  fillBtn.onclick = () => {
-    cancelRect(); // switching tool mid-drag abandons the box (matches the B/R keys)
-    brush.tool = 'fill';
-    brush.erase = false;
-    brush.picking = false;
-    if (!brush.color) brush.color = { ...palette[0].rgb };
-    renderToolOptions();
-    syncUI();
-  };
+    redrawCursorLayer();
+  }
+  // Pencil: draw with the current color. Rect: drag a filled (optionally rounded)
+  // box — a rectangular ERASE stays available via right-drag or the eraser ink.
+  // Fill: flood a contiguous region (or, with "replace", recolor every matching
+  // texel — optionally across all tiles); a right-click / eraser ink fills to clear.
+  pencilBtn.onclick = () => switchTool('pencil');
+  rectBtn.onclick = () => switchTool('rect');
+  fillBtn.onclick = () => switchTool('fill');
 
   // --- per-tool options row (contextual) ------------------------------------
   // Different tools expose different settings here. The pencil gets a tip-SIZE
@@ -605,6 +593,7 @@ export function createTileEditor(
   root.appendChild(usedRow);
 
   let lastUsedSig = null;
+  let lastPaintedSig = null;
   const distinctWorkColors = () => distinctColors(work);
   let usedEls = []; // { el, rgb } for active-color highlighting
   function renderUsed() {
@@ -613,6 +602,16 @@ export function createTileEditor(
     const painted = new Map();
     for (const c of usedColors) painted.set(rkey(c), c);
     for (const c of distinctWorkColors()) painted.set(rkey(c), c);
+    // The "in sprite" rings track the PAINTED set only, so refresh them whenever it
+    // changes — even when the swatch-row signature below is unchanged. (Erasing the
+    // last pixel of a color that is STILL the selected ink drops it from `painted`
+    // but not from the pinned-ink union, so the row sig wouldn't move and the ring
+    // would wrongly stay lit if this were folded into the sig gate.)
+    const paintedSig = [...painted.keys()].sort((a, b) => a - b).join(',');
+    if (paintedSig !== lastPaintedSig) {
+      lastPaintedSig = paintedSig;
+      markInSprite(new Set(painted.keys()));
+    }
     // The row ALSO carries the actively-chosen ink even before it's painted, so a
     // color picked from the "+" modal (or eyedropped) shows immediately as the
     // selected tile. `brush.chosen` gates out the untouched mount default.
@@ -620,7 +619,7 @@ export function createTileEditor(
     if (brush.chosen && brush.color) map.set(rkey(brush.color), { ...brush.color });
     const list = [...map.values()].sort((a, b) => rkey(a) - rkey(b));
     const sig = list.map(rkey).join(',');
-    if (sig === lastUsedSig) return; // set unchanged → skip DOM churn mid-stroke
+    if (sig === lastUsedSig) return; // swatch set unchanged → skip DOM churn mid-stroke
     lastUsedSig = sig;
     // Rebuild the swatches but keep the leading fixed controls (+ / eyedrop / erase).
     while (usedRow.children.length > FIXED_LEAD) usedRow.removeChild(usedRow.lastChild);
@@ -635,7 +634,6 @@ export function createTileEditor(
       usedEls.push({ el: s, rgb: c });
     }
     syncActiveSwatch();
-    markInSprite(new Set(painted.keys())); // in-sprite rings = painted colors only
   }
 
   // Ring the palette-modal swatches whose color is already painted in the sprite,

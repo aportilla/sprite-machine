@@ -9,7 +9,15 @@ import carAtlasUrl from '../assets/car-atlas.png';
 /** @returns {ImageData} */
 export function gridToImageData(rows, palette) {
   const h = rows.length;
+  if (h === 0) throw new Error('gridToImageData: rows must be non-empty.');
   const w = rows[0].length;
+  for (const row of rows) {
+    if (row.length !== w) {
+      throw new Error(
+        `gridToImageData: ragged rows (expected width ${w}, got ${row.length}).`
+      );
+    }
+  }
   const data = new Uint8ClampedArray(w * h * 4);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {

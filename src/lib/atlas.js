@@ -16,9 +16,13 @@ export const DEFAULT_ATLAS_LAYOUT = [
 ];
 
 // Allowed tile-dimension range for the in-app resize control (integers). A tile
-// maps 1:1 onto a lattice axis, so this is also the voxel grid's per-axis range.
+// maps 1:1 onto a lattice axis, so this is also the voxel grid's per-axis range —
+// and the carve/colorize pass is a synchronous O(n³) walk on the main thread. The
+// ceiling is 64 (a 64³ = 262 k-voxel grid still rebuilds live per stroke); larger
+// tiles (a 256³ = 16.7 M-voxel carve) froze the tab for seconds. clampTile pins
+// both the stepper and the ?tile dev hook into this range.
 export const TILE_MIN = 1;
-export const TILE_MAX = 256;
+export const TILE_MAX = 64;
 export const clampTile = (n) =>
   Math.max(TILE_MIN, Math.min(TILE_MAX, Math.round(Number(n) || 0)));
 
