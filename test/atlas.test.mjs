@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 
 import {
   sliceAtlas,
+  validateSheet,
   blitTile,
   cellOf,
   resizeTile,
@@ -379,4 +380,94 @@ test('clampTile: rounds and clamps to the integer tile range', () => {
   assert.equal(clampTile(40.6), 41);
   assert.equal(clampTile('12'), 12);
   assert.equal(clampTile(NaN), TILE_MIN);
+});
+
+// --- sliceAtlas warning / guard paths --------------------------------------
+
+test('sliceAtlas: a sheet too small to split (sub-1px tiles) bails with no views and an "unusable" warning', () => {
+  // A 1×1 sheet under the 3×2 layout derives tileW = 1/3 → rounds to 0 (< 1), the
+  // fundamentally-unusable guard. It returns before the slice loop, so `views` is
+  // empty (no keys), every value vacuously null, and one /unusable/i warning fires.
+  const tiny = { width: 1, height: 1, data: new Uint8ClampedArray(1 * 1 * 4) };
+  const res = sliceAtlas(tiny);
+  assert.equal(res.tileW, 0, 'derived tile width collapses to 0');
+  assert.deepEqual(Object.keys(res.views), [], 'no view tiles produced at all');
+  assert.ok(
+    Object.values(res.views).every((v) => v === null),
+    'every view value is null (vacuously — none were populated)'
+  );
+  assert.equal(res.warnings.length, 1, 'exactly the one guard warning');
+  assert.match(res.warnings[0], /unusable/i, 'flagged as unusable');
+});
+
+test('sliceAtlas: a non-divisible sheet warns "but image is …" and still reads tiles from the top-left', () => {
+  // 7×5 under 3×2 → tileW = round(7/3) = 2, tileH = round(5/2) = 3. cols*tileW = 6 ≠ 7
+  // and rows*tileH = 6 ≠ 5, so the mismatch warning fires; tiles are still cut from
+  // the top-left corner. Mark the (0,0) pixel opaque so the left cell reads non-null.
+  const W = 7;
+  const H = 5;
+  const sheet = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4) };
+  sheet.data[0] = 99; // R at (0,0)
+  sheet.data[3] = 255; // A at (0,0) → not blank
+  const res = sliceAtlas(sheet);
+  assert.equal(res.tileW, 2, 'tileW = round(7/3)');
+  assert.equal(res.tileH, 3, 'tileH = round(5/2)');
+  assert.equal(res.warnings.length, 1, 'just the divisibility mismatch warning');
+  assert.match(res.warnings[0], /but image is/i, 'surfaces the size mismatch');
+  assert.ok(res.views.left, 'the top-left cell still slices to a tile');
+  assert.equal(res.views.left.data[0], 99, 'and it reads the top-left pixel');
+});
+
+test('sliceAtlas: an unknown view name in a custom layout warns and skips that cell', () => {
+  // A 12×8 fully-opaque sheet with a bogus name swapped into the front cell. The bad
+  // name is warned about (/unknown view/i) and skipped — no key added — while the
+  // real neighbours still slice.
+  const layout = [
+    ['left', 'bogusview', 'top'],
+    ['right', 'back', 'bottom'],
+  ];
+  const sheet = {
+    width: 12,
+    height: 8,
+    data: new Uint8ClampedArray(12 * 8 * 4).fill(255),
+  };
+  const res = sliceAtlas(sheet, { layout });
+  assert.ok(
+    res.warnings.some((w) => /unknown view/i.test(w)),
+    'the bogus name is surfaced as an unknown-view warning'
+  );
+  assert.ok(!('bogusview' in res.views), 'the bogus cell is skipped — no view key');
+  assert.ok(res.views.left, 'a real neighbouring cell still slices');
+  assert.ok(res.views.top, 'and the other real cells too');
+});
+
+// --- validateSheet ---------------------------------------------------------
+
+test('validateSheet: rejects null, zero-sized, and short-buffer sheets; accepts a well-formed one', () => {
+  assert.match(
+    validateSheet(null),
+    /no valid dimensions/i,
+    'null → non-null error about dimensions'
+  );
+  assert.match(
+    validateSheet({ width: 0, height: 4, data: new Uint8ClampedArray(0) }),
+    /empty/i,
+    'zero width → empty-sheet error'
+  );
+  assert.match(
+    validateSheet({ width: 4, height: 0, data: new Uint8ClampedArray(0) }),
+    /empty/i,
+    'zero height → empty-sheet error'
+  );
+  // Buffer of 10 bytes where 4×4 RGBA needs 64.
+  assert.match(
+    validateSheet({ width: 4, height: 4, data: new Uint8ClampedArray(10) }),
+    /too short/i,
+    'under-length data buffer → too-short error'
+  );
+  assert.equal(
+    validateSheet({ width: 4, height: 4, data: new Uint8ClampedArray(4 * 4 * 4) }),
+    null,
+    'a correctly-sized sheet passes (null)'
+  );
 });

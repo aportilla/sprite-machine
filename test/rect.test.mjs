@@ -132,3 +132,27 @@ test('rows are contiguous, symmetric, and within the bounding box', () => {
     prev = clip;
   }
 });
+
+// The corner clip must be computed relative to the rect's own top-left origin
+// (offsets `y - y0` and `x0 + clip`), not the absolute grid coordinates. A rect at
+// a non-zero origin is where an origin-translation off-by-one in the corner clip
+// would surface: pin the CONCRETE runs so a shift in either axis is caught.
+test('non-zero origin: corner clip is rect-relative, straight rows span full width', () => {
+  // 10x10 rect anchored at (5,7)..(14,16), radius 3.
+  const { rows } = raster(5, 7, 14, 16, 3);
+  const byY = Object.fromEntries(rows.map((r) => [r.y, r]));
+
+  // Top corner row (y=7 == y0, the nearest edge → maximum clip of 3 per side).
+  // These absolute xl/xr only line up if the clip is measured from the rect, not 0.
+  assert.deepEqual([byY[7].xl, byY[7].xr], [8, 11], 'top corner row runs');
+  // Row one in from the top (y=8) clips exactly 1 column from each end.
+  assert.deepEqual([byY[8].xl, byY[8].xr], [6, 13], 'second-from-top row runs');
+
+  // Middle straight rows (y=10..13, past the r=3 corner band) span the full
+  // x0..x1 with zero clip — no corner arc reaches the vertical middle.
+  for (let y = 10; y <= 13; y++)
+    assert.deepEqual([byY[y].xl, byY[y].xr], [5, 14], `middle row ${y} full span`);
+
+  // The bottom corner mirrors the top (y=16 == y1, maximum clip again).
+  assert.deepEqual([byY[16].xl, byY[16].xr], [8, 11], 'bottom corner row runs');
+});
