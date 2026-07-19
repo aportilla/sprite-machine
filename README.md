@@ -77,8 +77,9 @@ _pick atlas ▾_ menu, and _download_.
   canvas, set off by a hairline separator): a **tool strip** of first-class tools
   (**pencil `B`**, **rect `R`**, and **fill `G`** are all live) — each an **icon
   button** drawn from the open-source **Adobe Spectrum
-  _workflow_** icon set (`draw` / `rectangle` / `color-fill`; the ink pickers below
-  use `sampler` for the eyedropper and `erase` for the eraser) — with
+  _workflow_** icon set (`draw` / `rectangle` / `color-fill`; the eyedropper ink
+  picker below uses `sampler`, and transparent is a checkerboard swatch, not an
+  icon) — with
   the square **tile-size stepper** docked at its right, above a **per-tool options**
   row. For the **pencil**, a **tip-size stepper** (`size: N px`) that stamps an
   **N×N** square footprint and **previews it** as a hairline outline on the canvas
@@ -94,7 +95,7 @@ _pick atlas ▾_ menu, and _download_.
   preview re-fits the instant you press or release Shift. Each corner rounds with a **convex** quarter-circle arc (bulging
   outward like a real rounded rectangle, not a concave scoop; clamped to half the
   shorter side), so even `radius: 1` clips the corner texel; the rect
-  respects the active ink, so a **right-drag** (or the eraser ink) drags a
+  respects the active ink, so a **right-drag** (or the transparent ink) drags a
   rectangular **erase**. The rounded-rect rasterization is a pure, Node-tested
   primitive (`src/lib/rect.js`) shared by the preview and the commit, so what you
   see is exactly what lands. For the **fill** (paint-bucket), two **checkboxes**:
@@ -105,7 +106,7 @@ _pick atlas ▾_ menu, and _download_.
   extends the recolor across **every tile in the atlas**, so it's a global
   find-and-replace of one color. Transparency is a first-class "color": clicking
   empty space targets transparent (so **replace** floods every empty texel with the
-  ink), and a **right-click** / the eraser ink fills _to_ transparent (delete a
+  ink), and a **right-click** / the transparent ink fills _to_ transparent (delete a
   color). The flood + replace are pure, Node-tested primitives (`src/lib/fill.js`).
   There's **no undo**, so an all-tiles replace is committed immediately — reload the
   sample to revert. **Below the card** is the **palette row** — every color currently painted on
@@ -114,9 +115,14 @@ _pick atlas ▾_ menu, and _download_.
   before you've drawn a single pixel with it) — led by a **+** that opens a **modal
   picker** over
   the **full 256-color palette**, then the **eyedropper** (`I` / hold **Alt** to
-  sample mid-stroke) and the **eraser** (`E` / **right-click**): these two sit
-  _among the colors_, not with the tools, because they pick the pencil's **ink** —
-  a sampled color, or transparent ("clear color") — rather than a drawing tool. The
+  sample mid-stroke) and a **transparent** swatch (`E` / **right-click**) — a
+  **checkerboard tile** (the same checker the canvas shows through unpainted texels,
+  so it previews what it paints) that selects the **empty / clear color**, not an
+  eraser _tool_: these two sit _among the colors_, not with the tools, because they
+  pick the pencil's **ink** — a sampled color, or transparent ("clear color") —
+  rather than a drawing tool. Selecting transparent then drawing (or a right-click,
+  or the `E` ink) lays clear texels, so it reads as painting a color, not wielding
+  an eraser. The
   modal is a 16×16 grid of **256 distinct** swatches (**Esc**, the backdrop, or
   **✕** closes it). The base is the standard **xterm-256** set — but xterm-256
   names 256 indexed _slots_ and only 247 _distinct_ colors (nine values, e.g.
@@ -326,7 +332,7 @@ src/lib/
 src/
   main.js         scene, lights, ground, framing, render loop + always-on editor wiring
   ui.js           header strip (samples, pick/drop atlas, download) + stage overlays (options, stats)
-  editor.js       tools panel (right half): one framed CARD of face tabs + stable-size canvas container (layout(): 60% of the sidebar height, centered integer-scaled canvas) + a tool FOOTER (tool strip — pencil + rect + fill live — with docked tile-size stepper, and per-tool options: pencil size + hover footprint preview, rect corner-radius + live drag preview / Esc-cancel, or fill replace / all-tiles checkboxes); palette row (colors + eyedropper/eraser/"+" 256-palette modal) sits below the card; align guides
+  editor.js       tools panel (right half): one framed CARD of face tabs + stable-size canvas container (layout(): 60% of the sidebar height, centered integer-scaled canvas) + a tool FOOTER (tool strip — pencil + rect + fill live — with docked tile-size stepper, and per-tool options: pencil size + hover footprint preview, rect corner-radius + live drag preview / Esc-cancel, or fill replace / all-tiles checkboxes); palette row (colors + eyedropper/transparent-swatch/"+" 256-palette modal) sits below the card; align guides
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
   icons.js        real UI glyphs — registers the Adobe Spectrum workflow <sp-icon-*> elements used by ui.js + editor.js (color via currentColor, size via --mod-icon-size; no sp-theme)
 ```

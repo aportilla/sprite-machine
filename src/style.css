@@ -666,13 +666,25 @@ body {
   border-color: var(--accent);
   background: rgba(199, 125, 214, 0.18);
 }
-/* Eraser = the "clear color" ink. Neutral among the pickers; its ACTIVE state
-   goes red (not accent) to preserve the "erase / clear" signal the old
-   checkerboard-with-red-slash swatch used to carry. */
-.editor-erase-tool.active {
-  color: #ff9ea1;
-  border-color: #e5484d;
-  background: rgba(229, 72, 77, 0.16);
+/* The "transparent" swatch — the empty / clear color, painted like any other. It
+   is a real .editor-swatch (so it takes the white "active" ring when selected),
+   filled with the SAME checkerboard the canvas shows through unpainted texels, so
+   the tile literally previews what painting it produces. Declared after
+   .editor-swatch so this background wins over that rule's `background: transparent`. */
+.editor-transparent-sw {
+  background-color: #2a2a30;
+  background-image: linear-gradient(
+      45deg,
+      #3a3a42 25%,
+      transparent 25%,
+      transparent 75%,
+      #3a3a42 75%
+    ),
+    linear-gradient(45deg, #3a3a42 25%, transparent 25%, transparent 75%, #3a3a42 75%);
+  background-size: 10px 10px;
+  background-position:
+    0 0,
+    5px 5px;
 }
 
 /* ---- full 256-color palette modal (opened by the "+") ---- */

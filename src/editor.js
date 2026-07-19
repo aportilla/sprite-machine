@@ -12,10 +12,10 @@
 // checkboxes). Only the PALETTE row lives
 // BELOW the card — every color currently painted on ANY face, so you can match
 // existing colors — led by a "+" that opens the full 256-color modal, then the
-// eyedropper and the eraser. The
-// eyedropper and eraser live with the colors, not the tools, because they choose
-// the pencil's INK (a sampled color, or transparent "clear color") rather than a
-// drawing tool. The brush selection is held in the caller-owned `brush` object so
+// eyedropper and a "transparent" swatch (a checkerboard tile = the empty / clear
+// color). The eyedropper and the transparent swatch live with the colors, not the
+// tools, because they choose the pencil's INK (a sampled color, or transparent
+// "clear color") rather than a drawing tool. The brush selection is held in the caller-owned `brush` object so
 // it survives a face swap (which destroys + re-mounts this editor). Every stroke
 // is HARD-pixel (alpha 0 or 255) so downstream ingest (alpha>=128) and
 // atlas.isBlank (alpha!==0) can never diverge.
@@ -570,9 +570,10 @@ export function createTileEditor(
   // --- palette row: ink pickers ---------------------------------------------
   // The only row BELOW the canvas card: every color painted anywhere in the sprite,
   // so you can match existing colors.
-  // The eyedropper and eraser sit here (not in the tool strip) because they pick
-  // the pencil's INK — a sampled color, or transparent ("clear color") — rather
-  // than a drawing tool. A leading "+" opens the full 256-color palette modal.
+  // The eyedropper and the transparent swatch sit here (not in the tool strip)
+  // because they pick the pencil's INK — a sampled color, or transparent ("clear
+  // color") — rather than a drawing tool. A leading "+" opens the full 256-color
+  // palette modal.
   const usedRow = el('div', 'editor-used-row');
   const addBtn = el('button', 'editor-add');
   addBtn.type = 'button';
@@ -589,18 +590,25 @@ export function createTileEditor(
     brush.picking = true;
     syncUI();
   };
-  const eraserSw = el('button', 'editor-pal-tool editor-erase-tool');
-  eraserSw.type = 'button';
-  eraserSw.title = 'eraser — clear color / erase to transparent (E, or right-click)';
-  eraserSw.setAttribute('aria-label', 'eraser (clear color)');
-  eraserSw.appendChild(icon('erase'));
-  eraserSw.onclick = () => {
+  // The "transparent" swatch: a checkerboard tile that reads as a first-class
+  // COLOR (empty / clear), not an eraser tool. Selecting it makes the pencil / rect
+  // / fill lay transparent — `brush.erase` is still the underlying flag, but the UI
+  // frames it as painting the empty color, matching the checker the canvas shows
+  // through unpainted texels. Also reachable by `E` or a right-click.
+  const transparentSw = el(
+    'button',
+    'editor-swatch editor-used-sw editor-transparent-sw'
+  );
+  transparentSw.type = 'button';
+  transparentSw.title = 'transparent — paint the empty / clear color (E, or right-click)';
+  transparentSw.setAttribute('aria-label', 'transparent (clear) color');
+  transparentSw.onclick = () => {
     brush.erase = true;
     brush.picking = false;
     brush.swatchIndex = -1;
     syncUI();
   };
-  usedRow.append(addBtn, eyeBtn, eraserSw);
+  usedRow.append(addBtn, eyeBtn, transparentSw);
   const FIXED_LEAD = usedRow.children.length; // fixed controls kept ahead of the swatches
   root.appendChild(usedRow);
 
@@ -726,7 +734,7 @@ export function createTileEditor(
     rectBtn.classList.toggle('active', brush.tool === 'rect');
     fillBtn.classList.toggle('active', brush.tool === 'fill');
     eyeBtn.classList.toggle('active', brush.picking);
-    eraserSw.classList.toggle('active', brush.erase && !brush.picking);
+    transparentSw.classList.toggle('active', brush.erase && !brush.picking);
     // With the pencil (its eraser/eyedropper ink modes included) the hover
     // footprint outline stands in for the pointer, so hide the OS cursor over the
     // canvas — CSS `.pencil-active { cursor: none }` leaves only the outline. The
@@ -735,7 +743,7 @@ export function createTileEditor(
     syncActiveSwatch();
   }
 
-  // keyboard: B / R / I / E pick pencil / rect / eyedropper / eraser-ink; Esc
+  // keyboard: B / R / I / E pick pencil / rect / eyedropper / transparent-ink; Esc
   // closes the palette modal, or aborts an in-flight rect drag (nothing committed).
   // Escape is handled before the input guard so it fires even from a focused
   // stepper; the rest are suppressed while a text/number input (a stepper) is
@@ -1062,7 +1070,7 @@ export function createTileEditor(
   function sampleAt(px, py) {
     const i = (py * tileW + px) * 4;
     if (work[i + 3] === 0) {
-      // Sampling empty space picks the eraser ink (clear color).
+      // Sampling empty space picks the transparent ink (clear color).
       brush.erase = true;
       brush.picking = false;
       brush.swatchIndex = -1;
