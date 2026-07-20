@@ -154,10 +154,16 @@ _pick atlas ▾_ menu, and _download_.
   earlier sparse 8×8×4 grid kept _every_ swatch ≥36 apart, so none merged).
   `test/palette.test.mjs` pins the exact set. Every stroke is hard-pixel: fully opaque or fully erased, never
   anti-aliased.
-- **Face tabs** — six **angled folder tabs** (skewed parallelograms) across the top
-  of the draw section switch which face you edit, laid out as mirror pairs
+- **Face tabs** — six **curved folder tabs** across the top of the draw section
+  switch which face you edit, laid out as mirror pairs
   (`left`/`right`, `front`/`back`, `top`/`bottom`)
-  so you can flip between a pair for reference. A **mirror-derived** face (one with
+  so you can flip between a pair for reference. Each tab's folder silhouette is an
+  **inline SVG rebuilt from its measured width** (`drawTab` in `src/editor.js`), so
+  the S-curve "ears" keep a **fixed pixel shape at any tab width** (only the flat top
+  between them grows) rather than distorting like a single stretched background; the
+  tabs **overlap** into clean valleys under a shared black **seam**, and the active
+  tab lifts above the seam to take the artwork gray so its open base merges into the
+  canvas below. A **mirror-derived** face (one with
   no art of its own) opens with an **empty canvas** and a **faded onion-skin** of
   the mirrored opposite behind it for reference; it becomes its own independent art
   only once you actually change a pixel — switching away and back leaves it derived,
@@ -364,7 +370,7 @@ src/lib/
 src/
   main.js         scene, lights, ground, framing, render loop + always-on editor wiring
   ui.js           header strip (samples, pick/drop atlas, download) + stage overlays (options, stats)
-  editor.js       tools panel (right half): a fixed 3-region flex column — SETTINGS header (tool strip: pencil + rect + fill live, docked tile-size stepper; per-tool options: pencil size SLIDER + hover footprint preview, rect corner-radius + live drag preview / Esc-cancel, or fill replace / all-tiles checkboxes), DRAW section (angled face tabs + canvas that fills the region via layout(): centered integer-scaled canvas), COLORS tray (ink strip: eyedropper + selected-color preview opening the 256 modal; scrollable palette box led by the transparent swatch); align guides
+  editor.js       tools panel (right half): a fixed 3-region flex column — SETTINGS header (tool strip: pencil + rect + fill live, docked tile-size stepper; per-tool options: pencil size SLIDER + hover footprint preview, rect corner-radius + live drag preview / Esc-cancel, or fill replace / all-tiles checkboxes), DRAW section (curved folder face tabs drawn per-tab as inline SVG via drawTab + canvas that fills the region via layout(): centered integer-scaled canvas), COLORS tray (ink strip: eyedropper + selected-color preview opening the 256 modal; scrollable palette box led by the transparent swatch); align guides
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
   icons.js        real UI glyphs — registers the Adobe Spectrum workflow <sp-icon-*> elements used by ui.js + editor.js (color via currentColor, size via --mod-icon-size; no sp-theme)
 ```

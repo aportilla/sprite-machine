@@ -9,7 +9,7 @@
 //      rect, and fill are all live) as square icon buttons with the tile-size
 //      stepper docked at its right, above a per-tool OPTIONS row (the pencil's
 //      tip-SIZE slider; the rect's corner-RADIUS stepper; the fill's two checkboxes).
-//   2. DRAW section (middle, GROWS): the six angled folder tabs cap it, and the
+//   2. DRAW section (middle, GROWS): the six curved folder tabs cap it, and the
 //      pixel canvas fills all remaining height below them.
 //   3. COLORS tray (bottom, fixed): a left INK STRIP — the eyedropper button and a
 //      selected-color PREVIEW box (a click opens the full 256-color modal) — beside
@@ -128,6 +128,81 @@ function el(tag, cls, text) {
   if (cls) n.className = cls;
   if (text != null) n.textContent = text;
   return n;
+}
+
+// --- curved folder-tab silhouette (drawn per-tab, not a stretched background) ---
+// Each face tab is a folder shape whose two sides are cubic S-curves (horizontal
+// tangents at the tip and at the top edge) flaring out to a wider base where tabs
+// overlap. The S-curve's horizontal run — the "ear" — is a FIXED pixel width read
+// from CSS, so unlike a single stretched SVG background the curves keep their shape
+// at any tab width; only the flat top between the ears grows. We rebuild the path
+// from the tab's measured box on mount and on every resize (drawTab).
+//
+//      ___________________
+//     /                   \
+//    /                     \
+//  _/                       \_   <- tips land on the seam centre-line
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const r2 = (v) => Math.round(v * 100) / 100;
+
+// Build the three shape layers once per tab (fill, black outline, focus ring),
+// inserted UNDER the label so the text always reads on top.
+function ensureTabShape(tab) {
+  let svg = tab.querySelector('.editor-tab__shape');
+  if (svg) return svg;
+  svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'editor-tab__shape');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  for (const cls of ['editor-tab__fill', 'editor-tab__edge', 'editor-tab__focus']) {
+    const p = document.createElementNS(SVG_NS, 'path');
+    p.setAttribute('class', cls);
+    svg.appendChild(p);
+  }
+  tab.insertBefore(svg, tab.firstChild);
+  return svg;
+}
+
+// Re-derive a tab's folder path from its current on-screen box. The fill runs a hair
+// past the seam (down to the box bottom) so the active tab, lifted above the seam,
+// erases it and opens into the panel; the outline stops at the seam centre-line.
+function drawTab(tab) {
+  const svg = ensureTabShape(tab);
+  const box = tab.getBoundingClientRect();
+  const w = box.width;
+  const h = box.height;
+  if (!w || !h) return; // not laid out yet — the ResizeObserver will call again
+  const cs = getComputedStyle(tab);
+  const stroke = parseFloat(cs.getPropertyValue('--tabs-stroke')) || 2;
+  let ear = parseFloat(cs.getPropertyValue('--tabs-ear')) || 15;
+  // Below ~stroke+2 the ear's floor of 1 would exceed (w-stroke)/2 and flip the flat
+  // top backwards (sl > sr) into a self-intersecting path. That needs sub-4px tabs (a
+  // panel far too narrow to see anyway), so just skip — the ResizeObserver redraws
+  // once the tab widens back to a sane size.
+  if (w < stroke + 2) return;
+  const s = stroke / 2; // keep the stroke inside the box
+  ear = Math.max(1, Math.min(ear, (w - stroke) / 2));
+  const x0 = r2(s);
+  const x1 = r2(w - s); // tip to tip
+  const yT = r2(s); // top edge, centre-line
+  const yB = r2(h - s); // seam, centre-line
+  const cl = r2(s + ear / 2);
+  const cr = r2(w - s - ear / 2); // S-curve control-point x's
+  const sl = r2(s + ear);
+  const sr = r2(w - s - ear); // where the flat top starts
+  // Left S-curve up to the flat top, across, then the right S-curve back down.
+  const d =
+    `M${x0},${yB} C${cl},${yB} ${cl},${yT} ${sl},${yT}` +
+    ` L${sr},${yT} C${cr},${yT} ${cr},${yB} ${x1},${yB}`;
+  svg.setAttribute('viewBox', `0 0 ${r2(w)} ${r2(h)}`);
+  // The fill runs down past the seam to the box bottom (so the active tab erases the
+  // seam); the outline + focus ring stop at the seam centre-line, leaving the base open.
+  const bottom = r2(h);
+  svg
+    .querySelector('.editor-tab__fill')
+    .setAttribute('d', `${d} L${x1},${bottom} L${x0},${bottom} Z`);
+  svg.querySelector('.editor-tab__edge').setAttribute('d', d);
+  svg.querySelector('.editor-tab__focus').setAttribute('d', d);
 }
 
 const toHex2 = (n) => n.toString(16).padStart(2, '0');
@@ -330,16 +405,43 @@ export function createTileEditor(
   const colors = el('div', 'editor-colors');
   root.append(settings, draw, colors);
 
-  // Six face tabs across the top of the draw region (one per atlas tile). The
-  // edited face is the active tab; clicking any other switches to it (the caller
-  // re-mounts the editor there — live edits are already committed).
+  // Six curved folder tabs across the top of the draw region (one per atlas tile).
+  // The edited face is the active tab; clicking any other switches to it (the caller
+  // re-mounts the editor there — live edits are already committed). Each tab's folder
+  // silhouette is an inline SVG rebuilt from its measured width by drawTab, so the
+  // S-curves keep a fixed shape at any tab width.
+  //
+  // A11y: these are a LABELED BUTTON GROUP marked with aria-current, not an ARIA
+  // `tablist`. The folder shape is purely visual — there are no persistent tabpanels
+  // (selecting a face tears down and re-mounts the whole editor), so role="tab"
+  // would promise a tab/tabpanel + arrow-key contract we don't keep. A button group
+  // with aria-current on the selected face is the honest description of the behavior.
   const tabs = el('div', 'editor-tabs');
+  tabs.setAttribute('role', 'group');
+  tabs.setAttribute('aria-label', 'edit face');
+  const tabEls = [];
   for (const f of faces || [name]) {
-    const t = el('button', 'editor-tab' + (f === name ? ' active' : ''), f);
-    if (f !== name) t.onclick = () => onSelectFace?.(f);
+    const active = f === name;
+    const t = el('button', 'editor-tab' + (active ? ' active' : ''));
+    t.type = 'button';
+    if (active) t.setAttribute('aria-current', 'true'); // the face being edited
+    t.appendChild(el('span', 'editor-tab__label', f)); // the label rides above the SVG
+    if (!active) t.onclick = () => onSelectFace?.(f);
     tabs.appendChild(t);
+    tabEls.push(t);
   }
   draw.appendChild(tabs);
+  // Draw each folder shape now (the panel is already mounted, so the boxes measure)
+  // and keep it in step with width changes: a window resize reflows the flex tabs, and
+  // the S-curve ears must stay a fixed pixel width while the flat top grows/shrinks.
+  for (const t of tabEls) drawTab(t);
+  let tabResizeObs = null;
+  if (typeof ResizeObserver !== 'undefined') {
+    tabResizeObs = new ResizeObserver((entries) => {
+      for (const e of entries) drawTab(e.target);
+    });
+    for (const t of tabEls) tabResizeObs.observe(t);
+  }
 
   // --- canvas: container filling the draw region + centered, maximal canvas ---
   // The CONTAINER (.editor-canvas-wrap) fills the draw region below the tabs (CSS
@@ -1326,6 +1428,7 @@ export function createTileEditor(
     document.removeEventListener('keydown', onKeyDown);
     document.removeEventListener('keyup', onKeyUp);
     resizeObs?.disconnect(); // stop observing the panel (we observe it, not a child)
+    tabResizeObs?.disconnect(); // stop redrawing the folder tabs on resize
     modal.remove(); // the modal lives on <body>, outside `container`
     container.innerHTML = ''; // removes the canvas + its pointer listeners with it
   }

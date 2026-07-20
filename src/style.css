@@ -143,18 +143,18 @@ body {
 
 /* Right half: the tools panel (inline tile editor, mounted by main.js). A fixed
    3-region flex column (settings / draw / colors) that exactly fills the panel
-   height — the draw region grows and the canvas fills it, so nothing page-scrolls
-   at normal sizes. overflow-y:auto is a short-window safety valve (the draw region
-   carries a min-height); scrollbar-gutter keeps a late scrollbar from shrinking the
-   content width and oscillating the canvas ResizeObserver. */
+   height — the draw region grows and the canvas fills it, so the panel itself never
+   scrolls. overflow:hidden (not auto) so no full-height scrollbar is ever reserved:
+   the panel would only page-scroll in a pathologically short window, and clipping the
+   tray edge there is preferable to permanently guttering the whole sidebar. (Any list
+   that genuinely overflows — the colors tray, the palette modal — scrolls on its own.) */
 #editor-panel {
   flex: 1 1 50%;
   min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
+  overflow: hidden;
   /* Classic silver tools panel: a Photoshop-3-era beveled-gray surface. `light` so
      native form controls + the panel scrollbar render pale, not dark. A raised
      left edge lifts it off the dark 3D stage. */
@@ -473,80 +473,125 @@ body {
   -webkit-appearance: none;
   margin: 0;
 }
-/* Six classic Photoshop-3-style FOLDER TABS across the top of the artwork panel:
-   rounded-top folder shapes with a BOLD black outline and SMOOTHLY CURVED sides (cubic
-   Béziers) that flare to a wider base, where they overlap. clip-path can't do curves, so
-   each tab's shape is an inline SVG background: a filled folder path (per-state gray) under a
-   stroked-only black-outline path (open at the base so the folder mouth reads open into
-   the panel). preserveAspectRatio='none' + background-size:100% 100% flexes the shape to
-   the tab width. Tabs OVERLAP (negative margin) and stack left-over-right; the active tab
-   comes to the FOREGROUND without rising and takes the artwork-panel body gray (they
-   merge). Inactive tabs are a darker gray with dim text. */
+/* Six curved FOLDER TABS across the top of the artwork panel. Each tab's silhouette
+   is a per-tab inline SVG (drawTab in editor.js) — a filled folder path under a
+   stroked-only black outline — rebuilt from the tab's measured width so the S-curve
+   ears stay a FIXED pixel width at any tab size (only the flat top between them
+   grows); a single stretched background distorted the curves. Tabs OVERLAP (negative
+   margin) so their flared feet interlock into clean \/ valleys under a shared black
+   seam; later tabs paint over earlier ones and the active tab lifts above the seam,
+   taking the artwork-panel gray so the open folder merges into the canvas below. The
+   --tabs-* knobs are read by both this CSS and drawTab, so keep --tabs-stroke/--tabs-ear
+   in sync with the JS defaults. */
 .editor-tabs {
+  --tabs-stroke: 2px; /* outline weight (drawTab reads this) */
+  --tabs-ear: 15px; /* horizontal run of each S-curve, fixed px (drawTab reads this) */
+  --tabs-overlap: 15px; /* how far each tab tucks under its left neighbour */
   display: flex;
+  align-items: flex-end;
   position: relative;
   z-index: 1; /* the tab strip sits over the canvas's top edge */
-  padding: 0 2px 0 10px; /* the first folder is inset from the panel's left edge */
+  padding: 0 4px; /* the outer feet are inset a touch from the panel edges */
+}
+/* The seam: a black line across the bar's base, above the resting tabs but below the
+   active one — which covers it, opening the folder into the panel. */
+.editor-tabs::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--tabs-stroke);
+  background: var(--c-dark);
+  z-index: 5;
 }
 .editor-tab {
   position: relative;
   flex: 1 1 0;
   min-width: 0;
   height: 30px;
-  padding: 3px 6px 0;
+  margin: 0;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 34' preserveAspectRatio='none'%3E%3Cpath d='M2 34 C12 34 14 4 26 4 L74 4 C86 4 88 34 98 34 Z' fill='%23767676'/%3E%3Cpath d='M2 34 C12 34 14 4 26 4 L74 4 C86 4 88 34 98 34' fill='none' stroke='%230a0a0a' stroke-width='2.5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  background-position: center;
   border: none;
-  color: #d4d4d4;
+  background: none;
   font: inherit;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  color: inherit;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
-/* Overlap: each tab tucks just ~3px under its LEFT neighbour — the curved feet
-   interlock but BOTH black outlines stay visible, forming clean \/ valleys (rather
-   than the front tab swallowing the next tab's edge). */
+/* Overlap: each tab tucks under its LEFT neighbour by one ear-width so the curved
+   feet interlock into a single \/ valley (both black outlines visible). */
 .editor-tab + .editor-tab {
-  margin-left: -3px;
+  margin-left: calc(var(--tabs-overlap) * -1);
 }
-/* Stack left-over-right (each tab's shoulder overlaps the tab to its right); the
-   active tab always comes fully to the foreground. */
-.editor-tab:nth-child(1) {
-  z-index: 6;
-}
-.editor-tab:nth-child(2) {
-  z-index: 5;
-}
-.editor-tab:nth-child(3) {
-  z-index: 4;
-}
-.editor-tab:nth-child(4) {
-  z-index: 3;
-}
-.editor-tab:nth-child(5) {
-  z-index: 2;
-}
-.editor-tab:nth-child(6) {
-  z-index: 1;
-}
-.editor-tab:hover:not(.active) {
-  color: #f2f2f2;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 34' preserveAspectRatio='none'%3E%3Cpath d='M2 34 C12 34 14 4 26 4 L74 4 C86 4 88 34 98 34 Z' fill='%237e7e7e'/%3E%3Cpath d='M2 34 C12 34 14 4 26 4 L74 4 C86 4 88 34 98 34' fill='none' stroke='%230a0a0a' stroke-width='2.5'/%3E%3C/svg%3E");
-}
-/* The selected tab does NOT rise — it comes to the foreground and takes the box gray
-   (#8a8a8a == --c-artwork), so the open folder merges into the content surface. */
+/* The active tab clears the seam and every neighbour, coming fully to the foreground
+   without rising. */
 .editor-tab.active {
   z-index: 10;
+  cursor: default;
+}
+/* The folder silhouette fills the tab box (backing paths built + sized in JS). */
+.editor-tab__shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+/* Resting tab: a darker gray than the artwork body; the active tab takes the body
+   gray (--c-artwork) so the open folder merges into the canvas surround. */
+.editor-tab__fill {
+  fill: #6f6f6f;
+}
+.editor-tab:hover:not(.active) .editor-tab__fill {
+  fill: #7c7c7c;
+}
+.editor-tab.active .editor-tab__fill {
+  fill: var(--c-artwork);
+}
+/* The bold black outline, open at the base so the folder mouth reads into the panel. */
+.editor-tab__edge {
+  fill: none;
+  stroke: var(--c-dark);
+  stroke-width: var(--tabs-stroke);
+  stroke-linecap: butt;
+  stroke-linejoin: round;
+}
+/* Keyboard focus: a marching-ants ring traced on the folder outline (mouse focus
+   shows nothing, matching the rest of the panel). */
+.editor-tab__focus {
+  fill: none;
+  stroke: none;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+.editor-tab:focus-visible {
+  outline: none;
+}
+.editor-tab:focus-visible .editor-tab__focus {
+  stroke: #fff;
+}
+/* The label rides above the SVG (position:relative over the absolute shape). */
+.editor-tab__label {
+  position: relative;
+  max-width: 100%;
+  padding: 0 6px;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: #d4d4d4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.editor-tab:hover:not(.active) .editor-tab__label {
+  color: #f2f2f2;
+}
+.editor-tab.active .editor-tab__label {
   color: #fff;
   font-weight: 700;
-  cursor: default;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 34' preserveAspectRatio='none'%3E%3Cpath d='M2 34 C12 34 14 4 26 4 L74 4 C86 4 88 34 98 34 Z' fill='%238a8a8a'/%3E%3Cpath d='M2 34 C12 34 14 4 26 4 L74 4 C86 4 88 34 98 34' fill='none' stroke='%230a0a0a' stroke-width='2.5'/%3E%3C/svg%3E");
 }
 /* The canvas CONTAINER: the sunken document inset within the artwork panel, below the
    tabs (flex:1). It has NO frame of its own — it simply fills the artwork box below the
