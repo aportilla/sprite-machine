@@ -36,8 +36,7 @@
   --bevel-pressed: inset 1px 1px 0 var(--c-dark), inset -1px -1px 0 var(--c-hilite),
     inset 2px 2px 0 var(--c-shadow), inset -2px -2px 0 var(--c-light);
   /* Sunken well (dark top-left, light bottom-right) — inputs, canvas, palette box. */
-  --bevel-sunken: inset -1px -1px 0 var(--c-hilite), inset 1px 1px 0 var(--c-shadow),
-    inset -2px -2px 0 var(--c-light), inset 2px 2px 0 var(--c-dark);
+  --bevel-sunken: 1px 1px 0 var(--c-light), -1px -1px 0 var(--c-dark);
   /* Thin one-level sunken frame — checkboxes, slider groove. */
   --bevel-sunken-1: inset -1px -1px 0 var(--c-hilite), inset 1px 1px 0 var(--c-shadow);
 }
@@ -373,7 +372,8 @@ body {
   min-height: 180px;
   display: flex;
   flex-direction: column;
-  padding: 3px;
+  padding: 0;
+  margin: 0 6px;
   background: var(--c-artwork);
   border: none;
   border-radius: 0;
@@ -492,6 +492,7 @@ body {
   position: relative;
   z-index: 1; /* the tab strip sits over the canvas's top edge */
   padding: 0 4px; /* the outer feet are inset a touch from the panel edges */
+  margin-top: 10px;
 }
 /* The seam: a black line across the bar's base, above the resting tabs but below the
    active one — which covers it, opening the folder into the panel. */
