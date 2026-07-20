@@ -995,7 +995,7 @@ body {
     5px 5px;
 }
 
-/* ---- full 256-color palette modal — a classic beveled dialog window ---- */
+/* ---- full 256-color palette modal — a plain, generic Photoshop-style dialog ---- */
 .palette-modal {
   position: fixed;
   inset: 0;
@@ -1014,41 +1014,47 @@ body {
   inset: 0;
   background: rgba(8, 8, 12, 0.5);
 }
-/* A classic silver dialog: raised outer bevel + a dropped shadow so it floats. The
-   3px silver frame is the window border; the title bar + grid sit inside it. */
+/* A plain silver dialog box: a thin dark edge with a soft raised inner line, and a
+   drop shadow so it floats. Deliberately NOT a windowed frame — no OS title bar,
+   no window chrome — just a padded, titled panel like a classic Photoshop dialog. */
 .palette-modal-card {
   position: relative;
   z-index: 1;
   width: min(92vw, 560px);
   max-height: 88vh;
   overflow-y: auto;
-  padding: 3px;
+  padding: 12px;
   background: var(--c-face);
   color: var(--c-text);
-  border: none;
+  border: 1px solid var(--c-dark);
   border-radius: 0;
   box-shadow:
-    var(--bevel-raised),
-    5px 5px 14px rgba(0, 0, 0, 0.45);
+    inset 1px 1px 0 var(--c-hilite),
+    inset -1px -1px 0 var(--c-shadow),
+    6px 6px 16px rgba(0, 0, 0, 0.4);
 }
-/* The title bar: the classic blue gradient with a white bold caption. */
+/* A plain title row: a dark caption on the silver, divided from the grid by an
+   engraved groove. No blue title bar, no window controls. */
 .palette-modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 3px 3px 3px 7px;
-  background: linear-gradient(90deg, #000080, #1084d0);
+  margin: 0 0 10px;
+  padding: 0 0 8px;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: none;
-  color: #fff;
+  color: var(--c-text);
+  box-shadow:
+    inset 0 -1px 0 var(--c-hilite),
+    inset 0 -2px 0 var(--c-shadow);
 }
-/* Title-bar close button: a small silver raised square with the X glyph. */
+/* A plain beveled close button — a generic dialog dismiss, not a window control. */
 .palette-modal-close {
-  width: 20px;
-  height: 18px;
+  width: 22px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1074,7 +1080,7 @@ body {
   display: grid;
   grid-template-columns: repeat(16, 1fr);
   gap: 2px;
-  margin: 3px 0 0;
+  margin: 0;
   padding: 8px;
   background: #cbcbcb;
   box-shadow: var(--bevel-sunken);
