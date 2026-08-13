@@ -1,90 +1,92 @@
 // ---------------------------------------------------------------------------
-// PLACEHOLDER cube-view icons for the editor's face picker — one small isometric
-// cube per atlas face, with the face's quad highlighted in the accent red (per
-// the System 7 UI mockup). These are stand-in inline SVGs: the real per-angle
-// artwork will be dropped in later as raster assets; only `faceIcon()`'s return
-// value (an element) is depended on, so swapping the art means editing this file
-// alone (e.g. return a <vf-img> wrapping the provided PNGs).
+// Cube-view icons for the editor's face picker — one small isometric cube per
+// atlas face, drawn as 21×26 pixel art (the real artwork; the placeholder inline
+// SVGs it replaced are gone).
 //
-// The cube is drawn as seen from the front-top-right corner, so three faces are
-// visible: TOP (the rhombus), FRONT (lower-left quad), RIGHT (lower-right quad).
-// A visible face highlights SOLID red; its hidden opposite (back / left /
-// bottom) highlights the same quad with a red diagonal HATCH — "the far side of
-// this one".
+// The cube is seen from a top-front corner, so three quads are visible and their
+// three opposites hide behind it. A face with a visible quad (`front`, `left`,
+// `top`) fills that quad SOLID red; a hidden one (`back`, `right`, `bottom`)
+// draws a thin red SLIVER peeking out along the silhouette edge it hides behind
+// — "the far side of this one".
+//
+// Left/right in this art is the OBJECT's own handedness (stage-left), not the
+// viewer's: `left` is the cube's lower-RIGHT quad and `right` the sliver on the
+// far left, the way a car facing you shows you its left flank on your right.
+// That's deliberate — don't "fix" it to match the world axes (+x right, so the
+// `left` face's normal is −x); the mapping below is the whole of it.
+//
+// The art is raster, so it goes through `vf-img`: one image pixel is one system
+// px, magnified nearest-neighbor on whole device pixels, with the kit's own grid
+// snapping. `width`/`height` are stated up front so the cell reserves its box
+// before the file lands and the settings row can't reflow.
+//
+// SELECTED is a 50% red dither in the cube's silhouette, laid OVER the art of
+// whichever face is checked (`vf-img`'s own `top`/`left` absolute positioning,
+// in the same system-px units as the art). It's always in the DOM; CSS shows it
+// only under a checked `vf-radio`, so it follows the group's own state rather
+// than needing a re-mount to appear.
 // ---------------------------------------------------------------------------
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
-const ACCENT = '#e0442f';
+import backUrl from './assets/faces/back.png';
+import bottomUrl from './assets/faces/bottom.png';
+import frontUrl from './assets/faces/front.png';
+import leftUrl from './assets/faces/left.png';
+import rightUrl from './assets/faces/right.png';
+import topUrl from './assets/faces/top.png';
+import selectedUrl from './assets/faces/selected.png';
 
-// The three visible quads of a 26×26 iso cube (points as "x,y" polygon lists).
-const QUAD_POINTS = {
-  top: '13,2 23,7.5 13,13 3,7.5',
-  front: '3,7.5 13,13 13,24 3,18.5', // lower-left quad
-  right: '23,7.5 23,18.5 13,24 13,13', // lower-right quad
+// face key -> its cube art. Swapping the artwork means editing this map alone.
+const FACE_ART = {
+  left: leftUrl,
+  right: rightUrl,
+  front: frontUrl,
+  back: backUrl,
+  top: topUrl,
+  bottom: bottomUrl,
 };
 
-// face -> which visible quad carries its highlight, and whether it's the hidden
-// opposite (hatched) rather than the visible face itself (solid).
-const FACE_QUAD = {
-  front: { quad: 'front', hidden: false },
-  back: { quad: 'front', hidden: true },
-  right: { quad: 'right', hidden: false },
-  left: { quad: 'right', hidden: true },
-  top: { quad: 'top', hidden: false },
-  bottom: { quad: 'top', hidden: true },
-};
+// Native size of every tile above, in system px (all seven share one box).
+const ICON_W = 21;
+const ICON_H = 26;
 
-function poly(points, fill, stroke) {
-  const p = document.createElementNS(SVG_NS, 'polygon');
-  p.setAttribute('points', points);
-  p.setAttribute('fill', fill);
-  if (stroke) {
-    p.setAttribute('stroke', stroke);
-    p.setAttribute('stroke-width', '1.25');
-    p.setAttribute('stroke-linejoin', 'round');
-  }
-  return p;
-}
-
-// One shared hatch pattern per SVG instance. The id repeats across instances in
-// the document; every copy is identical, so the first-match resolution of
-// url(#…) is harmless.
-function hatchDefs() {
-  const defs = document.createElementNS(SVG_NS, 'defs');
-  const pat = document.createElementNS(SVG_NS, 'pattern');
-  pat.setAttribute('id', 'sm-face-hatch');
-  pat.setAttribute('width', '3');
-  pat.setAttribute('height', '3');
-  pat.setAttribute('patternUnits', 'userSpaceOnUse');
-  pat.setAttribute('patternTransform', 'rotate(45)');
-  const r = document.createElementNS(SVG_NS, 'rect');
-  r.setAttribute('width', '1.5');
-  r.setAttribute('height', '3');
-  r.setAttribute('fill', ACCENT);
-  pat.appendChild(r);
-  defs.appendChild(pat);
-  return defs;
+/**
+ * A `vf-img` around one pixel-art PNG, sized to the shared icon box.
+ * @param {string} src
+ * @param {string} cls
+ * @returns {HTMLElement}
+ */
+function pixelImg(src, cls) {
+  const box = document.createElement('vf-img');
+  box.className = cls;
+  box.setAttribute('width', String(ICON_W));
+  box.setAttribute('height', String(ICON_H));
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = ''; // decorative: the cell's title + the radio's aria-label name it
+  box.appendChild(img);
+  return box;
 }
 
 /**
- * Build the placeholder cube icon for one atlas face.
+ * Build the cube icon for one atlas face: the face's art with the "selected"
+ * dither stacked over it (shown by CSS only while this cell's radio is checked).
  * @param {'left'|'right'|'front'|'back'|'top'|'bottom'} face
- * @returns {SVGSVGElement}
+ * @returns {HTMLElement}
  */
 export function faceIcon(face) {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 26 26');
-  svg.setAttribute('width', '26');
-  svg.setAttribute('height', '26');
-  svg.setAttribute('aria-hidden', 'true');
-  const { quad, hidden } = FACE_QUAD[face] || FACE_QUAD.front;
-  if (hidden) svg.appendChild(hatchDefs());
-  for (const q of ['top', 'front', 'right']) {
-    const isMark = q === quad;
-    const fill = !isMark ? '#fff' : hidden ? 'url(#sm-face-hatch)' : ACCENT;
-    // Hatched quads keep a white base underneath so the pattern reads on white.
-    if (isMark && hidden) svg.appendChild(poly(QUAD_POINTS[q], '#fff'));
-    svg.appendChild(poly(QUAD_POINTS[q], fill, '#000'));
-  }
-  return svg;
+  const art = el('div', 'editor-face-art');
+  art.appendChild(pixelImg(FACE_ART[face] || FACE_ART.front, 'editor-face-cube'));
+  const sel = pixelImg(selectedUrl, 'editor-face-selected');
+  // vf-img's own positioning: whole system px from the (relative) wrapper, so
+  // the dither lands exactly on the art's pixel grid at every --vf-scale.
+  sel.setAttribute('top', '0');
+  sel.setAttribute('left', '0');
+  art.appendChild(sel);
+  return art;
+}
+
+function el(tag, cls) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  return n;
 }

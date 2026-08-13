@@ -198,8 +198,20 @@ body {
   gap: 5px;
   cursor: pointer;
 }
-.editor-face-cell svg {
+/* The cube art and the "selected" dither stack in one box: the art is in flow
+   (it sizes the wrapper), the dither rides over it via vf-img's own top/left. */
+.editor-face-art {
+  position: relative;
   display: block;
+}
+/* The dither only paints for the checked face — vf-radio reflects `checked`, so
+   this tracks the group's own state, no re-mount needed. Visibility, not
+   display, so the component's own box rules are left alone. */
+.editor-face-selected {
+  visibility: hidden;
+}
+.editor-face-cell:has(vf-radio[checked]) .editor-face-selected {
+  visibility: visible;
 }
 
 /* The dotted rule between the settings row and the work area. */

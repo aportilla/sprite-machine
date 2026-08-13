@@ -6,8 +6,8 @@
 //
 // The panel is a fixed flex column:
 //   1. SETTINGS row (top, fixed): the TILE-SIZE number field (little-arrows
-//      stepper) and the FACE PICKER — six cube-view icons (placeholder art; real
-//      assets to come) over a vf-radio-group, replacing the old folder tabs.
+//      stepper) and the FACE PICKER — six pixel-art cube-view icons (vf-img)
+//      over a vf-radio-group, replacing the old folder tabs.
 //   2. A dotted separator.
 //   3. MAIN area (grows): a left RAIL — the TOOL STRIP (pencil / rect / fill /
 //      eyedropper as a 1-column vf-grid of cells; the selected tool inverts)
@@ -240,8 +240,10 @@ export function createTileEditor(
   tileGroup.append(tileField, caption('tile size', { dim: true }));
   settings.appendChild(tileGroup);
 
-  // Face picker: six cube-view icons (placeholder inline SVGs — see
-  // face-icons.js) over a vf-radio-group, laid out as mirror pairs by `faces`.
+  // Face picker: six pixel-art cube-view icons (vf-img — see face-icons.js)
+  // over a vf-radio-group, laid out as mirror pairs by `faces`. The checked
+  // face's icon takes the "selected" dither overlay (CSS, off vf-radio's
+  // reflected `checked`).
   // Picking a face re-mounts the editor there (live edits are already
   // committed), exactly as the old folder tabs did.
   const facePicker = /** @type {any} */ (document.createElement('vf-radio-group'));

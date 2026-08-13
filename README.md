@@ -24,7 +24,7 @@ its opposite at render time. The UI is drawn with the
 [`vintage-frames`](https://github.com/aportilla/vintage-frames) web component kit
 (classic Apple System 7 chrome): a white **header strip** over a **50/50 split** —
 the **tools panel** always open on one face on the left, the live 3D object on
-the right. The **face picker** (six cube-view icons over radio buttons) switches
+the right. The **face picker** (six pixel-art cube icons over radio buttons) switches
 which of the six you're editing (a mirror-derived face reads empty — an honest
 view of the sheet) — see [Drawing editor](#drawing-editor).
 
@@ -160,12 +160,21 @@ web component (`vf-number-field`, `vf-radio-group`, `vf-slider`, `vf-checkbox`,
 - **Face picker** — six **cube-view icons** over a radio row (a `vf-radio-group`)
   in the settings row switch which face you edit, laid out as mirror pairs
   (`left`/`right`, `front`/`back`, `top`/`bottom`)
-  so you can flip between a pair for reference. Each icon is a small isometric
-  cube with the face's quad highlighted — **solid red** for a visible face
-  (`front`/`right`/`top`), **red-hatched** for its hidden opposite
-  (`back`/`left`/`bottom`). The icons are **placeholder inline SVGs**
-  (`src/face-icons.js`), to be swapped for real per-angle artwork when it lands.
-  A **mirror-derived** face (one with
+  so you can flip between a pair for reference. Each icon is a **21×26 pixel-art**
+  isometric cube (`src/assets/faces/`, wired up in `src/face-icons.js`): the three
+  quads the view shows (`front`, `left`, `top`) fill **solid red**, and their hidden
+  opposites (`back`, `right`, `bottom`) draw a thin red **sliver** peeking out along
+  the silhouette edge they hide behind — "the far side of this one". Left/right in
+  the icons is the **object's own** handedness (stage-left): `left` is the cube's
+  lower-**right** quad, the way a car facing you shows its left flank on your right —
+  deliberately not the world-axis reading (`left` = −x, on the viewer's left). The **checked**
+  face takes a **50% red dither** (`selected.png`) laid over its whole cube; the
+  overlay is always in the DOM and CSS paints it only under a checked `vf-radio`, so
+  it tracks the group's own state. Being raster pixel art, every tile goes through
+  the kit's **`vf-img`** — one image pixel is one system px, magnified
+  nearest-neighbor on whole device pixels — and the dither is positioned with
+  `vf-img`'s own `top`/`left` (system px), so it stays registered to the art's grid
+  at any display scale. A **mirror-derived** face (one with
   no art of its own) opens with an **empty canvas** and a **faded onion-skin** of
   the mirrored opposite behind it for reference; it becomes its own independent art
   only once you actually change a pixel — switching away and back leaves it derived,
@@ -373,7 +382,7 @@ src/
   main.js         scene, lights, ground, framing, render loop + always-on editor wiring
   ui.js           System 7 header (brand, pick-atlas vf-menu, download vf-button) + stage overlays (smooth-slopes / auto-rotate vf-checkboxes, stats readout) — vintage-frames components
   editor.js       tools panel (left half), all vintage-frames chrome: SETTINGS row (tile-size vf-number-field + cube face picker on a vf-radio-group) over a dotted rule; TOOL RAIL (pencil + rect + fill + eyedropper cells in a vf-grid; current-ink vf-swatch opening the "Colors" vf-dialog, last-3-used color row, transparent no-color well); DRAW BOX (per-tool options bar: pencil size vf-slider + hover footprint preview, rect corner-radius vf-number-field + live drag preview / Esc-cancel, or fill replace / all-tiles vf-checkboxes; canvas fills the artwork well via layout(): centered integer-scaled canvas); align guides
-  face-icons.js   PLACEHOLDER cube-view icons for the face picker (inline SVG; real per-angle assets to come)
+  face-icons.js   face-picker cube icons: pixel-art PNGs (assets/faces/) in vf-img + the "selected" dither overlay
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
   icons.js        tool-cell + warning glyphs — registers the Adobe Spectrum workflow <sp-icon-*> elements used by ui.js + editor.js (color via currentColor, size via --mod-icon-size; no sp-theme)
 ```
