@@ -25,8 +25,13 @@
 // in the same system-px units as the art). It's always in the DOM; CSS shows it
 // only under a checked `vf-radio`, so it follows the group's own state rather
 // than needing a re-mount to appear.
+//
+// These are lit TEMPLATES, not built elements: <sm-editor> re-renders on every
+// state change, and a fresh DOM node per render would make lit swap all seven
+// images each time. A TemplateResult diffs to a no-op instead.
 // ---------------------------------------------------------------------------
 
+import { html } from 'lit';
 import backUrl from './assets/faces/back.png';
 import bottomUrl from './assets/faces/bottom.png';
 import frontUrl from './assets/faces/front.png';
@@ -50,43 +55,26 @@ const ICON_W = 21;
 const ICON_H = 26;
 
 /**
- * A `vf-img` around one pixel-art PNG, sized to the shared icon box.
- * @param {string} src
- * @param {string} cls
- * @returns {HTMLElement}
+ * The cube icon for one atlas face: the face's art with the "selected" dither
+ * stacked over it (shown by CSS only while this cell's radio is checked). The
+ * dither is placed with vf-img's own top/left — whole system px from the
+ * (relative) wrapper, so it lands exactly on the art's pixel grid at every
+ * --vf-scale.
+ * @param {string} face one of the six atlas face keys
  */
-function pixelImg(src, cls) {
-  const box = document.createElement('vf-img');
-  box.className = cls;
-  box.setAttribute('width', String(ICON_W));
-  box.setAttribute('height', String(ICON_H));
-  const img = document.createElement('img');
-  img.src = src;
-  img.alt = ''; // decorative: the cell's title + the radio's aria-label name it
-  box.appendChild(img);
-  return box;
-}
-
-/**
- * Build the cube icon for one atlas face: the face's art with the "selected"
- * dither stacked over it (shown by CSS only while this cell's radio is checked).
- * @param {'left'|'right'|'front'|'back'|'top'|'bottom'} face
- * @returns {HTMLElement}
- */
-export function faceIcon(face) {
-  const art = el('div', 'editor-face-art');
-  art.appendChild(pixelImg(FACE_ART[face] || FACE_ART.front, 'editor-face-cube'));
-  const sel = pixelImg(selectedUrl, 'editor-face-selected');
-  // vf-img's own positioning: whole system px from the (relative) wrapper, so
-  // the dither lands exactly on the art's pixel grid at every --vf-scale.
-  sel.setAttribute('top', '0');
-  sel.setAttribute('left', '0');
-  art.appendChild(sel);
-  return art;
-}
-
-function el(tag, cls) {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  return n;
-}
+export const faceIcon = (face) => html`
+  <div class="editor-face-art">
+    <vf-img class="editor-face-cube" width=${ICON_W} height=${ICON_H}>
+      <img src=${FACE_ART[face] || FACE_ART.front} alt="" />
+    </vf-img>
+    <vf-img
+      class="editor-face-selected"
+      width=${ICON_W}
+      height=${ICON_H}
+      top="0"
+      left="0"
+    >
+      <img src=${selectedUrl} alt="" />
+    </vf-img>
+  </div>
+`;

@@ -165,6 +165,13 @@ body {
 }
 
 /* ---- inline tile editor (content of the left-side #editor-panel) ---- */
+/* <sm-editor> renders into the LIGHT DOM, so it sits between #editor-panel and
+   the .editor column it renders. `display: contents` removes its box entirely,
+   leaving .editor as the panel's direct flex child — the same box tree the
+   editor had before it became a custom element. */
+sm-editor {
+  display: contents;
+}
 .editor {
   flex: 1;
   min-height: 0;

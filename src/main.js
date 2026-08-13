@@ -22,7 +22,7 @@ import { PENCIL_PALETTE, PALETTE_256 } from './lib/constants.js';
 import { faceGuides } from './lib/guides.js';
 import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
 import { createUI, mirrorImage } from './ui.js';
-import { createTileEditor } from './editor.js';
+import './components/sm-editor.js'; // registers <sm-editor>
 
 // --------------------------------------------------------------------------
 // Scene
@@ -259,8 +259,8 @@ function sliceAndBuild(reframe) {
 
 // --------------------------------------------------------------------------
 // Tile editor wiring (see the "Drawing editor" section of README.md and the
-// header comment of editor.js — docs/drawing-editor-plan.md is a superseded
-// early design, kept for history only).
+// header comment of components/sm-editor.js — docs/drawing-editor-plan.md is a
+// superseded early design, kept for history only).
 // --------------------------------------------------------------------------
 // The tools panel (right half) always shows the editor for one face. Boot and
 // sheet-swaps fall back to this face; the tabs switch which face is active. Tabs
@@ -308,26 +308,18 @@ function applyTileEdit(name, wasDerived, tile, dirty) {
 }
 
 // --- editor session -------------------------------------------------------
-// The editor is permanently docked in the left-half panel; the 3D view stays
-// live on the right. The brush selection is shared so it survives a face swap:
-// `tool` is the drawing op ('pencil', 'rect', 'fill' all live), `color` the ink,
-// `erase`/`picking` the eraser-ink / eyedropper flags, `size` the pencil
-// footprint, `cornerRadius` the rect tool's corner radius (texels, 0 = sharp),
-// `fillReplace`/`fillAllTiles` the fill tool's two option checkboxes, `recent`
-// the MRU ink list behind the editor's "last three used colors" row.
-const brush = {
-  tool: 'pencil',
-  color: null,
-  erase: false,
-  picking: false,
-  size: 1,
-  cornerRadius: 0,
-  fillReplace: false,
-  fillAllTiles: false,
-  recent: [],
-};
-let currentEditor = null;
+// ONE <sm-editor>, created on the first build and never destroyed. A face swap,
+// a tile resize and an all-tiles replace are property assignments — the element
+// re-derives its working buffer in willUpdate — so the brush selection (tool,
+// ink, recency, per-tool options) simply persists because the element does.
+// That is what retires the old caller-owned `brush` bag and the focus-restore
+// hack the per-swap re-mount used to need.
+let editorEl = null;
 let editingName = null;
+// Whether the face the editor is currently showing had no independent art when
+// it was selected — read by the sm-live handler (which lives on the dock, not in
+// a per-mount closure).
+let editingWasDerived = false;
 
 const freshTile = () => ({
   width: state.tileW,
@@ -335,69 +327,64 @@ const freshTile = () => ({
   data: new Uint8ClampedArray(state.tileW * state.tileH * 4),
 });
 
-function mountEditor(name, focusSize) {
-  if (currentEditor) {
-    currentEditor.destroy();
-    currentEditor = null;
-  }
+// Build the editor element once and dock it. Everything here is either constant
+// for the session or a one-shot dev hook consumed on its first update.
+function ensureEditor() {
+  if (editorEl) return editorEl;
+  editorEl = /** @type {any} */ (document.createElement('sm-editor'));
+  Object.assign(editorEl, {
+    palette: PENCIL_PALETTE,
+    palette256: PALETTE_256,
+    faces: TAB_ORDER,
+    sizeMin: TILE_MIN,
+    sizeMax: TILE_MAX,
+    openPaletteOnMount: pendingOpenPalette,
+    previewCursor: pendingCursor,
+    previewRect: pendingRect,
+    pickIndex: pendingPick,
+    fillOnMount: pendingFill,
+  });
+  pendingOpenPalette = false; // one-shot: they only fire on the first update
+  pendingCursor = null;
+  pendingRect = null;
+  pendingPick = null;
+  pendingFill = null;
+  ui.editorDock.replaceChildren(editorEl);
+  return editorEl;
+}
+
+// Point the persistent editor at a face. Called by a face pick, a sheet swap, a
+// tile resize, an all-tiles replace, and boot.
+function showFace(name) {
   const existing = state.views[name] || null;
-  const wasDerived = existing == null;
+  editingName = name;
+  editingWasDerived = existing == null;
   // Onion-skin: the opposite face's OWN art, mirrored, faded behind the canvas —
   // only when it has independent art (a derived opposite is just this face's own
   // mirror, so it would overlay identically and add nothing). A derived face
   // opens with an empty canvas and relies on this faded mirror as its reference.
   const oppArt = state.views[VIEW_OPPOSITE[name]];
-  const mirrorBehind = oppArt ? mirrorImage(oppArt, MIRROR_AXIS) : null;
-  // Hairline extent rules from the orthogonal faces sharing each of this face's
-  // axes — where a painted pixel can survive the (now strict) carve.
-  const guides = faceGuides(state.views, name, state.tileW, state.tileH);
-  editingName = name;
-  // Consume the one-shot ?fill hook BEFORE constructing the editor: it never re-mounts
-  // (its mount fill is local), but reading it into a local + nulling the field first
-  // keeps the one-shot honest against any re-entrant mount.
-  const fillOnMount = pendingFill;
-  pendingFill = null;
-  currentEditor = createTileEditor(ui.editorDock, {
-    name,
+  Object.assign(ensureEditor(), {
+    face: name,
     tile: existing || freshTile(),
     tileW: state.tileW,
     tileH: state.tileH,
-    palette: PENCIL_PALETTE,
-    palette256: PALETTE_256,
-    mirrorBehind,
-    guides,
-    faces: TAB_ORDER,
-    brush,
-    sizeMin: TILE_MIN,
-    sizeMax: TILE_MAX,
-    focusSize,
-    openPaletteOnMount: pendingOpenPalette,
-    previewCursor: pendingCursor,
-    previewRect: pendingRect,
-    pickIndex: pendingPick,
-    fillOnMount,
-    onLive: (working, dirty) => applyTileEdit(name, wasDerived, working, dirty),
-    onSelectFace: (target) => enterDrawing(target),
-    onResizeTile: (n) => resizeTiles(n, n, 'Tile'),
-    onReplaceAllTiles: (target, fill) => replaceColorAllTiles(target, fill),
+    mirrorBehind: oppArt ? mirrorImage(oppArt, MIRROR_AXIS) : null,
+    // Hairline extent rules from the orthogonal faces sharing each of this face's
+    // axes — where a painted pixel can survive the (now strict) carve.
+    guides: faceGuides(state.views, name, state.tileW, state.tileH),
   });
-  pendingOpenPalette = false; // one-shot: don't re-open on face swap / resize
-  pendingCursor = null; // one-shot: only preview on the first mount
-  pendingRect = null; // one-shot: only preview on the first mount
-  pendingPick = null; // one-shot: only pre-select on the first mount
 }
 
 // Fill with BOTH "replace" and "all tiles" on: replace every `target` texel with
-// `fill` across all six tiles, then re-slice + rebuild + re-open the editor on the
+// `fill` across all six tiles, then re-slice + rebuild + re-point the editor at the
 // same face so its working buffer reflects the replaced current tile. `target`/`fill`
 // are color keys ({transparent:true} | {r,g,b}). Scoped to the tiled region (the
 // top-left cols*tileW × rows*tileH block — the six tiles are contiguous there) rather
 // than the whole ImageData, so a non-divisible sheet's remainder pixels (outside every
 // tile, invisible to the carve but present in a download) are left untouched. Any
 // un-flushed live stroke is folded in first (same guard as resizeTiles) so the replace
-// sees the latest pixels and none are dropped on the re-mount. Called from the editor's
-// fill click — never during its construction — so the re-mount is a clean (post-event)
-// swap, like a tab click or a tile resize.
+// sees the latest pixels and none are dropped.
 function replaceColorAllTiles(target, fill) {
   if (!state.atlasImage) return;
   if (liveRAF) {
@@ -419,23 +406,22 @@ function replaceColorAllTiles(target, fill) {
   if (!changed) return;
   const face = editingName;
   refreshFromAtlas(false); // re-slice all views + rebuild the mesh (keep the camera)
-  if (face) mountEditor(face); // re-open on the same face at the replaced pixels
+  if (face) showFace(face); // re-point at the same face, now on the replaced pixels
 }
 
 // Resize every tile from the editor's tile-size stepper. Tiles are locked SQUARE, so
 // the editor always calls this with newW===newH: it resizes the WHOLE atlas so every
-// face moves together, then re-slices and re-opens the editor on the same face at the
-// new size (restoring focus to the stepper for typed entry). It CENTERS the art on
-// every axis (anchor 'center') so the sprite stays put in the canvas as the tile grows
-// or shrinks instead of hugging a corner — a square resize stays in registration (the
-// whole solid just translates), though centering the vertical axis means a ground-rested
-// sprite no longer pins to y=0 and floats up as the tile grows (accepted: the author
-// wanted centered artwork). The ?tile / ?tile=WxH dev hook drives this same path; an
-// asymmetric pair still shears the shared depth axis and warns. The control only shows
-// while editing, but this guards defensively.
-/** @param {number} newW @param {number} newH @param {string} [focusSize]
- *  @param {'origin'|'center'} [anchor] */
-function resizeTiles(newW, newH, focusSize, anchor = 'center') {
+// face moves together, then re-slices and re-points the editor at the same face at the
+// new size. (The number field keeps focus by itself now — the element it lives in is
+// never unmounted.) It CENTERS the art on every axis (anchor 'center') so the sprite
+// stays put in the canvas as the tile grows or shrinks instead of hugging a corner — a
+// square resize stays in registration (the whole solid just translates), though
+// centering the vertical axis means a ground-rested sprite no longer pins to y=0 and
+// floats up as the tile grows (accepted: the author wanted centered artwork). The
+// ?tile / ?tile=WxH dev hook drives this same path; an asymmetric pair still shears the
+// shared depth axis and warns.
+/** @param {number} newW @param {number} newH @param {'origin'|'center'} [anchor] */
+function resizeTiles(newW, newH, anchor = 'center') {
   if (!state.atlasImage) return;
   const w = clampTile(newW);
   const h = clampTile(newH);
@@ -449,14 +435,14 @@ function resizeTiles(newW, newH, focusSize, anchor = 'center') {
   state.atlasImage = resizeAtlas(state.atlasImage, w, h, { anchor });
   const face = editingName;
   refreshFromAtlas(false); // keep the camera — the world size is normalized anyway
-  if (face) mountEditor(face, focusSize); // re-open at the new size, refocus the stepper
+  if (face) showFace(face); // re-point at the new size (same face, same element)
 }
 
-// Select a face for editing: (re)mount the always-on editor on it. Called by a
-// tab click, a sheet swap, a tile resize, and boot.
+// Select a face for editing. Called by a face pick, a sheet swap, a tile resize,
+// and boot.
 function enterDrawing(name) {
   if (!state.atlasImage || !state.tileW || !state.tileH) return;
-  mountEditor(name);
+  showFace(name);
 }
 
 function onDownload() {
@@ -510,6 +496,24 @@ const ui = createUI({
   },
   onOptionChange: () => rebuild(),
   onDownload,
+});
+
+// <sm-editor> talks back in bubbling `sm-*` CustomEvents, heard once on the dock
+// rather than through per-mount callbacks — so the wiring outlives any editor.
+ui.editorDock.addEventListener('sm-live', (e) => {
+  const { tile, dirty } = /** @type {CustomEvent} */ (e).detail;
+  applyTileEdit(editingName, editingWasDerived, tile, dirty);
+});
+ui.editorDock.addEventListener('sm-select-face', (e) => {
+  enterDrawing(/** @type {CustomEvent} */ (e).detail.face);
+});
+ui.editorDock.addEventListener('sm-resize-tile', (e) => {
+  const { size } = /** @type {CustomEvent} */ (e).detail;
+  resizeTiles(size, size);
+});
+ui.editorDock.addEventListener('sm-replace-all-tiles', (e) => {
+  const { target, fill } = /** @type {CustomEvent} */ (e).detail;
+  replaceColorAllTiles(target, fill);
 });
 
 // --------------------------------------------------------------------------

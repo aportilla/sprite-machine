@@ -15,6 +15,21 @@ npm run lint       # prettier --check .   (npm run format to fix)
 npm run build      # static bundle in dist/
 ```
 
+Two headless-Chrome tools verify what Node can't, both against a running dev
+server:
+
+```bash
+tools/capture.sh shot 'http://localhost:5173/?sample=car&rotate=0' /tmp/shot.png
+tools/capture.sh dom  'http://localhost:5173/?diag=1&rotate=0'   # serialized DOM
+node tools/drive.mjs                                             # editor smoke test
+```
+
+`capture.sh` shows what the app **looks** like — its shots are byte-deterministic,
+so `cmp` against a saved baseline is a real regression check. `drive.mjs` covers
+what no screenshot can: it drives the editor over the DevTools Protocol with real
+trusted input (keys, drags, the color dialog, face swaps, tile resizes) and exits
+non-zero on any failure.
+
 **Pick a built-in sample**, or load your own **3×2 sprite sheet** — open the
 _pick atlas_ menu in the header or drop a PNG anywhere on the window. **Smooth
 slopes** (low-poly additive 45° wedges) is on by default and toggles live; greedy
@@ -70,7 +85,8 @@ face; the 3D view stays live on the right and rebuilds as you draw. Pick a face
 with the **face picker**; a **header strip** across the top holds the brand, the
 _pick atlas_ menu, and _download_. Every control is a `vintage-frames` System 7
 web component (`vf-number-field`, `vf-radio-group`, `vf-slider`, `vf-checkbox`,
-`vf-swatch`, `vf-grid`, `vf-dialog`, `vf-menu`, …).
+`vf-swatch`, `vf-grid`, `vf-dialog`, `vf-menu`, …), driven from a Lit template —
+see [UI layer: Lit](#ui-layer-lit).
 
 - **Panel layout** — a fixed flex column in the System 7 idiom: a **settings
   row** (top, fixed) holds the **tile-size** number field and the **face picker**
@@ -80,7 +96,7 @@ web component (`vf-number-field`, `vf-radio-group`, `vf-slider`, `vf-checkbox`,
   artwork well — its height is **CSS-driven** (flex), no JS pin — and the square
   editable canvas is **centered** in it and drawn **as large as an integer texel
   scale fits** (crisp, never a fractional pixel), **re-fitting responsively** when
-  the window resizes. See `layout()` in `src/editor.js`.
+  the window resizes. See `#layout()` in `src/components/sm-editor.js`.
 - **Tools** — the left **rail** holds a **tool strip**: a single column of square
   cells (**pencil `B`**, **rect `R`**, **fill `G`**, and the **eyedropper `I`**;
   the selected cell inverts) — each an icon from the open-source **Adobe Spectrum
@@ -211,7 +227,7 @@ land inside to survive the carve) and a **faded onion-skin** of the opposite fac
 behind the canvas. There is **no auto ground-rest**: an object sits at whatever Y
 you paint it (paint at the tile's bottom to rest on the ground). The editor is
 pure authoring — no changes to the carve / colorize / mesh pipeline. See
-`src/editor.js` and `src/lib/guides.js`.
+`src/components/sm-editor.js` and `src/lib/guides.js`.
 
 **Dev hook:** append `?edit=<face>` (e.g. `?edit=front`) to boot with the editor
 on that face — it's always open now, so this just picks the starting tab. It's how
@@ -379,13 +395,41 @@ src/lib/
   sprite-data.js  built-in samples (as atlases) + grid->ImageData helper
   diag.js         geometry watertightness self-check (dev only; ?diag=1)
 src/
-  main.js         scene, lights, ground, framing, render loop + always-on editor wiring
-  ui.js           System 7 header (brand, pick-atlas vf-menu, download vf-button) + stage overlays (smooth-slopes / auto-rotate vf-checkboxes, stats readout) — vintage-frames components
-  editor.js       tools panel (left half), all vintage-frames chrome: SETTINGS row (tile-size vf-number-field + cube face picker on a vf-radio-group) over a dotted rule; TOOL RAIL (pencil + rect + fill + eyedropper cells in a vf-grid; current-ink vf-swatch opening the "Colors" vf-dialog, last-3-used color row, transparent no-color well); DRAW BOX (per-tool options bar: pencil size vf-slider + hover footprint preview, rect corner-radius vf-number-field + live drag preview / Esc-cancel, or fill replace / all-tiles vf-checkboxes; canvas fills the artwork well via layout(): centered integer-scaled canvas); align guides
-  face-icons.js   face-picker cube icons: pixel-art PNGs (assets/faces/) in vf-img + the "selected" dither overlay
+  main.js         scene, lights, ground, framing, render loop + the <sm-editor> wiring (one element, property assignments, sm-* events)
+  ui.js           System 7 header (brand, pick-atlas vf-menu, download vf-button) + stage overlays (smooth-slopes / auto-rotate vf-checkboxes, stats readout) — lit-html render() into #topbar / #stage
+  components/
+    sm-editor.js  the tools panel (left half) as a light-DOM LitElement, all vintage-frames chrome: SETTINGS row (tile-size vf-number-field + cube face picker on a vf-radio-group) over a dotted rule; TOOL RAIL (pencil + rect + fill + eyedropper cells in a vf-grid; current-ink vf-swatch opening the "Colors" vf-dialog, last-3-used color row, transparent no-color well); DRAW BOX (per-tool options bar: pencil size vf-slider + hover footprint preview, rect corner-radius vf-number-field + live drag preview / Esc-cancel, or fill replace / all-tiles vf-checkboxes; canvas fills the artwork well via #layout(): centered integer-scaled canvas); align guides
+  face-icons.js   face-picker cube icons: pixel-art PNGs (assets/faces/) in vf-img + the "selected" dither overlay, as lit templates
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
-  icons.js        tool-cell + warning glyphs — registers the Adobe Spectrum workflow <sp-icon-*> elements used by ui.js + editor.js (color via currentColor, size via --mod-icon-size; no sp-theme)
+  icons.js        registers the Adobe Spectrum workflow <sp-icon-*> tool-cell + warning glyphs, written literally in the ui.js / sm-editor.js templates (color via currentColor, size via --mod-icon-size; no sp-theme)
 ```
+
+### UI layer: Lit
+
+The chrome is `lit`, the library `vintage-frames` itself is built on (one deduped
+copy — `npm ls lit`). `ui.js` is bare `lit-html` `render()` calls into the
+containers `index.html` already ships; the editor is a single **`<sm-editor>`**
+LitElement. Both render into the **light DOM** (`createRenderRoot() { return this }`,
+plus `sm-editor { display: contents }`), so `style.css` targets the same classes it
+always did, the box tree is unchanged, and `tools/capture.sh dom` still sees the
+whole editor.
+
+The split that makes it safe: **reactive properties are what the template reads**
+(`face`, `tile`, `tool`, `ink`, `recent`, `pencilSize`, …), while everything the
+canvas hot paths touch is a plain `#private` field (the pixel buffer and its
+`ImageData` view, stroke/drag state, the on-screen scale) — so a pencil drag can
+never schedule a re-render at pointer-move rate. Canvas backing stores are sized
+imperatively in `updated()`, never bound in a template (a bound `width` would clear
+the buffer mid-diff). User-editable `vf-*` values are controlled bindings with
+`live()`, so a re-render can't skip a re-sync after typing.
+
+**One element, forever:** a face swap, a tile resize and an all-tiles replace are
+property assignments — `willUpdate` re-derives the working buffer and drops any
+in-flight gesture when `face`/`tile`/`tileW`/`tileH` change. Because the element
+persists, so does everything it owns (tool, ink, recency, per-tool options, and the
+tile field's keyboard focus), which is why there is no caller-owned "brush" object
+and no refocus hack. It talks back in bubbling `sm-live` / `sm-select-face` /
+`sm-resize-tile` / `sm-replace-all-tiles` events, heard once on the dock.
 
 ## Known limitations & next steps
 

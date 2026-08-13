@@ -1,5 +1,13 @@
 # Lit adoption plan
 
+> **Status: landed.** Phases 0–3 are done; Phase 4 stays deferred. `ui.js` is
+> `lit-html`, the editor is `src/components/sm-editor.js` (one persistent
+> `<sm-editor>`), and `src/editor.js` is gone. Every phase landed with the
+> screenshot suite **byte-identical** to the pre-Lit build, 147 Node tests,
+> typecheck and lint green; the bundle moved 930.33 kB → 937.25 kB
+> (gzip 262.85 → 265.03 kB). Deviations from the plan as written are noted
+> per-phase below.
+
 Replace the editor UI's manual DOM construction (`document.createElement` +
 `setAttribute` + hand-rolled re-render functions) with **Lit templates and
 reactive state**. `vintage-frames` is already a LitElement kit, so `lit` is
@@ -240,7 +248,7 @@ What each of today's mechanisms maps to:
 Each phase lands green (`npm test` · `typecheck` · `lint`) and
 screenshot-verified before the next starts.
 
-### Phase 0 — dependency + conventions
+### Phase 0 — dependency + conventions ✅
 
 - `package.json`: add `"lit": "^3.3.0"` to `dependencies`. It resolves to the
   copy `vintage-frames` already hoisted (`^3.2.0` — same major), so verify
@@ -249,7 +257,7 @@ screenshot-verified before the next starts.
   `sm-` tag prefix, `static properties` + constructor init (never class
   fields), guarded `customElements.define`.
 
-### Phase 1 — pilot on `ui.js` (small, exercises every interop pattern)
+### Phase 1 — pilot on `ui.js` (small, exercises every interop pattern) ✅
 
 Convert `createUI` to lit-html `render()` calls into its existing containers
 (`#topbar`, `.stage-controls`, `.stage-stats`, the drop overlay). The
@@ -262,7 +270,17 @@ _Acceptance:_ pixel-identical `capture.sh` shots of the default boot, a
 warnings case (`?tile=12x30` — the non-square shear warning), and `?lowpoly=0`
 (exercises the controlled checkbox). DOM dump shows the same classes.
 
-### Phase 2 — `<sm-editor>`, one-for-one (the big one)
+**Landed.** All 10 shots byte-identical; DOM identical but for lit's comment
+markers and template whitespace. The drop overlay renders once into `#app`
+(after `#workspace`, where it always sat); the toggles and stats re-render into
+`#stage` beside the viewport canvas — `render()` only manages the part it
+appends, so the canvas is untouched. `.stage-stats:empty` still hides the panel:
+per CSS Selectors, comment nodes don't defeat `:empty`.
+_Deviation:_ `live()` is used on `vf-checkbox`'s `.checked` too (the table said a
+plain property binding). It costs nothing and closes the case where state
+returns to a value lit already has committed while the DOM has since diverged.
+
+### Phase 2 — `<sm-editor>`, one-for-one (the big one) ✅
 
 Port `createTileEditor` into `src/components/sm-editor.js` per the sketch,
 **keeping the external contract**: `main.js`'s `mountEditor` still creates a
@@ -284,7 +302,32 @@ Verification); the keyboard checklist (B/R/G/I/E, Esc mid-drag, Shift lock,
 Alt-eyedrop, typing in the tile field not hijacked); typecheck clean with the
 `@type {any}` cast count reduced.
 
-### Phase 3 — persistence: delete the re-mount
+**Landed.** All 10 shots byte-identical. The keyboard/pointer checklist was run
+as a CDP driver against the live dev app (real trusted input, so pointer capture
+and the composed-path guards behave) — the same driver run against the pre-Lit
+build first, to separate regressions from harness bugs. Every `/** @type {any} */`
+cast inside the editor is gone; the remaining ones are `CustomEvent` detail casts
+in `main.js`.
+
+Deviations, all forced by lit's diffing model:
+
+- **`faceIcon()` returns a template, not an element** (the plan filed this under
+  Phase 4). An interpolated DOM node is compared by identity, so a freshly built
+  one makes lit swap all seven `vf-img`s on _every_ re-render — including one per
+  keystroke in the tile field. Same for `icon()`: the `<sp-icon-*>` tags are now
+  written literally in the templates and `icons.js` is purely the registrar.
+- **`sm-editor { display: contents }`** in `style.css`. The element sits between
+  `#editor-panel` and the `.editor` column it renders; `display: contents` removes
+  its box so the flex chain — and therefore every measurement `#layout()` makes —
+  is exactly what it was.
+- **Dev hooks run in two halves**: the part that sets reactive state
+  (`?cursor`'s size, `?pick`, `?palette`, `?rect`'s tool/radius, `?fill`'s tool +
+  checkboxes) in `willUpdate`, the part that paints an overlay (`?cursor`'s
+  footprint, `?rect`'s preview, `?fill`'s fill) at the end of the first
+  `updated()`, once the canvases are sized and laid out. Setting reactive state
+  from `updated()` would schedule a second update and log a dev-mode warning.
+
+### Phase 3 — persistence: delete the re-mount ✅
 
 One `<sm-editor>` created at boot and never destroyed. Face swap, tile
 resize, and all-tiles replace become property assignments; `willUpdate`
@@ -309,6 +352,20 @@ _Acceptance:_ type `40`→`41`→`42` in the tile field and keep typing with no
 refocus code; open the palette, swap faces, palette state sane; the derived
 lifecycle (open derived → paint → becomes real → erase fully → derived again)
 per README; screenshot suite again.
+
+**Landed.** Shots byte-identical again; the driver's 57 checks all pass. The
+acceptance list specifically: typing `42` then `24` into the tile field commits
+both and leaves focus on `vf-number-field`'s inner input throughout (pre-Lit,
+the re-mount dropped it to `<body>` and `focusSize` put it back); after three
+face swaps the document holds exactly one `sm-editor`, one `vf-dialog`, its 256
+cells and one pixel canvas; and `right` on the car sample opens empty over the
+mirrored onion-skin, keeps its art once painted, and reverts to derived when
+fully erased.
+
+Deleted, as forecast: the `brush` object and its threading, `mountEditor`'s
+destroy/create dance and `currentEditor`, the `focusSize` parameter and the
+`#tileField` ref that existed only to serve it, and the per-mount picker
+rebuild. `resizeTiles` lost its `focusSize` parameter with them.
 
 ### Phase 4 — optional, explicitly deferred
 
@@ -362,3 +419,23 @@ Before/after each phase, the shot suite (dev server up, then
 Plus per-phase: `npm test` (147), `npm run typecheck`, `npm run lint`,
 `npm run build` with a bundle-size note, and the Phase-2/3 manual keyboard
 checklist. `capture.sh dom` diffs are the tiebreaker when a shot looks off.
+
+These shots turned out to be **byte-deterministic** under `capture.sh` (same
+input, same PNG), so `cmp` is the whole comparison — every phase above was
+verified that way, not by eye.
+
+The interaction half (which no screenshot can show) was driven over the Chrome
+DevTools Protocol against the running dev server: `Input.dispatchMouseEvent` /
+`dispatchKeyEvent` produce real trusted events, so pointer capture, focus
+delegation and the composed-path guard on the tile field all behave as they do
+for a user. Two things that harness taught, worth knowing before writing another:
+
+- Headless Chrome intermittently **reloads the page mid-run** under synthesized
+  input (it does so on the pre-Lit build too). A reload wipes tool/ink/recency
+  and reads as a pile of false failures — stamp `window.__stamp` and re-check it
+  on every probe, and start each section that asserts carried state from a
+  deliberate fresh load.
+- **Erasing part of FRONT doesn't lower the voxel count.** Opposite views are
+  plane-UNIONed by the carve, so BACK still covers the silhouette; what moves is
+  the surface colouring and with it the triangle count. Assert on the whole stats
+  readout, not on `voxels`.
