@@ -15,16 +15,18 @@ npm run lint       # prettier --check .   (npm run format to fix)
 npm run build      # static bundle in dist/
 ```
 
-**Pick a built-in sample**, or load your own **3×2 sprite sheet** — click _pick
-atlas ▾_ in the header or drop a PNG anywhere on the window. **Smooth slopes**
-(low-poly additive 45° wedges) is on by default and toggles live; greedy meshing
-is always on. Sprites are hard pixel art — every texel is fully opaque or fully
-transparent — and every face with no view of its own is mirror-filled from its
-opposite at render time. The app is a **header strip** over a **50/50 split**:
-the live 3D object on the left, and on the right a **tools panel** always open on
-one face. The face **tabs** switch which of the six you're editing (a
-mirror-derived face reads empty — an honest view of the sheet) — see
-[Drawing editor](#drawing-editor).
+**Pick a built-in sample**, or load your own **3×2 sprite sheet** — open the
+_pick atlas_ menu in the header or drop a PNG anywhere on the window. **Smooth
+slopes** (low-poly additive 45° wedges) is on by default and toggles live; greedy
+meshing is always on. Sprites are hard pixel art — every texel is fully opaque or
+fully transparent — and every face with no view of its own is mirror-filled from
+its opposite at render time. The UI is drawn with the
+[`vintage-frames`](https://github.com/aportilla/vintage-frames) web component kit
+(classic Apple System 7 chrome): a white **header strip** over a **50/50 split** —
+the **tools panel** always open on one face on the left, the live 3D object on
+the right. The **face picker** (six cube-view icons over radio buttons) switches
+which of the six you're editing (a mirror-derived face reads empty — an honest
+view of the sheet) — see [Drawing editor](#drawing-editor).
 
 ## Input: a 3×2 atlas
 
@@ -55,7 +57,7 @@ draw each tile this way for a zero-transform ingest:
 | TOP          | plan view, width horizontal                             | top edge     | width × depth  |
 | BOTTOM       | plan from below (car rolled sideways, not end-over-end) | top edge     | width × depth  |
 
-The editor's face **tabs** switch which tile you're editing; check each tile's
+The editor's **face picker** switches which tile you're editing; check each tile's
 orientation against this table's **Front points** column, using the faded
 onion-skin of the mirrored opposite and the alignment guides behind the canvas.
 Per-tile `rot`/`flip` transforms exist in the pipeline for sheets that don't
@@ -63,29 +65,30 @@ follow the convention.
 
 ## Drawing editor
 
-The **tools panel** fills the right half of the window and is always open on one
-face; the 3D view stays live on the left and rebuilds as you draw. Pick a face
-with the **tabs**; a **header strip** across the top holds the brand, the
-_pick atlas ▾_ menu, and _download_.
+The **tools panel** fills the left half of the window and is always open on one
+face; the 3D view stays live on the right and rebuilds as you draw. Pick a face
+with the **face picker**; a **header strip** across the top holds the brand, the
+_pick atlas_ menu, and _download_. Every control is a `vintage-frames` System 7
+web component (`vf-number-field`, `vf-radio-group`, `vf-slider`, `vf-checkbox`,
+`vf-swatch`, `vf-grid`, `vf-dialog`, `vf-menu`, …).
 
-- **Panel layout** — the panel is a **classic Photoshop tool panel**: a fixed
-  **3-region flex column** that exactly fills the panel height. A **settings header**
-  (top, fixed) holds the tools; a **draw section** (middle) **grows to fill all
-  remaining height**; a **colors tray** (bottom, fixed) reserves space for the
-  palette. The pixel canvas fills the draw section below the tabs — its height is
-  **CSS-driven** (the flex draw region), no longer a JS fraction — and the square
+- **Panel layout** — a fixed flex column in the System 7 idiom: a **settings
+  row** (top, fixed) holds the **tile-size** number field and the **face picker**
+  over a dotted rule; the **main area** below grows — a left **rail** (the tool
+  strip over the color wells) beside the black-framed **draw box** (the per-tool
+  **options bar** over the dark **artwork well**). The pixel canvas fills the
+  artwork well — its height is **CSS-driven** (flex), no JS pin — and the square
   editable canvas is **centered** in it and drawn **as large as an integer texel
-  scale fits** (crisp, never a fractional pixel), **re-fitting responsively** when the
-  window resizes. See `layout()` in `src/editor.js`.
-- **Tools** — the **settings header** holds a **tool strip** of first-class tools
-  (**pencil `B`**, **rect `R`**, and **fill `G`** are all live) — each a **square
-  icon button** drawn from the open-source **Adobe Spectrum
-  _workflow_** icon set (`draw` / `rectangle` / `color-fill`; the eyedropper ink
-  picker in the colors tray uses `sampler`, and transparent is a checkerboard swatch,
-  not an icon) — with
-  the **tile-size stepper** (`tile size`) docked at its right, above a **per-tool options**
-  row. For the **pencil**, a **tip-size slider** (`size: N px`, with a boxed readout)
-  that stamps an
+  scale fits** (crisp, never a fractional pixel), **re-fitting responsively** when
+  the window resizes. See `layout()` in `src/editor.js`.
+- **Tools** — the left **rail** holds a **tool strip**: a single column of square
+  cells (**pencil `B`**, **rect `R`**, **fill `G`**, and the **eyedropper `I`**;
+  the selected cell inverts) — each an icon from the open-source **Adobe Spectrum
+  _workflow_** set (`draw` / `rectangle` / `color-fill` / `sampler`) in a
+  `vf-grid` lattice. The **tile-size** field (`tile size`, the classic
+  little-arrows number field) sits in the settings row, and the draw box carries a
+  **per-tool options** bar. For the **pencil**, a **tip-size slider** (with an
+  `N px` readout) that stamps an
   **N×N** square footprint and **previews it** as a hairline outline on the canvas
   as you hover; while the pencil is active the **OS cursor is hidden** over the
   canvas, so that hover outline _is_ the cursor — the exact texels a stamp will
@@ -113,23 +116,23 @@ _pick atlas ▾_ menu, and _download_.
   ink), and a **right-click** / the transparent ink fills _to_ transparent (delete a
   color). The flood + replace are pure, Node-tested primitives (`src/lib/fill.js`).
   There's **no undo**, so an all-tiles replace is committed immediately — reload the
-  sample to revert. The bottom **colors tray** has a left **ink strip** — the
-  **eyedropper** (`I` / hold **Alt** to sample mid-stroke) and a **selected-color
-  preview** box that shows your current ink and, **clicked**, opens the **modal
-  picker** over the **full 256-color palette** — beside a **scrollable palette box**:
-  every color currently painted on _any_ face, so you can match existing colors,
-  **plus your currently selected ink** (so a color picked from the modal lands here as
-  the **selected tile** right away, before you've drawn a single pixel with it), led
-  by a **transparent** swatch (`E` / **right-click**) — a
-  **checkerboard tile** (the same checker the canvas shows through unpainted texels,
-  so it previews what it paints) that selects the **empty / clear color**, not an
-  eraser _tool_. The eyedropper and transparent swatch pick the pencil's **ink** — a
-  sampled color, or transparent ("clear color") — rather than a drawing tool, so they
-  sit _with the colors_, not the tools. Selecting transparent then drawing (or a
-  right-click, or the `E` ink) lays clear texels, so it reads as painting a color, not
-  wielding an eraser. The
-  modal is a 16×16 grid of **256 distinct** swatches (**Esc**, the backdrop, or
-  **✕** closes it). The base is the standard **xterm-256** set — but xterm-256
+  sample to revert. Below the tool strip sit the **color wells**: the
+  **current-ink swatch** (a `vf-swatch` showing the active ink — the transparency
+  checker while the clear ink is active — that, **clicked**, opens the **"Colors"
+  dialog** over the **full 256-color palette**), the **last three used colors**
+  under it (a most-recently-used row — every pick, eyedrop, or recency re-pick
+  promotes its color; clicking one re-inks instantly), and a **transparent**
+  swatch (`E` / **right-click**) — the kit's **checkerboard no-color well** (the
+  same checker the canvas shows through unpainted texels, so it previews what it
+  paints) that selects the **empty / clear color**, not an eraser _tool_. The
+  eyedropper (`I`, or hold **Alt** to sample mid-stroke) and the transparent
+  swatch pick the pencil's **ink** — a sampled color, or transparent ("clear
+  color") — rather than a drawing op. Selecting transparent then drawing (or a
+  right-click, or the `E` ink) lays clear texels, so it reads as painting a color,
+  not wielding an eraser. The
+  dialog is a System 7 movable modal (`vf-dialog`) holding a 16×16 `vf-grid` of
+  **256 distinct** swatches (**Esc** or the **close box** closes it). The base is
+  the standard **xterm-256** set — but xterm-256
   names 256 indexed _slots_ and only 247 _distinct_ colors (nine values, e.g.
   `#808080`/`#000000`/`#ffffff`, repeat where its system, cube, and grayscale
   ranges overlap), so the nine redundant cells are backfilled with shades
@@ -154,16 +157,15 @@ _pick atlas ▾_ menu, and _download_.
   earlier sparse 8×8×4 grid kept _every_ swatch ≥36 apart, so none merged).
   `test/palette.test.mjs` pins the exact set. Every stroke is hard-pixel: fully opaque or fully erased, never
   anti-aliased.
-- **Face tabs** — six **curved folder tabs** across the top of the draw section
-  switch which face you edit, laid out as mirror pairs
+- **Face picker** — six **cube-view icons** over a radio row (a `vf-radio-group`)
+  in the settings row switch which face you edit, laid out as mirror pairs
   (`left`/`right`, `front`/`back`, `top`/`bottom`)
-  so you can flip between a pair for reference. Each tab's folder silhouette is an
-  **inline SVG rebuilt from its measured width** (`drawTab` in `src/editor.js`), so
-  the S-curve "ears" keep a **fixed pixel shape at any tab width** (only the flat top
-  between them grows) rather than distorting like a single stretched background; the
-  tabs **overlap** into clean valleys under a shared black **seam**, and the active
-  tab lifts above the seam to take the artwork gray so its open base merges into the
-  canvas below. A **mirror-derived** face (one with
+  so you can flip between a pair for reference. Each icon is a small isometric
+  cube with the face's quad highlighted — **solid red** for a visible face
+  (`front`/`right`/`top`), **red-hatched** for its hidden opposite
+  (`back`/`left`/`bottom`). The icons are **placeholder inline SVGs**
+  (`src/face-icons.js`), to be swapped for real per-angle artwork when it lands.
+  A **mirror-derived** face (one with
   no art of its own) opens with an **empty canvas** and a **faded onion-skin** of
   the mirrored opposite behind it for reference; it becomes its own independent art
   only once you actually change a pixel — switching away and back leaves it derived,
@@ -171,8 +173,8 @@ _pick atlas ▾_ menu, and _download_.
 - **Live + canonical** — edits write straight back into the current sheet, so the
   **download** button saves the edited atlas as `atlas.png`, and the model
   rebuilds (rAF-debounced) with no camera jump.
-- **Tile size** — a single **square-tile stepper** docked at the right of the tool
-  strip retiles the whole atlas to any integer **1–64** (the ceiling keeps the
+- **Tile size** — a single **square-tile number field** in the settings row
+  retiles the whole atlas to any integer **1–64** (the ceiling keeps the
   live per-stroke carve — a synchronous O(n³) walk — tractable). Tiles are **locked square**, so
   every resize is **registration-preserving**, and the stepper **keeps the art centered**:
   each axis splits the size change around the sprite (`resizeAtlas` with `anchor:'center'`)
@@ -214,18 +216,18 @@ step T-junctions show as _expected_ nonzero boundary/odd edges, not holes, so th
 `?tile=<N>` (or `<W>x<H>` to force an asymmetric, out-of-registration resize the
 locked-square UI can't produce) to apply one **centered** tile resize (the same
 `anchor:'center'` path the stepper drives) after the first build,
-`?palette=1` to open the 256-color palette modal on the first mount, `?cursor=<N>`
+`?palette=1` to open the 256-color "Colors" dialog on the first mount, `?cursor=<N>`
 to set the pencil size to N and draw its footprint outline at the tile center on
 mount, `?pick=<N>` to select `PALETTE_256[N]` as the ink on mount (as if picked
-from the modal) so a shot can show it landing as the selected-color preview + palette tile, and
+from the dialog) so a shot can show it landing as the current-ink swatch, and
 `?rect=<x0,y0,x1,y1[,r[,sq]]>` to select the rect tool and draw its live drag preview
 for that box (corner radius `r`; `sq=1` for the Shift square-lock) on mount so a shot
 can show the tool mid-drag, and `?fill=<x,y[,r[,a]]>` to select the fill tool, set its
 checkboxes (`replace=r`, `all-tiles=a`), and fill at `(x,y)` on mount (the mount fill
 is always applied to the current tile only — combine with `?pick=<N>` to fill with a
 specific palette color) so a shot can show the tool + result — the
-stepper, tabs, modal, swatch pick, hover preview, rect drag, and fill click can't be
-driven headlessly.
+stepper, face picker, dialog, swatch pick, hover preview, rect drag, and fill click
+can't be driven headlessly.
 
 ---
 
@@ -369,10 +371,11 @@ src/lib/
   diag.js         geometry watertightness self-check (dev only; ?diag=1)
 src/
   main.js         scene, lights, ground, framing, render loop + always-on editor wiring
-  ui.js           header strip (samples, pick/drop atlas, download) + stage overlays (options, stats)
-  editor.js       tools panel (right half): a fixed 3-region flex column — SETTINGS header (tool strip: pencil + rect + fill live, docked tile-size stepper; per-tool options: pencil size SLIDER + hover footprint preview, rect corner-radius + live drag preview / Esc-cancel, or fill replace / all-tiles checkboxes), DRAW section (curved folder face tabs drawn per-tab as inline SVG via drawTab + canvas that fills the region via layout(): centered integer-scaled canvas), COLORS tray (ink strip: eyedropper + selected-color preview opening the 256 modal; scrollable palette box led by the transparent swatch); align guides
+  ui.js           System 7 header (brand, pick-atlas vf-menu, download vf-button) + stage overlays (smooth-slopes / auto-rotate vf-checkboxes, stats readout) — vintage-frames components
+  editor.js       tools panel (left half), all vintage-frames chrome: SETTINGS row (tile-size vf-number-field + cube face picker on a vf-radio-group) over a dotted rule; TOOL RAIL (pencil + rect + fill + eyedropper cells in a vf-grid; current-ink vf-swatch opening the "Colors" vf-dialog, last-3-used color row, transparent no-color well); DRAW BOX (per-tool options bar: pencil size vf-slider + hover footprint preview, rect corner-radius vf-number-field + live drag preview / Esc-cancel, or fill replace / all-tiles vf-checkboxes; canvas fills the artwork well via layout(): centered integer-scaled canvas); align guides
+  face-icons.js   PLACEHOLDER cube-view icons for the face picker (inline SVG; real per-angle assets to come)
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
-  icons.js        real UI glyphs — registers the Adobe Spectrum workflow <sp-icon-*> elements used by ui.js + editor.js (color via currentColor, size via --mod-icon-size; no sp-theme)
+  icons.js        tool-cell + warning glyphs — registers the Adobe Spectrum workflow <sp-icon-*> elements used by ui.js + editor.js (color via currentColor, size via --mod-icon-size; no sp-theme)
 ```
 
 ## Known limitations & next steps

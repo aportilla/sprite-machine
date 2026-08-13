@@ -1,604 +1,301 @@
-:root {
-  color-scheme: dark;
-  --bg: #4a4a52;
-  --topbar-h: 52px;
-  /* Opaque panel fill (matches the old rgba(24,24,30,.96) composited over --bg).
-     Solid so the active folder-tab can blend into it exactly. */
-  --panel-bg: #1a1a20;
-  /* A lighter-dark fill (a step up from the panel bg) shared by the active tab and
-     the canvas box, so the selected tab reads as one structure with the content
-     area it caps. */
-  --widget-bg: #2e2e38;
-  --accent: #c77dd6;
+/* ---------------------------------------------------------------------------
+   Sprite Machine — System 7 chrome via the `vintage-frames` web component kit.
 
-  /* ---- classic "Photoshop 3 era" panel palette (the right-side tools panel) -------
-     The mid-90s beveled-gray palette aesthetic (Photoshop 3's tabbed floating
-     palettes): every control is drawn with 3D edges out of five flat tones — a bright
-     highlight + soft light on the top-left, a soft shadow + near-black on the
-     bottom-right, over a neutral silver face. The four bevel recipes below (raised
-     button / pressed button / sunken well / thin sunken) are that era's edge stacks,
-     composed as inset box-shadows so any element can wear one without extra markup.
-     Scoped in use to #editor-panel + the palette modal; the header + 3D stage keep the
-     dark theme above. */
-  --c-face: #c0c0c0; /* silver button/panel face */
-  --c-hilite: #ffffff; /* brightest bevel edge (outer top-left) */
-  --c-light: #dfdfdf; /* soft light (inner top-left) */
-  --c-shadow: #808080; /* soft shadow (inner bottom-right) */
-  --c-dark: #0a0a0a; /* near-black bevel line (outer bottom-right) */
-  --c-well: #808080; /* sunken canvas backdrop (classic neutral gray) */
-  --c-artwork: #8a8a8a; /* the ONE content gray: the whole artwork box, its active tab, and the canvas surround — a single integrated surface, no nested frames */
-  --c-text: #1a1a1a; /* near-black label text on silver */
-  --c-text-dim: #545454; /* muted caption text */
-  /* Raised button (light top-left, dark bottom-right). */
-  --bevel-raised: inset -1px -1px 0 var(--c-dark), inset 1px 1px 0 var(--c-hilite),
-    inset -2px -2px 0 var(--c-shadow), inset 2px 2px 0 var(--c-light);
-  /* Pressed button — the raised stack inverted, so it reads pushed-in. */
-  --bevel-pressed: inset 1px 1px 0 var(--c-dark), inset -1px -1px 0 var(--c-hilite),
-    inset 2px 2px 0 var(--c-shadow), inset -2px -2px 0 var(--c-light);
-  /* Sunken well (dark top-left, light bottom-right) — inputs, canvas, palette box. */
-  --bevel-sunken: 1px 1px 0 var(--c-light), -1px -1px 0 var(--c-dark);
-  /* Thin one-level sunken frame — checkboxes, slider groove. */
-  --bevel-sunken-1: inset -1px -1px 0 var(--c-hilite), inset 1px 1px 0 var(--c-shadow);
+   The components carry their own styles (1-bit borders, Chicago/Geneva bitmap
+   faces, hard offset shadows); this sheet only supplies the PAGE's share:
+     - the app frame (header strip over an editor-left / stage-right split);
+     - layout inside the editor panel (settings row, tool rail, draw box);
+     - the canvas stack (four aligned layers + the transparency checker);
+     - the few app-specific 1-bit bits the kit has no component for (the tool
+       cells inside a vf-grid, the floating stage panels, the drop overlay).
+   Palette: black #000 / white #fff, System 7 mid gray #808080 for the stage,
+   and a dark artwork well behind the pixel canvas so sprite art pops.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --sm-black: #000;
+  --sm-white: #fff;
+  --sm-stage: #808080; /* System 7 desktop mid gray (matches the 3D scene bg) */
+  --sm-artwork: #56565a; /* dark well behind the pixel canvas */
 }
 
 * {
   box-sizing: border-box;
 }
-
 html,
 body {
-  margin: 0;
   height: 100%;
-  background: var(--bg);
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  color: #e8e8ea;
-  overflow: hidden;
+  margin: 0;
+}
+body {
+  background: var(--sm-white);
+  color: var(--sm-black);
+  /* Fallback for stray page text; real captions are vf-label / vf-paragraph. */
+  font-family: 'VF Display', 'Chicago', 'Geneva', 'Helvetica Neue', Helvetica, Arial,
+    sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ---- app shell: header strip over a 50/50 workspace (3D stage | tools) ---- */
 #app {
-  position: fixed;
-  inset: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
 
-/* Full-width header: brand (left) + atlas actions (right). */
+/* ---- header strip: brand left, atlas actions right ---- */
 #topbar {
-  flex: 0 0 auto;
-  height: var(--topbar-h);
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 0 16px;
-  background: var(--panel-bg);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  user-select: none;
-}
-.brand {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: #f0f0f4;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--sm-white);
+  border-bottom: 1px solid var(--sm-black);
+  position: relative;
+  z-index: 20; /* the pick-atlas menu panel drops over the workspace */
 }
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 18px;
 }
 
-/* The 50/50 split below the header. */
+/* ---- workspace: editor panel (left) | live 3D stage (right) ---- */
 #workspace {
-  flex: 1 1 auto;
+  flex: 1;
   min-height: 0;
   display: flex;
 }
-
-/* Left half: the live 3D view, with floating overlays (toggles + stats). */
-#stage {
-  position: relative;
-  flex: 1 1 50%;
+#editor-panel {
+  flex: 1 1 0;
   min-width: 0;
-  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--sm-white);
+  border-right: 1px solid var(--sm-black);
   overflow: hidden;
-  background: var(--bg);
+}
+#stage {
+  flex: 1 1 0;
+  min-width: 0;
+  position: relative;
+  background: var(--sm-stage);
+  overflow: hidden;
 }
 #viewport {
-  display: block;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  /* Keep upscaled pixels crisp, not blurred. */
+  display: block;
+  /* Low-res render buffer upscaled crisply by CSS. */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 
-/* Render toggles float bottom-left over the stage. */
+/* Floating stage panels: white face, 1px black border, hard offset shadow —
+   the kit's raised-surface recipe, hand-rolled for these two page overlays. */
 .stage-controls {
   position: absolute;
-  left: 14px;
-  bottom: 14px;
-  z-index: 5;
+  right: 16px;
+  bottom: 16px;
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 18px;
+  padding: 8px 12px;
+  background: var(--sm-white);
+  border: 1px solid var(--sm-black);
+  box-shadow: 2px 2px 0 0 var(--sm-black);
 }
-.stage-controls .toggle {
-  flex: 0 0 auto;
-}
-
-/* Compact live stats / warnings float bottom-right; never eat pointer events so
-   orbit-drag over that corner still works. */
 .stage-stats {
   position: absolute;
-  right: 14px;
-  bottom: 14px;
-  z-index: 5;
-  max-width: 44%;
-  text-align: right;
-  font-size: 10px;
-  pointer-events: none;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-}
-
-/* Right half: the tools panel (inline tile editor, mounted by main.js). A fixed
-   3-region flex column (settings / draw / colors) that exactly fills the panel
-   height — the draw region grows and the canvas fills it, so the panel itself never
-   scrolls. overflow:hidden (not auto) so no full-height scrollbar is ever reserved:
-   the panel would only page-scroll in a pathologically short window, and clipping the
-   tray edge there is preferable to permanently guttering the whole sidebar. (Any list
-   that genuinely overflows — the colors tray, the palette modal — scrolls on its own.) */
-#editor-panel {
-  flex: 1 1 50%;
-  min-width: 0;
-  height: 100%;
+  left: 16px;
+  top: 16px;
+  max-width: min(60%, 340px);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  /* Classic silver tools panel: a Photoshop-3-era beveled-gray surface. `light` so
-     native form controls + the panel scrollbar render pale, not dark. A raised
-     left edge lifts it off the dark 3D stage. */
-  color-scheme: light;
-  background: var(--c-face);
-  color: var(--c-text);
-  font-family: Tahoma, Geneva, Verdana, 'Segoe UI', 'MS Sans Serif', sans-serif;
-  border-left: 2px solid var(--c-dark);
-  box-shadow:
-    inset 2px 0 0 var(--c-hilite),
-    inset 3px 0 0 var(--c-light);
+  gap: 3px;
+  padding: 8px 10px;
+  background: var(--sm-white);
+  border: 1px solid var(--sm-black);
+  box-shadow: 2px 2px 0 0 var(--sm-black);
 }
-/* Classic beveled scrollbars for the silver panel + its scrolling children. */
-#editor-panel ::-webkit-scrollbar,
-#editor-panel::-webkit-scrollbar,
-.palette-modal ::-webkit-scrollbar {
-  width: 16px;
-  height: 16px;
-}
-#editor-panel ::-webkit-scrollbar-track,
-#editor-panel::-webkit-scrollbar-track,
-.palette-modal ::-webkit-scrollbar-track {
-  background: #dedede;
-  background-image: repeating-conic-gradient(#cfcfcf 0% 25%, #dedede 0% 50%);
-  background-size: 2px 2px;
-}
-#editor-panel ::-webkit-scrollbar-thumb,
-#editor-panel::-webkit-scrollbar-thumb,
-.palette-modal ::-webkit-scrollbar-thumb {
-  background: var(--c-face);
-  box-shadow: var(--bevel-raised);
-}
-/* Classic dotted keyboard-focus rectangle on the silver controls. */
-#editor-panel button:focus-visible,
-#editor-panel input:focus-visible,
-.palette-modal button:focus-visible {
-  outline: 1px dotted var(--c-text);
-  outline-offset: -4px;
-}
-
-/* ---- shared bits ---- */
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  color: #e8e8ea;
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-.chip:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
-.picker-caret {
-  color: #b8b8c0;
-  --mod-icon-size: 10px;
-}
-/* Leading download glyph in the header's download chip. */
-.chip sp-icon-download {
-  --mod-icon-size: 14px;
-}
-
-/* Atlas action menu: "pick atlas ▾" trigger + a dropdown of load actions. */
-.picker {
-  position: relative;
-}
-.picker.open .picker-trigger {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.28);
-}
-.picker-menu {
+.stage-stats:empty {
   display: none;
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  left: auto;
-  min-width: 170px;
-  z-index: 50;
-  flex-direction: column;
-  gap: 2px;
-  padding: 4px;
-  background: #22222a;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 6px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
-.picker.open .picker-menu {
-  display: flex;
-}
-.picker-item {
-  text-align: left;
-  padding: 6px 8px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: #e8e8ea;
-  font: inherit;
-  cursor: pointer;
-}
-.picker-item:hover {
-  background: rgba(199, 125, 214, 0.28);
-}
-
-/* Pill toggle buttons — subtle when off, accent-filled when on. */
-.toggle {
-  padding: 6px 10px;
-  background: rgba(20, 20, 26, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  color: #cfcfd6;
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    border-color 0.12s ease;
-}
-.toggle:hover {
-  background: rgba(40, 40, 48, 0.82);
-  color: #e8e8ea;
-}
-.toggle.on {
-  background: #c77dd6;
-  border-color: #c77dd6;
-  color: #201025;
-  font-weight: 600;
-}
-
-/* Live stats readout (in the stage overlay). */
 .stat {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-.stat .k {
-  color: #b6b6c0;
-}
-.stat .v {
-  color: #eaeaf0;
-  text-align: right;
+  justify-content: space-between;
+  gap: 14px;
 }
 .warn {
   display: flex;
-  align-items: flex-start; /* pin the alert icon to the first line, not the block center */
-  justify-content: flex-end;
-  gap: 4px;
-  color: #f0c883;
-  margin-top: 6px;
-  font-size: 10px;
-  --mod-icon-size: 11px;
+  align-items: flex-start;
+  gap: 6px;
+  --mod-icon-size: 14px;
 }
-/* Nudge the alert glyph down a hair so its optical center lines up with the
-   first line's cap height (the icon box is taller than the 10px text). */
 .warn sp-icon-alert {
+  flex: none;
   margin-top: 1px;
 }
 
-/* ---- whole-app drop target ---- */
+/* ---- whole-app drop overlay ---- */
 .drop-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
   display: none;
   align-items: center;
   justify-content: center;
-  background: rgba(10, 10, 14, 0.7);
-  backdrop-filter: blur(2px);
+  background: rgba(255, 255, 255, 0.75);
+  z-index: 1000;
   pointer-events: none; /* let the drop event fall through to #app */
 }
 #app.app-drag .drop-overlay {
   display: flex;
 }
 .drop-overlay-msg {
-  border: 2px dashed rgba(169, 220, 214, 0.85);
-  background: rgba(28, 28, 34, 0.6);
-  color: #e8e8ea;
-  padding: 22px 34px;
-  border-radius: 12px;
-  font-size: 14px;
+  background: var(--sm-white);
+  border: 2px solid var(--sm-black);
+  box-shadow: 2px 2px 0 0 var(--sm-black);
+  padding: 20px 28px;
 }
 
-/* ---- inline tile editor (content of the right-side #editor-panel) ---- */
-/* The editor root fills the panel as a flex column; min-height:0 lets the draw
-   region shrink so the canvas can be measured/clamped instead of overflowing. */
+/* ---- inline tile editor (content of the left-side #editor-panel) ---- */
 .editor {
-  flex: 1 1 auto;
+  flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  /* No horizontal padding: the artwork panel goes full-width (its black top border
-     spans edge to edge); the settings header + colors tray re-add their own side
-     padding so they keep their silver margins. */
-  padding: 8px 0;
+  background: var(--sm-white);
 }
-/* Region 1 — settings header: tools + tile size + per-tool options. Fixed height. */
+
+/* Settings row: tile-size field + the six-face cube picker. */
 .editor-settings {
-  flex: 0 0 auto;
+  flex: none;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0 8px;
-}
-/* Region 2 — draw section: the ARTWORK PANEL — ONE integrated gray box (a single
-   sunken-bevel frame, no nested inner frames) with the folder tabs cut into its top and
-   the canvas filling it below. Everything shares --c-artwork: the box, the active tab,
-   and the canvas surround, so the selected folder + the content read as one surface.
-   Grows to fill; min-height guards a short window; min-height:0 lets it shrink. */
-.editor-draw {
-  flex: 1 1 auto;
-  min-height: 180px;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  margin: 0 6px;
-  background: var(--c-artwork);
-  border: none;
-  border-radius: 0;
-  box-shadow: var(--bevel-sunken); /* the SINGLE frame around the content area */
-}
-/* Region 3 — colors tray: ink strip + scrollable palette. Fixed, reserved height. */
-.editor-colors {
-  flex: 0 0 auto;
-  height: 140px;
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-  padding: 0 8px;
-}
-/* A labeled integer stepper — a "label:" caption + a bordered [−][value][unit?][+]
-   box. Used for the tile size (docked in the tool strip) and the pencil tip size
-   (in the per-tool options row). */
-.editor-field {
-  display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 14px 32px;
+  padding: 12px 16px;
+}
+.editor-tile-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.editor-face-row {
+  display: flex;
+  gap: 14px;
+}
+.editor-face-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+.editor-face-cell svg {
+  display: block;
+}
+
+/* The dotted rule between the settings row and the work area. */
+.editor-sep {
+  flex: none;
+  margin: 0 16px;
+  --vf-separator-color: var(--sm-black);
+  --vf-separator-style: dotted;
+}
+
+/* Main area: the tool/color rail beside the draw box. */
+.editor-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 14px;
+  padding: 14px 16px;
+}
+.editor-rail {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+/* Tool cells inside the vf-grid strip: plain buttons that fill their cell
+   (the grid draws the lattice + frame); the selected tool inverts. */
+.editor-toolstrip .editor-tool {
+  place-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--sm-white);
+  color: var(--sm-black);
+  cursor: pointer;
+  --mod-icon-size: 18px;
+}
+.editor-toolstrip .editor-tool:active,
+.editor-toolstrip .editor-tool.active {
+  background: var(--sm-black);
+  color: var(--sm-white);
+}
+.editor-toolstrip .editor-tool:focus-visible {
+  outline: 1px dotted currentColor;
+  outline-offset: -4px;
+}
+
+/* Color wells: current ink over the last-used row and the transparent checker. */
+.editor-colors {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.editor-recent {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
 }
-.editor-field-cap {
-  font-size: 11px;
-  color: var(--c-text);
-  letter-spacing: 0;
+/* Mark the transparent swatch while the clear ink is active (the current-ink
+   swatch above also flips to the checker, but the source cell should read too). */
+vf-swatch.editor-transparent.active {
+  outline: 1px dotted var(--sm-black);
+  outline-offset: 2px;
 }
-/* The stepper is now just a flex row — each ± button + the value field wears its own
-   bevel (no group frame), the way a classic spin control looks. */
-.editor-stepper {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-}
-/* Unit suffix inside the stepper box (e.g. "px"), between the value and "+". */
-.editor-step-unit {
-  padding: 0 4px 0 2px;
-  font-size: 11px;
-  color: var(--c-text-dim);
-}
-/* Classic raised spin buttons: silver face, beveled edges, dark glyph. Pressed on
-   :active; dimmed at a bound. */
-.editor-step {
-  width: 19px;
-  height: 20px;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: var(--c-face);
-  border: none;
-  border-radius: 0;
-  box-shadow: var(--bevel-raised);
-  color: var(--c-text);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-}
-.editor-step:active:not(:disabled) {
-  box-shadow: var(--bevel-pressed);
-  padding: 1px 0 0 1px; /* nudge the glyph down-right so it reads pushed-in */
-}
-.editor-step:disabled {
-  color: var(--c-shadow);
-  text-shadow: 1px 1px 0 var(--c-hilite); /* classic "engraved" disabled glyph */
-  cursor: default;
-}
-/* The value: a sunken white field between the ± buttons. */
-.editor-step-val {
-  width: 42px;
-  height: 20px;
-  padding: 0 2px;
-  background: #fff;
-  border: none;
-  box-shadow: var(--bevel-sunken);
-  color: var(--c-text);
-  font: inherit;
-  font-size: 12px;
-  text-align: center;
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-.editor-step-val:focus {
-  outline: 1px dotted var(--c-text);
-  outline-offset: -3px;
-  color: #000;
-}
-/* Drop the native number spinners — the ± buttons are the control. */
-.editor-step-val::-webkit-outer-spin-button,
-.editor-step-val::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-/* Six curved FOLDER TABS across the top of the artwork panel. Each tab's silhouette
-   is a per-tab inline SVG (drawTab in editor.js) — a filled folder path under a
-   stroked-only black outline — rebuilt from the tab's measured width so the S-curve
-   ears stay a FIXED pixel width at any tab size (only the flat top between them
-   grows); a single stretched background distorted the curves. Tabs OVERLAP (negative
-   margin) so their flared feet interlock into clean \/ valleys under a shared black
-   seam; later tabs paint over earlier ones and the active tab lifts above the seam,
-   taking the artwork-panel gray so the open folder merges into the canvas below. The
-   --tabs-* knobs are read by both this CSS and drawTab, so keep --tabs-stroke/--tabs-ear
-   in sync with the JS defaults. */
-.editor-tabs {
-  --tabs-stroke: 2px; /* outline weight (drawTab reads this) */
-  --tabs-ear: 15px; /* horizontal run of each S-curve, fixed px (drawTab reads this) */
-  --tabs-overlap: 15px; /* how far each tab tucks under its left neighbour */
-  display: flex;
-  align-items: flex-end;
-  position: relative;
-  z-index: 1; /* the tab strip sits over the canvas's top edge */
-  padding: 0 4px; /* the outer feet are inset a touch from the panel edges */
-  margin-top: 10px;
-}
-/* The seam: a black line across the bar's base, above the resting tabs but below the
-   active one — which covers it, opening the folder into the panel. */
-.editor-tabs::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: var(--tabs-stroke);
-  background: var(--c-dark);
-  z-index: 5;
-}
-.editor-tab {
-  position: relative;
-  flex: 1 1 0;
+
+/* The draw box: per-tool options bar over the dark artwork well. */
+.editor-drawbox {
+  flex: 1;
   min-width: 0;
-  height: 30px;
-  margin: 0;
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--sm-black);
+  background: var(--sm-artwork);
+}
+.editor-opts {
+  flex: none;
+  min-height: 38px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
+  gap: 12px;
+  padding: 6px 12px;
+  background: var(--sm-white);
+  border-bottom: 1px solid var(--sm-black);
 }
-/* Overlap: each tab tucks under its LEFT neighbour by one ear-width so the curved
-   feet interlock into a single \/ valley (both black outlines visible). */
-.editor-tab + .editor-tab {
-  margin-left: calc(var(--tabs-overlap) * -1);
+.editor-size-slider {
+  flex: 1;
+  max-width: 260px;
 }
-/* The active tab clears the seam and every neighbour, coming fully to the foreground
-   without rising. */
-.editor-tab.active {
-  z-index: 10;
-  cursor: default;
-}
-/* The folder silhouette fills the tab box (backing paths built + sized in JS). */
-.editor-tab__shape {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-/* Resting tab: a darker gray than the artwork body; the active tab takes the body
-   gray (--c-artwork) so the open folder merges into the canvas surround. */
-.editor-tab__fill {
-  fill: #6f6f6f;
-}
-.editor-tab:hover:not(.active) .editor-tab__fill {
-  fill: #7c7c7c;
-}
-.editor-tab.active .editor-tab__fill {
-  fill: var(--c-artwork);
-}
-/* The bold black outline, open at the base so the folder mouth reads into the panel. */
-.editor-tab__edge {
-  fill: none;
-  stroke: var(--c-dark);
-  stroke-width: var(--tabs-stroke);
-  stroke-linecap: butt;
-  stroke-linejoin: round;
-}
-/* Keyboard focus: a marching-ants ring traced on the folder outline (mouse focus
-   shows nothing, matching the rest of the panel). */
-.editor-tab__focus {
-  fill: none;
-  stroke: none;
-  stroke-width: 1.5;
-  stroke-dasharray: 4 3;
-}
-.editor-tab:focus-visible {
-  outline: none;
-}
-.editor-tab:focus-visible .editor-tab__focus {
-  stroke: #fff;
-}
-/* The label rides above the SVG (position:relative over the absolute shape). */
-.editor-tab__label {
-  position: relative;
-  max-width: 100%;
-  padding: 0 6px;
-  font-size: 10px;
-  letter-spacing: 0.03em;
-  color: #d4d4d4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.editor-tab:hover:not(.active) .editor-tab__label {
-  color: #f2f2f2;
-}
-.editor-tab.active .editor-tab__label {
-  color: #fff;
-  font-weight: 700;
-}
-/* The canvas CONTAINER: the sunken document inset within the artwork panel, below the
-   tabs (flex:1). It has NO frame of its own — it simply fills the artwork box below the
-   tabs (transparent, so the one box gray shows through) and centers the checkerboard
-   canvas. The active folder tab above shares that gray, so tab → surround → canvas read
-   as one continuous surface (no nested beveled boxes). */
+
+/* The canvas CONTAINER fills the draw box below the options bar and centers the
+   integer-scaled canvas stack (sized by layout() in editor.js). */
 .editor-canvas-wrap {
   flex: 1 1 auto;
   min-height: 0; /* let it shrink so layout() can integer-fit the canvas inside */
@@ -606,11 +303,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px;
+  padding: 12px;
   overflow: hidden; /* clip if a tiny container forces the min (scale 1) canvas over */
-  background: transparent;
-  border: none;
-  border-radius: 0;
 }
 /* The centered square holding the four aligned canvas layers; sized by layout(). */
 .editor-canvas-stack {
@@ -669,420 +363,4 @@ body {
 .editor-canvas-cursor {
   z-index: 3;
   pointer-events: none;
-}
-.editor-swatch {
-  aspect-ratio: 1;
-  border: 1px solid var(--c-dark);
-  border-radius: 0;
-  padding: 0;
-  background: transparent;
-  cursor: pointer;
-}
-/* Selected swatch: a crisp dark selection ring (via outline, so it composes with the
-   in-sprite box-shadow ring below when a swatch is both selected AND painted). */
-.editor-swatch.active {
-  position: relative;
-  z-index: 2;
-  border-color: var(--c-text);
-  outline: 2px solid var(--c-text);
-  outline-offset: 0;
-}
-/* Colors already painted in the sprite get an outline ring in the 256 palette
-   modal — never a dim, so all 256 stay clearly visible. An OUTER two-tone ring
-   (dark hug + light stroke) sits in the grid gap, so it reads against any swatch
-   color; z-index lifts it over neighbors. Uses box-shadow (not outline), so a swatch
-   that is both selected AND painted keeps its .active outline ring too. */
-.editor-swatch.in-sprite {
-  position: relative;
-  z-index: 1;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.8),
-    0 0 0 3px #ffffff,
-    0 0 0 4px rgba(0, 0, 0, 0.55);
-}
-/* A swatch that is BOTH selected and in-sprite must lead: .active (z-index:2) and
-   .in-sprite (z-index:1) tie on specificity, so the later .in-sprite would otherwise
-   win and drop it to 1, letting a neighbour's ring overlap its outline. This combined
-   rule (higher specificity) lifts it clear above both. */
-.editor-swatch.active.in-sprite {
-  z-index: 3;
-}
-
-/* ---- tool strip + per-tool options (rows in the settings header) ---- */
-/* The tool strip: first-class tools (pencil / rect / fill) as square icon buttons on
-   the left, the tile-size stepper docked on the right. */
-.editor-toolstrip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-/* Photoshop-3 tool palette: the tool cells TOUCH (no gap), sharing thin black edges. */
-.editor-toolgroup {
-  display: flex;
-  gap: 0;
-}
-/* A flat, light tool cell with a thin black outline. Adjacent cells overlap their
-   borders (margin-left:-1px below) into a single shared divider, so the group reads as
-   one black-gridded strip — the classic PS tool palette. */
-.editor-tool {
-  flex: 0 0 auto;
-  padding: 6px 12px;
-  font: inherit;
-  font-size: 11px;
-  color: var(--c-text);
-  --mod-icon-color: var(--c-text); /* dark Spectrum glyph on the light cell */
-  background: #e4e4e4;
-  border: 1px solid var(--c-dark);
-  border-radius: 0;
-  box-shadow: inset 1px 1px 0 #f6f6f6; /* faint top-left highlight — a light, raised cell */
-  cursor: pointer;
-}
-/* Collapse each pair of touching black borders into one shared 1px divider. */
-.editor-tool + .editor-tool {
-  margin-left: -1px;
-}
-/* Mouse-down presses a tool in: darker + an inset top-left shadow. */
-.editor-tool:active:not(:disabled) {
-  background: #a8a8a8;
-  box-shadow: inset 2px 2px 3px rgba(0, 0, 0, 0.35);
-}
-.editor-tool:active:not(:disabled) > * {
-  transform: translate(1px, 1px); /* nudge the glyph pushed-in */
-}
-/* The SELECTED tool stays pressed + darker — the PS tool-palette "current tool" read. */
-.editor-tool.active {
-  position: relative;
-  z-index: 1; /* its full black outline draws over the touching neighbours */
-  color: var(--c-text);
-  background: #a8a8a8;
-  box-shadow: inset 2px 2px 3px rgba(0, 0, 0, 0.35);
-}
-.editor-tool.active > * {
-  transform: translate(1px, 1px);
-}
-.editor-tool:hover:not(.active):not(:disabled) {
-  background: #efefef;
-}
-.editor-tool:disabled {
-  color: var(--c-shadow);
-  --mod-icon-color: var(--c-shadow);
-  cursor: default;
-}
-/* Square icon tool cells. --mod-icon-size sizes the theme-free Spectrum glyph;
-   --mod-icon-color (set above) paints it dark, so .active / :disabled restyle it. */
-.editor-tool-icon {
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  --mod-icon-size: 18px;
-}
-
-/* Per-tool options row (contextual), the second footer row. A fixed min-height keeps
-   the layout stable even for a tool with no options. For the pencil: the tip-size
-   stepper; for the rect: the corner-radius stepper; for the fill: two checkboxes. */
-.editor-tool-opts {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 28px;
-}
-/* The pencil tip-size SLIDER (Photoshop-style): the range fills the row, a boxed
-   readout ("Npx") docks at its right. Grows to fill the settings width. */
-.editor-slider-field {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-/* A classic Win9x trackbar: a thin sunken groove with a chunky raised rectangular
-   thumb. The native range is stripped (appearance:none) and rebuilt from the bevel
-   recipes via the vendor track/thumb pseudo-elements. */
-.editor-slider {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 20px;
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent;
-  cursor: pointer;
-}
-.editor-slider::-webkit-slider-runnable-track {
-  height: 6px;
-  background: var(--c-face);
-  box-shadow: var(--bevel-sunken-1);
-}
-.editor-slider::-moz-range-track {
-  height: 6px;
-  background: var(--c-face);
-  box-shadow: var(--bevel-sunken-1);
-}
-.editor-slider::-webkit-slider-thumb {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 12px;
-  height: 20px;
-  margin-top: -7px; /* center the 20px thumb over the 6px track */
-  background: var(--c-face);
-  box-shadow: var(--bevel-raised);
-}
-.editor-slider::-moz-range-thumb {
-  width: 12px;
-  height: 20px;
-  border: none;
-  border-radius: 0;
-  background: var(--c-face);
-  box-shadow: var(--bevel-raised);
-}
-.editor-slider-val {
-  flex: 0 0 auto;
-  min-width: 42px;
-  padding: 2px 6px;
-  text-align: center;
-  font-size: 11px;
-  color: var(--c-text);
-  background: #fff;
-  border: none;
-  box-shadow: var(--bevel-sunken);
-  border-radius: 0;
-}
-/* Fill-tool option checkboxes ("replace" + "all tiles"). A black check glyph marks a
-   checked box; a disabled box ("all tiles" while "replace" is off) greys and blocks
-   pointer events but keeps showing its remembered state. */
-.editor-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-  user-select: none;
-}
-/* Classic checkbox: a small sunken white box; the check is a black glyph shown only
-   when :checked (drawn as a background image, since replaced inputs won't render a
-   pseudo-element reliably). */
-.editor-check input {
-  width: 13px;
-  height: 13px;
-  margin: 0;
-  flex: 0 0 auto;
-  appearance: none;
-  -webkit-appearance: none;
-  background: #fff;
-  box-shadow: var(--bevel-sunken);
-  border: none;
-  border-radius: 0;
-  cursor: pointer;
-}
-.editor-check input:checked {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.2l2.6 2.8L10 3' fill='none' stroke='%23000' stroke-width='1.8'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 11px 11px;
-}
-.editor-check-cap {
-  font-size: 11px;
-  color: var(--c-text);
-}
-.editor-check.disabled {
-  cursor: default;
-}
-.editor-check.disabled .editor-check-cap {
-  color: var(--c-shadow);
-  text-shadow: 1px 1px 0 var(--c-hilite); /* engraved disabled label */
-}
-.editor-check.disabled input {
-  background: var(--c-face);
-  cursor: default;
-}
-.editor-check.disabled input:checked {
-  /* keep the remembered check, greyed */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.2l2.6 2.8L10 3' fill='none' stroke='%23808080' stroke-width='1.8'/%3E%3C/svg%3E");
-}
-
-/* ---- colors tray (ink strip + scrollable palette) + palette modal ---- */
-/* The left ink STRIP: the eyedropper button on top, the selected-color preview
-   filling the rest. Fixed narrow column at the tray's left. */
-.editor-ink-strip {
-  flex: 0 0 auto;
-  width: 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-/* The selected-color PREVIEW: a big sunken well of the current ink; a click opens the
-   256-color modal (replacing the old "+"). Fills the strip below the eyedropper. */
-.editor-selected-preview {
-  flex: 1 1 auto;
-  width: 100%;
-  min-height: 0;
-  border: none;
-  border-radius: 0;
-  box-shadow: var(--bevel-sunken);
-}
-/* The scrollable "colors…" box: the transparent lead swatch + every color painted
-   in the sprite — a classic sunken list well. Scrolls when colors overflow. */
-.editor-palette-box {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  gap: 5px;
-  padding: 7px;
-  background: #cbcbcb;
-  border: none;
-  border-radius: 0;
-  box-shadow: var(--bevel-sunken);
-}
-/* Empty-state hint (no sprite colors yet — only the transparent lead swatch). */
-.editor-palette-box.is-empty::after {
-  content: 'colors…';
-  align-self: center;
-  color: var(--c-text-dim);
-  font-size: 11px;
-}
-.editor-used-sw {
-  flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
-}
-
-/* Eyedropper — a compact classic icon button at the top of the ink strip. */
-.editor-pal-tool {
-  flex: 0 0 auto;
-  width: 100%;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  color: var(--c-text);
-  --mod-icon-color: var(--c-text);
-  background: var(--c-face);
-  border: none;
-  border-radius: 0;
-  box-shadow: var(--bevel-raised);
-  cursor: pointer;
-  --mod-icon-size: 16px;
-}
-.editor-pal-tool:active,
-.editor-pal-tool.active {
-  box-shadow: var(--bevel-pressed);
-}
-.editor-pal-tool:active > *,
-.editor-pal-tool.active > * {
-  transform: translate(1px, 1px);
-}
-/* The "transparent" swatch — the empty / clear color, painted like any other. It
-   is a real .editor-swatch (so it takes the "active" selection ring when selected),
-   filled with the SAME light checkerboard the canvas shows through unpainted texels,
-   so the tile literally previews what painting it produces. Declared after
-   .editor-swatch so this background wins over that rule's `background: transparent`. */
-.editor-transparent-sw {
-  background-color: #a8a8a8;
-  background-image: linear-gradient(
-      45deg,
-      #d0d0d0 25%,
-      transparent 25%,
-      transparent 75%,
-      #d0d0d0 75%
-    ),
-    linear-gradient(45deg, #d0d0d0 25%, transparent 25%, transparent 75%, #d0d0d0 75%);
-  background-size: 10px 10px;
-  background-position:
-    0 0,
-    5px 5px;
-}
-
-/* ---- full 256-color palette modal — a plain, generic Photoshop-style dialog ---- */
-.palette-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  color-scheme: light;
-  font-family: Tahoma, Geneva, Verdana, 'Segoe UI', 'MS Sans Serif', sans-serif;
-}
-.palette-modal.open {
-  display: flex;
-}
-.palette-modal-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(8, 8, 12, 0.5);
-}
-/* A plain silver dialog box: a thin dark edge with a soft raised inner line, and a
-   drop shadow so it floats. Deliberately NOT a windowed frame — no OS title bar,
-   no window chrome — just a padded, titled panel like a classic Photoshop dialog. */
-.palette-modal-card {
-  position: relative;
-  z-index: 1;
-  width: min(92vw, 560px);
-  max-height: 88vh;
-  overflow-y: auto;
-  padding: 12px;
-  background: var(--c-face);
-  color: var(--c-text);
-  border: 1px solid var(--c-dark);
-  border-radius: 0;
-  box-shadow:
-    inset 1px 1px 0 var(--c-hilite),
-    inset -1px -1px 0 var(--c-shadow),
-    6px 6px 16px rgba(0, 0, 0, 0.4);
-}
-/* A plain title row: a dark caption on the silver, divided from the grid by an
-   engraved groove. No blue title bar, no window controls. */
-.palette-modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin: 0 0 10px;
-  padding: 0 0 8px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--c-text);
-  box-shadow:
-    inset 0 -1px 0 var(--c-hilite),
-    inset 0 -2px 0 var(--c-shadow);
-}
-/* A plain beveled close button — a generic dialog dismiss, not a window control. */
-.palette-modal-close {
-  width: 22px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: var(--c-face);
-  border: none;
-  border-radius: 0;
-  box-shadow: var(--bevel-raised);
-  color: var(--c-text);
-  --mod-icon-color: var(--c-text);
-  --mod-icon-size: 12px;
-  cursor: pointer;
-}
-.palette-modal-close:active {
-  box-shadow: var(--bevel-pressed);
-}
-.palette-modal-close:active > * {
-  transform: translate(1px, 1px);
-}
-
-/* The full 256-color palette as a 16x16 grid, in a sunken well inside the dialog. */
-.editor-cube {
-  display: grid;
-  grid-template-columns: repeat(16, 1fr);
-  gap: 2px;
-  margin: 0;
-  padding: 8px;
-  background: #cbcbcb;
-  box-shadow: var(--bevel-sunken);
 }

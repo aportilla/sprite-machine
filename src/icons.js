@@ -16,14 +16,11 @@ import '@spectrum-web-components/icons-workflow/icons/sp-icon-draw.js';
 import '@spectrum-web-components/icons-workflow/icons/sp-icon-rectangle.js';
 import '@spectrum-web-components/icons-workflow/icons/sp-icon-color-fill.js';
 import '@spectrum-web-components/icons-workflow/icons/sp-icon-sampler.js';
-import '@spectrum-web-components/icons-workflow/icons/sp-icon-download.js';
-import '@spectrum-web-components/icons-workflow/icons/sp-icon-close.js';
-import '@spectrum-web-components/icons-workflow/icons/sp-icon-chevron-down.js';
 import '@spectrum-web-components/icons-workflow/icons/sp-icon-alert.js';
 
 /**
  * Create a Spectrum workflow icon element.
- * @param {'draw'|'rectangle'|'color-fill'|'sampler'|'download'|'close'|'chevron-down'|'alert'} name
+ * @param {'draw'|'rectangle'|'color-fill'|'sampler'|'alert'} name
  *   the icon (matches the registered <sp-icon-NAME> element).
  * @param {string} [label] accessible label; omit for a decorative icon (the host
  *   then marks itself aria-hidden and the surrounding button names the action).

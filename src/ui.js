@@ -1,12 +1,15 @@
 // ---------------------------------------------------------------------------
-// UI chrome around the editor: a full-width header strip (brand + atlas action
-// menu + download) and, floating over the 3D stage, the render toggles
-// (smooth-slopes / auto-rotate) and a compact live-stats/warnings readout. The
-// tools panel itself (right half) is the inline tile editor, mounted by main.js
-// into #editor-panel. The whole app window is a drop target for sprite sheets.
-// Pure DOM; talks to main.js via callbacks.
+// UI chrome around the editor, drawn with the `vintage-frames` System 7 web
+// component kit: a full-width white header strip (brand + a standalone
+// "pick atlas" vf-menu + a download vf-button) and, floating over the 3D stage,
+// the render toggles (smooth-slopes / auto-rotate vf-checkboxes on a small
+// panel) and a compact live-stats/warnings readout. The tools panel itself
+// (LEFT half) is the inline tile editor, mounted by main.js into #editor-panel.
+// The whole app window is a drop target for sprite sheets. Pure DOM; talks to
+// main.js via callbacks.
 // ---------------------------------------------------------------------------
 
+import 'vintage-frames';
 import { fileToImageData } from './image-io.js';
 import { flip } from './lib/ingest.js';
 import { icon } from './icons.js';
@@ -18,31 +21,21 @@ function el(tag, cls, text) {
   return n;
 }
 
+// A caption in the kit's own faces (so it scales with the components): the
+// display face for chrome, `face="body"` (Geneva 9) for fine print.
+function label(text, opts = {}) {
+  const l = document.createElement('vf-label');
+  if (opts.face) l.setAttribute('face', opts.face);
+  if (opts.dim) l.setAttribute('dim', '');
+  l.textContent = text;
+  return l;
+}
+
 // A warning / error line for the stats overlay: an alert icon + the message.
-// The icon inherits the row's warn color via currentColor.
 function warnRow(msg) {
   const r = el('div', 'warn');
-  r.append(icon('alert'), el('span', null, msg));
+  r.append(icon('alert'), label(msg, { face: 'body' }));
   return r;
-}
-
-// Reflect an on/off state onto a pill toggle button (class + a11y state).
-function setToggle(btn, on) {
-  btn.classList.toggle('on', !!on);
-  btn.setAttribute('aria-pressed', String(!!on));
-}
-
-// A pill toggle button: clicking flips it and reports the new state.
-function toggleBtn(label, initial, onToggle) {
-  const b = el('button', 'toggle', label);
-  b.type = 'button';
-  setToggle(b, initial);
-  b.onclick = () => {
-    const on = !b.classList.contains('on');
-    setToggle(b, on);
-    onToggle(on);
-  };
-  return b;
 }
 
 // Mirror a tile for display (an axis-flip in image space), so a mirror-derived
@@ -72,11 +65,15 @@ export function createUI({
 
   // Whole-app drop overlay (shown while a file is dragged anywhere over the app).
   const dropOverlay = el('div', 'drop-overlay');
-  dropOverlay.appendChild(el('div', 'drop-overlay-msg', 'drop a sprite sheet to load'));
+  const dropCard = el('div', 'drop-overlay-msg');
+  dropCard.appendChild(label('Drop a sprite sheet to load'));
+  dropOverlay.appendChild(dropCard);
   app.appendChild(dropOverlay);
 
   // --- header strip: brand (left) + atlas actions (right) --------------------
-  topbar.appendChild(el('div', 'brand', 'SPRITE MACHINE'));
+  const brand = label('Sprite Machine');
+  brand.className = 'brand';
+  topbar.appendChild(brand);
   const actions = el('div', 'topbar-actions');
   topbar.appendChild(actions);
 
@@ -95,44 +92,33 @@ export function createUI({
   // scratch — every face reads empty until you paint it.
   const loadBlank = () => onAtlas(new ImageData(120, 80));
 
-  // "pick atlas ▾" — a trigger that opens a menu of load actions (samples /
-  // blank / from disk). Its label never changes. The whole app is also a drop
-  // target.
-  const picker = el('div', 'picker');
-  const pickBtn = el('button', 'chip picker-trigger');
-  const caret = icon('chevron-down');
-  caret.classList.add('picker-caret');
-  pickBtn.append(el('span', null, 'pick atlas'), caret);
-  const menu = el('div', 'picker-menu');
-  picker.append(pickBtn, menu);
-
-  let menuOpen = false;
-  const closeMenu = () => {
-    menuOpen = false;
-    picker.classList.remove('open');
+  // "pick atlas" — a standalone vf-menu (the classic menu-button pattern): its
+  // dropped panel lists the load actions (samples / blank / from disk). The
+  // whole app is also a drop target.
+  const picker = document.createElement('vf-menu');
+  picker.setAttribute('label', 'pick atlas');
+  picker.className = 'atlas-menu';
+  const menuItem = (value, text) => {
+    const it = document.createElement('vf-menu-item');
+    it.setAttribute('value', value);
+    it.textContent = text;
+    picker.appendChild(it);
   };
-  const menuItem = (label, action) => {
-    const it = el('button', 'picker-item', label);
-    it.onclick = () => {
-      closeMenu();
-      action();
-    };
-    menu.appendChild(it);
-  };
-  samples.forEach((s, i) => menuItem(s.name.toLowerCase(), () => selectSample(i)));
-  menuItem('blank', loadBlank);
-  menuItem('select from disk…', () => fileInput.click());
+  samples.forEach((s, i) => menuItem(`sample:${i}`, s.name.toLowerCase()));
+  menuItem('blank', 'blank');
+  const sep = document.createElement('vf-separator');
+  picker.appendChild(sep);
+  menuItem('disk', 'select from disk…');
+  picker.addEventListener('vf-menu-select', (e) => {
+    const v = /** @type {CustomEvent} */ (e).detail.value;
+    if (v.startsWith('sample:')) selectSample(+v.slice('sample:'.length));
+    else if (v === 'blank') loadBlank();
+    else if (v === 'disk') fileInput.click();
+  });
 
-  pickBtn.onclick = (e) => {
-    e.stopPropagation(); // don't let the outside-click closer see this same click
-    menuOpen = !menuOpen;
-    picker.classList.toggle('open', menuOpen);
-  };
-  document.addEventListener('click', () => menuOpen && closeMenu());
-
-  const dlBtn = el('button', 'chip');
-  dlBtn.append(icon('download'), el('span', null, 'download'));
-  dlBtn.onclick = () => onDownload?.();
+  const dlBtn = document.createElement('vf-button');
+  dlBtn.textContent = 'download';
+  dlBtn.addEventListener('click', () => onDownload?.());
   actions.append(picker, dlBtn);
 
   // Decode a dropped/picked file, surfacing failures instead of swallowing them
@@ -169,16 +155,26 @@ export function createUI({
     if (f) await loadFile(f);
   });
 
-  // --- stage overlays: render toggles (bottom-left) + live stats (corner) -----
+  // --- stage overlays: render toggles (bottom-right) + live stats (corner) ----
+  // The toggles are System 7 checkboxes on a small floating white panel.
   const controls = el('div', 'stage-controls');
-  const lowpolyBtn = toggleBtn('smooth slopes', state.lowpoly, (on) => {
+  const toggle = (text, initial, onToggle) => {
+    const cb = document.createElement('vf-checkbox');
+    cb.textContent = text;
+    /** @type {any} */ (cb).checked = !!initial;
+    cb.addEventListener('vf-change', (e) => {
+      onToggle(!!(/** @type {CustomEvent} */ (e).detail.checked));
+    });
+    return cb;
+  };
+  const lowpolyCb = toggle('smooth slopes', state.lowpoly, (on) => {
     state.lowpoly = on;
     onOptionChange();
   });
-  const rotBtn = toggleBtn('auto rotate', state.autoRotate, (on) => {
+  const rotCb = toggle('auto rotate', state.autoRotate, (on) => {
     state.autoRotate = on;
   });
-  controls.append(lowpolyBtn, rotBtn);
+  controls.append(lowpolyCb, rotCb);
   stage.appendChild(controls);
 
   const stats = el('div', 'stage-stats');
@@ -190,15 +186,19 @@ export function createUI({
   }
 
   function syncControls() {
-    setToggle(lowpolyBtn, state.lowpoly);
-    setToggle(rotBtn, state.autoRotate);
+    /** @type {any} */ (lowpolyCb).checked = !!state.lowpoly;
+    /** @type {any} */ (rotCb).checked = !!state.autoRotate;
   }
 
   function setStats({ dims, voxels, triangles, warnings }) {
     stats.innerHTML = '';
     const line = (k, v) => {
       const r = el('div', 'stat');
-      r.append(el('span', 'k', k), el('span', 'v', String(v)));
+      const key = label(k, { face: 'body', dim: true });
+      key.className = 'k';
+      const val = label(String(v), { face: 'body' });
+      val.className = 'v';
+      r.append(key, val);
       stats.appendChild(r);
     };
     // Tiles are locked square, so a well-formed sheet carves to an N³ grid — show the

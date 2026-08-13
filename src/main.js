@@ -18,7 +18,6 @@ import {
 } from './lib/atlas.js';
 import { VIEW_NAMES, VIEW_OPPOSITE, MIRROR_AXIS } from './lib/views.js';
 import { replaceColorInRect } from './lib/fill.js';
-import { distinctColors, rgbKey } from './lib/color.js';
 import { PENCIL_PALETTE, PALETTE_256 } from './lib/constants.js';
 import { faceGuides } from './lib/guides.js';
 import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
@@ -35,8 +34,10 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
+// Stage backdrop: the System 7 mid gray, matching the vintage-frames UI chrome
+// around it.
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x4a4a52);
+scene.background = new THREE.Color(0x808080);
 
 const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
 camera.position.set(5, 4.2, 5);
@@ -307,12 +308,13 @@ function applyTileEdit(name, wasDerived, tile, dirty) {
 }
 
 // --- editor session -------------------------------------------------------
-// The editor is permanently docked in the right-half panel; the 3D view stays
-// live on the left. The brush selection is shared so it survives a face swap:
+// The editor is permanently docked in the left-half panel; the 3D view stays
+// live on the right. The brush selection is shared so it survives a face swap:
 // `tool` is the drawing op ('pencil', 'rect', 'fill' all live), `color` the ink,
 // `erase`/`picking` the eraser-ink / eyedropper flags, `size` the pencil
 // footprint, `cornerRadius` the rect tool's corner radius (texels, 0 = sharp),
-// `fillReplace`/`fillAllTiles` the fill tool's two option checkboxes.
+// `fillReplace`/`fillAllTiles` the fill tool's two option checkboxes, `recent`
+// the MRU ink list behind the editor's "last three used colors" row.
 const brush = {
   tool: 'pencil',
   color: null,
@@ -322,6 +324,7 @@ const brush = {
   cornerRadius: 0,
   fillReplace: false,
   fillAllTiles: false,
+  recent: [],
 };
 let currentEditor = null;
 let editingName = null;
@@ -331,26 +334,6 @@ const freshTile = () => ({
   height: state.tileH,
   data: new Uint8ClampedArray(state.tileW * state.tileH * 4),
 });
-
-// Distinct solid colors painted on ANY face except `exceptName` — that face is
-// edited live in the editor, which unions its own current pixels on top. Feeds
-// the editor's dynamic "in sprite" palette so authors can match existing colors.
-function usedColorsExcept(exceptName) {
-  const seen = new Set();
-  const out = [];
-  for (const name of VIEW_NAMES) {
-    if (name === exceptName) continue;
-    const view = state.views[name];
-    if (!view) continue;
-    for (const c of distinctColors(view.data)) {
-      const key = rgbKey(c);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(c);
-    }
-  }
-  return out;
-}
 
 function mountEditor(name, focusSize) {
   if (currentEditor) {
@@ -381,7 +364,6 @@ function mountEditor(name, focusSize) {
     tileH: state.tileH,
     palette: PENCIL_PALETTE,
     palette256: PALETTE_256,
-    usedColors: usedColorsExcept(name),
     mirrorBehind,
     guides,
     faces: TAB_ORDER,
