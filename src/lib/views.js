@@ -197,7 +197,7 @@ export const VIEW_OPPOSITE = {
 // that would imply the axis varies): the projections make each pair mirror
 // HORIZONTALLY — left↔right and front↔back on the X/Z planes, and top↔bottom too
 // because BOTTOM is the sideways (left/right) flip of TOP, not an end-over-end one.
-// (mirrorImage's 'y' branch in ui.js is therefore unexercised in practice.)
+// (mirrorImage's 'y' branch in derive.js is therefore unexercised in practice.)
 export const MIRROR_AXIS = 'x';
 
 // Which grid axes a view's (imgW, imgH) constrain. Used by dimension

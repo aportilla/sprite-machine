@@ -5,17 +5,20 @@ import { buildVoxels } from './lib/pipeline.js';
 import { voxelMesh } from './lib/mesh.js';
 import { wedgeMesh } from './lib/wedge-mesh.js';
 import { SAMPLES } from './lib/sprite-data.js';
-import { clampTile, validateSheet, TILE_MIN, TILE_MAX } from './lib/atlas.js';
+import { clampTile, TILE_MIN, TILE_MAX } from './lib/atlas.js';
 import { VIEW_NAMES } from './lib/views.js';
 import { PENCIL_PALETTE, PALETTE_256 } from './lib/constants.js';
-import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
 import { doc } from './state/doc.js';
 import { session } from './state/session.js';
 import { prefs } from './state/prefs.js';
 import { build } from './state/build.js';
 import { editorViewModel } from './state/derive.js';
-import { createUI } from './ui.js';
+import { loadSample } from './loaders.js';
+import { initDropTarget } from './drop-target.js';
 import './components/sm-editor.js'; // registers <sm-editor>
+import './components/sm-topbar.js'; // registers <sm-topbar>
+import './components/sm-stage-controls.js'; // registers <sm-stage-controls>
+import './components/sm-stats-readout.js'; // registers <sm-stats-readout>
 
 // --------------------------------------------------------------------------
 // Scene
@@ -84,9 +87,6 @@ const RENDER_SCALE = 0.5; // low-res render, crisply upscaled by CSS
 if (params.get('lowpoly') != null) prefs.setLowpoly(params.get('lowpoly') === '1');
 if (params.get('rotate') === '0') prefs.setAutoRotate(false);
 
-// Dev hook: ?edit=<view> auto-opens the tile editor on that face after the first
-// build (handy for screenshots / the manual test checklist).
-let pendingEditFace = null;
 // Dev hook: ?tile=N (square) or ?tile=WxH applies one resize after the first build
 // (the capture tool can't click the stepper).
 let pendingTileResize = null;
@@ -137,7 +137,11 @@ function frameObject(obj) {
 // Rebuild — a subscriber of the doc (change + live) and prefs slices
 // --------------------------------------------------------------------------
 let current = null; // THREE.Object3D in the scene
-let frameNext = true; // reframe camera on next build (sample/mode change)
+// The doc's sheet generation at the last FRAMED build: a build of a new sheet
+// reframes the camera; every other rebuild (stroke, resize, replace, toggle)
+// is in place. Left stale on an empty build, so the first real build of a
+// fresh sheet still frames (e.g. the first stroke on a blank atlas).
+let framedSheet = 0;
 
 function rebuild() {
   const d = doc.get();
@@ -191,9 +195,9 @@ function rebuild() {
     });
   }
   scene.add(current);
-  if (frameNext) {
+  if (d.sheet !== framedSheet) {
     frameObject(current);
-    frameNext = false;
+    framedSheet = d.sheet;
   } else if (prevRotY != null) {
     current.rotation.y = prevRotY;
   }
@@ -263,7 +267,7 @@ function ensureEditor() {
   pendingRect = null;
   pendingPick = null;
   pendingFill = null;
-  ui.editorDock.replaceChildren(editorEl);
+  editorDock.replaceChildren(editorEl);
   return editorEl;
 }
 
@@ -286,78 +290,42 @@ function showFace(name) {
   });
 }
 
-// Select a face for editing. Called by a face pick, a sheet swap, a tile resize,
-// and boot.
+// Select a face for editing. Called by a face pick and by any structural doc
+// change (below); a no-doc call (nothing loaded yet) is a no-op.
 function enterDrawing(name) {
   const d = doc.get();
   if (!d.atlasImage || !d.tileW || !d.tileH) return;
   showFace(name);
 }
 
-// Load a NEW sheet (sample / dropped atlas / blank): the doc drops any pending
-// live stroke from the old sheet, re-slices, and notifies (one rebuild); then
-// the always-on editor re-points at the active face (a pending ?edit= face,
-// else whatever was open, else the default).
-function loadSheet(imageData, transforms) {
-  frameNext = true;
-  doc.loadAtlas(imageData, transforms);
-  // Dev hook: ?tile=WxH resizes the fresh sheet once (the capture tool can't click
-  // the stepper) before the editor opens, so a headless shot shows the result.
-  if (pendingTileResize) {
-    const { w, h } = pendingTileResize;
-    pendingTileResize = null;
-    doc.resizeTiles(w, h);
-  }
-  const face = pendingEditFace || session.get().face || DEFAULT_FACE;
-  pendingEditFace = null;
-  enterDrawing(face);
-}
-
-function onDownload() {
-  if (!doc.get().atlasImage) return;
-  // Fold any un-flushed live stroke into the canonical sheet BEFORE snapshotting
-  // it — applyTileEdit only schedules the blit via rAF (paused in a backgrounded
-  // tab), so without this drain the last stroke could be dropped from atlas.png.
-  doc.drain();
-  imageDataToBlob(doc.get().atlasImage)
-    .then((b) => downloadBlob(b, 'atlas.png'))
-    .catch((err) => build.setError(`Download failed: ${err.message}`));
-}
-
-// --------------------------------------------------------------------------
-// UI wiring
-// --------------------------------------------------------------------------
-const ui = createUI({
-  samples: SAMPLES,
-  onSample: async (sample) => {
-    let image;
-    try {
-      image = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
-    } catch (err) {
-      build.setError(`Couldn't load sample "${sample.name}": ${err.message}`);
-      return;
-    }
-    const bad = validateSheet(image);
-    if (bad) {
-      build.setError(`Sample "${sample.name}" is unusable: ${bad}`);
-      return;
-    }
-    loadSheet(image, { ...(sample.transforms || {}) });
-  },
-  onAtlas: (imageData) => {
-    const bad = validateSheet(imageData);
-    if (bad) {
-      build.setError(bad);
-      return;
-    }
-    loadSheet(imageData, {});
-  },
-  onDownload,
+// EVERY structural doc change re-points the always-on editor: a fresh sheet
+// falls back to the session's face (a ?edit= boot seed, else whatever was open,
+// else the default); a tile resize / all-tiles replace re-derives the same face
+// over the new pixels. Registered AFTER the rebuild subscription, so the mesh
+// is current when the editor re-derives (the same order the old imperative
+// call sites had). Live strokes are silent on this channel by design.
+const unsubDocEditor = doc.subscribe(() => {
+  enterDrawing(session.get().face || DEFAULT_FACE);
 });
+
+// --------------------------------------------------------------------------
+// Chrome mounting + editor events
+// --------------------------------------------------------------------------
+// The chrome components are connected (each reads its slice itself); the
+// composition root just places them. The drop overlay + listeners ride on #app.
+document.getElementById('topbar').replaceChildren(document.createElement('sm-topbar'));
+document
+  .getElementById('stage')
+  .append(
+    document.createElement('sm-stage-controls'),
+    document.createElement('sm-stats-readout')
+  );
+initDropTarget();
+const editorDock = document.getElementById('editor-panel');
 
 // <sm-editor> talks back in bubbling `sm-*` CustomEvents, heard once on the dock
 // rather than through per-mount callbacks — so the wiring outlives any editor.
-ui.editorDock.addEventListener('sm-live', (e) => {
+editorDock.addEventListener('sm-live', (e) => {
   const { tile, dirty } = /** @type {CustomEvent} */ (e).detail;
   // An untouched derived/empty face stays that way (mirror-derived or empty);
   // otherwise the working buffer becomes the face's real art — or null again if
@@ -365,21 +333,22 @@ ui.editorDock.addEventListener('sm-live', (e) => {
   if (editingWasDerived && !dirty) return;
   doc.applyTileEdit(session.get().face, tile);
 });
-ui.editorDock.addEventListener('sm-select-face', (e) => {
+editorDock.addEventListener('sm-select-face', (e) => {
   enterDrawing(/** @type {CustomEvent} */ (e).detail.face);
 });
-ui.editorDock.addEventListener('sm-resize-tile', (e) => {
+editorDock.addEventListener('sm-resize-tile', (e) => {
   const { size } = /** @type {CustomEvent} */ (e).detail;
   // Tiles are locked SQUARE (the only registering shape) and the resize CENTERS
-  // the art on every axis; re-point the editor at the same face at the new size.
-  // (The number field keeps focus by itself — its element is never unmounted.)
-  if (doc.resizeTiles(size, size)) showFace(session.get().face);
+  // the art on every axis; the doc-change subscriber re-points the editor at the
+  // same face at the new size. (The number field keeps focus by itself — its
+  // element is never unmounted.)
+  doc.resizeTiles(size, size);
 });
-ui.editorDock.addEventListener('sm-replace-all-tiles', (e) => {
+editorDock.addEventListener('sm-replace-all-tiles', (e) => {
   const { target, fill } = /** @type {CustomEvent} */ (e).detail;
-  // Fill with BOTH "replace" and "all tiles" on: recolor across the whole sheet,
-  // then re-point the editor so its working buffer reflects the replaced tile.
-  if (doc.replaceAllTiles(target, fill)) showFace(session.get().face);
+  // Fill with BOTH "replace" and "all tiles" on: recolor across the whole sheet;
+  // the doc-change subscriber re-points the editor over the replaced pixels.
+  doc.replaceAllTiles(target, fill);
 });
 
 // --------------------------------------------------------------------------
@@ -442,13 +411,15 @@ if (hot) {
     unsubDocChange();
     unsubDocLive();
     unsubPrefs();
-    ui.dispose();
+    unsubDocEditor();
   });
 }
 
 // Boot with a sample (?sample=<index|name> overrides, handy for testing).
+// Dev hook: ?edit=<view> seeds the session's face, so the editor opens there —
+// it's always open now, so this just picks the starting face.
 const editParam = params.get('edit');
-if (editParam && VIEW_NAMES.includes(editParam)) pendingEditFace = editParam;
+if (editParam && VIEW_NAMES.includes(editParam)) session.selectFace(editParam);
 const tileParam = params.get('tile');
 if (tileParam) {
   const m = /^(\d+)(?:x(\d+))?$/i.exec(tileParam.trim());
@@ -497,6 +468,14 @@ if (q != null) {
   const byName = SAMPLES.findIndex((s) => s.name.toLowerCase() === q.toLowerCase());
   startIndex = byName >= 0 ? byName : Math.min(SAMPLES.length - 1, Math.max(0, +q || 0));
 }
-ui.selectSample(startIndex);
+loadSample(SAMPLES[startIndex]).then(() => {
+  // Dev hook: ?tile=WxH resizes the fresh sheet once (the capture tool can't
+  // click the stepper); the doc-change subscriber re-points the editor after.
+  if (pendingTileResize) {
+    const { w, h } = pendingTileResize;
+    pendingTileResize = null;
+    doc.resizeTiles(w, h);
+  }
+});
 resize();
 tick();

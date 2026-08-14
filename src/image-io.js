@@ -1,5 +1,5 @@
 // Browser image decoding helpers -> ImageData (the {width,height,data} shape the
-// pipeline consumes). Kept out of ui.js so main.js can load atlas URLs too.
+// pipeline consumes). Standalone so the loaders and the topbar's download share it.
 
 async function bitmapToImageData(bmp) {
   const c = document.createElement('canvas');
@@ -22,8 +22,8 @@ export async function urlToImageData(url) {
 }
 
 // Encode an ImageData (or plain {width,height,data}) to a PNG Blob. The
-// wrap-if-plain guard mirrors ui.js's drawPixels so a pipeline tile object works
-// as well as a real ImageData.
+// wrap-if-plain guard means a pipeline tile object (e.g. a resized atlas sheet)
+// works as well as a real ImageData.
 export function imageDataToBlob(imageData) {
   const id =
     imageData instanceof ImageData

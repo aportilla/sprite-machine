@@ -52,7 +52,7 @@ function rot90cw(img) {
 }
 
 // Axis-flip blit: mirror an image horizontally (flipX) and/or vertically (flipY).
-// Exported so ui.js's display-only mirrorImage reuses one flip implementation.
+// Exported so derive.js's display-only mirrorImage reuses one flip implementation.
 // A no-op (both false) returns the SAME object; any flip returns a fresh copy.
 export function flip(img, flipX, flipY) {
   if (!flipX && !flipY) return img;

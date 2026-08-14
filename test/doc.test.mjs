@@ -217,6 +217,18 @@ test('replaceAllTiles is scoped to the tiled region (remainder pixels untouched)
   assert.deepEqual(getPx(doc.get().atlasImage, 6, 0), RED, 'remainder left alone');
 });
 
+test('the sheet generation bumps on loadAtlas only — never on resize/replace', () => {
+  const doc = createDoc(fakeScheduler());
+  assert.equal(doc.get().sheet, 0);
+  doc.loadAtlas(carSheet());
+  assert.equal(doc.get().sheet, 1);
+  doc.resizeTiles(4, 4);
+  doc.replaceAllTiles({ r: 255, g: 0, b: 0 }, { r: 0, g: 255, b: 0 });
+  assert.equal(doc.get().sheet, 1, 'same document, same generation');
+  doc.loadAtlas(carSheet());
+  assert.equal(doc.get().sheet, 2);
+});
+
 test('loadAtlas drops a pending stroke from the OLD sheet', () => {
   const fs = fakeScheduler();
   const doc = createDoc(fs);

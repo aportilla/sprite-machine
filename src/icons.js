@@ -2,7 +2,7 @@
 // Real UI icons — Adobe Spectrum "workflow" icon set (open source, via
 // @spectrum-web-components/icons-workflow). Each import below is a side effect
 // that registers one <sp-icon-*> custom element; importing this module is what
-// makes those tags usable in `ui.js` / `sm-editor.js` templates, where they are
+// makes those tags usable in the chrome / `sm-editor.js` templates, where they are
 // written literally (`<sp-icon-draw></sp-icon-draw>`) so lit can diff them.
 //
 // The elements render their SVG in shadow DOM with `fill: currentColor`, so an

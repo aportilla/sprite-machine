@@ -54,6 +54,10 @@ export function createDoc(scheduler = {}) {
     tileH: 0,
     cols: 0,
     rows: 0,
+    // Sheet GENERATION: bumped only by a wholesale load, never by a resize or
+    // replace — "is this still the same document?" for consumers that behave
+    // differently on a fresh sheet (the rebuilder frames the camera on one).
+    sheet: 0,
   });
 
   /** @type {Set<(s: ReturnType<typeof store.get>) => void>} */
@@ -110,7 +114,12 @@ export function createDoc(scheduler = {}) {
     /** @param {object} imageData  @param {Record<string, object>} [transforms] */
     loadAtlas(imageData, transforms = {}) {
       this.dropLive();
-      store.patch({ atlasImage: imageData, transforms, ...slicedPatch(imageData) });
+      store.patch({
+        atlasImage: imageData,
+        transforms,
+        sheet: store.get().sheet + 1,
+        ...slicedPatch(imageData),
+      });
     },
 
     // One live/committed tile edit from the editor. The face's view becomes the

@@ -164,11 +164,14 @@ body {
   padding: 20px 28px;
 }
 
-/* ---- inline tile editor (content of the left-side #editor-panel) ---- */
-/* <sm-editor> renders into the LIGHT DOM, so it sits between #editor-panel and
-   the .editor column it renders. `display: contents` removes its box entirely,
-   leaving .editor as the panel's direct flex child — the same box tree the
-   editor had before it became a custom element. */
+/* Every sm-* component renders into the LIGHT DOM, so its host element sits
+   between its container and the classed markup it renders (e.g. <sm-editor>
+   between #editor-panel and the .editor column). `display: contents` removes
+   the host's box entirely, leaving the same box tree the chrome had before it
+   became custom elements — which is what keeps screenshots byte-identical. */
+sm-topbar,
+sm-stage-controls,
+sm-stats-readout,
 sm-editor {
   display: contents;
 }
