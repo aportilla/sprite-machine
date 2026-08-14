@@ -28,19 +28,23 @@
 // opened) and driven by the `pickerOpen` boolean — its native <dialog> is
 // top-layer, so living in our own template can never clip it.
 //
-// STATE SPLIT — the correctness core. Reactive properties are what the TEMPLATE
-// reads; everything the canvas hot paths touch is a plain `#private` field, so a
+// STATE SPLIT — the correctness core. What the TEMPLATE reads is either a
+// reactive property (assigned by main.js) or the shared `session` store slice
+// (bridged by a StoreController, so any action re-renders this element);
+// everything the canvas hot paths touch is a plain `#private` field, so a
 // pencil drag can never schedule a template re-render at pointer-move rate:
 //
-//   reactive (static properties)          plain fields (never re-render)
-//   ----------------------------          ------------------------------
+//   reactive props (static properties)    plain fields (never re-render)
+//   ----------------------------------    ------------------------------
 //   face, tile, tileW/tileH, guides,      #work / #imgData / #dirty (the pixel
 //   mirrorBehind, faces, palette,         buffer — #work is shared BY REFERENCE
 //   palette256, sizeMin/sizeMax           with #imgData, so it must never be
-//   tool, ink, erase, picking, recent     diffed or copied), #drawing, #prev,
-//   pencilSize, cornerRadius,             #forceErase, #hoverTexel, the rect
-//   fillReplace, fillAllTiles,            drag state, the layout geometry
-//   pickerOpen                            (#scale/#cssW/#cssH), refs, contexts
+//                                         diffed or copied), #drawing, #prev,
+//   session slice (read via getters:      #forceErase, #hoverTexel, the rect
+//   tool, ink, erase, picking, recent,    drag state, the layout geometry
+//   pencilSize, cornerRadius,             (#scale/#cssW/#cssH), refs, contexts
+//   fillReplace, fillAllTiles,
+//   pickerOpen — writes are ACTIONS)
 //
 // Every stroke is HARD-pixel (alpha 0 or 255) so downstream ingest (alpha>=128)
 // and atlas.isBlank (alpha!==0) can never diverge.
@@ -114,6 +118,8 @@ import { faceIcon } from '../face-icons.js';
 import { roundedRectRows, maxCornerRadius, squareEnd } from '../lib/rect.js';
 import { keyAt, floodFill, replaceColor } from '../lib/fill.js';
 import { rgbKey } from '../lib/color.js';
+import { session, RECENT_SLOTS } from '../state/session.js';
+import { StoreController } from '../state/store-controller.js';
 
 // The pixel-canvas CONTAINER fills the draw box below the options bar (CSS
 // flex:1), so the canvas grows to consume whatever height the fixed settings row
@@ -125,9 +131,6 @@ import { rgbKey } from '../lib/color.js';
 // the sprite art. MIRROR_ALPHA keeps the onion-skin a faint hint.
 const GUIDE_COLOR = 'rgba(120, 200, 255, 0.6)';
 const MIRROR_ALPHA = 0.22;
-
-// How many "last used" colors show under the current swatch.
-const RECENT_SLOTS = 3;
 
 // The four tool glyphs, as module-constant templates: a TemplateResult diffs to
 // a no-op, where a freshly built element would make lit swap the icon on every
@@ -170,17 +173,6 @@ export class SmEditor extends LitElement {
     faces: { attribute: false },
     sizeMin: { type: Number },
     sizeMax: { type: Number },
-    // --- internal state the template reads ---------------------------------
-    tool: { state: true },
-    ink: { state: true },
-    erase: { state: true },
-    picking: { state: true },
-    recent: { state: true },
-    pencilSize: { state: true },
-    cornerRadius: { state: true },
-    fillReplace: { state: true },
-    fillAllTiles: { state: true },
-    pickerOpen: { state: true },
   };
 
   // NEVER declare a reactive property as a class field — the field would shadow
@@ -199,16 +191,11 @@ export class SmEditor extends LitElement {
     this.sizeMin = 1;
     this.sizeMax = 64;
 
-    this.tool = 'pencil'; // the drawing op: 'pencil' | 'rect' | 'fill'
-    this.ink = null; // {r,g,b} — the active color
-    this.erase = false; // the transparent ("clear") ink is selected
-    this.picking = false; // the eyedropper is armed for the next canvas click
-    this.recent = []; // MRU inks, current at [0]; slots 1..3 are the "last used" row
-    this.pencilSize = 1; // the pencil's N×N tip footprint, in texels
-    this.cornerRadius = 0; // the rect tool's corner radius, in texels (0 = sharp)
-    this.fillReplace = false;
-    this.fillAllTiles = false;
-    this.pickerOpen = false;
+    // The shared editor-session slice holds the brush state (tool, ink,
+    // recency, per-tool options, picker flag); this controller re-renders the
+    // element on any session action. The getters below read it, so the
+    // template and gesture code keep their `this.tool` / `this.ink` reads.
+    new StoreController(this, session.store);
 
     // Dev hooks (plain: consumed once on mount, never re-read).
     this.openPaletteOnMount = false;
@@ -216,6 +203,42 @@ export class SmEditor extends LitElement {
     this.previewRect = null;
     this.pickIndex = null;
     this.fillOnMount = null;
+  }
+
+  // --- session reads ---------------------------------------------------------
+  // The brush state lives in the session slice; these getters keep every
+  // existing template / gesture read (`this.tool`, `this.ink`, …) working
+  // verbatim. There are deliberately no setters — every write is a session
+  // ACTION, so an accidental assignment throws instead of silently forking.
+  get tool() {
+    return session.get().tool;
+  }
+  get ink() {
+    return session.get().ink;
+  }
+  get erase() {
+    return session.get().erase;
+  }
+  get picking() {
+    return session.get().picking;
+  }
+  get recent() {
+    return session.get().recent;
+  }
+  get pencilSize() {
+    return session.get().pencilSize;
+  }
+  get cornerRadius() {
+    return session.get().cornerRadius;
+  }
+  get fillReplace() {
+    return session.get().fillReplace;
+  }
+  get fillAllTiles() {
+    return session.get().fillAllTiles;
+  }
+  get pickerOpen() {
+    return session.get().pickerOpen;
   }
 
   // --- plain fields: the pixel buffer, gesture state, on-screen geometry -----
@@ -262,6 +285,7 @@ export class SmEditor extends LitElement {
   #cursorCtx = null;
 
   #pickerBuilt = false; // the dialog's 256 cells exist once it has been opened
+  #cursorState = null; // last-seen session keys the cursor overlay depends on
   #stateHooksDone = false; // the dev hooks' reactive half ran (willUpdate)
   #drawHooksDone = false; // the dev hooks' canvas half ran (updated)
 
@@ -280,12 +304,6 @@ export class SmEditor extends LitElement {
   }
   get #radiusMax() {
     return maxCornerRadius(this.tileW || 1, this.tileH || 1);
-  }
-  #clampBrush(n) {
-    return Math.max(1, Math.min(this.#brushMax, Math.round(Number(n) || 1)));
-  }
-  #clampRadius(n) {
-    return Math.max(0, Math.min(this.#radiusMax, Math.round(Number(n) || 0)));
   }
 
   // --- lifecycle -------------------------------------------------------------
@@ -312,12 +330,10 @@ export class SmEditor extends LitElement {
       changed.has('face');
 
     // A tile resize can leave a persisted pencil size / corner radius past the
-    // new bounds.
+    // new bounds — the clamp itself lives in the session action.
     if (changed.has('tileW') || changed.has('tileH')) {
-      this.pencilSize = this.#clampBrush(this.pencilSize);
-      this.cornerRadius = this.#clampRadius(this.cornerRadius);
+      session.clampTools(this.#brushMax, this.#radiusMax);
     }
-    if (!this.ink && this.palette?.length) this.ink = { ...this.palette[0].rgb };
 
     // The re-mount, relocated: a new face / tile geometry means a fresh working
     // buffer (+ its ImageData view) and no gesture carried over from the old one.
@@ -359,14 +375,26 @@ export class SmEditor extends LitElement {
     if (!geom && changed.has('guides')) this.#drawGuidesLayer();
 
     // The cursor overlay is canvas-drawn, so the state the template can't express
-    // has to be re-stroked here.
+    // has to be re-stroked here. Session keys don't appear in lit's `changed`
+    // map (they aren't reactive properties), so diff a snapshot of the keys the
+    // overlay depends on instead.
+    const s = session.get();
+    const cs = this.#cursorState;
     if (
-      changed.has('tool') ||
-      changed.has('erase') ||
-      changed.has('picking') ||
-      changed.has('pencilSize') ||
-      changed.has('cornerRadius')
+      !cs ||
+      cs.tool !== s.tool ||
+      cs.erase !== s.erase ||
+      cs.picking !== s.picking ||
+      cs.pencilSize !== s.pencilSize ||
+      cs.cornerRadius !== s.cornerRadius
     ) {
+      this.#cursorState = {
+        tool: s.tool,
+        erase: s.erase,
+        picking: s.picking,
+        pencilSize: s.pencilSize,
+        cornerRadius: s.cornerRadius,
+      };
       this.#redrawCursorLayer();
     }
 
@@ -495,7 +523,7 @@ export class SmEditor extends LitElement {
   // part of the first render, not a second update scheduled from updated()), the
   // half that paints a canvas overlay runs after the geometry is laid out.
   #applyStateHooks() {
-    if (this.previewCursor) this.pencilSize = this.#clampBrush(this.previewCursor);
+    if (this.previewCursor) session.setPencilSize(this.previewCursor, this.#brushMax);
     // ?pick=N runs before the ?palette=1 open (so the dialog reflects it) and
     // before ?fill (so ?pick=N&fill=x,y fills with palette color N).
     if (this.pickIndex != null && this.palette256?.[this.pickIndex]) {
@@ -505,17 +533,15 @@ export class SmEditor extends LitElement {
     if (this.previewRect) {
       // Modeled as an active drag with no captured pointer, so the preview survives
       // a re-layout and pressing ESC still demonstrates cancel.
-      this.tool = 'rect';
+      session.setTool('rect');
       if (this.previewRect.r != null) {
-        this.cornerRadius = this.#clampRadius(this.previewRect.r);
+        session.setCornerRadius(this.previewRect.r, this.#radiusMax);
       }
     }
     if (this.fillOnMount) {
-      this.tool = 'fill';
-      this.erase = false; // match every tool-select handler: a fill paints, not erases
-      this.picking = false;
-      this.fillReplace = !!this.fillOnMount.replace;
-      this.fillAllTiles = !!this.fillOnMount.all;
+      session.setTool('fill'); // a fill paints, not erases (clears erase/picking)
+      session.setFillReplace(this.fillOnMount.replace);
+      session.setFillAllTiles(this.fillOnMount.all);
     }
   }
 
@@ -748,18 +774,14 @@ export class SmEditor extends LitElement {
         <vf-checkbox
           .checked=${live(this.fillReplace)}
           title="recolor every matching texel on this tile (not just the contiguous region)"
-          @vf-change=${(e) => {
-            this.fillReplace = !!e.detail.checked;
-          }}
+          @vf-change=${(e) => session.setFillReplace(e.detail.checked)}
           >replace</vf-checkbox
         >
         <vf-checkbox
           .checked=${live(this.fillAllTiles)}
           ?disabled=${!this.fillReplace}
           title="replace the clicked color across every tile in the atlas"
-          @vf-change=${(e) => {
-            this.fillAllTiles = !!e.detail.checked;
-          }}
+          @vf-change=${(e) => session.setFillAllTiles(e.detail.checked)}
           >all tiles</vf-checkbox
         >
       `;
@@ -820,9 +842,7 @@ export class SmEditor extends LitElement {
         width="244"
         height="266"
         .open=${this.pickerOpen}
-        @vf-close=${() => {
-          this.pickerOpen = false;
-        }}
+        @vf-close=${() => session.closePicker()}
       >
         <vf-grid
           class="editor-picker-grid"
@@ -843,7 +863,7 @@ export class SmEditor extends LitElement {
                 title=${p.css}
                 @click=${() => {
                   this.#selectColor(p.rgb);
-                  this.pickerOpen = false;
+                  session.closePicker();
                 }}
               ></vf-swatch>`
           )}
@@ -853,55 +873,37 @@ export class SmEditor extends LitElement {
   }
 
   // --- ink + tool selection ---------------------------------------------------
-  #ensureInk() {
-    if (!this.ink && this.palette?.length) this.ink = { ...this.palette[0].rgb };
-  }
-
-  // MRU ink recency: `recent[0]` is the current ink; slots 1..RECENT_SLOTS are the
-  // "last used colors" row. Updated on every actual pick (dialog, eyedrop, recency
-  // swatch) — never by the untouched mount default.
-  #touchRecent(c) {
-    const key = rgbKey(c);
-    this.recent = [
-      { r: c.r, g: c.g, b: c.b },
-      ...this.recent.filter((x) => rgbKey(x) !== key),
-    ].slice(0, RECENT_SLOTS + 1);
-  }
+  // The pick/tool semantics themselves (MRU recency, flag clearing, clamping)
+  // live in the session slice's actions; these wrappers add only what is
+  // element-local (the picker-built latch, cancelling an in-flight gesture).
 
   // The single path every color pick funnels through (picker dialog, in-sprite
   // eyedrop, recency swatch): make `color` the ink, clear the erase/eyedropper
   // flags, and promote it to the top of the recency list.
   #selectColor(color) {
-    this.ink = { r: color.r, g: color.g, b: color.b };
-    this.erase = false;
-    this.picking = false;
-    this.#touchRecent(this.ink);
+    session.pickColor(color);
   }
 
   #selectTransparent = () => {
-    this.erase = true;
-    this.picking = false;
+    session.selectTransparent();
   };
 
   #openPicker = () => {
     this.#pickerBuilt = true;
-    this.pickerOpen = true;
+    session.openPicker();
     this.requestUpdate(); // #pickerBuilt is a plain latch — ask for the render
   };
 
   // Abandon any in-flight rect (switching tool mid-drag discards the box, matching
-  // the B/R/G keys), select the tool, return to painting (out of eraser /
-  // eyedropper), and ensure an ink.
+  // the B/R/G keys), then select the tool — the action returns to painting (out
+  // of eraser / eyedropper); the ink is always set.
   #switchTool(tool) {
     this.#cancelRect();
-    this.tool = tool;
-    this.erase = false;
-    this.picking = false;
-    this.#ensureInk();
+    session.setTool(tool);
   }
 
   #armEyedropper() {
-    this.picking = true;
+    session.armEyedropper();
   }
 
   // --- control handlers -------------------------------------------------------
@@ -911,12 +913,12 @@ export class SmEditor extends LitElement {
   }
 
   #onPencilSize(e) {
-    this.pencilSize = this.#clampBrush(e.detail.value);
+    session.setPencilSize(e.detail.value, this.#brushMax);
     this.#drawCursor(this.#hoverTexel); // reflect the new footprint immediately
   }
 
   #onCornerRadius(e) {
-    this.cornerRadius = this.#clampRadius(e.detail.valueAsNumber);
+    session.setCornerRadius(e.detail.valueAsNumber, this.#radiusMax);
     if (this.#rectDragging) this.#drawRectPreview(); // re-round the in-flight box live
   }
 
@@ -974,15 +976,11 @@ export class SmEditor extends LitElement {
     // ESC, so B/R/G can't leave a half-dragged rect wired to the old pointer.
     if (this.#rectDragging && (k === 'b' || k === 'r' || k === 'g')) this.#cancelRect();
     if (k === 'b' || k === 'r' || k === 'g') {
-      this.tool = k === 'b' ? 'pencil' : k === 'r' ? 'rect' : 'fill';
-      this.erase = false;
-      this.picking = false;
-      this.#ensureInk();
+      session.setTool(k === 'b' ? 'pencil' : k === 'r' ? 'rect' : 'fill');
     } else if (k === 'i') {
-      this.picking = true;
+      session.armEyedropper();
     } else if (k === 'e') {
-      this.erase = true;
-      this.picking = false;
+      session.selectTransparent();
     } else {
       return;
     }
@@ -1236,8 +1234,7 @@ export class SmEditor extends LitElement {
     const i = (py * this.tileW + px) * 4;
     if (work[i + 3] === 0) {
       // Sampling empty space picks the transparent ink (clear color).
-      this.erase = true;
-      this.picking = false;
+      session.selectTransparent();
     } else {
       // Route through #selectColor so an off-palette (imported) sample becomes the
       // ink (and joins the recency row) just like any pick.

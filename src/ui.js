@@ -9,10 +9,10 @@
 //
 // Rendered with `lit-html` into the three containers index.html already ships
 // (#topbar, #stage, #app): one `update()` re-renders the chrome for whatever the
-// current state says, and lit diffs. The state it reads is `state` (owned by
-// main.js — the render toggles) plus the local `stats`/`error` pair the build
-// pipeline pushes in, so `setStats` / `setError` / `syncControls` are all just
-// "assign, then update()" rather than three hand-rolled DOM rebuilds.
+// current state says, and lit diffs. The state it reads is the `prefs` slice
+// (the render toggles, routed back through their actions) and the `build` slice
+// (stats + errors, written by the rebuild pipeline) — this module subscribes to
+// both, so a slice change re-renders with no push-in methods.
 //
 // LIGHT DOM throughout: no component of our own, no shadow root, so style.css's
 // `.stage-*` / `.topbar-*` / `.drop-overlay` rules and `capture.sh dom` keep
@@ -25,7 +25,8 @@ import { live } from 'lit/directives/live.js';
 import { ifDefined } from 'lit/directives/if-defined.js';
 import { createRef, ref } from 'lit/directives/ref.js';
 import { fileToImageData } from './image-io.js';
-import { flip } from './lib/ingest.js';
+import { prefs } from './state/prefs.js';
+import { build } from './state/build.js';
 import './icons.js'; // registers <sp-icon-alert> (used by the warning rows below)
 
 // A caption in the kit's own faces (so it scales with the components): the
@@ -43,26 +44,10 @@ const warnRow = (msg) =>
     <sp-icon-alert></sp-icon-alert>${label(msg, { face: 'body' })}
   </div>`;
 
-// Mirror a tile for display (an axis-flip in image space), so a mirror-derived
-// face shows the way we actually render it. `axis` is 'x' (horizontal) or 'y'.
-// Exported so main.js can seed the tile editor's canvas with the same mirrored
-// image the onion-skin shows. A thin wrapper over the pipeline's `flip` blit so
-// there is one mirror implementation. (In practice MIRROR_AXIS is always 'x'.)
-export function mirrorImage(img, axis) {
-  return flip(img, axis === 'x', axis === 'y');
-}
-
 const dragHasFiles = (e) =>
   !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
 
-export function createUI({
-  samples,
-  state,
-  onSample,
-  onAtlas,
-  onOptionChange,
-  onDownload,
-}) {
+export function createUI({ samples, onSample, onAtlas, onDownload }) {
   const app = document.getElementById('app');
   const topbar = document.getElementById('topbar');
   const stage = document.getElementById('stage');
@@ -72,11 +57,6 @@ export function createUI({
   const fileInput = /** @type {import('lit/directives/ref.js').Ref<HTMLInputElement>} */ (
     createRef()
   );
-
-  // What the stats overlay shows. `error` (a failed decode / unusable sample)
-  // REPLACES the readout until the next successful build pushes stats in.
-  let stats = { dims: null, voxels: 0, triangles: 0, warnings: [] };
-  let error = null;
 
   // --- header strip: brand (left) + atlas actions (right) --------------------
   // "pick atlas" is a standalone vf-menu (the classic menu-button pattern): its
@@ -107,24 +87,20 @@ export function createUI({
 
   // --- stage overlays: render toggles (bottom-right) + live stats (corner) ----
   // The toggles are System 7 checkboxes on a small floating white panel; they
-  // are CONTROLLED — bound down from `state`, routed back up through vf-change.
-  // `live()` diffs against the checkbox's own current state, not the last
-  // rendered value, so a re-render can never skip a needed re-sync.
+  // are CONTROLLED — bound down from the prefs slice, routed back up through its
+  // actions on vf-change. `live()` diffs against the checkbox's own current
+  // state, not the last rendered value, so a re-render can never skip a needed
+  // re-sync.
   const stageOverlays = () => html`
     <div class="stage-controls">
       <vf-checkbox
-        .checked=${live(!!state.lowpoly)}
-        @vf-change=${(e) => {
-          state.lowpoly = !!e.detail.checked;
-          onOptionChange();
-        }}
+        .checked=${live(!!prefs.get().lowpoly)}
+        @vf-change=${(e) => prefs.setLowpoly(e.detail.checked)}
         >smooth slopes</vf-checkbox
       >
       <vf-checkbox
-        .checked=${live(!!state.autoRotate)}
-        @vf-change=${(e) => {
-          state.autoRotate = !!e.detail.checked;
-        }}
+        .checked=${live(!!prefs.get().autoRotate)}
+        @vf-change=${(e) => prefs.setAutoRotate(e.detail.checked)}
         >auto rotate</vf-checkbox
       >
     </div>
@@ -138,23 +114,25 @@ export function createUI({
     </div>
   `;
 
-  // The readout body. An error stands alone; otherwise the measured lines over
-  // any build warnings. Empty (the no-views case) leaves the panel with nothing
-  // but lit's comment markers, which `.stage-stats:empty` still counts as empty.
+  // The readout body, off the build slice. An error stands alone; otherwise the
+  // measured lines over any build warnings. Empty (the no-views case) leaves the
+  // panel with nothing but lit's comment markers, which `.stage-stats:empty`
+  // still counts as empty.
   function statsRows() {
-    if (error) return warnRow(error);
+    const b = build.get();
+    if (b.error) return warnRow(b.error);
     const rows = [];
     // Tiles are locked square, so a well-formed sheet carves to an N³ grid — show the
     // single edge in px. A non-square (warned) load still reports its full nx×ny×nz.
-    if (stats.dims) {
-      const { nx, ny, nz } = stats.dims;
+    if (b.dims) {
+      const { nx, ny, nz } = b.dims;
       rows.push(
         statLine('grid', nx === ny && ny === nz ? `${nx}px` : `${nx}×${ny}×${nz}`)
       );
     }
-    if (stats.voxels) rows.push(statLine('voxels', stats.voxels));
-    if (stats.triangles) rows.push(statLine('tris', stats.triangles));
-    for (const w of stats.warnings || []) rows.push(warnRow(w));
+    if (b.voxels) rows.push(statLine('voxels', b.voxels));
+    if (b.triangles) rows.push(statLine('tris', b.triangles));
+    for (const w of b.warnings || []) rows.push(warnRow(w));
     return rows;
   }
 
@@ -174,6 +152,9 @@ export function createUI({
     app
   );
   update();
+
+  // A slice change re-renders the chrome; unsubscribed via dispose() on HMR.
+  const unsubs = [prefs.subscribe(update), build.subscribe(update)];
 
   // --- event plumbing --------------------------------------------------------
   // A fresh 3x2 sheet of empty (transparent) square 40×40 tiles to draw from
@@ -200,7 +181,7 @@ export function createUI({
     try {
       onAtlas(await fileToImageData(f));
     } catch (err) {
-      setError(`Couldn't read "${f.name}" as an image: ${err.message}`);
+      build.setError(`Couldn't read "${f.name}" as an image: ${err.message}`);
     }
   }
 
@@ -235,29 +216,13 @@ export function createUI({
     onSample(samples[i]);
   }
 
-  // The render toggles are bound from `state`; re-render to re-assert them.
-  function syncControls() {
-    update();
-  }
-
-  function setStats(model) {
-    stats = model;
-    error = null; // a successful build clears any standing error
-    update();
-  }
-
-  // Show a one-off error (e.g. a failed image decode) in the stats overlay; it
-  // persists until the next successful build overwrites it.
-  function setError(msg) {
-    error = msg;
-    update();
-  }
-
   return {
     selectSample,
-    syncControls,
-    setStats,
-    setError,
     editorDock,
+    // HMR teardown: drop this instance's slice subscriptions so a re-executed
+    // main.js doesn't leave the old chrome re-rendering forever.
+    dispose() {
+      for (const u of unsubs) u();
+    },
   };
 }

@@ -5,23 +5,16 @@ import { buildVoxels } from './lib/pipeline.js';
 import { voxelMesh } from './lib/mesh.js';
 import { wedgeMesh } from './lib/wedge-mesh.js';
 import { SAMPLES } from './lib/sprite-data.js';
-import {
-  sliceAtlas,
-  blitTile,
-  cellOf,
-  resizeAtlas,
-  clampTile,
-  isBlank,
-  validateSheet,
-  TILE_MIN,
-  TILE_MAX,
-} from './lib/atlas.js';
-import { VIEW_NAMES, VIEW_OPPOSITE, MIRROR_AXIS } from './lib/views.js';
-import { replaceColorInRect } from './lib/fill.js';
+import { clampTile, validateSheet, TILE_MIN, TILE_MAX } from './lib/atlas.js';
+import { VIEW_NAMES } from './lib/views.js';
 import { PENCIL_PALETTE, PALETTE_256 } from './lib/constants.js';
-import { faceGuides } from './lib/guides.js';
 import { urlToImageData, imageDataToBlob, downloadBlob } from './image-io.js';
-import { createUI, mirrorImage } from './ui.js';
+import { doc } from './state/doc.js';
+import { session } from './state/session.js';
+import { prefs } from './state/prefs.js';
+import { build } from './state/build.js';
+import { editorViewModel } from './state/derive.js';
+import { createUI } from './ui.js';
 import './components/sm-editor.js'; // registers <sm-editor>
 
 // --------------------------------------------------------------------------
@@ -79,31 +72,18 @@ ground.receiveShadow = true;
 scene.add(ground);
 
 // --------------------------------------------------------------------------
-// State + rebuild
+// Boot params + prefs seeding
 // --------------------------------------------------------------------------
-const state = {
-  views: {}, // name -> {width,height,data} | null
-  lowpoly: true, // additive 45° wedges over same-color staircases (default on)
-  transforms: {}, // per-view reorientation (rot/flip)
-  autoRotate: true,
-  atlasImage: null, // the current sprite sheet (ImageData) — canonical source
-  atlasWarnings: [],
-  // Rounded tile geometry from the last sliceAtlas — the editor writes tiles back
-  // into atlasImage using these, so it must never re-derive them from dimensions.
-  tileW: 0,
-  tileH: 0,
-  cols: 0,
-  rows: 0,
-};
-
-let current = null; // THREE.Object3D in the scene
-let frameNext = true; // reframe camera on next build (sample/mode change)
-
-// Parse the query string once — these flags never change at runtime.
+// Parse the query string once — these flags never change at runtime. The prefs
+// params are applied HERE, before any store subscription exists, so seeding
+// them can't fire a phantom rebuild.
 const params = new URLSearchParams(location.search);
 const FLAT = params.get('flat') === '1';
 const DIAG = params.get('diag') === '1';
 const RENDER_SCALE = 0.5; // low-res render, crisply upscaled by CSS
+if (params.get('lowpoly') != null) prefs.setLowpoly(params.get('lowpoly') === '1');
+if (params.get('rotate') === '0') prefs.setAutoRotate(false);
+
 // Dev hook: ?edit=<view> auto-opens the tile editor on that face after the first
 // build (handy for screenshots / the manual test checklist).
 let pendingEditFace = null;
@@ -153,9 +133,16 @@ function frameObject(obj) {
   controls.update();
 }
 
+// --------------------------------------------------------------------------
+// Rebuild — a subscriber of the doc (change + live) and prefs slices
+// --------------------------------------------------------------------------
+let current = null; // THREE.Object3D in the scene
+let frameNext = true; // reframe camera on next build (sample/mode change)
+
 function rebuild() {
-  const opts = { transforms: state.transforms };
-  const provided = VIEW_NAMES.filter((n) => state.views[n]);
+  const d = doc.get();
+  const opts = { transforms: d.transforms };
+  const provided = VIEW_NAMES.filter((n) => d.views[n]);
 
   // Carry the spin forward: a live tile edit (or an option toggle) rebuilds the
   // mesh in place, and a fresh mesh starts at rotation 0 — without this the
@@ -174,28 +161,21 @@ function rebuild() {
     current = null;
   }
 
-  let stats = { dims: null, voxels: 0, triangles: 0, warnings: [] };
   if (provided.length === 0) {
-    ui.setStats(stats);
+    build.setStats({ dims: null, voxels: 0, triangles: 0, warnings: [] });
     requestRender(); // the old mesh (if any) was just removed — redraw the empty scene
     return;
   }
 
-  /** @type {Record<string, ImageData|null>} */
+  /** @type {Record<string, {width:number,height:number,data:Uint8ClampedArray}|null>} */
   const rawViews = {};
-  for (const n of VIEW_NAMES) rawViews[n] = state.views[n] || null;
+  for (const n of VIEW_NAMES) rawViews[n] = d.views[n] || null;
 
   const result = buildVoxels(rawViews, opts);
-  current = state.lowpoly
+  const lowpoly = prefs.get().lowpoly;
+  current = lowpoly
     ? wedgeMesh(result, { flat: FLAT })
     : voxelMesh(result, { greedy: true }); // greedy meshing is always on
-  stats = {
-    dims: result.dims,
-    voxels: result.solidCount,
-    triangles: current.userData.triangles,
-    warnings: result.warnings,
-  };
-  stats.warnings = [...state.atlasWarnings, ...(stats.warnings || [])];
   if (DIAG && current?.geometry) {
     const geo = current.geometry; // captured: current may change before load resolves
     import('./lib/diag.js').then(({ computeDiag }) => {
@@ -206,8 +186,8 @@ function rebuild() {
       // Tag the mode: only the low-poly (wedge) mesh is guaranteed watertight. The
       // greedy-voxel mesh (lowpoly off) deliberately leaves its step-riser T-junctions
       // unrepaired, so nonzero boundary/odd edges there are expected artifacts, not holes.
-      const mode = state.lowpoly ? 'lowpoly' : 'voxel';
-      document.title = `DIAG ${mode} ` + JSON.stringify(computeDiag(geo));
+      document.title =
+        `DIAG ${lowpoly ? 'lowpoly' : 'voxel'} ` + JSON.stringify(computeDiag(geo));
     });
   }
   scene.add(current);
@@ -217,115 +197,49 @@ function rebuild() {
   } else if (prevRotY != null) {
     current.rotation.y = prevRotY;
   }
-  ui.setStats(stats);
+  build.setStats({
+    dims: result.dims,
+    voxels: result.solidCount,
+    triangles: current.userData.triangles,
+    warnings: [...d.atlasWarnings, ...(result.warnings || [])],
+  });
   requestRender(); // the mesh changed — redraw once even if the camera is idle
 }
 
-// Re-slice the canonical atlas into face views (at its current tile size) and
-// rebuild the mesh. Does NOT touch drawing mode — callers decide whether an open
-// editor survives: a tile resize keeps it (re-mounting at the new size), a
-// wholesale sheet swap closes it first (sliceAndBuild).
-function refreshFromAtlas(reframe) {
-  const sliced = sliceAtlas(state.atlasImage);
-  state.views = sliced.views;
-  state.atlasWarnings = sliced.warnings;
-  state.tileW = sliced.tileW;
-  state.tileH = sliced.tileH;
-  state.cols = sliced.cols;
-  state.rows = sliced.rows;
-  if (reframe) frameNext = true;
-  rebuild();
-}
-
-// Load a NEW sheet (sample / dropped atlas / blank): it replaces every view
-// wholesale, so any pending live stroke from the old sheet is now stale — drop
-// it, refresh, then re-mount the always-on editor on the active face (a pending
-// ?edit= face, else whatever was open, else the default).
-function sliceAndBuild(reframe) {
-  if (!state.atlasImage) return;
-  dropLive();
-  refreshFromAtlas(reframe);
-  // Dev hook: ?tile=WxH resizes the fresh sheet once (the capture tool can't click
-  // the stepper) before the editor opens, so a headless shot shows the result.
-  if (pendingTileResize) {
-    const { w, h } = pendingTileResize;
-    pendingTileResize = null;
-    resizeTiles(w, h);
+// Structural doc changes (load / resize / replace-all) and the rAF-coalesced
+// live channel both rebuild; a lowpoly toggle rebuilds too (autoRotate doesn't).
+const unsubDocChange = doc.subscribe(() => rebuild());
+const unsubDocLive = doc.onLive(() => rebuild());
+let lastLowpoly = prefs.get().lowpoly;
+const unsubPrefs = prefs.subscribe((p) => {
+  if (p.lowpoly !== lastLowpoly) {
+    lastLowpoly = p.lowpoly;
+    rebuild();
   }
-  const face = pendingEditFace || editingName || DEFAULT_FACE;
-  pendingEditFace = null;
-  enterDrawing(face);
-}
+});
 
 // --------------------------------------------------------------------------
 // Tile editor wiring (see the "Drawing editor" section of README.md and the
 // header comment of components/sm-editor.js — docs/drawing-editor-plan.md is a
 // superseded early design, kept for history only).
 // --------------------------------------------------------------------------
-// The tools panel (right half) always shows the editor for one face. Boot and
-// sheet-swaps fall back to this face; the tabs switch which face is active. Tabs
-// are laid out as mirror pairs (left/right, front/back, top/bottom).
+// The tools panel (left half) always shows the editor for one face. Boot and
+// sheet-swaps fall back to this face; the face picker switches which is active,
+// laid out as mirror pairs (left/right, front/back, top/bottom).
 const DEFAULT_FACE = 'left';
 const TAB_ORDER = ['left', 'right', 'front', 'back', 'top', 'bottom'];
-
-// Coalesce live edits to at most one voxel rebuild per animation frame. The
-// editor's own 2D canvas repaints per pixel; only the (heavier) blit + preview +
-// mesh rebuild is throttled here.
-let liveRAF = 0;
-let livePending = null; // { name, tile } awaiting flush
-function flushLive() {
-  liveRAF = 0;
-  const p = livePending;
-  livePending = null;
-  if (!p) return;
-  const cell = cellOf(p.name);
-  if (cell && state.atlasImage) {
-    blitTile(state.atlasImage, p.tile, cell.c * state.tileW, cell.r * state.tileH);
-  }
-  rebuild();
-}
-
-// Discard any pending live rebuild without flushing it — used before a wholesale
-// sheet swap so a stale tile can't blit into a freshly loaded atlas (which may
-// have a different tile size) on the next frame.
-function dropLive() {
-  if (liveRAF) {
-    cancelAnimationFrame(liveRAF);
-    liveRAF = 0;
-  }
-  livePending = null;
-}
-
-// Apply one live/committed tile edit. `wasDerived` = the face had no independent
-// art when the editor opened; if the user drew nothing (`!dirty`) it stays that
-// way (mirror-derived or empty). Otherwise the working buffer becomes the face's
-// real art — or null again if fully erased, reverting it to mirror-derived.
-function applyTileEdit(name, wasDerived, tile, dirty) {
-  if (wasDerived && !dirty) return; // untouched derived/empty face: leave as-is
-  state.views[name] = isBlank(tile) ? null : tile;
-  livePending = { name, tile };
-  if (!liveRAF) liveRAF = requestAnimationFrame(flushLive);
-}
 
 // --- editor session -------------------------------------------------------
 // ONE <sm-editor>, created on the first build and never destroyed. A face swap,
 // a tile resize and an all-tiles replace are property assignments — the element
-// re-derives its working buffer in willUpdate — so the brush selection (tool,
-// ink, recency, per-tool options) simply persists because the element does.
-// That is what retires the old caller-owned `brush` bag and the focus-restore
-// hack the per-swap re-mount used to need.
+// re-derives its working buffer in willUpdate — and the brush state itself
+// (tool, ink, recency, per-tool options) lives in the session slice, which
+// outlives even the element.
 let editorEl = null;
-let editingName = null;
 // Whether the face the editor is currently showing had no independent art when
 // it was selected — read by the sm-live handler (which lives on the dock, not in
 // a per-mount closure).
 let editingWasDerived = false;
-
-const freshTile = () => ({
-  width: state.tileW,
-  height: state.tileH,
-  data: new Uint8ClampedArray(state.tileW * state.tileH * 4),
-});
 
 // Build the editor element once and dock it. Everything here is either constant
 // for the session or a one-shot dev hook consumed on its first update.
@@ -354,110 +268,60 @@ function ensureEditor() {
 }
 
 // Point the persistent editor at a face. Called by a face pick, a sheet swap, a
-// tile resize, an all-tiles replace, and boot.
+// tile resize, an all-tiles replace, and boot. The face lands in the session
+// slice (the canonical "which face" record); the per-face view model — working
+// tile, onion-skin, alignment guides — is a pure derivation over the doc.
 function showFace(name) {
-  const existing = state.views[name] || null;
-  editingName = name;
-  editingWasDerived = existing == null;
-  // Onion-skin: the opposite face's OWN art, mirrored, faded behind the canvas —
-  // only when it has independent art (a derived opposite is just this face's own
-  // mirror, so it would overlay identically and add nothing). A derived face
-  // opens with an empty canvas and relies on this faded mirror as its reference.
-  const oppArt = state.views[VIEW_OPPOSITE[name]];
+  session.selectFace(name);
+  const d = doc.get();
+  const vm = editorViewModel(d, name);
+  editingWasDerived = vm.wasDerived;
   Object.assign(ensureEditor(), {
     face: name,
-    tile: existing || freshTile(),
-    tileW: state.tileW,
-    tileH: state.tileH,
-    mirrorBehind: oppArt ? mirrorImage(oppArt, MIRROR_AXIS) : null,
-    // Hairline extent rules from the orthogonal faces sharing each of this face's
-    // axes — where a painted pixel can survive the (now strict) carve.
-    guides: faceGuides(state.views, name, state.tileW, state.tileH),
+    tile: vm.tile,
+    tileW: d.tileW,
+    tileH: d.tileH,
+    mirrorBehind: vm.mirrorBehind,
+    guides: vm.guides,
   });
-}
-
-// Fill with BOTH "replace" and "all tiles" on: replace every `target` texel with
-// `fill` across all six tiles, then re-slice + rebuild + re-point the editor at the
-// same face so its working buffer reflects the replaced current tile. `target`/`fill`
-// are color keys ({transparent:true} | {r,g,b}). Scoped to the tiled region (the
-// top-left cols*tileW × rows*tileH block — the six tiles are contiguous there) rather
-// than the whole ImageData, so a non-divisible sheet's remainder pixels (outside every
-// tile, invisible to the carve but present in a download) are left untouched. Any
-// un-flushed live stroke is folded in first (same guard as resizeTiles) so the replace
-// sees the latest pixels and none are dropped.
-function replaceColorAllTiles(target, fill) {
-  if (!state.atlasImage) return;
-  if (liveRAF) {
-    cancelAnimationFrame(liveRAF);
-    flushLive();
-  }
-  const { data, width, height } = state.atlasImage;
-  const changed = replaceColorInRect(
-    data,
-    width,
-    height,
-    0,
-    0,
-    state.cols * state.tileW,
-    state.rows * state.tileH,
-    target,
-    fill
-  );
-  if (!changed) return;
-  const face = editingName;
-  refreshFromAtlas(false); // re-slice all views + rebuild the mesh (keep the camera)
-  if (face) showFace(face); // re-point at the same face, now on the replaced pixels
-}
-
-// Resize every tile from the editor's tile-size stepper. Tiles are locked SQUARE, so
-// the editor always calls this with newW===newH: it resizes the WHOLE atlas so every
-// face moves together, then re-slices and re-points the editor at the same face at the
-// new size. (The number field keeps focus by itself now — the element it lives in is
-// never unmounted.) It CENTERS the art on every axis (anchor 'center') so the sprite
-// stays put in the canvas as the tile grows or shrinks instead of hugging a corner — a
-// square resize stays in registration (the whole solid just translates), though
-// centering the vertical axis means a ground-rested sprite no longer pins to y=0 and
-// floats up as the tile grows (accepted: the author wanted centered artwork). The
-// ?tile / ?tile=WxH dev hook drives this same path; an asymmetric pair still shears the
-// shared depth axis and warns.
-/** @param {number} newW @param {number} newH @param {'origin'|'center'} [anchor] */
-function resizeTiles(newW, newH, anchor = 'center') {
-  if (!state.atlasImage) return;
-  const w = clampTile(newW);
-  const h = clampTile(newH);
-  if (w === state.tileW && h === state.tileH) return; // no-op (e.g. ± at a bound)
-  // Fold any un-flushed live stroke into the canonical sheet BEFORE we rebuild it
-  // at a new size, so the last edit isn't dropped or blitted at the wrong scale.
-  if (liveRAF) {
-    cancelAnimationFrame(liveRAF);
-    flushLive();
-  }
-  state.atlasImage = resizeAtlas(state.atlasImage, w, h, { anchor });
-  const face = editingName;
-  refreshFromAtlas(false); // keep the camera — the world size is normalized anyway
-  if (face) showFace(face); // re-point at the new size (same face, same element)
 }
 
 // Select a face for editing. Called by a face pick, a sheet swap, a tile resize,
 // and boot.
 function enterDrawing(name) {
-  if (!state.atlasImage || !state.tileW || !state.tileH) return;
+  const d = doc.get();
+  if (!d.atlasImage || !d.tileW || !d.tileH) return;
   showFace(name);
 }
 
+// Load a NEW sheet (sample / dropped atlas / blank): the doc drops any pending
+// live stroke from the old sheet, re-slices, and notifies (one rebuild); then
+// the always-on editor re-points at the active face (a pending ?edit= face,
+// else whatever was open, else the default).
+function loadSheet(imageData, transforms) {
+  frameNext = true;
+  doc.loadAtlas(imageData, transforms);
+  // Dev hook: ?tile=WxH resizes the fresh sheet once (the capture tool can't click
+  // the stepper) before the editor opens, so a headless shot shows the result.
+  if (pendingTileResize) {
+    const { w, h } = pendingTileResize;
+    pendingTileResize = null;
+    doc.resizeTiles(w, h);
+  }
+  const face = pendingEditFace || session.get().face || DEFAULT_FACE;
+  pendingEditFace = null;
+  enterDrawing(face);
+}
+
 function onDownload() {
-  if (!state.atlasImage) return;
+  if (!doc.get().atlasImage) return;
   // Fold any un-flushed live stroke into the canonical sheet BEFORE snapshotting
   // it — applyTileEdit only schedules the blit via rAF (paused in a backgrounded
   // tab), so without this drain the last stroke could be dropped from atlas.png.
-  // Same guard as resizeTiles / replaceColorAllTiles, the sibling canonical consumers.
-  if (liveRAF) {
-    cancelAnimationFrame(liveRAF);
-    flushLive();
-  }
-  imageDataToBlob(state.atlasImage)
+  doc.drain();
+  imageDataToBlob(doc.get().atlasImage)
     .then((b) => downloadBlob(b, 'atlas.png'))
-    .catch((err) => ui.setError(`Download failed: ${err.message}`));
+    .catch((err) => build.setError(`Download failed: ${err.message}`));
 }
 
 // --------------------------------------------------------------------------
@@ -465,36 +329,29 @@ function onDownload() {
 // --------------------------------------------------------------------------
 const ui = createUI({
   samples: SAMPLES,
-  state,
   onSample: async (sample) => {
     let image;
     try {
       image = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
     } catch (err) {
-      ui.setError(`Couldn't load sample "${sample.name}": ${err.message}`);
+      build.setError(`Couldn't load sample "${sample.name}": ${err.message}`);
       return;
     }
     const bad = validateSheet(image);
     if (bad) {
-      ui.setError(`Sample "${sample.name}" is unusable: ${bad}`);
+      build.setError(`Sample "${sample.name}" is unusable: ${bad}`);
       return;
     }
-    state.atlasImage = image;
-    state.transforms = { ...(sample.transforms || {}) };
-    ui.syncControls();
-    sliceAndBuild(true);
+    loadSheet(image, { ...(sample.transforms || {}) });
   },
   onAtlas: (imageData) => {
     const bad = validateSheet(imageData);
     if (bad) {
-      ui.setError(bad);
+      build.setError(bad);
       return;
     }
-    state.atlasImage = imageData;
-    state.transforms = {};
-    sliceAndBuild(true);
+    loadSheet(imageData, {});
   },
-  onOptionChange: () => rebuild(),
   onDownload,
 });
 
@@ -502,18 +359,27 @@ const ui = createUI({
 // rather than through per-mount callbacks — so the wiring outlives any editor.
 ui.editorDock.addEventListener('sm-live', (e) => {
   const { tile, dirty } = /** @type {CustomEvent} */ (e).detail;
-  applyTileEdit(editingName, editingWasDerived, tile, dirty);
+  // An untouched derived/empty face stays that way (mirror-derived or empty);
+  // otherwise the working buffer becomes the face's real art — or null again if
+  // fully erased, reverting it to mirror-derived (doc.applyTileEdit decides).
+  if (editingWasDerived && !dirty) return;
+  doc.applyTileEdit(session.get().face, tile);
 });
 ui.editorDock.addEventListener('sm-select-face', (e) => {
   enterDrawing(/** @type {CustomEvent} */ (e).detail.face);
 });
 ui.editorDock.addEventListener('sm-resize-tile', (e) => {
   const { size } = /** @type {CustomEvent} */ (e).detail;
-  resizeTiles(size, size);
+  // Tiles are locked SQUARE (the only registering shape) and the resize CENTERS
+  // the art on every axis; re-point the editor at the same face at the new size.
+  // (The number field keeps focus by itself — its element is never unmounted.)
+  if (doc.resizeTiles(size, size)) showFace(session.get().face);
 });
 ui.editorDock.addEventListener('sm-replace-all-tiles', (e) => {
   const { target, fill } = /** @type {CustomEvent} */ (e).detail;
-  replaceColorAllTiles(target, fill);
+  // Fill with BOTH "replace" and "all tiles" on: recolor across the whole sheet,
+  // then re-point the editor so its working buffer reflects the replaced tile.
+  if (doc.replaceAllTiles(target, fill)) showFace(session.get().face);
 });
 
 // --------------------------------------------------------------------------
@@ -549,7 +415,7 @@ canvasResizeObs?.observe(canvas);
 
 let rafId = 0;
 function tick() {
-  if (state.autoRotate && current) {
+  if (prefs.get().autoRotate && current) {
     current.rotation.y += 0.006;
     needsRender = true;
   }
@@ -563,7 +429,9 @@ function tick() {
 
 // Vite HMR re-executes this module's top level on edit without unloading the old
 // instance; without teardown the window resize handler, the ResizeObserver, the
-// controls listener, and the rAF loop would accumulate a duplicate each edit.
+// controls listener, the rAF loop, and this run's store subscriptions would
+// accumulate a duplicate each edit. (The store singletons themselves persist —
+// only the listeners belong to this execution.)
 const hot = /** @type {any} */ (import.meta).hot;
 if (hot) {
   hot.dispose(() => {
@@ -571,12 +439,14 @@ if (hot) {
     canvasResizeObs?.disconnect();
     controls.removeEventListener('change', requestRender);
     cancelAnimationFrame(rafId);
+    unsubDocChange();
+    unsubDocLive();
+    unsubPrefs();
+    ui.dispose();
   });
 }
 
 // Boot with a sample (?sample=<index|name> overrides, handy for testing).
-if (params.get('lowpoly') != null) state.lowpoly = params.get('lowpoly') === '1';
-if (params.get('rotate') === '0') state.autoRotate = false;
 const editParam = params.get('edit');
 if (editParam && VIEW_NAMES.includes(editParam)) pendingEditFace = editParam;
 const tileParam = params.get('tile');

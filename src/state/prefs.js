@@ -1,0 +1,30 @@
+// ---------------------------------------------------------------------------
+// `prefs` slice — the render toggles. Written by the stage controls (and the
+// ?lowpoly / ?rotate boot params); `lowpoly` is read by the rebuilder, and
+// `autoRotate` by the render loop as a plain per-frame read.
+// ---------------------------------------------------------------------------
+
+import { createStore } from './store.js';
+
+export function createPrefs() {
+  const store = createStore({
+    lowpoly: true, // additive 45° wedges over same-color staircases (default on)
+    autoRotate: true,
+  });
+  return {
+    store,
+    get: store.get,
+    subscribe: store.subscribe,
+    /** @param {boolean} v */
+    setLowpoly(v) {
+      store.patch({ lowpoly: !!v });
+    },
+    /** @param {boolean} v */
+    setAutoRotate(v) {
+      store.patch({ autoRotate: !!v });
+    },
+  };
+}
+
+// The app-wide singleton (there is exactly one preferences set per page).
+export const prefs = createPrefs();

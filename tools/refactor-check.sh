@@ -56,11 +56,13 @@ DOMS=(
 mkdir -p "$BASE"
 fails=0
 
+# Two nondeterministic byte sequences pollute an otherwise stable DOM dump:
 # lit stamps its marker comments with a per-page-load random number
-# (<!--?lit$NNNNNNNN$-->) — the one nondeterministic byte sequence in an
-# otherwise stable DOM dump. Normalize it so `diff` only sees real drift.
+# (<!--?lit$NNNNNNNN$-->), and Vite cache-busts module URLs with ?t=<mtime>
+# once a module has been edited under the running dev server. Normalize both so
+# `diff` only sees real drift.
 normalize_dom() {
-  sed -E 's/lit\$[0-9]+\$/lit$N$/g'
+  sed -E -e 's/lit\$[0-9]+\$/lit$N$/g' -e 's/\?t=[0-9]+//g'
 }
 
 if [ "$MODE" = "record" ]; then
