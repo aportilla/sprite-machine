@@ -34,6 +34,12 @@ curl -s -o /dev/null --max-time 3 "$HOST/" || {
   exit 3
 }
 
+# Warm-up: after an edit, Vite transforms modules on first request, and the
+# dynamically-imported diag module can miss the capture's virtual-time budget on
+# a cold graph — the DIAG title then never lands. One throwaway page hit makes
+# every subsequent capture run against a hot module graph.
+tools/capture.sh dom "$HOST/?diag=1&rotate=0" >/dev/null 2>&1 || true
+
 # name|query — every entry pins rotate=0 so the mesh angle is deterministic.
 SHOTS=(
   'default|/?rotate=0'
@@ -56,13 +62,16 @@ DOMS=(
 mkdir -p "$BASE"
 fails=0
 
-# Two nondeterministic byte sequences pollute an otherwise stable DOM dump:
+# Three nondeterministic byte sequences pollute an otherwise stable DOM dump:
 # lit stamps its marker comments with a per-page-load random number
-# (<!--?lit$NNNNNNNN$-->), and Vite cache-busts module URLs with ?t=<mtime>
-# once a module has been edited under the running dev server. Normalize both so
-# `diff` only sees real drift.
+# (<!--?lit$NNNNNNNN$-->); Vite cache-busts module URLs with ?t=<mtime> once a
+# module has been edited under the running dev server; and the ?diag=1 title is
+# written ASYNCHRONOUSLY (a dynamic import racing the virtual-time dump), so
+# whether it landed by dump time is a coin flip. Normalize all three so `diff`
+# only sees real drift — the diag title is asserted semantically below instead.
 normalize_dom() {
-  sed -E -e 's/lit\$[0-9]+\$/lit$N$/g' -e 's/\?t=[0-9]+//g'
+  sed -E -e 's/lit\$[0-9]+\$/lit$N$/g' -e 's/\?t=[0-9]+//g' \
+    -e 's|<title>[^<]*</title>|<title>TITLE</title>|'
 }
 
 if [ "$MODE" = "record" ]; then
@@ -124,12 +133,20 @@ for e in "${DOMS[@]}"; do
 done
 
 # The ?diag=1 self-check writes its result into document.title — assert the
-# watertight report actually ran (mode-tagged) rather than only diffing bytes.
-if ! grep -q 'DIAG lowpoly' "$TMP/diag.dom.html" 2>/dev/null; then
+# watertight report actually runs (mode-tagged). The write is async against the
+# dump timer, so retry a couple of times before calling it a failure.
+diag_ok=0
+for _ in 1 2 3; do
+  if tools/capture.sh dom "$HOST/?diag=1&rotate=0" 2>/dev/null | grep -q 'DIAG lowpoly'; then
+    diag_ok=1
+    break
+  fi
+done
+if [ "$diag_ok" = 1 ]; then
+  echo "ok    diag title reports DIAG lowpoly"
+else
   echo "FAIL  diag title missing 'DIAG lowpoly' (self-check did not run?)"
   fails=$((fails + 1))
-else
-  echo "ok    diag title reports DIAG lowpoly"
 fi
 
 if [ "$fails" -gt 0 ]; then

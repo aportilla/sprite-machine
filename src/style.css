@@ -172,9 +172,16 @@ body {
 sm-topbar,
 sm-stage-controls,
 sm-stats-readout,
-sm-editor {
+sm-editor,
+sm-face-picker,
+sm-tool-strip,
+sm-color-wells,
+sm-color-picker {
   display: contents;
 }
+/* <sm-tool-options> is the exception: it IS the .editor-opts box (the class
+   rule below gives it display:flex), so its children are the bare controls —
+   the exact surface drive.mjs probes. */
 .editor {
   flex: 1;
   min-height: 0;

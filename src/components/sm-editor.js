@@ -107,19 +107,19 @@
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
-import { LitElement, html, nothing } from 'lit';
+import { LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { live } from 'lit/directives/live.js';
-import { ifDefined } from 'lit/directives/if-defined.js';
-import { repeat } from 'lit/directives/repeat.js';
 import { createRef, ref } from 'lit/directives/ref.js';
-import '../icons.js'; // registers the <sp-icon-*> tool glyphs used below
-import { faceIcon } from '../face-icons.js';
 import { roundedRectRows, maxCornerRadius, squareEnd } from '../lib/rect.js';
 import { keyAt, floodFill, replaceColor } from '../lib/fill.js';
-import { rgbKey } from '../lib/color.js';
 import { session, RECENT_SLOTS } from '../state/session.js';
 import { StoreController } from '../state/store-controller.js';
+import './sm-face-picker.js'; // registers <sm-face-picker>
+import './sm-tool-strip.js'; // registers <sm-tool-strip>
+import './sm-color-wells.js'; // registers <sm-color-wells>
+import './sm-tool-options.js'; // registers <sm-tool-options>
+import './sm-color-picker.js'; // registers <sm-color-picker>
 
 // The pixel-canvas CONTAINER fills the draw box below the options bar (CSS
 // flex:1), so the canvas grows to consume whatever height the fixed settings row
@@ -131,14 +131,6 @@ import { StoreController } from '../state/store-controller.js';
 // the sprite art. MIRROR_ALPHA keeps the onion-skin a faint hint.
 const GUIDE_COLOR = 'rgba(120, 200, 255, 0.6)';
 const MIRROR_ALPHA = 0.22;
-
-// The four tool glyphs, as module-constant templates: a TemplateResult diffs to
-// a no-op, where a freshly built element would make lit swap the icon on every
-// re-render.
-const ICON_DRAW = html`<sp-icon-draw></sp-icon-draw>`;
-const ICON_RECT = html`<sp-icon-rectangle></sp-icon-rectangle>`;
-const ICON_FILL = html`<sp-icon-color-fill></sp-icon-color-fill>`;
-const ICON_SAMPLER = html`<sp-icon-sampler></sp-icon-sampler>`;
 
 // Draw the four "furthest extent" hairlines into an OVERLAY context sized to the
 // on-screen canvas (screen-res so the 1px lines stay crisp regardless of scale).
@@ -155,9 +147,6 @@ function drawGuides(g, guides, scale, cssW, cssH) {
   if (vMin != null) g.fillRect(0, vMin * scale, cssW, T); // top extent
   if (vMax != null) g.fillRect(0, (vMax + 1) * scale - T, cssW, T); // bottom extent
 }
-
-const toHex2 = (n) => n.toString(16).padStart(2, '0');
-const rgbHex = ({ r, g, b }) => `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
 
 export class SmEditor extends LitElement {
   static properties = {
@@ -284,7 +273,6 @@ export class SmEditor extends LitElement {
   #overlayCtx = null;
   #cursorCtx = null;
 
-  #pickerBuilt = false; // the dialog's 256 cells exist once it has been opened
   #cursorState = null; // last-seen session keys the cursor overlay depends on
   #stateHooksDone = false; // the dev hooks' reactive half ran (willUpdate)
   #drawHooksDone = false; // the dev hooks' canvas half ran (updated)
@@ -529,7 +517,7 @@ export class SmEditor extends LitElement {
     if (this.pickIndex != null && this.palette256?.[this.pickIndex]) {
       this.#selectColor(this.palette256[this.pickIndex].rgb);
     }
-    if (this.openPaletteOnMount) this.#openPicker();
+    if (this.openPaletteOnMount) session.openPicker();
     if (this.previewRect) {
       // Modeled as an active drag with no captured pointer, so the preview survives
       // a re-layout and pressing ESC still demonstrates cancel.
@@ -574,219 +562,79 @@ export class SmEditor extends LitElement {
   }
 
   // --- template --------------------------------------------------------------
+  // The container renders the panel LAYOUT and wires the presentational leaves:
+  // props down (session/doc-derived values + clamp bounds), `sm-*` events up,
+  // translated into store actions here. The tile-size field stays inline (a
+  // component for 15 lines of template would be ceremony) — in an UNCONDITIONAL
+  // template position, so lit reuses the node and keyboard focus survives
+  // re-renders (the focus contract drive.mjs exercises). The face picker's
+  // `sm-select-face` bubbles straight through to the dock — face routing is the
+  // caller's job, not this container's.
   render() {
     return html`
       <div class="editor">
-        <div class="editor-settings">${this.#settingsRow()}</div>
+        <div class="editor-settings">
+          <div class="editor-tile-group">
+            <vf-number-field
+              class="editor-tile-size"
+              .value=${live(String(this.tileW))}
+              min=${this.sizeMin}
+              max=${this.sizeMax}
+              step="1"
+              label="tile size (${this.sizeMin}–${this.sizeMax})"
+              @vf-change=${this.#onTileSize}
+            ></vf-number-field>
+            <vf-label dim>tile size</vf-label>
+          </div>
+          <sm-face-picker .faces=${this.faces} .selected=${this.face}></sm-face-picker>
+        </div>
         <vf-separator class="editor-sep"></vf-separator>
         <div class="editor-main">
-          <div class="editor-rail">${this.#toolStrip()}${this.#colorWells()}</div>
+          <div class="editor-rail">
+            <sm-tool-strip
+              .tool=${this.tool}
+              .picking=${this.picking}
+              @sm-pick-tool=${(e) => this.#switchTool(e.detail.tool)}
+              @sm-arm-eyedropper=${() => session.armEyedropper()}
+            ></sm-tool-strip>
+            <sm-color-wells
+              .ink=${this.ink}
+              .erase=${this.erase}
+              .picking=${this.picking}
+              .recent=${this.recent.slice(1, RECENT_SLOTS + 1)}
+              @sm-pick-color=${(e) => this.#selectColor(e.detail.rgb)}
+              @sm-pick-transparent=${() => session.selectTransparent()}
+              @sm-open-picker=${() => session.openPicker()}
+            ></sm-color-wells>
+          </div>
           <div class="editor-drawbox">
-            <div class="editor-opts">${this.#toolOptions()}</div>
+            <sm-tool-options
+              class="editor-opts"
+              .tool=${this.tool}
+              .pencilSize=${this.pencilSize}
+              .brushMax=${this.#brushMax}
+              .cornerRadius=${this.cornerRadius}
+              .radiusMax=${this.#radiusMax}
+              .fillReplace=${this.fillReplace}
+              .fillAllTiles=${this.fillAllTiles}
+              @sm-set-pencil-size=${this.#onPencilSize}
+              @sm-set-corner-radius=${this.#onCornerRadius}
+              @sm-set-fill-opts=${this.#onFillOpts}
+            ></sm-tool-options>
             ${this.#canvasStack()}
           </div>
         </div>
-        ${this.#pickerDialog()}
+        <sm-color-picker
+          .palette=${this.palette256}
+          .open=${this.pickerOpen}
+          @sm-pick-color=${(e) => {
+            this.#selectColor(e.detail.rgb);
+            session.closePicker();
+          }}
+          @sm-close=${() => session.closePicker()}
+        ></sm-color-picker>
       </div>
     `;
-  }
-
-  // Tile size: the classic "little arrows" number field. Tiles are locked SQUARE,
-  // so a resize is always alignment-safe. Beside it, the face picker: six
-  // pixel-art cube-view icons (vf-img — see face-icons.js) over a vf-radio-group,
-  // laid out as mirror pairs by `faces`. The checked face's icon takes the
-  // "selected" dither overlay (CSS, off vf-radio's reflected `checked`).
-  #settingsRow() {
-    const faces = this.faces || [this.face];
-    return html`
-      <div class="editor-tile-group">
-        <vf-number-field
-          class="editor-tile-size"
-          .value=${live(String(this.tileW))}
-          min=${this.sizeMin}
-          max=${this.sizeMax}
-          step="1"
-          label="tile size (${this.sizeMin}–${this.sizeMax})"
-          @vf-change=${this.#onTileSize}
-        ></vf-number-field>
-        <vf-label dim>tile size</vf-label>
-      </div>
-      <vf-radio-group
-        class="editor-face-picker"
-        label="edit face"
-        .value=${this.face}
-        @vf-change=${this.#onFacePick}
-      >
-        <div class="editor-face-row">
-          ${faces.map(
-            (f) => html`
-              <div
-                class="editor-face-cell"
-                title=${f}
-                @click=${(e) => this.#onFaceCellClick(e, f)}
-              >
-                ${faceIcon(f)}
-                <vf-radio value=${f} aria-label=${f}></vf-radio>
-              </div>
-            `
-          )}
-        </div>
-      </vf-radio-group>
-    `;
-  }
-
-  // Pencil, rect, and fill are the drawing ops; the eyedropper arms a one-shot
-  // sample (`I`, or hold Alt). The selected cell inverts (CSS off `.active`).
-  #toolStrip() {
-    const cell = (name, glyph, title, active, onClick) => html`
-      <button
-        type="button"
-        class=${classMap({ 'editor-tool': true, active })}
-        title=${title}
-        aria-label=${name}
-        @click=${onClick}
-      >
-        ${glyph}
-      </button>
-    `;
-    return html`
-      <vf-grid
-        class="editor-toolstrip"
-        columns="1"
-        cell-width="28"
-        cell-height="28"
-        role="group"
-        aria-label="tools"
-      >
-        ${cell('pencil', ICON_DRAW, 'pencil — draw (B)', this.tool === 'pencil', () =>
-          this.#switchTool('pencil')
-        )}
-        ${cell(
-          'rectangle',
-          ICON_RECT,
-          'rectangle — drag a box (R)',
-          this.tool === 'rect',
-          () => this.#switchTool('rect')
-        )}
-        ${cell(
-          'fill',
-          ICON_FILL,
-          'fill — flood a region, or replace a color (G)',
-          this.tool === 'fill',
-          () => this.#switchTool('fill')
-        )}
-        ${cell(
-          'eyedropper',
-          ICON_SAMPLER,
-          'eyedropper — click the sprite to sample (I, or hold Alt while drawing)',
-          this.picking,
-          () => this.#armEyedropper()
-        )}
-      </vf-grid>
-    `;
-  }
-
-  // The current-ink swatch doubles as the picker opener (a click drops the
-  // 256-color dialog). While the transparent ink is active it shows the kit's
-  // no-color checker — the same "empty color" the canvas shows through unpainted
-  // texels — which is just the `color` attribute going away.
-  #colorWells() {
-    const clear = this.erase && !this.picking;
-    const inkHex = clear || !this.ink ? undefined : rgbHex(this.ink);
-    return html`
-      <div class="editor-colors">
-        <vf-swatch
-          class="editor-selected"
-          width="40"
-          height="28"
-          color=${ifDefined(inkHex)}
-          label="selected color — open the color picker"
-          title="selected color — open the color picker"
-          @click=${this.#openPicker}
-        ></vf-swatch>
-        <div class="editor-recent">${this.#recentRow()}</div>
-        <vf-swatch
-          class=${classMap({ 'editor-transparent': true, active: clear })}
-          width="16"
-          height="16"
-          label="transparent (clear) color"
-          title="transparent — paint the empty / clear color (E, or right-click)"
-          @click=${this.#selectTransparent}
-        ></vf-swatch>
-      </div>
-    `;
-  }
-
-  // The "last three used colors" under the current swatch: recency slots 1..3
-  // (slot 0 is the current ink, already shown by the swatch above). Keyed by
-  // color, so a promotion moves a swatch instead of rebuilding the row.
-  #recentRow() {
-    return repeat(this.recent.slice(1, RECENT_SLOTS + 1), rgbKey, (c) => {
-      const hex = rgbHex(c);
-      return html`<vf-swatch
-        width="16"
-        height="16"
-        color=${hex}
-        label=${hex}
-        title=${hex}
-        @click=${() => this.#selectColor(c)}
-      ></vf-swatch>`;
-    });
-  }
-
-  // Contextual options: the pencil's tip-size slider (with a live readout), the
-  // rect's corner-radius field, or the fill's two checkboxes.
-  #toolOptions() {
-    if (this.tool === 'pencil') {
-      // vf-input fires on every drag move / key change, so the hover footprint
-      // tracks the slider in real time.
-      return html`
-        <vf-slider
-          class="editor-size-slider"
-          min="1"
-          max=${this.#brushMax}
-          step="1"
-          .value=${live(this.pencilSize)}
-          label="pencil size (1–${this.#brushMax})"
-          @vf-input=${this.#onPencilSize}
-        ></vf-slider>
-        <vf-label dim>${this.pencilSize} px</vf-label>
-      `;
-    }
-    if (this.tool === 'rect') {
-      return html`
-        <vf-label dim>radius</vf-label>
-        <vf-number-field
-          min="0"
-          max=${this.#radiusMax}
-          step="1"
-          .value=${live(String(this.cornerRadius))}
-          label="corner radius (0–${this.#radiusMax})"
-          @vf-change=${this.#onCornerRadius}
-        ></vf-number-field>
-      `;
-    }
-    if (this.tool === 'fill') {
-      // "replace" upgrades the flood to a whole-tile recolor of every matching
-      // texel; "all tiles" (only meaningful with replace on) extends that across
-      // the atlas.
-      return html`
-        <vf-checkbox
-          .checked=${live(this.fillReplace)}
-          title="recolor every matching texel on this tile (not just the contiguous region)"
-          @vf-change=${(e) => session.setFillReplace(e.detail.checked)}
-          >replace</vf-checkbox
-        >
-        <vf-checkbox
-          .checked=${live(this.fillAllTiles)}
-          ?disabled=${!this.fillReplace}
-          title="replace the clicked color across every tile in the atlas"
-          @vf-change=${(e) => session.setFillAllTiles(e.detail.checked)}
-          >all tiles</vf-checkbox
-        >
-      `;
-    }
-    return nothing;
   }
 
   // The CONTAINER (.editor-canvas-wrap) fills the draw box below the options bar
@@ -829,53 +677,10 @@ export class SmEditor extends LitElement {
     `;
   }
 
-  // A System 7 movable modal holding the Hilbert-laid palette as a 16×16 grid of
-  // swatch cells. 256 cells are expensive, and most mounts never open the dialog —
-  // so nothing is rendered until the first open, and from then on `pickerOpen`
-  // alone drives it (`vf-dialog.show()` is verbatim `open = true`).
-  #pickerDialog() {
-    if (!this.#pickerBuilt) return nothing;
-    return html`
-      <vf-dialog
-        heading="Colors"
-        closable
-        width="244"
-        height="266"
-        .open=${this.pickerOpen}
-        @vf-close=${() => session.closePicker()}
-      >
-        <vf-grid
-          class="editor-picker-grid"
-          columns="16"
-          cell-width="12"
-          cell-height="12"
-          collapse
-          role="group"
-          aria-label="color palette"
-        >
-          ${this.palette256.map(
-            (p) =>
-              html`<vf-swatch
-                width="14"
-                height="14"
-                color=${p.css}
-                label=${p.css}
-                title=${p.css}
-                @click=${() => {
-                  this.#selectColor(p.rgb);
-                  session.closePicker();
-                }}
-              ></vf-swatch>`
-          )}
-        </vf-grid>
-      </vf-dialog>
-    `;
-  }
-
   // --- ink + tool selection ---------------------------------------------------
   // The pick/tool semantics themselves (MRU recency, flag clearing, clamping)
   // live in the session slice's actions; these wrappers add only what is
-  // element-local (the picker-built latch, cancelling an in-flight gesture).
+  // element-local (cancelling an in-flight gesture, refreshing an overlay).
 
   // The single path every color pick funnels through (picker dialog, in-sprite
   // eyedrop, recency swatch): make `color` the ink, clear the erase/eyedropper
@@ -883,16 +688,6 @@ export class SmEditor extends LitElement {
   #selectColor(color) {
     session.pickColor(color);
   }
-
-  #selectTransparent = () => {
-    session.selectTransparent();
-  };
-
-  #openPicker = () => {
-    this.#pickerBuilt = true;
-    session.openPicker();
-    this.requestUpdate(); // #pickerBuilt is a plain latch — ask for the render
-  };
 
   // Abandon any in-flight rect (switching tool mid-drag discards the box, matching
   // the B/R/G keys), then select the tool — the action returns to painting (out
@@ -902,39 +697,27 @@ export class SmEditor extends LitElement {
     session.setTool(tool);
   }
 
-  #armEyedropper() {
-    session.armEyedropper();
-  }
-
   // --- control handlers -------------------------------------------------------
   #onTileSize(e) {
     const n = e.detail.valueAsNumber;
     if (Number.isFinite(n) && n !== this.tileW) this.#emit('sm-resize-tile', { size: n });
   }
 
-  #onPencilSize(e) {
-    session.setPencilSize(e.detail.value, this.#brushMax);
+  #onPencilSize = (e) => {
+    session.setPencilSize(e.detail.n, this.#brushMax);
     this.#drawCursor(this.#hoverTexel); // reflect the new footprint immediately
-  }
+  };
 
-  #onCornerRadius(e) {
-    session.setCornerRadius(e.detail.valueAsNumber, this.#radiusMax);
+  #onCornerRadius = (e) => {
+    session.setCornerRadius(e.detail.n, this.#radiusMax);
     if (this.#rectDragging) this.#drawRectPreview(); // re-round the in-flight box live
-  }
+  };
 
-  // Picking a face re-mounts the editor there (live edits are already committed),
-  // exactly as the old folder tabs did.
-  #onFacePick(e) {
-    const f = e.detail.value;
-    if (f && f !== this.face) this.#emit('sm-select-face', { face: f });
-  }
-
-  // The cube icon is a click target too; the radio's own click already routes
-  // through the group's vf-change, so skip it here to avoid a double switch.
-  #onFaceCellClick(e, f) {
-    if (/** @type {Element} */ (e.target).closest?.('vf-radio')) return;
-    if (f !== this.face) this.#emit('sm-select-face', { face: f });
-  }
+  #onFillOpts = (e) => {
+    const { replace, allTiles } = e.detail;
+    if (replace !== undefined) session.setFillReplace(replace);
+    if (allTiles !== undefined) session.setFillAllTiles(allTiles);
+  };
 
   #emit(type, detail) {
     // Light DOM ⇒ no `composed` needed; the dock hears it on the way up.
