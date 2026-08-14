@@ -176,7 +176,8 @@ sm-editor,
 sm-face-picker,
 sm-tool-strip,
 sm-color-wells,
-sm-color-picker {
+sm-color-picker,
+sm-draw-canvas {
   display: contents;
 }
 /* <sm-tool-options> is the exception: it IS the .editor-opts box (the class

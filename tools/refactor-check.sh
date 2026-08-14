@@ -134,10 +134,12 @@ done
 
 # The ?diag=1 self-check writes its result into document.title — assert the
 # watertight report actually runs (mode-tagged). The write is async against the
-# dump timer, so retry a couple of times before calling it a failure.
+# dump timer, so give this capture a much larger virtual-time budget (the
+# default 4000 races the dynamic import) and retry before calling it a failure.
 diag_ok=0
 for _ in 1 2 3; do
-  if tools/capture.sh dom "$HOST/?diag=1&rotate=0" 2>/dev/null | grep -q 'DIAG lowpoly'; then
+  if CAPTURE_VTB=30000 tools/capture.sh dom "$HOST/?diag=1&rotate=0" 2>/dev/null |
+    grep -q 'DIAG lowpoly'; then
     diag_ok=1
     break
   fi

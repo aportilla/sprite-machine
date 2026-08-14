@@ -5,7 +5,7 @@ import { buildVoxels } from './lib/pipeline.js';
 import { voxelMesh } from './lib/mesh.js';
 import { wedgeMesh } from './lib/wedge-mesh.js';
 import { SAMPLES } from './lib/sprite-data.js';
-import { clampTile, TILE_MIN, TILE_MAX } from './lib/atlas.js';
+import { TILE_MIN, TILE_MAX } from './lib/atlas.js';
 import { VIEW_NAMES } from './lib/views.js';
 import { PENCIL_PALETTE, PALETTE_256 } from './lib/constants.js';
 import { doc } from './state/doc.js';
@@ -13,8 +13,10 @@ import { session } from './state/session.js';
 import { prefs } from './state/prefs.js';
 import { build } from './state/build.js';
 import { editorViewModel } from './state/derive.js';
+import { parseBootParams } from './boot/params.js';
 import { loadSample } from './loaders.js';
 import { initDropTarget } from './drop-target.js';
+import { initShortcuts } from './shortcuts.js';
 import './components/sm-editor.js'; // registers <sm-editor>
 import './components/sm-topbar.js'; // registers <sm-topbar>
 import './components/sm-stage-controls.js'; // registers <sm-stage-controls>
@@ -75,42 +77,42 @@ ground.receiveShadow = true;
 scene.add(ground);
 
 // --------------------------------------------------------------------------
-// Boot params + prefs seeding
+// Boot params — parsed once (boot/params.js) and applied as store actions
 // --------------------------------------------------------------------------
-// Parse the query string once — these flags never change at runtime. The prefs
-// params are applied HERE, before any store subscription exists, so seeding
-// them can't fire a phantom rebuild.
-const params = new URLSearchParams(location.search);
-const FLAT = params.get('flat') === '1';
-const DIAG = params.get('diag') === '1';
+// The prefs/session seeds land HERE, before any store subscription exists, so
+// seeding them can't fire a phantom rebuild — and the editor mounts with the
+// seeded state already in place. The dev hooks' state halves are ordinary
+// session actions now; only the canvas-paint halves (?cursor's footprint,
+// ?rect's drag preview, ?fill's click) ride as one-shot props on the editor
+// (consumed by <sm-draw-canvas> on its first update). See boot/params.js for
+// what every hook means.
+const boot = parseBootParams(location.search, {
+  sampleNames: SAMPLES.map((s) => s.name),
+});
+const FLAT = boot.flat;
+const DIAG = boot.diag;
 const RENDER_SCALE = 0.5; // low-res render, crisply upscaled by CSS
-if (params.get('lowpoly') != null) prefs.setLowpoly(params.get('lowpoly') === '1');
-if (params.get('rotate') === '0') prefs.setAutoRotate(false);
+if (boot.lowpoly != null) prefs.setLowpoly(boot.lowpoly);
+if (boot.rotate === false) prefs.setAutoRotate(false);
+if (boot.edit) session.selectFace(boot.edit);
+// The old on-mount hook order, preserved: pencil size, then pick (so ?palette
+// reflects it and ?fill fills with it), then the dialog, then rect, then fill.
+// The size/radius seeds are clamped for real against the tile geometry when the
+// editor first mounts (its willUpdate re-clamps on any tileW/tileH change).
+if (boot.cursor != null) session.setPencilSize(boot.cursor, Number.MAX_SAFE_INTEGER);
+if (boot.pick != null) session.pickColor(PALETTE_256[boot.pick].rgb);
+if (boot.palette) session.openPicker();
+if (boot.rect) {
+  session.setTool('rect');
+  if (boot.rect.r) session.setCornerRadius(boot.rect.r, Number.MAX_SAFE_INTEGER);
+}
+if (boot.fill) {
+  session.setTool('fill');
+  session.setFillReplace(boot.fill.replace);
+  session.setFillAllTiles(boot.fill.all);
+}
 
-// Dev hook: ?tile=N (square) or ?tile=WxH applies one resize after the first build
-// (the capture tool can't click the stepper).
-let pendingTileResize = null;
-// Dev hook: ?palette=1 opens the "+" palette modal on the first editor mount
-// (the capture tool can't click "+"). Consumed once.
-let pendingOpenPalette = false;
-// Dev hook: ?cursor=N sets the pencil size to N and draws its footprint outline at
-// the tile center on the first editor mount (the capture tool has no pointer to
-// hover). Consumed once.
-let pendingCursor = null;
-// Dev hook: ?pick=N selects PALETTE_256[N] as the ink on the first editor mount, as
-// if picked from the "+" modal (the capture tool can't click a swatch), so a shot
-// can show it landing as the selected palette-row tile. Consumed once.
-let pendingPick = null;
-// Dev hook: ?rect=x0,y0,x1,y1[,r[,sq]] selects the rect tool and draws its live drag
-// preview for that box (radius r; sq=1 for the Shift square-lock) on the first editor
-// mount (the capture tool can't drag), so a shot can show the tool mid-drag. Consumed once.
-let pendingRect = null;
-// Dev hook: ?fill=x,y[,r[,a]] selects the fill tool, sets its checkboxes (replace=r,
-// all-tiles=a), and fills at (x,y) on the first editor mount (the capture tool can't
-// click), so a shot can show the tool + result. Consumed once.
-let pendingFill = null;
-
-const camParam = params.get('cam');
+const camParam = boot.cam;
 const ISO_DIR = new THREE.Vector3(
   ...(camParam === 'top'
     ? [0.001, 1, 0.001]
@@ -246,7 +248,8 @@ let editorEl = null;
 let editingWasDerived = false;
 
 // Build the editor element once and dock it. Everything here is either constant
-// for the session or a one-shot dev hook consumed on its first update.
+// for the session or a one-shot canvas dev hook consumed on the canvas's first
+// update (their state halves were applied as boot actions above).
 function ensureEditor() {
   if (editorEl) return editorEl;
   editorEl = /** @type {any} */ (document.createElement('sm-editor'));
@@ -256,17 +259,10 @@ function ensureEditor() {
     faces: TAB_ORDER,
     sizeMin: TILE_MIN,
     sizeMax: TILE_MAX,
-    openPaletteOnMount: pendingOpenPalette,
-    previewCursor: pendingCursor,
-    previewRect: pendingRect,
-    pickIndex: pendingPick,
-    fillOnMount: pendingFill,
+    previewCursor: boot.cursor != null,
+    previewRect: boot.rect,
+    fillOnMount: boot.fill,
   });
-  pendingOpenPalette = false; // one-shot: they only fire on the first update
-  pendingCursor = null;
-  pendingRect = null;
-  pendingPick = null;
-  pendingFill = null;
   editorDock.replaceChildren(editorEl);
   return editorEl;
 }
@@ -321,6 +317,9 @@ document
     document.createElement('sm-stats-readout')
   );
 initDropTarget();
+// The global tool shortcuts (B/R/G/I/E → session actions); the gesture-scoped
+// keys (Esc / Shift on an in-flight rect) live inside <sm-draw-canvas>.
+const disposeShortcuts = initShortcuts();
 const editorDock = document.getElementById('editor-panel');
 
 // <sm-editor> talks back in bubbling `sm-*` CustomEvents, heard once on the dock
@@ -412,70 +411,15 @@ if (hot) {
     unsubDocLive();
     unsubPrefs();
     unsubDocEditor();
+    disposeShortcuts();
   });
 }
 
 // Boot with a sample (?sample=<index|name> overrides, handy for testing).
-// Dev hook: ?edit=<view> seeds the session's face, so the editor opens there —
-// it's always open now, so this just picks the starting face.
-const editParam = params.get('edit');
-if (editParam && VIEW_NAMES.includes(editParam)) session.selectFace(editParam);
-const tileParam = params.get('tile');
-if (tileParam) {
-  const m = /^(\d+)(?:x(\d+))?$/i.exec(tileParam.trim());
-  if (m) pendingTileResize = { w: clampTile(+m[1]), h: clampTile(+(m[2] ?? m[1])) };
-}
-if (params.get('palette') === '1') pendingOpenPalette = true;
-const cursorParam = params.get('cursor');
-if (cursorParam) {
-  const n = parseInt(cursorParam, 10);
-  if (n > 0) pendingCursor = n;
-}
-const pickParam = params.get('pick');
-if (pickParam != null) {
-  const n = parseInt(pickParam, 10);
-  if (n >= 0 && n < PALETTE_256.length) pendingPick = n;
-}
-const rectParam = params.get('rect');
-if (rectParam) {
-  const p = rectParam.split(',').map((s) => parseInt(s, 10));
-  if (p.length >= 4 && p.slice(0, 4).every(Number.isFinite)) {
-    pendingRect = {
-      x0: p[0],
-      y0: p[1],
-      x1: p[2],
-      y1: p[3],
-      r: p.length > 4 ? p[4] : 0,
-      square: p.length > 5 && p[5] > 0,
-    };
-  }
-}
-const fillParam = params.get('fill');
-if (fillParam) {
-  const p = fillParam.split(',').map((s) => parseInt(s, 10));
-  if (p.length >= 2 && p.slice(0, 2).every(Number.isFinite)) {
-    pendingFill = {
-      x: p[0],
-      y: p[1],
-      replace: p.length > 2 && p[2] > 0,
-      all: p.length > 3 && p[3] > 0,
-    };
-  }
-}
-const q = params.get('sample');
-let startIndex = 0;
-if (q != null) {
-  const byName = SAMPLES.findIndex((s) => s.name.toLowerCase() === q.toLowerCase());
-  startIndex = byName >= 0 ? byName : Math.min(SAMPLES.length - 1, Math.max(0, +q || 0));
-}
-loadSample(SAMPLES[startIndex]).then(() => {
-  // Dev hook: ?tile=WxH resizes the fresh sheet once (the capture tool can't
-  // click the stepper); the doc-change subscriber re-points the editor after.
-  if (pendingTileResize) {
-    const { w, h } = pendingTileResize;
-    pendingTileResize = null;
-    doc.resizeTiles(w, h);
-  }
+loadSample(SAMPLES[boot.sampleIndex]).then(() => {
+  // Dev hook: ?tile / ?tile=WxH resizes the fresh sheet once (the capture tool
+  // can't click the stepper); the doc-change subscriber re-points the editor.
+  if (boot.tile) doc.resizeTiles(boot.tile.w, boot.tile.h);
 });
 resize();
 tick();

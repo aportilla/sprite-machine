@@ -65,8 +65,12 @@ reap_orphans
 DIR="$(mktemp -d "$ROOT/run.XXXXXX")"
 trap 'reap_run "$DIR"' EXIT INT TERM
 
+# CAPTURE_VTB overrides the virtual-time budget: async work that races the dump
+# (e.g. ?diag=1's dynamic import writing document.title) gets more scheduler
+# turns under a bigger budget. The default stays 4000 — shots are pinned to it
+# (a different budget can change the dumped frame).
 COMMON=(--headless=new --disable-gpu --use-gl=angle --use-angle=swiftshader
-  --hide-scrollbars --window-size=1000,850 --virtual-time-budget=4000
+  --hide-scrollbars --window-size=1000,850 --virtual-time-budget="${CAPTURE_VTB:-4000}"
   --force-device-scale-factor="${CAPTURE_DSF:-1}"
   --no-first-run --no-default-browser-check --user-data-dir="$DIR")
 
