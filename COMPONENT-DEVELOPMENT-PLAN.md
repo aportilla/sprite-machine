@@ -1,5 +1,17 @@
 # Component development plan — decompose the UI, formalize app state
 
+> **STATUS: IMPLEMENTED** (August 2026). All six phases landed, one commit per
+> phase, each gated on byte-identical `tools/refactor-check.sh` screenshots and
+> a green `tools/drive.mjs`. Deviations from the letter of the plan, all in
+> service of its intent: the doc slice gained a `sheet` generation counter (the
+> rebuilder frames the camera on a new generation instead of a `frameNext`
+> flag); `applyTileEdit` takes `(face, tile)` with the untouched-derived guard
+> at the caller; face routing collapsed into `session.face` (seeded `'left'`,
+> `?edit=` overrides) instead of a dock-relayed event; and the canvas's pure
+> overlay painters split into `components/draw-overlays.js` to keep
+> `sm-draw-canvas.js` near the size audit. See README's Architecture section
+> for the as-built map.
+
 A scoping + implementation plan for breaking the three monolithic UI files —
 `src/components/sm-editor.js` (**1,382 lines**), `src/main.js` (**632**),
 `src/ui.js` (**263**) — into small, single-purpose Lit components coordinated by
@@ -329,28 +341,28 @@ judgment call. One commit (or a few) per phase.
 
 ### Phase 0 — Safety net _(S)_
 
-- [ ] Add `tools/refactor-check.sh`: boots the dev server assumption, shoots a
+- [x] Add `tools/refactor-check.sh`: boots the dev server assumption, shoots a
       fixed URL matrix into a git-ignored `refactor-baselines/`, and `cmp`s
       against it; also captures `dom` snapshots for `diff`. Matrix (all
       `rotate=0`): default car; `edit=front`; `palette=1`; `cursor=5`;
       `rect=3,3,20,14,4` and `…,4,1` (square-lock); `fill=5,5,1`; `pick=37`;
       `tile=24`; `lowpoly=0`; `diag=1` (dom, title check).
-- [ ] Record baselines; run every gate once to confirm a clean start.
+- [x] Record baselines; run every gate once to confirm a clean start.
 
 ### Phase 1 — The state layer, under the monolith _(M — the keystone)_
 
-- [ ] `state/store.js` + `state/store-controller.js` + `test/store.test.mjs`.
-- [ ] `state/prefs.js`, `state/build.js`; re-point `main.js`'s `state.lowpoly`
+- [x] `state/store.js` + `state/store-controller.js` + `test/store.test.mjs`.
+- [x] `state/prefs.js`, `state/build.js`; re-point `main.js`'s `state.lowpoly`
       / `state.autoRotate` and `ui.setStats`/`setError` at them (ui.js still
       renders, now reading slices).
-- [ ] `state/session.js` + tests (MRU promotion, clamp-on-resize, tool-switch
+- [x] `state/session.js` + tests (MRU promotion, clamp-on-resize, tool-switch
       semantics, transparent/eyedrop rules). Convert `sm-editor.js`'s internal
       `state: true` properties to store reads via StoreController; its handlers
       become action calls. **The element stays monolithic.**
-- [ ] `state/doc.js` + tests (injectable scheduler; blit/drain ordering;
+- [x] `state/doc.js` + tests (injectable scheduler; blit/drain ordering;
       silent-on-change stroke writes; blank-revert). Move `applyTileEdit`,
       `flushLive`, `dropLive`, drain guards out of `main.js`.
-- [ ] `state/derive.js` + tests; `showFace()` in main.js becomes a thin wrapper
+- [x] `state/derive.js` + tests; `showFace()` in main.js becomes a thin wrapper
       over it.
 
 Exit: identical screenshots; `sm-editor.js` shrinks ~150 lines; session state
@@ -358,44 +370,44 @@ now survives even element replacement (stronger than "one element, forever").
 
 ### Phase 2 — Chrome components _(S — validates the pattern cheaply)_
 
-- [ ] `ui.js` → `<sm-topbar>`, `<sm-stage-controls>`, `<sm-stats-readout>`,
+- [x] `ui.js` → `<sm-topbar>`, `<sm-stage-controls>`, `<sm-stats-readout>`,
       `drop-target.js`, `loaders.js`. Retire `createUI` and both bags.
-- [ ] `display: contents` host rules; classes unchanged.
+- [x] `display: contents` host rules; classes unchanged.
 
 ### Phase 3 — Editor leaves, the easy five _(M)_
 
-- [ ] Extract `<sm-face-picker>`, `<sm-tool-strip>`, `<sm-color-wells>`,
+- [x] Extract `<sm-face-picker>`, `<sm-tool-strip>`, `<sm-color-wells>`,
       `<sm-tool-options>`, `<sm-color-picker>` as presentational leaves;
       `<sm-editor>` becomes container + layout + wiring.
-- [ ] Preserve: lazy dialog build, `live()` bindings, keyed recency `repeat()`,
+- [x] Preserve: lazy dialog build, `live()` bindings, keyed recency `repeat()`,
       module-constant icon templates, the HMR define-guard per new element.
 
 ### Phase 4 — The draw canvas _(L — the riskiest; sub-staged)_
 
-- [ ] 4a. `lib/brush.js` (pure `writeTexel` / `stampBrush` / `strokeLine`) +
+- [x] 4a. `lib/brush.js` (pure `writeTexel` / `stampBrush` / `strokeLine`) +
       `test/brush.test.mjs` (Bresenham continuity, footprint anchoring, the
       transparent-idempotence rule — real coverage the monolith never had).
       Monolith consumes it in place.
-- [ ] 4b. Extract `<sm-draw-canvas>` (props/events per §4); buffer-reset on
+- [x] 4b. Extract `<sm-draw-canvas>` (props/events per §4); buffer-reset on
       tile-identity change; gesture-cancel on any `tool` change.
-- [ ] 4c. Split the keyboard: `shortcuts.js` (global) vs canvas-internal
+- [x] 4c. Split the keyboard: `shortcuts.js` (global) vs canvas-internal
       Esc/Shift.
-- [ ] 4d. Dev hooks: `boot/params.js` + boot-time actions + the three one-shot
+- [x] 4d. Dev hooks: `boot/params.js` + boot-time actions + the three one-shot
       canvas props. Delete the monolith's two-phase hook machinery.
 
 ### Phase 5 — Scene extraction + composition root _(M)_
 
-- [ ] `scene/stage.js`, `scene/rebuilder.js` (subscribes `doc.change`,
+- [x] `scene/stage.js`, `scene/rebuilder.js` (subscribes `doc.change`,
       `doc.live`, `prefs`; writes `build`).
-- [ ] `main.js` → ~80-line composition root. HMR teardown consolidated here
+- [x] `main.js` → ~80-line composition root. HMR teardown consolidated here
       (stage dispose, store-listener cleanup, observer disconnects).
 
 ### Phase 6 — Docs + cleanup _(S)_
 
-- [ ] Rewrite README's Architecture + "UI layer: Lit" sections for the new map.
-- [ ] Mark `ux-enhancement.md` superseded (as `docs/drawing-editor-plan.md`
+- [x] Rewrite README's Architecture + "UI layer: Lit" sections for the new map.
+- [x] Mark `ux-enhancement.md` superseded (as `docs/drawing-editor-plan.md`
       already is) or move it under `docs/`.
-- [ ] Audit: no UI file > ~600 lines; delete dead code; delete
+- [x] Audit: no UI file > ~600 lines; delete dead code; delete
       `refactor-baselines/` or promote the matrix script to a permanent tool.
 
 ---

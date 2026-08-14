@@ -39,30 +39,13 @@
 import { LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { createRef, ref } from 'lit/directives/ref.js';
-import { brushBounds, writeTexel, stampBrush, strokeLine } from '../lib/brush.js';
+import { writeTexel, stampBrush, strokeLine } from '../lib/brush.js';
 import { roundedRectRows, squareEnd } from '../lib/rect.js';
 import { keyAt, floodFill, replaceColor } from '../lib/fill.js';
+import { drawGuides, drawCursorOutline, drawRectPreview } from './draw-overlays.js';
 
-// Hairline extent rules: translucent cyan so they read as guides distinct from
-// the sprite art. MIRROR_ALPHA keeps the onion-skin a faint hint.
-const GUIDE_COLOR = 'rgba(120, 200, 255, 0.6)';
+// MIRROR_ALPHA keeps the onion-skin a faint hint.
 const MIRROR_ALPHA = 0.22;
-
-// Draw the four "furthest extent" hairlines into an OVERLAY context sized to the
-// on-screen canvas (screen-res so the 1px lines stay crisp regardless of scale).
-// The lines box the region where a painted pixel can survive the carve: verticals
-// at the outer edges of the supported columns, horizontals at the supported rows.
-function drawGuides(g, guides, scale, cssW, cssH) {
-  g.clearRect(0, 0, cssW, cssH);
-  if (!guides) return;
-  const { uMin, uMax, vMin, vMax } = guides.extent;
-  g.fillStyle = GUIDE_COLOR;
-  const T = 1; // hairline thickness (screen px)
-  if (uMin != null) g.fillRect(uMin * scale, 0, T, cssH); // left extent
-  if (uMax != null) g.fillRect((uMax + 1) * scale - T, 0, T, cssH); // right extent
-  if (vMin != null) g.fillRect(0, vMin * scale, cssW, T); // top extent
-  if (vMax != null) g.fillRect(0, (vMax + 1) * scale - T, cssW, T); // bottom extent
-}
 
 export class SmDrawCanvas extends LitElement {
   static properties = {
@@ -525,38 +508,34 @@ export class SmDrawCanvas extends LitElement {
   }
 
   // --- overlays ---------------------------------------------------------------
+  // The screen-space view the overlay painters (draw-overlays.js) draw in.
+  get #overlayView() {
+    return {
+      tileW: this.tileW,
+      tileH: this.tileH,
+      scale: this.#scale,
+      cssW: this.#cssW,
+      cssH: this.#cssH,
+    };
+  }
+
   // Hairline outline of the footprint the pencil would stamp, drawn on the topmost
-  // overlay under the cursor (a haloed white rect; red while erasing). The
-  // eyedropper previews a single cell (its sample target). Cleared with t == null
-  // when the pointer leaves the canvas. Only the PENCIL has a hover footprint — the
-  // rect tool relies on the OS crosshair when idle and its own drag preview when
-  // dragging — so for any other tool this just clears the overlay.
+  // overlay under the cursor. The eyedropper previews a single cell (its sample
+  // target). Cleared with t == null when the pointer leaves the canvas. Only the
+  // PENCIL has a hover footprint — the rect tool relies on the OS crosshair when
+  // idle and its own drag preview when dragging — so for any other tool this just
+  // clears the overlay.
   #drawCursor(t) {
     this.#hoverTexel = t;
     const g = this.#cursorCtx;
     if (!g) return;
-    g.clearRect(0, 0, this.#cssW, this.#cssH);
-    if (!t || this.tool !== 'pencil') return;
-    const size = this.picking ? 1 : this.pencilSize;
-    const b = brushBounds(t.px, t.py, size);
-    const x0 = Math.max(0, b.x0);
-    const y0 = Math.max(0, b.y0);
-    const x1 = Math.min(this.tileW - 1, b.x1);
-    const y1 = Math.min(this.tileH - 1, b.y1);
-    if (x1 < x0 || y1 < y0) return;
-    const rx = x0 * this.#scale + 0.5;
-    const ry = y0 * this.#scale + 0.5;
-    const rw = (x1 - x0 + 1) * this.#scale - 1;
-    const rh = (y1 - y0 + 1) * this.#scale - 1;
-    g.lineWidth = 3; // dark halo so the outline reads on any art color
-    g.strokeStyle = 'rgba(0, 0, 0, 0.45)';
-    g.strokeRect(rx, ry, rw, rh);
-    g.lineWidth = 1;
-    g.strokeStyle =
+    drawCursorOutline(
+      g,
+      this.#overlayView,
+      this.tool === 'pencil' ? t : null,
+      this.picking ? 1 : this.pencilSize,
       this.erase && !this.picking
-        ? 'rgba(255, 120, 120, 0.95)'
-        : 'rgba(255, 255, 255, 0.95)';
-    g.strokeRect(rx, ry, rw, rh);
+    );
   }
 
   // The moving corner after any Shift square-lock (raw corner when unlocked).
@@ -581,36 +560,21 @@ export class SmDrawCanvas extends LitElement {
     };
   }
 
-  // Live preview of the rect on the cursor overlay: the exact texels a commit will
-  // fill (via the shared roundedRectRows — so rounded corners show precisely),
+  // Live preview of the rect on the cursor overlay: the exact filled texels,
   // tinted by the active ink (red while erasing), under a haloed hairline of the
   // drag bounding box so the extent reads on any art even before the fill is
   // obvious. Nothing is written to `#work` until #commitRect() on pointer-up.
   #drawRectPreview() {
     const g = this.#cursorCtx;
     if (!g) return;
-    g.clearRect(0, 0, this.#cssW, this.#cssH);
-    const b = this.#rectBounds();
-    if (!b) return;
-    const s = this.#scale;
-    const erasing = this.#forceErase || this.erase;
-    g.fillStyle = erasing
-      ? 'rgba(255, 120, 120, 0.35)'
-      : `rgba(${this.ink.r}, ${this.ink.g}, ${this.ink.b}, 0.5)`;
-    roundedRectRows(b.x0, b.y0, b.x1, b.y1, this.cornerRadius, (y, xl, xr) => {
-      if (xr < xl) return; // empty row at an extreme radius
-      g.fillRect(xl * s, y * s, (xr - xl + 1) * s, s);
-    });
-    const rx = b.x0 * s + 0.5;
-    const ry = b.y0 * s + 0.5;
-    const rw = (b.x1 - b.x0 + 1) * s - 1;
-    const rh = (b.y1 - b.y0 + 1) * s - 1;
-    g.lineWidth = 3; // dark halo so the box reads on any art color
-    g.strokeStyle = 'rgba(0, 0, 0, 0.45)';
-    g.strokeRect(rx, ry, rw, rh);
-    g.lineWidth = 1;
-    g.strokeStyle = erasing ? 'rgba(255, 120, 120, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-    g.strokeRect(rx, ry, rw, rh);
+    drawRectPreview(
+      g,
+      this.#overlayView,
+      this.#rectBounds(),
+      this.cornerRadius,
+      this.ink,
+      this.#forceErase || this.erase
+    );
   }
 
   // Rasterize the finished rect into `#work` (same roundedRectRows the preview used,

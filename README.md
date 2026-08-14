@@ -28,7 +28,10 @@ node tools/drive.mjs                                             # editor smoke 
 so `cmp` against a saved baseline is a real regression check. `drive.mjs` covers
 what no screenshot can: it drives the editor over the DevTools Protocol with real
 trusted input (keys, drags, the color dialog, face swaps, tile resizes) and exits
-non-zero on any failure.
+non-zero on any failure. `tools/refactor-check.sh` builds on the first:
+`record` shoots a fixed URL matrix (every dev hook) into a git-ignored
+`refactor-baselines/`, and a plain run `cmp`s the live app against it — a
+machine-checkable "nothing changed visually" gate for refactors.
 
 **Pick a built-in sample**, or load your own **3×2 sprite sheet** — open the
 _pick atlas_ menu in the header or drop a PNG anywhere on the window. **Smooth
@@ -96,7 +99,7 @@ see [UI layer: Lit](#ui-layer-lit).
   artwork well — its height is **CSS-driven** (flex), no JS pin — and the square
   editable canvas is **centered** in it and drawn **as large as an integer texel
   scale fits** (crisp, never a fractional pixel), **re-fitting responsively** when
-  the window resizes. See `#layout()` in `src/components/sm-editor.js`.
+  the window resizes. See `#layout()` in `src/components/sm-draw-canvas.js`.
 - **Tools** — the left **rail** holds a **tool strip**: a single column of square
   cells (**pencil `B`**, **rect `R`**, **fill `G`**, and the **eyedropper `I`**;
   the selected cell inverts) — each an icon from the open-source **Adobe Spectrum
@@ -227,7 +230,8 @@ land inside to survive the carve) and a **faded onion-skin** of the opposite fac
 behind the canvas. There is **no auto ground-rest**: an object sits at whatever Y
 you paint it (paint at the tile's bottom to rest on the ground). The editor is
 pure authoring — no changes to the carve / colorize / mesh pipeline. See
-`src/components/sm-editor.js` and `src/lib/guides.js`.
+`src/components/` (the `<sm-editor>` container and its leaves) and
+`src/lib/guides.js`.
 
 **Dev hook:** append `?edit=<face>` (e.g. `?edit=front`) to boot with the editor
 on that face — it's always open now, so this just picks the starting tab. It's how
@@ -359,6 +363,17 @@ the no-op guards, and a full-tile flood that can't overflow the stack).
 256-color palette: 256 entries, all distinct, valid `#rrggbb`, `packed`
 derived from `css`, and the exact set of within-wedge-tolerance color pairs (the
 six saturated system-vs-cube overlaps included) so the wedge-safety note can't drift.
+`test/brush.test.mjs` pins the pencil primitives (Bresenham continuity, footprint
+anchoring, the transparent-idempotence rule).
+
+The **app-state layer** (`src/state/`) is pure JS with the same treatment:
+`test/store.test.mjs` (the observable store: by-reference values, silent no-op
+patches), `test/session.test.mjs` (tool/ink semantics, MRU recency promotion,
+clamp-on-resize), `test/doc.test.mjs` (the two-channel canonical document: silent
+stroke writes, rAF-coalesced blit-then-notify via an injectable scheduler, the
+drain-before-consume guard, blank-revert, the sheet generation), `test/derive.test.mjs`
+(the per-face view model: tile identity, derived faces, mirrored onion-skin), and
+`test/params.test.mjs` (the whole `?param` dev-hook surface, typed).
 
 Beyond that pipeline integration, the pure modules also have direct unit suites:
 `test/carve.test.mjs` (vox/unvox round-trip, `extractSurface` masks + counts,
@@ -387,6 +402,7 @@ src/lib/
   guides.js       editor alignment guides: per-face cross-axis extent (pure)
   rect.js         editor rect tool: rounded-rectangle rasterization, per-row runs (pure)
   fill.js         editor fill tool: contiguous flood + global color replace (pure)
+  brush.js        editor pencil primitives: writeTexel / stampBrush / strokeLine (Bresenham) (pure)
   pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
   t-junction.js   lattice-exact T-junction repair for merged+wedge meshes (pure)
   mesh-util.js    shared vertex-color linearizer + mesh finishing (THREE)
@@ -394,42 +410,86 @@ src/lib/
   wedge-mesh.js   voxel solid + additive 45° wedges             (low-poly mode; THREE)
   sprite-data.js  built-in samples (as atlases) + grid->ImageData helper
   diag.js         geometry watertightness self-check (dev only; ?diag=1)
+src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-tested)
+  store.js            createStore(): get / patch / subscribe — values BY REFERENCE, silent no-op patches
+  store-controller.js the Lit bridge: a ReactiveController mapping store change -> host.requestUpdate()
+  doc.js              the canonical document (atlas + sliced views + tile geometry) with TWO channels:
+                      change (structural) and live (stroke-rate, rAF-coalesced blit-then-notify);
+                      owns applyTileEdit / drain / dropLive / loadAtlas / resizeTiles / replaceAllTiles
+  session.js          editor session: face, tool, ink, MRU recency, per-tool options, picker flag —
+                      named actions carrying the old element semantics verbatim
+  prefs.js            lowpoly / autoRotate (the render toggles)
+  build.js            dims / voxels / tris / warnings / error — written by the rebuilder, read by the stats readout
+  derive.js           pure selectors: editorViewModel(doc, face) -> { tile, mirrorBehind, guides, wasDerived }
+src/scene/
+  stage.js        renderer, camera + orbit controls, lights, ground, framing, on-demand render loop, resize
+  rebuilder.js    the pipeline's ONLY consumer: doc(change+live)/prefs subscriber -> buildVoxels -> mesh swap -> build stats
 src/
-  main.js         scene, lights, ground, framing, render loop + the <sm-editor> wiring (one element, property assignments, sm-* events)
-  ui.js           System 7 header (brand, pick-atlas vf-menu, download vf-button) + stage overlays (smooth-slopes / auto-rotate vf-checkboxes, stats readout) — lit-html render() into #topbar / #stage
-  components/
-    sm-editor.js  the tools panel (left half) as a light-DOM LitElement, all vintage-frames chrome: SETTINGS row (tile-size vf-number-field + cube face picker on a vf-radio-group) over a dotted rule; TOOL RAIL (pencil + rect + fill + eyedropper cells in a vf-grid; current-ink vf-swatch opening the "Colors" vf-dialog, last-3-used color row, transparent no-color well); DRAW BOX (per-tool options bar: pencil size vf-slider + hover footprint preview, rect corner-radius vf-number-field + live drag preview / Esc-cancel, or fill replace / all-tiles vf-checkboxes; canvas fills the artwork well via #layout(): centered integer-scaled canvas); align guides
+  main.js         the composition root: parse params -> seed stores -> stage + rebuilder -> mount components -> boot load
+  boot/params.js  URL-param parsing -> one typed boot object (pure, Node-tested)
+  loaders.js      every way a sheet enters (sample / file / blank): decode + validateSheet -> doc.loadAtlas | build.setError
+  drop-target.js  whole-app drag & drop + overlay -> loaders
+  shortcuts.js    document-level B/R/G/I/E -> session actions (Esc/Shift are gesture-scoped and live in the canvas)
+  components/     all Lit, all LIGHT DOM (display: contents hosts) — see "UI layer" below
+    sm-editor.js       CONNECTED container: panel layout + leaf wiring; memoizes the per-face view model
+                       (face / views-identity / geometry) and translates leaf events into store actions —
+                       the only editor file that knows the store exists
+    sm-draw-canvas.js  leaf: the pixel-canvas subsystem — working buffer (+ImageData view, by reference),
+                       pencil/rect/fill gestures, integer-scale layout, overlay layers, gesture-scoped keys
+    draw-overlays.js   pure canvas painters for the guide hairlines / hover footprint / rect drag preview
+    sm-face-picker.js, sm-tool-strip.js, sm-color-wells.js, sm-tool-options.js, sm-color-picker.js
+                       presentational leaves: props down, bubbling sm-* events up, no store imports
+    sm-topbar.js, sm-stage-controls.js, sm-stats-readout.js
+                       connected chrome: pick-atlas menu + download / prefs toggles / build readout
+    ui-bits.js         shared caption + warning-row template helpers
   face-icons.js   face-picker cube icons: pixel-art PNGs (assets/faces/) in vf-img + the "selected" dither overlay, as lit templates
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
-  icons.js        registers the Adobe Spectrum workflow <sp-icon-*> tool-cell + warning glyphs, written literally in the ui.js / sm-editor.js templates (color via currentColor, size via --mod-icon-size; no sp-theme)
+  icons.js        registers the Adobe Spectrum workflow <sp-icon-*> tool-cell + warning glyphs, written literally in the component templates (color via currentColor, size via --mod-icon-size; no sp-theme)
 ```
 
-### UI layer: Lit
+### UI layer: Lit + a hand-rolled store
 
 The chrome is `lit`, the library `vintage-frames` itself is built on (one deduped
-copy — `npm ls lit`). `ui.js` is bare `lit-html` `render()` calls into the
-containers `index.html` already ships; the editor is a single **`<sm-editor>`**
-LitElement. Both render into the **light DOM** (`createRenderRoot() { return this }`,
-plus `sm-editor { display: contents }`), so `style.css` targets the same classes it
-always did, the box tree is unchanged, and `tools/capture.sh dom` still sees the
-whole editor.
+copy — `npm ls lit`), organized in **three layers with dependency arrows only
+pointing down**: presentation (`components/` + `scene/`) → app state (`state/`)
+→ domain (`lib/`). The state mechanism is a ~40-line observable store
+(`createStore`: get / patch / subscribe) with four slices — `doc` (the canonical
+document), `session` (the editor's brush state), `prefs`, `build` — and a
+`StoreController` (a Lit ReactiveController) that re-renders a host on any
+slice change. **Connected** components (`sm-editor` and the chrome) read slices
+and call named actions; the editor **leaves** are dumb — props down, bubbling
+`sm-*` events up, no store imports — so store coupling stays visible and
+greppable. Every component renders into the **light DOM**
+(`createRenderRoot() { return this }` + `display: contents` hosts), so
+`style.css` targets the same classes it always did, the box tree is unchanged,
+and `tools/capture.sh dom` still sees everything.
 
-The split that makes it safe: **reactive properties are what the template reads**
-(`face`, `tile`, `tool`, `ink`, `recent`, `pencilSize`, …), while everything the
-canvas hot paths touch is a plain `#private` field (the pixel buffer and its
-`ImageData` view, stroke/drag state, the on-screen scale) — so a pencil drag can
-never schedule a re-render at pointer-move rate. Canvas backing stores are sized
-imperatively in `updated()`, never bound in a template (a bound `width` would clear
-the buffer mid-diff). User-editable `vf-*` values are controlled bindings with
-`live()`, so a re-render can't skip a re-sync after typing.
+**The two-speed state system** is the correctness core. Store state is what
+templates read; everything the canvas hot paths touch is a plain `#private`
+field in `<sm-draw-canvas>` (the pixel buffer and its `ImageData` view,
+stroke/drag state, the on-screen scale) — so a pencil drag can never schedule a
+re-render at pointer-move rate. The doc formalizes the split with **two
+channels**: `subscribe` (change — structural: load / resize / replace-all,
+drives templates and view-model re-derivation) and `onLive` (stroke-rate,
+rAF-coalesced blit-then-notify, whose only subscriber is the mesh rebuilder).
+A live stroke lands via `applyTileEdit`, which stores the canvas's working
+buffer **by reference** into `views[face]` _silently_ on the change channel —
+guides and onion-skin recompute only on a face switch or structural change,
+never mid-stroke — and every canonical-atlas consumer (download, resize,
+replace-all) folds the pending stroke in first through the one `drain()` guard.
+Canvas backing stores are sized imperatively in `updated()`, never bound in a
+template (a bound `width` would clear the buffer mid-diff); user-editable
+`vf-*` values are controlled bindings with `live()`, so a re-render can't skip
+a re-sync after typing.
 
-**One element, forever:** a face swap, a tile resize and an all-tiles replace are
-property assignments — `willUpdate` re-derives the working buffer and drops any
-in-flight gesture when `face`/`tile`/`tileW`/`tileH` change. Because the element
-persists, so does everything it owns (tool, ink, recency, per-tool options, and the
-tile field's keyboard focus), which is why there is no caller-owned "brush" object
-and no refocus hack. It talks back in bubbling `sm-live` / `sm-select-face` /
-`sm-resize-tile` / `sm-replace-all-tiles` events, heard once on the dock.
+**One element, forever — and state that outlives it:** the single `<sm-editor>`
+is docked at boot and never destroyed (that's what keeps the tile field's
+keyboard focus alive across resizes with no refocus hack), and the brush state
+lives in the session slice, so it couldn't die with a DOM node anyway. A face
+swap, tile resize or all-tiles replace is just a store action; the editor
+re-derives its per-face view model (memoized on face / `views`-identity / tile
+geometry) and the canvas resets its working buffer only when the tile's
+IDENTITY actually changes.
 
 ## Known limitations & next steps
 
@@ -449,7 +509,8 @@ and no refocus hack. It talks back in bubbling `sm-live` / `sm-select-face` /
   (idle scenes don't repaint). The carve is a synchronous O(n³) walk, so the tile
   stepper is capped at **64** (a 64³ grid still rebuilds live per stroke); to lift
   that ceiling, move `buildVoxels` to a Web Worker (it's pure typed-array code,
-  trivially transferable). For a scene of _many_ objects, batch identical ones
-  with an object-level `InstancedMesh`.
+  trivially transferable — and `scene/rebuilder.js` is the pipeline's only
+  caller, so making it async is a local change). For a scene of _many_ objects,
+  batch identical ones with an object-level `InstancedMesh`.
 - **Export** — the merged mesh is glTF-ready (`GLTFExporter`) for use in other
   engines / animation.
