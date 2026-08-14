@@ -224,7 +224,10 @@ export class SmDrawCanvas extends LitElement {
       this.#redrawCursorLayer();
     }
 
-    if (!this.#drawHooksDone) {
+    // One-shot dev hooks fire on the first update WITH REAL GEOMETRY — the
+    // element can mount before the first sheet arrives (tileW 0), and the
+    // hooks must not be consumed against an empty canvas.
+    if (!this.#drawHooksDone && this.tileW > 0 && this.tileH > 0) {
       this.#drawHooksDone = true;
       this.#applyDrawHooks();
     }

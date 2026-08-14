@@ -1,42 +1,39 @@
 // ---------------------------------------------------------------------------
 // <sm-editor> — the tools panel (LEFT half of the workspace): the CONNECTED
-// container for the drawing editor. Permanently docked — a face is always
-// selected; the 3D view stays live + interactive on the right. No imports from
-// the voxel pipeline.
+// container for the drawing editor. Permanently docked by main.js at boot —
+// a face is always selected; the 3D view stays live + interactive on the
+// right. No imports from the voxel pipeline.
 //
 // A LitElement rendering into the LIGHT DOM (`createRenderRoot() { return this }`)
 // so style.css's `.editor-*` rules and `capture.sh dom` keep working untouched;
 // style.css gives the host `display: contents`, so the box tree is exactly the
 // `.editor` column it wraps.
 //
-// The container renders the panel LAYOUT and wires the presentational leaves —
-// props down, bubbling `sm-*` events up, translated into session actions here:
+// THE ONLY EDITOR FILE THAT KNOWS THE STORE EXISTS. Two StoreControllers
+// re-render it on any session (brush state) or doc (structural) change; it
+// derives the per-face view model via derive.js and translates every leaf
+// event into a store action or doc mutation:
 //   1. SETTINGS row (fixed): the TILE-SIZE number field (inline — 15 lines of
 //      template; a component would be ceremony, and its UNCONDITIONAL slot is
 //      what lets lit reuse the node so keyboard focus survives re-renders) and
-//      <sm-face-picker> (its sm-select-face bubbles straight to the dock).
+//      <sm-face-picker> (sm-select-face → session.selectFace).
 //   2. A dotted separator.
 //   3. MAIN area (grows): the RAIL — <sm-tool-strip> over <sm-color-wells> —
 //      beside the DRAW BOX: <sm-tool-options> (it IS the .editor-opts bar) over
-//      <sm-draw-canvas> (the whole pixel-canvas subsystem).
+//      <sm-draw-canvas> (the pixel-canvas subsystem; its sm-live strokes fold
+//      into the doc, its eyedrops become session picks).
 //   4. <sm-color-picker>, the 256-color vf-dialog (lazy-built on first open).
 //
-// The brush state (tool, ink, recency, per-tool options, picker flag) lives in
-// the SESSION slice — read through getters, written through actions; a
-// StoreController re-renders this element on any change, and the state
-// outlives even the element. The doc-derived view model (tile, onion-skin,
-// guides) and tile geometry arrive as properties assigned by main.js.
+// THE VIEW MODEL IS MEMOIZED on (face, views-identity, tile geometry) — the
+// two-speed contract depends on it: a live stroke mutates `views[face]`
+// SILENTLY (same object), so guides / onion-skin / the working tile's identity
+// stay put mid-stroke and the canvas never resets its buffer; a structural doc
+// change (load / resize / replace-all) swaps the `views` object, so the next
+// render re-derives everything — the old imperative showFace(), now pull-based.
 //
-// ONE ELEMENT, FOREVER. main.js creates a single <sm-editor> on the first
-// build and never destroys it: a face swap, a tile resize and an all-tiles
-// replace are property assignments. Because the element persists, so does the
-// tile field's keyboard focus — no refocus hack.
-//
-// EVENTS heard here (from the leaves): sm-pick-tool, sm-arm-eyedropper,
-// sm-pick-color, sm-pick-transparent, sm-open-picker, sm-close,
-// sm-set-pencil-size, sm-set-corner-radius, sm-set-fill-opts.
-// EVENTS passing through to the dock (main.js): sm-select-face, sm-live,
-// sm-replace-all-tiles — plus sm-resize-tile emitted by the tile field here.
+// ONE ELEMENT, FOREVER: created once and never destroyed, which is what keeps
+// the tile field's keyboard focus alive across resizes with no refocus hack.
+// The brush state itself lives in the session slice and outlives even this.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
@@ -44,6 +41,8 @@ import { LitElement, html } from 'lit';
 import { live } from 'lit/directives/live.js';
 import { maxCornerRadius } from '../lib/rect.js';
 import { session, RECENT_SLOTS } from '../state/session.js';
+import { doc } from '../state/doc.js';
+import { editorViewModel } from '../state/derive.js';
 import { StoreController } from '../state/store-controller.js';
 import './sm-face-picker.js'; // registers <sm-face-picker>
 import './sm-tool-strip.js'; // registers <sm-tool-strip>
@@ -54,44 +53,31 @@ import './sm-draw-canvas.js'; // registers <sm-draw-canvas>
 
 export class SmEditor extends LitElement {
   static properties = {
-    // --- inputs (main.js owns these) ---------------------------------------
-    face: {},
-    tile: { attribute: false },
-    tileW: { type: Number },
-    tileH: { type: Number },
+    // Session-constant inputs (main.js assigns them once at creation).
     palette: { attribute: false },
     palette256: { attribute: false },
-    mirrorBehind: { attribute: false },
-    guides: { attribute: false },
     faces: { attribute: false },
     sizeMin: { type: Number },
     sizeMax: { type: Number },
   };
 
-  // NEVER declare a reactive property as a class field — the field would shadow
-  // the accessor `static properties` installs and silently kill reactivity.
   constructor() {
     super();
-    this.face = '';
-    this.tile = null;
-    this.tileW = 0;
-    this.tileH = 0;
     this.palette = [];
     this.palette256 = [];
-    this.mirrorBehind = null;
-    this.guides = null;
+    /** @type {string[]|null} */
     this.faces = null;
     this.sizeMin = 1;
     this.sizeMax = 64;
 
-    // The shared editor-session slice holds the brush state; this controller
-    // re-renders the element on any session action. The getters below read it,
-    // so the template keeps plain `this.tool` / `this.ink` reads.
+    // Any session action (brush state) or structural doc change re-renders;
+    // live strokes are silent on both by design.
     new StoreController(this, session.store);
+    new StoreController(this, doc.store);
 
     // One-shot canvas dev hooks (?cursor / ?rect / ?fill paint halves) —
     // assigned by main.js before docking, handed to <sm-draw-canvas>, consumed
-    // there on its first update.
+    // there on its first update with real tile geometry.
     this.previewCursor = false;
     this.previewRect = null;
     this.fillOnMount = null;
@@ -141,29 +127,56 @@ export class SmEditor extends LitElement {
   // full-tile rect could use — a per-rect clamp in roundedRectRows handles smaller
   // rects). Both derive from the live tile; the session actions do the clamping.
   get #brushMax() {
-    return Math.max(1, Math.min(this.tileW || 1, this.tileH || 1));
+    const d = doc.get();
+    return Math.max(1, Math.min(d.tileW || 1, d.tileH || 1));
   }
   get #radiusMax() {
-    return maxCornerRadius(this.tileW || 1, this.tileH || 1);
+    const d = doc.get();
+    return maxCornerRadius(d.tileW || 1, d.tileH || 1);
   }
 
-  willUpdate(changed) {
-    // A tile resize can leave a persisted pencil size / corner radius past the
-    // new bounds — the clamp itself lives in the session action.
-    if (changed.has('tileW') || changed.has('tileH')) {
+  // --- the memoized per-face view model --------------------------------------
+  #vm = null;
+  #vmKey = null; // identities the memo is valid for
+  #viewModel() {
+    const d = doc.get();
+    const face = session.get().face;
+    const k = this.#vmKey;
+    if (
+      !this.#vm ||
+      k.face !== face ||
+      k.views !== d.views ||
+      k.tileW !== d.tileW ||
+      k.tileH !== d.tileH
+    ) {
+      this.#vm = editorViewModel(d, face);
+      this.#vmKey = { face, views: d.views, tileW: d.tileW, tileH: d.tileH };
+    }
+    return this.#vm;
+  }
+
+  willUpdate() {
+    // A tile resize can leave the persisted pencil size / corner radius past
+    // the new bounds — the clamp itself lives in the session action.
+    const d = doc.get();
+    const k = this.#vmKey;
+    if (d.tileW && d.tileH && (!k || k.tileW !== d.tileW || k.tileH !== d.tileH)) {
       session.clampTools(this.#brushMax, this.#radiusMax);
     }
   }
 
   // --- template --------------------------------------------------------------
   render() {
+    const d = doc.get();
+    const face = session.get().face;
+    const vm = this.#viewModel();
     return html`
       <div class="editor">
         <div class="editor-settings">
           <div class="editor-tile-group">
             <vf-number-field
               class="editor-tile-size"
-              .value=${live(String(this.tileW))}
+              .value=${live(String(d.tileW))}
               min=${this.sizeMin}
               max=${this.sizeMax}
               step="1"
@@ -172,7 +185,11 @@ export class SmEditor extends LitElement {
             ></vf-number-field>
             <vf-label dim>tile size</vf-label>
           </div>
-          <sm-face-picker .faces=${this.faces} .selected=${this.face}></sm-face-picker>
+          <sm-face-picker
+            .faces=${this.faces}
+            .selected=${face}
+            @sm-select-face=${(e) => session.selectFace(e.detail.face)}
+          ></sm-face-picker>
         </div>
         <vf-separator class="editor-sep"></vf-separator>
         <div class="editor-main">
@@ -210,11 +227,11 @@ export class SmEditor extends LitElement {
               @sm-set-fill-opts=${this.#onFillOpts}
             ></sm-tool-options>
             <sm-draw-canvas
-              .tile=${this.tile}
-              .tileW=${this.tileW}
-              .tileH=${this.tileH}
-              .mirrorBehind=${this.mirrorBehind}
-              .guides=${this.guides}
+              .tile=${vm.tile}
+              .tileW=${d.tileW}
+              .tileH=${d.tileH}
+              .mirrorBehind=${vm.mirrorBehind}
+              .guides=${vm.guides}
               .tool=${this.tool}
               .ink=${this.ink}
               .erase=${this.erase}
@@ -226,8 +243,10 @@ export class SmEditor extends LitElement {
               .previewCursor=${this.previewCursor}
               .previewRect=${this.previewRect}
               .fillOnMount=${this.fillOnMount}
+              @sm-live=${this.#onLive}
               @sm-pick-color=${this.#onPickColor}
               @sm-pick-transparent=${() => session.selectTransparent()}
+              @sm-replace-all-tiles=${this.#onReplaceAllTiles}
             ></sm-draw-canvas>
           </div>
         </div>
@@ -258,14 +277,31 @@ export class SmEditor extends LitElement {
     if (allTiles !== undefined) session.setFillAllTiles(allTiles);
   };
 
+  // One live/committed stroke from the canvas. An untouched derived/empty face
+  // stays that way (mirror-derived or empty); otherwise the working buffer
+  // becomes the face's real art — or null again if fully erased, reverting it
+  // to mirror-derived (doc.applyTileEdit decides). Silent on the change
+  // channel, so this render's memoized view model stays valid mid-stroke.
+  #onLive = (e) => {
+    const { tile, dirty } = e.detail;
+    if (this.#vm?.wasDerived && !dirty) return;
+    doc.applyTileEdit(session.get().face, tile);
+  };
+
+  // Fill with BOTH "replace" and "all tiles" on: recolor across the whole
+  // sheet; the structural change re-derives this editor over the new pixels.
+  #onReplaceAllTiles = (e) => {
+    const { target, fill } = e.detail;
+    doc.replaceAllTiles(target, fill);
+  };
+
+  // Tiles are locked SQUARE (the only registering shape) and the resize
+  // CENTERS the art on every axis; the structural change re-derives the same
+  // face at the new size. (The number field keeps focus by itself — its
+  // element is never unmounted.)
   #onTileSize = (e) => {
     const n = e.detail.valueAsNumber;
-    if (Number.isFinite(n) && n !== this.tileW) {
-      // Light DOM ⇒ no `composed` needed; the dock hears it on the way up.
-      this.dispatchEvent(
-        new CustomEvent('sm-resize-tile', { detail: { size: n }, bubbles: true })
-      );
-    }
+    if (Number.isFinite(n) && n !== doc.get().tileW) doc.resizeTiles(n, n);
   };
 }
 

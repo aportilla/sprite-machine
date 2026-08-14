@@ -25,7 +25,10 @@ const clampRadius = (n, max) => Math.max(0, Math.min(max, Math.round(Number(n) |
 
 export function createSession() {
   const store = createStore({
-    face: '', // which of the six atlas faces is being edited ('' until boot)
+    // Which of the six atlas faces is being edited. A face is ALWAYS selected
+    // (the editor is always open); boot and sheet swaps fall back to this
+    // default, and the ?edit= dev hook overrides it before the first mount.
+    face: 'left',
     tool: 'pencil', // the drawing op: 'pencil' | 'rect' | 'fill'
     // The active color. Seeded from the pencil palette so it is never null —
     // but NOT entered into `recent`: the untouched mount default never joins
