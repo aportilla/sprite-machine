@@ -275,7 +275,22 @@ const PROBE = `(() => {
 
 let reloads = 0;
 async function probe() {
-  const s = await evaluate(PROBE);
+  let s;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      s = await evaluate(PROBE);
+      break;
+    } catch (err) {
+      // The headless reload can land DURING a probe: the page is mid-navigation,
+      // `.editor-canvas` is null, and the probe throws. That is the same artifact
+      // the __stamp check reports, just caught earlier — wait the app back in and
+      // retry instead of crashing the run. (waitForApp re-stamps, so count it here.)
+      if (attempt >= 3) throw err;
+      reloads++;
+      console.log('  !!   page reloaded mid-probe (headless artifact) — waiting');
+      await waitForApp();
+    }
+  }
   if (s.stamp === 'RELOADED') {
     reloads++;
     console.log('  !!   page reloaded (headless artifact) — re-stamping');
@@ -520,8 +535,13 @@ async function main() {
   );
 
   // --- an edit must reach the voxel pipeline --------------------------------
+  // Fresh load first: the headless reload artifact reliably strikes right after
+  // the preceding Shift-drag, and this section carries tool + ink state across
+  // several inputs — the same reason the face-swap section starts fresh.
   section('live rebuild');
-  const statsBefore = JSON.stringify((await probe()).stats);
+  await freshPage();
+  s = await probe();
+  const statsBefore = JSON.stringify(s.stats);
   await keyPress('r'); // rect
   await keyPress('e'); // transparent ink
   await drag(at(8, 14), at(32, 34));
