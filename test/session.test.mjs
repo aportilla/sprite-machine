@@ -18,20 +18,29 @@ test('boot: pencil active, ink seeded from the palette, recency row empty', () =
   assert.deepEqual(st.ink, PENCIL_PALETTE[0].rgb);
   assert.deepEqual(st.recent, [], 'the untouched mount default never enters recency');
   assert.equal(st.erase, false);
-  assert.equal(st.picking, false);
 });
 
-test('pickColor: copies the ink, clears erase/picking, promotes to MRU', () => {
+test('pickColor: copies the ink, clears erase, promotes to MRU', () => {
   const s = createSession();
   s.selectTransparent();
-  s.armEyedropper();
   s.pickColor(RED);
   const st = s.get();
   assert.deepEqual(st.ink, RED);
   assert.notEqual(st.ink, RED, 'the ink is a copy, not the caller object');
   assert.equal(st.erase, false);
-  assert.equal(st.picking, false);
   assert.deepEqual(st.recent, [RED], 'slot 0 is the current ink');
+});
+
+test('eyedropper is a sticky tool: a pick leaves it selected', () => {
+  const s = createSession();
+  s.setTool('eyedropper');
+  assert.equal(s.get().tool, 'eyedropper');
+  s.pickColor(RED); // an eyedrop of a painted texel
+  assert.equal(s.get().tool, 'eyedropper', 'sampling does not switch tools');
+  s.selectTransparent(); // an eyedrop of empty space
+  assert.equal(s.get().tool, 'eyedropper', 'a transparent sample does not either');
+  s.setTool('pencil');
+  assert.equal(s.get().tool, 'pencil', 'only an explicit tool pick leaves it');
 });
 
 test('MRU: a second pick pushes the first down; a re-pick promotes, not duplicates', () => {
@@ -53,26 +62,22 @@ test('MRU: the list caps at RECENT_SLOTS + 1 (current + the last-used row)', () 
   assert.deepEqual(recent.at(-1), inks[1], 'oldest surviving pick last');
 });
 
-test('selectTransparent: erase on, eyedropper disarmed, ink untouched', () => {
+test('selectTransparent: erase on, ink untouched', () => {
   const s = createSession();
   s.pickColor(RED);
-  s.armEyedropper();
   s.selectTransparent();
   const st = s.get();
   assert.equal(st.erase, true);
-  assert.equal(st.picking, false);
   assert.deepEqual(st.ink, RED, 'the solid ink survives for when erase ends');
 });
 
-test('setTool: selects the op and returns to painting (out of eraser/eyedropper)', () => {
+test('setTool: selects the tool and returns to painting (out of eraser)', () => {
   const s = createSession();
   s.selectTransparent();
-  s.armEyedropper();
   s.setTool('rect');
   const st = s.get();
   assert.equal(st.tool, 'rect');
   assert.equal(st.erase, false);
-  assert.equal(st.picking, false);
 });
 
 test('setPencilSize / setCornerRadius clamp and round against the given bound', () => {

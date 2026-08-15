@@ -144,9 +144,14 @@ see [UI layer: Lit](#ui-layer-lit).
   swatch (`E` / **right-click**) — the kit's **checkerboard no-color well** (the
   same checker the canvas shows through unpainted texels, so it previews what it
   paints) that selects the **empty / clear color**, not an eraser _tool_. The
-  eyedropper (`I`, or hold **Alt** to sample mid-stroke) and the transparent
-  swatch pick the pencil's **ink** — a sampled color, or transparent ("clear
-  color") — rather than a drawing op. Selecting transparent then drawing (or a
+  **eyedropper** (`I`) is a sticky mode exactly like its three siblings: it stays
+  selected, and every canvas click samples the clicked texel into the **ink** — a
+  painted texel's color, or transparent ("clear color") for empty space — until
+  another tool is picked (while it's active the OS cursor hides behind a 1-cell
+  outline over its sample target, the same treatment as the pencil's footprint).
+  Hold **Alt** instead for a momentary sample that doesn't leave the current
+  tool. The eyedropper and the transparent swatch pick the pencil's **ink**
+  rather than performing a drawing op: selecting transparent then drawing (or a
   right-click, or the `E` ink) lays clear texels, so it reads as painting a color,
   not wielding an eraser. The
   dialog is a System 7 movable modal (`vf-dialog`) holding a 16×16 `vf-grid` of

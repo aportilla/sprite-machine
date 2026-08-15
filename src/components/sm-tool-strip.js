@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
 // <sm-tool-strip> — the rail's tool strip: pencil / rect / fill / eyedropper as
 // a 1-column vf-grid of square cells (the selected cell inverts, CSS off
-// `.active`). A presentational LEAF: props down (`tool`, `picking`), bubbling
-// `sm-pick-tool {tool}` / `sm-arm-eyedropper` events up.
+// `.active`). A presentational LEAF: props down (`tool`), bubbling
+// `sm-pick-tool {tool}` events up. All four cells are sibling sticky modes —
+// the eyedropper selects like any other tool.
 //
 // LIGHT DOM + `display: contents`, so `.editor-toolstrip` keeps its box.
 // ---------------------------------------------------------------------------
@@ -23,13 +24,11 @@ const ICON_SAMPLER = html`<sp-icon-sampler></sp-icon-sampler>`;
 export class SmToolStrip extends LitElement {
   static properties = {
     tool: {},
-    picking: { type: Boolean },
   };
 
   constructor() {
     super();
     this.tool = 'pencil';
-    this.picking = false;
   }
 
   createRenderRoot() {
@@ -78,9 +77,8 @@ export class SmToolStrip extends LitElement {
           'eyedropper',
           ICON_SAMPLER,
           'eyedropper — click the sprite to sample (I, or hold Alt while drawing)',
-          this.picking,
-          () =>
-            this.dispatchEvent(new CustomEvent('sm-arm-eyedropper', { bubbles: true }))
+          this.tool === 'eyedropper',
+          () => this.#pickTool('eyedropper')
         )}
       </vf-grid>
     `;

@@ -1,9 +1,10 @@
 // ---------------------------------------------------------------------------
 // <sm-draw-canvas> — the pixel-canvas subsystem: the 4-layer stack (checker/
 // onion-skin background, the editable pixel canvas, the hairline guide overlay,
-// the cursor overlay), the working buffer, the pencil/rect/fill gestures, the
-// integer-scale layout fitting, and the gesture-scoped keys (Esc cancels an
-// in-flight rect, Shift square-locks it — document-level, but canvas business).
+// the cursor overlay), the working buffer, the pencil/rect/fill/eyedropper
+// gestures, the integer-scale layout fitting, and the gesture-scoped keys (Esc
+// cancels an in-flight rect, Shift square-locks it — document-level, but
+// canvas business).
 //
 // A presentational LEAF: props down (tile geometry + view model + the brush
 // state), bubbling events up:
@@ -57,7 +58,6 @@ export class SmDrawCanvas extends LitElement {
     tool: {},
     ink: { attribute: false },
     erase: { type: Boolean },
-    picking: { type: Boolean },
     pencilSize: { type: Number },
     cornerRadius: { type: Number },
     fillReplace: { type: Boolean },
@@ -74,7 +74,6 @@ export class SmDrawCanvas extends LitElement {
     this.tool = 'pencil';
     this.ink = null;
     this.erase = false;
-    this.picking = false;
     this.pencilSize = 1;
     this.cornerRadius = 0;
     this.fillReplace = false;
@@ -200,7 +199,6 @@ export class SmDrawCanvas extends LitElement {
     if (
       changed.has('tool') ||
       changed.has('erase') ||
-      changed.has('picking') ||
       changed.has('pencilSize') ||
       changed.has('cornerRadius')
     ) {
@@ -377,11 +375,11 @@ export class SmDrawCanvas extends LitElement {
           <canvas
             class=${classMap({
               'editor-canvas': true,
-              // With the pencil (its eraser/eyedropper ink modes included) the hover
-              // footprint outline stands in for the pointer, so hide the OS cursor
-              // over the canvas — CSS `.pencil-active { cursor: none }` leaves only
-              // the outline. The rect tool keeps the default crosshair.
-              'pencil-active': this.tool === 'pencil',
+              // With the pencil (footprint) or the eyedropper (its 1-cell sample
+              // target) the hover outline stands in for the pointer, so hide the
+              // OS cursor over the canvas — CSS `.hide-cursor { cursor: none }`
+              // leaves only the outline. Rect / fill keep the default crosshair.
+              'hide-cursor': this.tool === 'pencil' || this.tool === 'eyedropper',
             })}
             ${ref(this.#canvas)}
             @pointerdown=${this.#onPointerDown}
@@ -410,9 +408,9 @@ export class SmDrawCanvas extends LitElement {
 
   // --- gesture-scoped keyboard -------------------------------------------------
   // Esc aborts an in-flight rect drag (nothing committed); Shift held mid-drag
-  // locks the box to a square; B/R/G mid-drag abandon the box (shortcuts.js does
-  // the actual tool switch — abandoning is this canvas's business, so the two
-  // compose without ordering coupling). Everything here is a no-op unless a
+  // locks the box to a square; B/R/G/I mid-drag abandon the box (shortcuts.js
+  // does the actual tool switch — abandoning is this canvas's business, so the
+  // two compose without ordering coupling). Everything here is a no-op unless a
   // gesture is actually in flight.
   #onKeyDown = (e) => {
     if (!this.#rectDragging) return;
@@ -437,8 +435,8 @@ export class SmDrawCanvas extends LitElement {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key.toLowerCase();
     // Switching tools mid rect-drag abandons the box (nothing committed) — same as
-    // ESC, so B/R/G can't leave a half-dragged rect wired to the old pointer.
-    if (k === 'b' || k === 'r' || k === 'g') this.#cancelRect();
+    // ESC, so B/R/G/I can't leave a half-dragged rect wired to the old pointer.
+    if (k === 'b' || k === 'r' || k === 'g' || k === 'i') this.#cancelRect();
   };
 
   // Releasing Shift mid-drag drops the square-lock and re-derives the free box.
@@ -521,20 +519,21 @@ export class SmDrawCanvas extends LitElement {
 
   // Hairline outline of the footprint the pencil would stamp, drawn on the topmost
   // overlay under the cursor. The eyedropper previews a single cell (its sample
-  // target). Cleared with t == null when the pointer leaves the canvas. Only the
-  // PENCIL has a hover footprint — the rect tool relies on the OS crosshair when
+  // target). Cleared with t == null when the pointer leaves the canvas. Only these
+  // two have a hover outline — the rect tool relies on the OS crosshair when
   // idle and its own drag preview when dragging — so for any other tool this just
   // clears the overlay.
   #drawCursor(t) {
     this.#hoverTexel = t;
     const g = this.#cursorCtx;
     if (!g) return;
+    const eyedropper = this.tool === 'eyedropper';
     drawCursorOutline(
       g,
       this.#overlayView,
-      this.tool === 'pencil' ? t : null,
-      this.picking ? 1 : this.pencilSize,
-      this.erase && !this.picking
+      this.tool === 'pencil' || eyedropper ? t : null,
+      eyedropper ? 1 : this.pencilSize,
+      this.erase && !eyedropper
     );
   }
 
@@ -673,9 +672,11 @@ export class SmDrawCanvas extends LitElement {
     if (!t) return;
     e.preventDefault();
     this.#drawCursor(t);
-    // Alt-hold = momentary eyedropper (sample without switching ink first);
-    // a right-click still erases even with Alt down. Works with any tool.
-    if (e.button !== 2 && (e.altKey || this.picking)) {
+    // The eyedropper tool samples on any click and never writes a pixel (its
+    // sticky modality: it stays selected after the sample). Alt-hold is the
+    // momentary version — sample without leaving the current tool — where a
+    // right-click still erases even with Alt down.
+    if (this.tool === 'eyedropper' || (e.button !== 2 && e.altKey)) {
       this.#sampleAt(t.px, t.py);
       return;
     }

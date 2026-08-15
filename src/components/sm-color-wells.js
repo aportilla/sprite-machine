@@ -2,9 +2,9 @@
 // <sm-color-wells> — the rail's color group: the current-ink vf-swatch (a click
 // asks to open the 256-color picker), the "last used colors" row under it, and
 // the transparent checker swatch (the empty / clear "color", not an eraser
-// tool). A presentational LEAF: props down (`ink`, `erase`, `picking`,
-// `recent` — the already-sliced last-used row), bubbling `sm-pick-color {rgb}`
-// / `sm-pick-transparent` / `sm-open-picker` events up.
+// tool). A presentational LEAF: props down (`ink`, `erase`, `recent` — the
+// already-sliced last-used row), bubbling `sm-pick-color {rgb}` /
+// `sm-pick-transparent` / `sm-open-picker` events up.
 //
 // LIGHT DOM + `display: contents`, so `.editor-colors` keeps its box.
 // ---------------------------------------------------------------------------
@@ -23,7 +23,6 @@ export class SmColorWells extends LitElement {
   static properties = {
     ink: { attribute: false },
     erase: { type: Boolean },
-    picking: { type: Boolean },
     recent: { attribute: false },
   };
 
@@ -32,7 +31,6 @@ export class SmColorWells extends LitElement {
     /** @type {{r:number,g:number,b:number}|null} */
     this.ink = null;
     this.erase = false;
-    this.picking = false;
     /** @type {{r:number,g:number,b:number}[]} the last-used row (slot 0 excluded) */
     this.recent = [];
   }
@@ -46,7 +44,7 @@ export class SmColorWells extends LitElement {
   // no-color checker — the same "empty color" the canvas shows through unpainted
   // texels — which is just the `color` attribute going away.
   render() {
-    const clear = this.erase && !this.picking;
+    const clear = this.erase;
     const inkHex = clear || !this.ink ? undefined : rgbHex(this.ink);
     return html`
       <div class="editor-colors">

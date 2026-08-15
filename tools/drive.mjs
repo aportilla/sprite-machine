@@ -250,10 +250,11 @@ const PROBE = `(() => {
     stats[row.children[0].textContent.trim()] = row.children[1].textContent.trim();
   }
   return {
-    // pencil / rect / fill are mutually exclusive; the eyedropper is a separate
-    // armed flag that can be lit at the same time as one of them.
-    drawTool: ['pencil', 'rectangle', 'fill'].find((t) => tools[t]) || null,
-    eyedropper: !!tools.eyedropper,
+    // All four tools are mutually exclusive sticky modes — exactly one cell is
+    // lit. The eyedropper is listed LAST so a drawing-tool cell wrongly left
+    // active alongside it would win the find and fail the tool checks.
+    drawTool:
+      ['pencil', 'rectangle', 'fill', 'eyedropper'].find((t) => tools[t]) || null,
     inkColor: sw ? sw.getAttribute('color') : null,
     transparentActive: !!q('vf-swatch.editor-transparent.active'),
     recent: [...document.querySelectorAll('.editor-recent vf-swatch')].map((s) =>
@@ -264,7 +265,7 @@ const PROBE = `(() => {
     checkedRadio: checked ? checked.getAttribute('value') : null,
     tileField: q('.editor-tile-size').value,
     dialogOpen: !!(q('vf-dialog') && q('vf-dialog').open),
-    pencilCursorClass: canvas.classList.contains('pencil-active'),
+    hideCursorClass: canvas.classList.contains('hide-cursor'),
     rect: { left: r.left, top: r.top, width: r.width, height: r.height },
     tileW: canvas.width,
     stats,
@@ -399,7 +400,7 @@ async function main() {
 
   section(`boot — face=${s.face} tile=${TILE}px`);
   check('boots with the pencil active', s.drawTool === 'pencil', s.drawTool);
-  check('pencil hides the OS cursor over the canvas', s.pencilCursorClass === true);
+  check('pencil hides the OS cursor over the canvas', s.hideCursorClass === true);
   check('options bar shows the pencil slider', s.opts.join(',') === 'vf-slider,vf-label');
   check('face picker reflects ?edit=front', s.face === 'front', s.face);
   check('the checked radio follows the face', s.checkedRadio === 'front');
@@ -416,7 +417,7 @@ async function main() {
     s.opts.join(',') === 'vf-label,vf-number-field',
     s.opts.join(',')
   );
-  check('the rect tool restores the OS crosshair', s.pencilCursorClass === false);
+  check('the rect tool restores the OS crosshair', s.hideCursorClass === false);
 
   await keyPress('g');
   s = await probe();
@@ -429,13 +430,15 @@ async function main() {
 
   await keyPress('i');
   s = await probe();
-  check('I arms the eyedropper', s.eyedropper === true);
+  check('I selects the eyedropper tool', s.drawTool === 'eyedropper', s.drawTool);
+  check('the eyedropper hides the OS cursor too', s.hideCursorClass === true);
+  check('the eyedropper has an empty options bar', s.opts.length === 0, s.opts.join(','));
 
   await keyPress('e');
   s = await probe();
   check('E selects the transparent ink', s.transparentActive === true);
   check('E clears the current-ink swatch colour', s.inkColor === null, s.inkColor);
-  check('E disarms the eyedropper', s.eyedropper === false);
+  check('E leaves the eyedropper selected (sticky)', s.drawTool === 'eyedropper');
 
   await keyPress('b');
   s = await probe();
@@ -504,6 +507,23 @@ async function main() {
     'a second pick pushes the first into the last-used row',
     s.inkColor === secondInk && s.recent.length === 1 && s.recent[0] === firstInk,
     `ink=${s.inkColor}/${secondInk} row=${JSON.stringify(s.recent)}`
+  );
+
+  // The eyedropper TOOL (vs the momentary Alt-hold above) is sticky: a plain
+  // click samples, and the tool stays selected for the next sample.
+  await keyPress('i');
+  await click(at(20, 26).x, at(20, 26).y);
+  await sleep(150);
+  s = await probe();
+  check(
+    'a click with the eyedropper tool samples the ink',
+    s.inkColor === firstInk,
+    `${s.inkColor} vs ${firstInk}`
+  );
+  check(
+    'the eyedropper stays selected after the sample',
+    s.drawTool === 'eyedropper',
+    s.drawTool
   );
 
   // --- rect: Esc cancel, Shift square-lock ----------------------------------

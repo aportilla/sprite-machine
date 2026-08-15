@@ -95,9 +95,6 @@ export class SmEditor extends LitElement {
   get erase() {
     return session.get().erase;
   }
-  get picking() {
-    return session.get().picking;
-  }
   get recent() {
     return session.get().recent;
   }
@@ -196,14 +193,11 @@ export class SmEditor extends LitElement {
           <div class="editor-rail">
             <sm-tool-strip
               .tool=${this.tool}
-              .picking=${this.picking}
               @sm-pick-tool=${(e) => session.setTool(e.detail.tool)}
-              @sm-arm-eyedropper=${() => session.armEyedropper()}
             ></sm-tool-strip>
             <sm-color-wells
               .ink=${this.ink}
               .erase=${this.erase}
-              .picking=${this.picking}
               .recent=${this.recent.slice(1, RECENT_SLOTS + 1)}
               @sm-pick-color=${this.#onPickColor}
               @sm-pick-transparent=${() => session.selectTransparent()}
@@ -235,7 +229,6 @@ export class SmEditor extends LitElement {
               .tool=${this.tool}
               .ink=${this.ink}
               .erase=${this.erase}
-              .picking=${this.picking}
               .pencilSize=${this.pencilSize}
               .cornerRadius=${this.cornerRadius}
               .fillReplace=${this.fillReplace}
@@ -266,7 +259,8 @@ export class SmEditor extends LitElement {
   // --- handlers ---------------------------------------------------------------
   // The single funnel every color pick routes through (recency swatch, canvas
   // eyedrop; the dialog adds a close on top): the session action sets the ink,
-  // clears the erase/eyedropper flags, and promotes the MRU recency.
+  // clears the erase flag, and promotes the MRU recency — the tool is left
+  // alone, so an eyedrop keeps the eyedropper selected (sticky modality).
   #onPickColor = (e) => {
     session.pickColor(e.detail.rgb);
   };

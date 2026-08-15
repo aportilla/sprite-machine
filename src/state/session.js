@@ -29,13 +29,12 @@ export function createSession() {
     // (the editor is always open); boot and sheet swaps fall back to this
     // default, and the ?edit= dev hook overrides it before the first mount.
     face: 'left',
-    tool: 'pencil', // the drawing op: 'pencil' | 'rect' | 'fill'
+    tool: 'pencil', // the active tool: 'pencil' | 'rect' | 'fill' | 'eyedropper'
     // The active color. Seeded from the pencil palette so it is never null —
     // but NOT entered into `recent`: the untouched mount default never joins
     // the recency row.
     ink: { ...PENCIL_PALETTE[0].rgb },
     erase: false, // the transparent ("clear") ink is selected
-    picking: false, // the eyedropper is armed for the next canvas click
     /** @type {{r:number,g:number,b:number}[]} MRU inks, current at [0] */
     recent: [],
     pencilSize: 1, // the pencil's N×N tip footprint, in texels
@@ -55,16 +54,19 @@ export function createSession() {
       store.patch({ face });
     },
 
-    // Select a drawing op: return to painting (out of eraser / eyedropper).
-    // The ink is always set (seeded at boot), so there is nothing to "ensure".
-    /** @param {'pencil'|'rect'|'fill'} tool */
+    // Select a tool — the eyedropper is a sticky mode exactly like the drawing
+    // ops (it stays selected until another tool is picked). Selecting any tool
+    // returns to painting (out of the transparent ink); the ink is always set
+    // (seeded at boot), so there is nothing to "ensure".
+    /** @param {'pencil'|'rect'|'fill'|'eyedropper'} tool */
     setTool(tool) {
-      store.patch({ tool, erase: false, picking: false });
+      store.patch({ tool, erase: false });
     },
 
     // The single path every color pick funnels through (picker dialog, in-sprite
-    // eyedrop, recency swatch): make `color` the ink, clear the erase/eyedropper
-    // flags, and promote it to the top of the recency list.
+    // eyedrop, recency swatch): make `color` the ink, clear the erase flag, and
+    // promote it to the top of the recency list. The TOOL is untouched — an
+    // eyedrop leaves the eyedropper selected (sticky modality).
     /** @param {{r:number,g:number,b:number}} color */
     pickColor(color) {
       const ink = { r: color.r, g: color.g, b: color.b };
@@ -73,15 +75,11 @@ export function createSession() {
         0,
         RECENT_SLOTS + 1
       );
-      store.patch({ ink, erase: false, picking: false, recent });
+      store.patch({ ink, erase: false, recent });
     },
 
     selectTransparent() {
-      store.patch({ erase: true, picking: false });
-    },
-
-    armEyedropper() {
-      store.patch({ picking: true });
+      store.patch({ erase: true });
     },
 
     /** @param {number} n  @param {number} max */
