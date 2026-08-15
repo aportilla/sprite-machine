@@ -3,8 +3,7 @@
 > **SUPERSEDED.** Historical design doc, kept for reference (like
 > `drawing-editor-plan.md`). The editor has since moved to the System 7
 > `vintage-frames` layout, and the UI was decomposed into components — see
-> `COMPONENT-DEVELOPMENT-PLAN.md` and README's Architecture section for the
-> current structure.
+> README's Architecture section for the current structure.
 
 A re-working of the right-half editor (`#editor-panel`) into a **classic
 Photoshop tool-panel** layout: a fixed **tool/settings header**, a **draw

@@ -3,8 +3,8 @@
 // of its own: parse the boot params, seed the stores, create the THREE stage +
 // mesh rebuilder, mount the (connected) chrome and editor components, wire the
 // global shortcuts and drop target, and load the boot sample. Everything else
-// coordinates through the state slices (state/) — see COMPONENT-DEVELOPMENT-
-// PLAN.md for the architecture.
+// coordinates through the state slices (state/) — see README's Architecture
+// section.
 // ---------------------------------------------------------------------------
 
 import './style.css';

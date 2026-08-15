@@ -24,17 +24,14 @@ tools/capture.sh dom  'http://localhost:5173/?diag=1&rotate=0'   # light-DOM she
 node tools/drive.mjs                                             # editor smoke test
 ```
 
-`capture.sh` shows what the app **looks** like — its shots are byte-deterministic,
-so `cmp` against a saved baseline is a real regression check (its `dom` mode only
+`capture.sh` shows what the app **looks** like — its shots are byte-deterministic
+(fixed window size, DSF 1, virtual time budget, `rotate=0`), so `cmp` between two
+runs is a real regression check rather than a judgment call (its `dom` mode only
 serializes light DOM — the page shell and `<title>` — since the components render
-in shadow DOM). `drive.mjs` covers
-what no screenshot can: it drives the editor over the DevTools Protocol with real
-trusted input (keys, drags, the color dialog, face swaps, tile resizes), probing
-through the components' shadow roots, and exits
-non-zero on any failure. `tools/refactor-check.sh` builds on the first:
-`record` shoots a fixed URL matrix (every dev hook) into a git-ignored
-`refactor-baselines/`, and a plain run `cmp`s the live app against it — a
-machine-checkable "nothing changed visually" gate for refactors.
+in shadow DOM). `drive.mjs` covers what no screenshot can: it drives the editor
+over the DevTools Protocol with real trusted input (keys, drags, the color dialog,
+face swaps, tile resizes), probing through the components' shadow roots, and exits
+non-zero on any failure.
 
 **Pick a built-in sample**, or load your own **3×2 sprite sheet** — open the
 _pick atlas_ menu in the header or drop a PNG anywhere on the window. **Smooth
@@ -485,8 +482,8 @@ into every shadow tree), the reset, the `#app` header/split frame, and the
 drop overlay `drop-target.js` renders into the page. The `.warn` row's styles
 live with its template as ui-bits' `warnStyles` export, composed by whoever
 renders `warnRow()`. One consequence for tooling: `tools/capture.sh dom` only
-serializes light DOM (the page shell + `<title>`), so DOM-dump baselines are
-retired — the byte-deterministic screenshots and the shadow-piercing
+serializes light DOM (the page shell + `<title>`), so a DOM dump says nothing
+about the UI — the byte-deterministic screenshots and the shadow-piercing
 `drive.mjs` are the regression surface.
 
 **The two-speed state system** is the correctness core. Store state is what

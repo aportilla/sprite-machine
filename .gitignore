@@ -1,6 +1,5 @@
 node_modules
 dist
-refactor-baselines
 dist-ssr
 *.local
 .DS_Store
