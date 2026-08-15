@@ -38,12 +38,16 @@
 // ---------------------------------------------------------------------------
 
 import { css, LitElement, html } from 'lit';
-import { classMap } from 'lit/directives/class-map.js';
 import { createRef, ref } from 'lit/directives/ref.js';
 import { writeTexel, stampBrush, strokeLine } from '../lib/brush.js';
 import { roundedRectRows, squareEnd } from '../lib/rect.js';
 import { keyAt, floodFill, replaceColor } from '../lib/fill.js';
-import { drawGuides, drawCursorOutline, drawRectPreview } from './draw-overlays.js';
+import {
+  drawGuides,
+  drawCursorOutline,
+  drawPencilPreview,
+  drawRectPreview,
+} from './draw-overlays.js';
 import { baseStyles } from './base-styles.js';
 
 // MIRROR_ALPHA keeps the onion-skin a faint hint.
@@ -90,12 +94,6 @@ export class SmDrawCanvas extends LitElement {
         z-index: 1;
         cursor: crosshair;
         touch-action: none;
-      }
-      /* With the pencil or the eyedropper active, the hover outline (the stamp
-       footprint / the 1-cell sample target) IS the cursor, so hide the OS pointer
-       over the canvas — only the hairline outline shows what a click will touch. */
-      .editor-canvas.hide-cursor {
-        cursor: none;
       }
       /* Faded onion-skin (drawn) over a checkerboard (CSS), UNDER the transparent
        pixel canvas so both show through unpainted texels. */
@@ -283,7 +281,8 @@ export class SmDrawCanvas extends LitElement {
       changed.has('tool') ||
       changed.has('erase') ||
       changed.has('pencilSize') ||
-      changed.has('cornerRadius')
+      changed.has('cornerRadius') ||
+      changed.has('ink') // the pencil's filled preview is tinted by the ink
     ) {
       this.#redrawCursorLayer();
     }
@@ -456,14 +455,7 @@ export class SmDrawCanvas extends LitElement {
         <div class="editor-canvas-stack" ${ref(this.#stack)}>
           <canvas class="editor-canvas-bg" ${ref(this.#bg)}></canvas>
           <canvas
-            class=${classMap({
-              'editor-canvas': true,
-              // With the pencil (footprint) or the eyedropper (its 1-cell sample
-              // target) the hover outline stands in for the pointer, so hide the
-              // OS cursor over the canvas — CSS `.hide-cursor { cursor: none }`
-              // leaves only the outline. Rect / fill keep the default crosshair.
-              'hide-cursor': this.tool === 'pencil' || this.tool === 'eyedropper',
-            })}
+            class="editor-canvas"
             ${ref(this.#canvas)}
             @pointerdown=${this.#onPointerDown}
             @pointermove=${this.#onPointerMove}
@@ -601,23 +593,28 @@ export class SmDrawCanvas extends LitElement {
     };
   }
 
-  // Hairline outline of the footprint the pencil would stamp, drawn on the topmost
-  // overlay under the cursor. The eyedropper previews a single cell (its sample
-  // target). Cleared with t == null when the pointer leaves the canvas. Only these
-  // two have a hover outline — the rect tool relies on the OS crosshair when
-  // idle and its own drag preview when dragging — so for any other tool this just
-  // clears the overlay.
+  // The hover preview on the topmost overlay, under the cursor: the pencil fills
+  // the exact texels a stamp would paint with the active ink (WYSIWYG — the OS
+  // crosshair marks the position); the eyedropper outlines a single cell (its
+  // sample target). Cleared with t == null when the pointer leaves the canvas.
+  // Only these two have a hover preview — the rect tool relies on the OS
+  // crosshair when idle and its own drag preview when dragging — so for any
+  // other tool this just clears the overlay.
   #drawCursor(t) {
     this.#hoverTexel = t;
     const g = this.#cursorCtx;
     if (!g) return;
-    const eyedropper = this.tool === 'eyedropper';
-    drawCursorOutline(
+    if (this.tool === 'eyedropper') {
+      drawCursorOutline(g, this.#overlayView, t, 1, false);
+      return;
+    }
+    drawPencilPreview(
       g,
       this.#overlayView,
-      this.tool === 'pencil' || eyedropper ? t : null,
-      eyedropper ? 1 : this.pencilSize,
-      this.erase && !eyedropper
+      this.tool === 'pencil' ? t : null,
+      this.pencilSize,
+      this.ink,
+      this.erase
     );
   }
 

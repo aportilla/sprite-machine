@@ -108,10 +108,11 @@ see [UI layer: Lit](#ui-layer-lit).
   little-arrows number field) sits in the settings row, and the draw box carries a
   **per-tool options** bar. For the **pencil**, a **tip-size slider** (with an
   `N px` readout) that stamps an
-  **N×N** square footprint and **previews it** as a hairline outline on the canvas
-  as you hover; while the pencil is active the **OS cursor is hidden** over the
-  canvas, so that hover outline _is_ the cursor — the exact texels a stamp will
-  cover, nothing else floating over them. For the **rect**, a **corner-radius
+  **N×N** square footprint and **previews it filled with the active ink** on the
+  canvas as you hover — the exact texels a stamp will cover, looking exactly as
+  the art would after the click (a translucent red block while erasing, since
+  transparency can't be previewed on an overlay) — with the **OS crosshair kept
+  on top** marking the position. For the **rect**, a **corner-radius
   stepper** (`radius: N px`, `0` = sharp): **drag** a box and a **live preview**
   (the exact filled texels, tinted by the ink — red while erasing — under a haloed
   bounding box) tracks the drag on the top overlay; **release** commits it, and
@@ -147,8 +148,8 @@ see [UI layer: Lit](#ui-layer-lit).
   **eyedropper** (`I`) is a sticky mode exactly like its three siblings: it stays
   selected, and every canvas click samples the clicked texel into the **ink** — a
   painted texel's color, or transparent ("clear color") for empty space — until
-  another tool is picked (while it's active the OS cursor hides behind a 1-cell
-  outline over its sample target, the same treatment as the pencil's footprint).
+  another tool is picked (while it's active a 1-cell hairline outline marks its
+  sample target under the OS crosshair).
   Hold **Alt** instead for a momentary sample that doesn't leave the current
   tool. The eyedropper and the transparent swatch pick the pencil's **ink**
   rather than performing a drawing op: selecting transparent then drawing (or a
@@ -253,8 +254,8 @@ step T-junctions show as _expected_ nonzero boundary/odd edges, not holes, so th
 locked-square UI can't produce) to apply one **centered** tile resize (the same
 `anchor:'center'` path the stepper drives) after the first build,
 `?palette=1` to open the 256-color "Colors" dialog on the first mount, `?cursor=<N>`
-to set the pencil size to N and draw its footprint outline at the tile center on
-mount, `?pick=<N>` to select `PALETTE_256[N]` as the ink on mount (as if picked
+to set the pencil size to N and draw its filled footprint preview at the tile center
+on mount, `?pick=<N>` to select `PALETTE_256[N]` as the ink on mount (as if picked
 from the dialog) so a shot can show it landing as the current-ink swatch, and
 `?rect=<x0,y0,x1,y1[,r[,sq]]>` to select the rect tool and draw its live drag preview
 for that box (corner radius `r`; `sq=1` for the Shift square-lock) on mount so a shot

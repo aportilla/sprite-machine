@@ -286,7 +286,7 @@ const PROBE = `(() => {${DEEP}
     checkedRadio: checked ? checked.getAttribute('value') : null,
     tileField: __q('.editor-tile-size').value,
     dialogOpen: !!(__q('vf-dialog') && __q('vf-dialog').open),
-    hideCursorClass: canvas.classList.contains('hide-cursor'),
+    cursorStyle: getComputedStyle(canvas).cursor,
     rect: { left: r.left, top: r.top, width: r.width, height: r.height },
     tileW: canvas.width,
     stats,
@@ -423,7 +423,7 @@ async function main() {
 
   section(`boot — face=${s.face} tile=${TILE}px`);
   check('boots with the pencil active', s.drawTool === 'pencil', s.drawTool);
-  check('pencil hides the OS cursor over the canvas', s.hideCursorClass === true);
+  check('pencil keeps the OS crosshair over the canvas', s.cursorStyle === 'crosshair');
   check('options bar shows the pencil slider', s.opts.join(',') === 'vf-slider,vf-label');
   check('face picker reflects ?edit=front', s.face === 'front', s.face);
   check('the checked radio follows the face', s.checkedRadio === 'front');
@@ -440,7 +440,7 @@ async function main() {
     s.opts.join(',') === 'vf-label,vf-number-field',
     s.opts.join(',')
   );
-  check('the rect tool restores the OS crosshair', s.hideCursorClass === false);
+  check('the rect tool keeps the OS crosshair', s.cursorStyle === 'crosshair');
 
   await keyPress('g');
   s = await probe();
@@ -454,7 +454,7 @@ async function main() {
   await keyPress('i');
   s = await probe();
   check('I selects the eyedropper tool', s.drawTool === 'eyedropper', s.drawTool);
-  check('the eyedropper hides the OS cursor too', s.hideCursorClass === true);
+  check('the eyedropper keeps the OS crosshair too', s.cursorStyle === 'crosshair');
   check('the eyedropper has an empty options bar', s.opts.length === 0, s.opts.join(','));
 
   await keyPress('e');
