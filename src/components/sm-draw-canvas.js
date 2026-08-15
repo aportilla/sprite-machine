@@ -37,18 +37,105 @@
 //     tile) even with all-tiles on — a local fill avoids a re-mount mid-mount.
 // ---------------------------------------------------------------------------
 
-import { LitElement, html } from 'lit';
+import { css, LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { createRef, ref } from 'lit/directives/ref.js';
 import { writeTexel, stampBrush, strokeLine } from '../lib/brush.js';
 import { roundedRectRows, squareEnd } from '../lib/rect.js';
 import { keyAt, floodFill, replaceColor } from '../lib/fill.js';
 import { drawGuides, drawCursorOutline, drawRectPreview } from './draw-overlays.js';
+import { baseStyles } from './base-styles.js';
 
 // MIRROR_ALPHA keeps the onion-skin a faint hint.
 const MIRROR_ALPHA = 0.22;
 
 export class SmDrawCanvas extends LitElement {
+  static styles = [
+    baseStyles,
+    css`
+      :host {
+        display: contents;
+      }
+      /* The canvas CONTAINER fills the draw box below the options bar and centers
+       the integer-scaled canvas stack (sized by #layout()). */
+      .editor-canvas-wrap {
+        flex: 1 1 auto;
+        min-height: 0; /* let it shrink so #layout() can integer-fit the canvas inside */
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px;
+        overflow: hidden; /* clip if a tiny container forces the min (scale 1) canvas over */
+      }
+      /* The centered square holding the four aligned canvas layers; sized by #layout(). */
+      .editor-canvas-stack {
+        position: relative;
+        flex: 0 0 auto;
+      }
+      /* All four layers fill the stack (backing stores managed in JS): a background
+       (checkerboard via CSS + faded onion-skin, native tile res), the transparent pixel
+       canvas (native tile res), then the guide + cursor overlays (screen res). */
+      .editor-canvas-stack > canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+      /* Only the pixel canvas takes pointer events (default auto); the others pass
+       clicks through to it. */
+      .editor-canvas {
+        z-index: 1;
+        cursor: crosshair;
+        touch-action: none;
+      }
+      /* With the pencil or the eyedropper active, the hover outline (the stamp
+       footprint / the 1-cell sample target) IS the cursor, so hide the OS pointer
+       over the canvas — only the hairline outline shows what a click will touch. */
+      .editor-canvas.hide-cursor {
+        cursor: none;
+      }
+      /* Faded onion-skin (drawn) over a checkerboard (CSS), UNDER the transparent
+       pixel canvas so both show through unpainted texels. */
+      .editor-canvas-bg {
+        z-index: 0;
+        pointer-events: none;
+        /* Classic light transparency checker (pale gray + off-white), so empty texels
+         read as "no color" against the darker gray canvas well framing them. */
+        background-color: #a8a8a8;
+        background-image: linear-gradient(
+            45deg,
+            #d0d0d0 25%,
+            transparent 25%,
+            transparent 75%,
+            #d0d0d0 75%
+          ),
+          linear-gradient(
+            45deg,
+            #d0d0d0 25%,
+            transparent 25%,
+            transparent 75%,
+            #d0d0d0 75%
+          );
+        background-size: 16px 16px;
+        background-position:
+          0 0,
+          8px 8px;
+      }
+      /* Hairline extent rules sit ABOVE the pixel canvas; the cursor preview above them. */
+      .editor-canvas-overlay {
+        z-index: 2;
+        pointer-events: none;
+      }
+      .editor-canvas-cursor {
+        z-index: 3;
+        pointer-events: none;
+      }
+    `,
+  ];
+
   static properties = {
     tile: { attribute: false },
     tileW: { type: Number },
@@ -129,10 +216,6 @@ export class SmDrawCanvas extends LitElement {
   #cursorCtx = null;
 
   #drawHooksDone = false; // the one-shot canvas dev hooks ran (first update)
-
-  createRenderRoot() {
-    return this; // light DOM — style.css + `capture.sh dom` keep working
-  }
 
   // --- lifecycle -------------------------------------------------------------
   connectedCallback() {
@@ -398,7 +481,8 @@ export class SmDrawCanvas extends LitElement {
 
   // --- events -----------------------------------------------------------------
   #emit(type, detail) {
-    // Light DOM ⇒ no `composed` needed; the container / dock hear it on the way up.
+    // Dispatched on the HOST (which lives in the container's tree), so no
+    // `composed` is needed for the container to hear it.
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true }));
   }
 

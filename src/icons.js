@@ -9,7 +9,8 @@
 // icon paints in its host button's text color for free — active / disabled /
 // hover states all follow automatically (no per-icon color wiring). We ship no
 // <sp-theme>, so the icons have no intrinsic size: the theme-independent hook
-// their host honors is `--mod-icon-size`, set per context in style.css.
+// their host honors is `--mod-icon-size`, set per context by the styles of the
+// component that places them (the tool strip, the warning row).
 //
 // Icons are DECORATIVE (no `label` ⇒ the host sets aria-hidden); the button they
 // sit in carries the accessible name (aria-label / title / text).

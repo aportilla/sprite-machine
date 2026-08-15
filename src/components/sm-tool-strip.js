@@ -5,13 +5,15 @@
 // `sm-pick-tool {tool}` events up. All four cells are sibling sticky modes —
 // the eyedropper selects like any other tool.
 //
-// LIGHT DOM + `display: contents`, so `.editor-toolstrip` keeps its box.
+// Shadow DOM; `:host { display: contents }`, so the strip sits in the rail
+// directly.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
-import { LitElement, html } from 'lit';
+import { css, LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import '../icons.js'; // registers the <sp-icon-*> tool glyphs used below
+import { baseStyles } from './base-styles.js';
 
 // The four tool glyphs, as module-constant templates: a TemplateResult diffs to
 // a no-op, where a freshly built element would make lit swap the icon on every
@@ -22,6 +24,39 @@ const ICON_FILL = html`<sp-icon-color-fill></sp-icon-color-fill>`;
 const ICON_SAMPLER = html`<sp-icon-sampler></sp-icon-sampler>`;
 
 export class SmToolStrip extends LitElement {
+  static styles = [
+    baseStyles,
+    css`
+      :host {
+        display: contents;
+      }
+      /* Tool cells inside the vf-grid strip: plain buttons that fill their cell
+       (the grid draws the lattice + frame); the selected tool inverts. */
+      .editor-toolstrip .editor-tool {
+        place-self: stretch;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: var(--sm-white);
+        color: var(--sm-black);
+        cursor: pointer;
+        --mod-icon-size: 18px;
+      }
+      .editor-toolstrip .editor-tool:active,
+      .editor-toolstrip .editor-tool.active {
+        background: var(--sm-black);
+        color: var(--sm-white);
+      }
+      .editor-toolstrip .editor-tool:focus-visible {
+        outline: 1px dotted currentColor;
+        outline-offset: -4px;
+      }
+    `,
+  ];
+
   static properties = {
     tool: {},
   };
@@ -29,10 +64,6 @@ export class SmToolStrip extends LitElement {
   constructor() {
     super();
     this.tool = 'pencil';
-  }
-
-  createRenderRoot() {
-    return this; // light DOM — style.css + `capture.sh dom` keep working
   }
 
   render() {

@@ -5,12 +5,13 @@
 // route to the loaders, download drains the doc and snapshots the canonical
 // sheet. Static content — it renders once (samples are a build-time constant).
 //
-// LIGHT DOM + a `display: contents` host rule, so the box tree inside #topbar
-// is exactly the brand/actions row style.css already lays out.
+// A standard shadow-DOM Lit component; `:host { display: contents }` keeps the
+// #topbar flex row laying out the brand/actions children directly.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
-import { LitElement, html } from 'lit';
+import { css, LitElement, html } from 'lit';
+import { baseStyles } from './base-styles.js';
 import { createRef, ref } from 'lit/directives/ref.js';
 import { SAMPLES } from '../lib/sprite-data.js';
 import { loadSample, loadFile, loadBlank } from '../loaders.js';
@@ -20,12 +21,23 @@ import { imageDataToBlob, downloadBlob } from '../image-io.js';
 import { label } from './ui-bits.js';
 
 export class SmTopbar extends LitElement {
+  static styles = [
+    baseStyles,
+    css`
+      /* The host box dissolves — #topbar's own flex row lays the children out. */
+      :host {
+        display: contents;
+      }
+      .topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+    `,
+  ];
+
   /** @type {import('lit/directives/ref.js').Ref<HTMLInputElement>} */
   #fileInput = createRef();
-
-  createRenderRoot() {
-    return this; // light DOM — style.css + `capture.sh dom` keep working
-  }
 
   render() {
     return html`

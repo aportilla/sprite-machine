@@ -12,9 +12,16 @@
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
-import { LitElement, html, nothing } from 'lit';
+import { css, LitElement, html, nothing } from 'lit';
 
 export class SmColorPicker extends LitElement {
+  // Host-only: the dialog + grid carry their own kit styles.
+  static styles = css`
+    :host {
+      display: contents;
+    }
+  `;
+
   static properties = {
     palette: { attribute: false },
     open: { type: Boolean },
@@ -27,10 +34,6 @@ export class SmColorPicker extends LitElement {
     /** @type {{css:string, rgb:{r:number,g:number,b:number}}[]} */
     this.palette = [];
     this.open = false;
-  }
-
-  createRenderRoot() {
-    return this; // light DOM — style.css + `capture.sh dom` keep working
   }
 
   render() {

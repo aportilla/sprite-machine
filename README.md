@@ -20,14 +20,17 @@ server:
 
 ```bash
 tools/capture.sh shot 'http://localhost:5173/?sample=car&rotate=0' /tmp/shot.png
-tools/capture.sh dom  'http://localhost:5173/?diag=1&rotate=0'   # serialized DOM
+tools/capture.sh dom  'http://localhost:5173/?diag=1&rotate=0'   # light-DOM shell + title
 node tools/drive.mjs                                             # editor smoke test
 ```
 
 `capture.sh` shows what the app **looks** like — its shots are byte-deterministic,
-so `cmp` against a saved baseline is a real regression check. `drive.mjs` covers
+so `cmp` against a saved baseline is a real regression check (its `dom` mode only
+serializes light DOM — the page shell and `<title>` — since the components render
+in shadow DOM). `drive.mjs` covers
 what no screenshot can: it drives the editor over the DevTools Protocol with real
-trusted input (keys, drags, the color dialog, face swaps, tile resizes) and exits
+trusted input (keys, drags, the color dialog, face swaps, tile resizes), probing
+through the components' shadow roots, and exits
 non-zero on any failure. `tools/refactor-check.sh` builds on the first:
 `record` shoots a fixed URL matrix (every dev hook) into a git-ignored
 `refactor-baselines/`, and a plain run `cmp`s the live app against it — a
@@ -185,7 +188,8 @@ see [UI layer: Lit](#ui-layer-lit).
   in the settings row switch which face you edit, laid out as mirror pairs
   (`left`/`right`, `front`/`back`, `top`/`bottom`)
   so you can flip between a pair for reference. Each icon is a **21×26 pixel-art**
-  isometric cube (`src/assets/faces/`, wired up in `src/face-icons.js`): the three
+  isometric cube (`src/assets/faces/`, wired up inside `sm-face-picker.js` — the one
+  component that renders and styles them): the three
   quads the view shows (`front`, `left`, `top`) fill **solid red**, and their hidden
   opposites (`back`, `right`, `bottom`) draw a thin red **sliver** peeking out along
   the silhouette edge they hide behind — "the far side of this one". Left/right in
@@ -193,8 +197,9 @@ see [UI layer: Lit](#ui-layer-lit).
   lower-**right** quad, the way a car facing you shows its left flank on your right —
   deliberately not the world-axis reading (`left` = −x, on the viewer's left). The **checked**
   face takes a **50% red dither** (`selected.png`) laid over its whole cube; the
-  overlay is always in the DOM and CSS paints it only under a checked `vf-radio`, so
-  it tracks the group's own state. Being raster pixel art, every tile goes through
+  overlay is always in the DOM and the picker's template flips its visibility class
+  off the `selected` prop, so it never re-mounts (and never depends on the kit's
+  internal radio state). Being raster pixel art, every tile goes through
   the kit's **`vf-img`** — one image pixel is one system px, magnified
   nearest-neighbor on whole device pixels — and the dither is positioned with
   `vf-img`'s own `top`/`left` (system px), so it stays registered to the art's grid
@@ -435,7 +440,7 @@ src/
   loaders.js      every way a sheet enters (sample / file / blank): decode + validateSheet -> doc.loadAtlas | build.setError
   drop-target.js  whole-app drag & drop + overlay -> loaders
   shortcuts.js    document-level B/R/G/I/E -> session actions (Esc/Shift are gesture-scoped and live in the canvas)
-  components/     all Lit, all LIGHT DOM (display: contents hosts) — see "UI layer" below
+  components/     all Lit, standard SHADOW DOM (mostly `:host { display: contents }`) — see "UI layer" below
     sm-editor.js       CONNECTED container: panel layout + leaf wiring; memoizes the per-face view model
                        (face / views-identity / geometry) and translates leaf events into store actions —
                        the only editor file that knows the store exists
@@ -446,8 +451,10 @@ src/
                        presentational leaves: props down, bubbling sm-* events up, no store imports
     sm-topbar.js, sm-stage-controls.js, sm-stats-readout.js
                        connected chrome: pick-atlas menu + download / prefs toggles / build readout
-    ui-bits.js         shared caption + warning-row template helpers
-  face-icons.js   face-picker cube icons: pixel-art PNGs (assets/faces/) in vf-img + the "selected" dither overlay, as lit templates
+    ui-bits.js         shared caption + warning-row template helpers (+ the warn row's styles,
+                       a css export its consumers compose into their own `static styles`)
+    base-styles.js     the shared border-box reset every component composes first (box-sizing
+                       doesn't inherit across shadow boundaries)
   image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
   icons.js        registers the Adobe Spectrum workflow <sp-icon-*> tool-cell + warning glyphs, written literally in the component templates (color via currentColor, size via --mod-icon-size; no sp-theme)
 ```
@@ -464,10 +471,23 @@ document), `session` (the editor's brush state), `prefs`, `build` — and a
 slice change. **Connected** components (`sm-editor` and the chrome) read slices
 and call named actions; the editor **leaves** are dumb — props down, bubbling
 `sm-*` events up, no store imports — so store coupling stays visible and
-greppable. Every component renders into the **light DOM**
-(`createRenderRoot() { return this }` + `display: contents` hosts), so
-`style.css` targets the same classes it always did, the box tree is unchanged,
-and `tools/capture.sh dom` still sees everything.
+greppable. Every component is a **standard shadow-DOM Lit element**: its
+styles live with it as ``static styles = css`…` ``, scoped to its own root and
+composed over a shared `baseStyles` (`components/base-styles.js` — the
+border-box reset, which does not inherit across shadow boundaries). Hosts that
+are pure containers dissolve with `:host { display: contents }`, so the
+flattened box tree is exactly what the classed markup lays out;
+`<sm-tool-options>` is the one host with a real box (it IS the options bar).
+Leaf events are dispatched on the host element itself — the host lives in the
+parent's tree, so they reach the container without `composed`. `style.css`
+keeps only the page's share: the palette tokens (custom properties inherit
+into every shadow tree), the reset, the `#app` header/split frame, and the
+drop overlay `drop-target.js` renders into the page. The `.warn` row's styles
+live with its template as ui-bits' `warnStyles` export, composed by whoever
+renders `warnRow()`. One consequence for tooling: `tools/capture.sh dom` only
+serializes light DOM (the page shell + `<title>`), so DOM-dump baselines are
+retired — the byte-deterministic screenshots and the shadow-piercing
+`drive.mjs` are the regression surface.
 
 **The two-speed state system** is the correctness core. Store state is what
 templates read; everything the canvas hot paths touch is a plain `#private`

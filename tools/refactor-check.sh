@@ -2,8 +2,11 @@
 # Refactor safety net: shoot a fixed URL matrix through tools/capture.sh and
 # compare byte-for-byte against recorded baselines. Screenshots are
 # byte-deterministic (fixed window size, DSF 1, virtual time budget, rotate=0),
-# so `cmp` is a real "no visual change" gate — not a judgment call. A couple of
-# `dom` snapshots ride along so structural drift shows up as a readable diff.
+# so `cmp` is a real "no visual change" gate — not a judgment call.
+# (The old serialized-DOM baselines are retired: the sm-* components render in
+# shadow DOM now, which Chrome's --dump-dom cannot see, so a DOM dump is just
+# the static page shell. The ?diag=1 check below still reads the dump — it
+# only needs <title>, which is light DOM.)
 #
 # Usage:
 #   npm run dev                      # in another shell
@@ -53,26 +56,9 @@ SHOTS=(
   'tile24|/?tile=24&rotate=0'
   'lowpoly-off|/?lowpoly=0&rotate=0'
 )
-DOMS=(
-  'default|/?rotate=0'
-  'edit-front|/?edit=front&rotate=0'
-  'diag|/?diag=1&rotate=0'
-)
 
 mkdir -p "$BASE"
 fails=0
-
-# Three nondeterministic byte sequences pollute an otherwise stable DOM dump:
-# lit stamps its marker comments with a per-page-load random number
-# (<!--?lit$NNNNNNNN$-->); Vite cache-busts module URLs with ?t=<mtime> once a
-# module has been edited under the running dev server; and the ?diag=1 title is
-# written ASYNCHRONOUSLY (a dynamic import racing the virtual-time dump), so
-# whether it landed by dump time is a coin flip. Normalize all three so `diff`
-# only sees real drift — the diag title is asserted semantically below instead.
-normalize_dom() {
-  sed -E -e 's/lit\$[0-9]+\$/lit$N$/g' -e 's/\?t=[0-9]+//g' \
-    -e 's|<title>[^<]*</title>|<title>TITLE</title>|'
-}
 
 if [ "$MODE" = "record" ]; then
   for e in "${SHOTS[@]}"; do
@@ -80,12 +66,6 @@ if [ "$MODE" = "record" ]; then
     url="$HOST${e#*|}"
     tools/capture.sh shot "$url" "$BASE/$name.png" >/dev/null
     echo "recorded  $name.png"
-  done
-  for e in "${DOMS[@]}"; do
-    name="${e%%|*}"
-    url="$HOST${e#*|}"
-    tools/capture.sh dom "$url" | normalize_dom >"$BASE/$name.dom.html"
-    echo "recorded  $name.dom.html"
   done
   echo "baselines recorded into $BASE/"
   exit 0
@@ -110,24 +90,6 @@ for e in "${SHOTS[@]}"; do
     # Keep the differing shot next to the baseline for eyeballing.
     cp "$TMP/$name.png" "$BASE/$name.FAIL.png"
     echo "DIFF  $name.png (differing shot kept at $BASE/$name.FAIL.png)"
-    fails=$((fails + 1))
-  fi
-done
-
-for e in "${DOMS[@]}"; do
-  name="${e%%|*}"
-  url="$HOST${e#*|}"
-  if [ ! -s "$BASE/$name.dom.html" ]; then
-    echo "MISS  $name.dom.html (no baseline — run 'refactor-check.sh record')"
-    fails=$((fails + 1))
-    continue
-  fi
-  tools/capture.sh dom "$url" | normalize_dom >"$TMP/$name.dom.html"
-  if diff -q "$BASE/$name.dom.html" "$TMP/$name.dom.html" >/dev/null; then
-    echo "ok    $name.dom.html"
-  else
-    cp "$TMP/$name.dom.html" "$BASE/$name.FAIL.dom.html"
-    echo "DIFF  $name.dom.html (kept at $BASE/$name.FAIL.dom.html — diff it)"
     fails=$((fails + 1))
   fi
 done

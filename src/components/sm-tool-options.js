@@ -7,15 +7,38 @@
 // {n}` / `sm-set-fill-opts {replace?|allTiles?}` events up. `live()` bindings
 // throughout, so a re-render can't skip a re-sync after typing.
 //
-// This element IS the `.editor-opts` box (the container gives it the class):
-// its children are the bare controls, exactly the surface drive.mjs probes.
+// This element IS the options bar (`:host` carries the box); its shadow root
+// holds the bare controls, exactly the surface drive.mjs probes.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
-import { LitElement, html, nothing } from 'lit';
+import { css, LitElement, html, nothing } from 'lit';
 import { live } from 'lit/directives/live.js';
+import { baseStyles } from './base-styles.js';
 
 export class SmToolOptions extends LitElement {
+  // The one sm-* host with a REAL box (no `display: contents`): this element
+  // IS the options bar, so `:host` carries its flex-row layout.
+  static styles = [
+    baseStyles,
+    css`
+      :host {
+        flex: none;
+        min-height: 38px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 6px 12px;
+        background: var(--sm-white);
+        border-bottom: 1px solid var(--sm-black);
+      }
+      .editor-size-slider {
+        flex: 1;
+        max-width: 260px;
+      }
+    `,
+  ];
+
   static properties = {
     tool: {},
     pencilSize: { type: Number },
@@ -35,10 +58,6 @@ export class SmToolOptions extends LitElement {
     this.radiusMax = 0;
     this.fillReplace = false;
     this.fillAllTiles = false;
-  }
-
-  createRenderRoot() {
-    return this; // light DOM — style.css + `capture.sh dom` keep working
   }
 
   render() {

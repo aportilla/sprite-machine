@@ -19,9 +19,10 @@
 //
 // Assumes the CAR sample at its shipped 40px tile: the texel coordinates below
 // are picked off that art (a body pixel to eyedrop, an empty corner to rect into).
-// It asserts on the light-DOM contract — `.editor-*` class names, `vf-*` tags,
-// the `.stage-stats` readout — which is exactly the surface style.css and the
-// capture crops depend on, so a change that breaks this breaks those too.
+// The sm-* components render in SHADOW DOM, so every page-side probe goes
+// through the shadow-piercing __q/__qa helpers (DEEP, below) instead of bare
+// document.querySelector — the `.editor-*` class names and `vf-*` tags it
+// asserts on live inside those roots.
 //
 // PROCESS HYGIENE, same concern as capture.sh: an agent harness may SIGKILL this
 // script, and SIGKILL cannot be trapped, so `finally` is not enough. Three
@@ -232,21 +233,40 @@ function check(name, ok, extra = '') {
 }
 const section = (title) => console.log(`\n[${title}]`);
 
+// --- shadow-piercing queries -------------------------------------------------
+// The sm-* components render in shadow DOM, so document.querySelector can't
+// see the editor's internals. Every page-side expression inlines these
+// helpers: __qa runs the selector inside the document AND inside every open
+// shadow root (both ends of a descendant selector must share one root — true
+// for every probe below); __q takes the first hit. Inlined per-expression, so
+// the headless mid-run reload can never wipe an installed helper.
+const DEEP = `
+  const __qa = (sel, root = document) => {
+    const out = [];
+    const walk = (r) => {
+      for (const el of r.querySelectorAll(sel)) out.push(el);
+      for (const el of r.querySelectorAll('*')) if (el.shadowRoot) walk(el.shadowRoot);
+    };
+    walk(root);
+    return out;
+  };
+  const __q = (sel, root = document) => __qa(sel, root)[0] || null;
+`;
+
 // --- page probes ------------------------------------------------------------
 // One round trip that reads everything the checks below assert on, so a probe is
 // a consistent snapshot rather than a series of racing reads.
-const PROBE = `(() => {
-  const q = (s) => document.querySelector(s);
+const PROBE = `(() => {${DEEP}
   const tools = {};
-  for (const b of document.querySelectorAll('.editor-tool')) {
+  for (const b of __qa('.editor-tool')) {
     tools[b.getAttribute('aria-label')] = b.classList.contains('active');
   }
-  const sw = q('.editor-selected');
-  const canvas = q('.editor-canvas');
+  const sw = __q('.editor-selected');
+  const canvas = __q('.editor-canvas');
   const r = canvas.getBoundingClientRect();
-  const checked = q('vf-radio[checked]');
+  const checked = __q('vf-radio[checked]');
   const stats = {};
-  for (const row of document.querySelectorAll('.stage-stats .stat')) {
+  for (const row of __qa('.stage-stats .stat')) {
     stats[row.children[0].textContent.trim()] = row.children[1].textContent.trim();
   }
   return {
@@ -256,15 +276,16 @@ const PROBE = `(() => {
     drawTool:
       ['pencil', 'rectangle', 'fill', 'eyedropper'].find((t) => tools[t]) || null,
     inkColor: sw ? sw.getAttribute('color') : null,
-    transparentActive: !!q('vf-swatch.editor-transparent.active'),
-    recent: [...document.querySelectorAll('.editor-recent vf-swatch')].map((s) =>
-      s.getAttribute('color')
+    transparentActive: !!__q('vf-swatch.editor-transparent.active'),
+    recent: __qa('.editor-recent vf-swatch').map((s) => s.getAttribute('color')),
+    // The options bar IS <sm-tool-options>; its shadow root holds the bare controls.
+    opts: [...__q('sm-tool-options').shadowRoot.children].map((c) =>
+      c.tagName.toLowerCase()
     ),
-    opts: [...q('.editor-opts').children].map((c) => c.tagName.toLowerCase()),
-    face: q('.editor-face-picker').value,
+    face: __q('.editor-face-picker').value,
     checkedRadio: checked ? checked.getAttribute('value') : null,
-    tileField: q('.editor-tile-size').value,
-    dialogOpen: !!(q('vf-dialog') && q('vf-dialog').open),
+    tileField: __q('.editor-tile-size').value,
+    dialogOpen: !!(__q('vf-dialog') && __q('vf-dialog').open),
     hideCursorClass: canvas.classList.contains('hide-cursor'),
     rect: { left: r.left, top: r.top, width: r.width, height: r.height },
     tileW: canvas.width,
@@ -302,16 +323,16 @@ async function probe() {
 
 // One texel of the editor's live pixel canvas, as [r,g,b,a].
 const texelAt = (px, py) =>
-  evaluate(`(() => {
-    const c = document.querySelector('.editor-canvas');
+  evaluate(`(() => {${DEEP}
+    const c = __q('.editor-canvas');
     const d = c.getContext('2d').getImageData(${px}, ${py}, 1, 1).data;
     return [d[0], d[1], d[2], d[3]];
   })()`);
 
 // True when every texel of a layer is fully transparent.
 const layerIsEmpty = (sel) =>
-  evaluate(`(() => {
-    const c = document.querySelector('${sel}');
+  evaluate(`(() => {${DEEP}
+    const c = __q('${sel}');
     const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
     for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return false;
     return true;
@@ -319,8 +340,8 @@ const layerIsEmpty = (sel) =>
 
 // The viewport rect of an element, and its centre — how a click finds a control.
 const centreOf = (sel) =>
-  evaluate(`(() => {
-    const r = document.querySelector('${sel}').getBoundingClientRect();
+  evaluate(`(() => {${DEEP}
+    const r = __q('${sel}').getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   })()`);
 
@@ -333,8 +354,10 @@ const texelPos = (rect, tile, px, py) => ({
 const hex = ([r, g, b]) =>
   '#' + [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('');
 
-const APP_READY = `!!(document.querySelector('.editor-canvas') &&
-  document.querySelector('.stage-stats').textContent.includes('voxels'))`;
+const APP_READY = `(() => {${DEEP}
+  return !!(__q('.editor-canvas') &&
+    __q('.stage-stats').textContent.includes('voxels'));
+})()`;
 
 async function waitForApp() {
   for (let i = 0; i < 100; i++) {
@@ -447,9 +470,9 @@ async function main() {
   check('B restores a solid ink swatch', /^#[0-9a-f]{6}$/.test(s.inkColor || ''));
 
   // The kit hosts its <input> in shadow DOM, so the guard has to read the
-  // composed path — a light-DOM tagName check would let this through.
+  // composed path — a retargeted document-level check would let this through.
   await evaluate(
-    `document.querySelector('.editor-tile-size').shadowRoot.querySelector('input').focus()`
+    `(() => {${DEEP} __q('.editor-tile-size').shadowRoot.querySelector('input').focus(); })()`
   );
   await keyPress('r');
   s = await probe();
@@ -457,7 +480,11 @@ async function main() {
     'a letter typed in the tile field does not switch tools',
     s.drawTool === 'pencil'
   );
-  await evaluate(`document.activeElement.blur()`);
+  // Blur the INNERMOST focused element — document.activeElement is only the
+  // outermost shadow host.
+  await evaluate(`(() => { let a = document.activeElement;
+    while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+    if (a) a.blur(); })()`);
 
   // --- pencil ---------------------------------------------------------------
   section('pencil');
@@ -604,7 +631,7 @@ async function main() {
   // --- tile resize by the stepper -------------------------------------------
   section('tile resize');
   const stepper = await evaluate(
-    `(() => { const st = document.querySelector('.editor-tile-size')
+    `(() => {${DEEP} const st = __q('.editor-tile-size')
         .shadowRoot.querySelector('[part="stepper"]').getBoundingClientRect();
       return { x: st.left + st.width / 2, y: st.top + st.height * 0.25 }; })()`
   );
@@ -628,7 +655,7 @@ async function main() {
   section('typed tile entry');
   await freshPage();
   await evaluate(
-    `document.querySelector('.editor-tile-size').shadowRoot.querySelector('input').focus()`
+    `(() => {${DEEP} __q('.editor-tile-size').shadowRoot.querySelector('input').focus(); })()`
   );
   // Clear with real keystrokes — an out-of-band `input.value = ''` races with
   // live() re-asserting the bound value on the next render.
@@ -639,10 +666,12 @@ async function main() {
   await sleep(700);
   s = await probe();
   check('typing a tile size commits it', s.tileW === 42, `tileW=${s.tileW}`);
+  // Walk the whole delegated-focus chain (sm-editor → vf-number-field → input)
+  // and report the innermost host/leaf pair.
   const focusAfter = await evaluate(
-    `(() => { const a = document.activeElement; if (!a) return null;
-      const inner = a.shadowRoot && a.shadowRoot.activeElement;
-      return (a.tagName + '/' + (inner ? inner.tagName : '-')).toLowerCase(); })()`
+    `(() => { const chain = []; let a = document.activeElement;
+      while (a) { chain.push(a.tagName.toLowerCase()); a = a.shadowRoot && a.shadowRoot.activeElement; }
+      return chain.length ? chain.slice(-2).join('/') : null; })()`
   );
   check(
     'keyboard focus stays in the tile field across the resize',
@@ -667,7 +696,7 @@ async function main() {
   const inkSwatch = await centreOf('.editor-selected');
   await click(inkSwatch.x, inkSwatch.y);
   await sleep(400);
-  await evaluate(`document.querySelector('vf-dialog').close()`);
+  await evaluate(`(() => {${DEEP} __q('vf-dialog').close(); })()`);
   await sleep(300);
   for (const face of ['top', 'back', 'left']) {
     const p = await centreOf(`vf-radio[value="${face}"]`);
@@ -676,10 +705,11 @@ async function main() {
   }
   s = await probe();
   const counts = await evaluate(
-    `({ editors: document.querySelectorAll('sm-editor').length,
-        dialogs: document.querySelectorAll('vf-dialog').length,
-        cells: document.querySelectorAll('.editor-picker-grid vf-swatch').length,
-        canvases: document.querySelectorAll('.editor-canvas').length })`
+    `(() => {${DEEP}
+      return { editors: __qa('sm-editor').length,
+        dialogs: __qa('vf-dialog').length,
+        cells: __qa('.editor-picker-grid vf-swatch').length,
+        canvases: __qa('.editor-canvas').length }; })()`
   );
   check('three face swaps reuse ONE element', counts.editors === 1, `${counts.editors}`);
   check(
@@ -756,7 +786,7 @@ async function main() {
   s = await probe();
   check('clicking the ink swatch opens the Colors dialog', s.dialogOpen === true);
   const cell = await evaluate(
-    `(() => { const cells = document.querySelectorAll('.editor-picker-grid vf-swatch');
+    `(() => {${DEEP} const cells = __qa('.editor-picker-grid vf-swatch');
       const c = cells[70]; const r = c.getBoundingClientRect();
       return { count: cells.length, x: r.left + r.width / 2, y: r.top + r.height / 2,
                color: c.getAttribute('color') }; })()`

@@ -4,7 +4,9 @@
 // container we don't own). A depth counter keeps the overlay stable as the
 // drag crosses child elements (dragenter/leave bubble from every descendant);
 // the overlay's visibility is a CSS rule off `#app.app-drag`, so this stays a
-// classList toggle. Dropped files route to the loaders.
+// classList toggle. The overlay renders into the PAGE's light DOM, so its
+// styles live with the page's share in style.css. Dropped files route to the
+// loaders.
 // ---------------------------------------------------------------------------
 
 import { html, render } from 'lit';

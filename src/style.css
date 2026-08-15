@@ -1,13 +1,13 @@
 /* ---------------------------------------------------------------------------
    Sprite Machine — System 7 chrome via the `vintage-frames` web component kit.
 
-   The components carry their own styles (1-bit borders, Chicago/Geneva bitmap
-   faces, hard offset shadows); this sheet only supplies the PAGE's share:
-     - the app frame (header strip over an editor-left / stage-right split);
-     - layout inside the editor panel (settings row, tool rail, draw box);
-     - the canvas stack (four aligned layers + the transparency checker);
-     - the few app-specific 1-bit bits the kit has no component for (the tool
-       cells inside a vf-grid, the floating stage panels, the drop overlay).
+   The kit's components carry their own styles (1-bit borders, Chicago/Geneva
+   bitmap faces, hard offset shadows), and every sm-* component carries ITS own
+   (standard Lit `static styles`, scoped to its shadow root). This sheet
+   supplies only the PAGE's share: the shared palette tokens (custom properties
+   inherit into every shadow tree), the reset, the app frame index.html
+   declares (header strip over an editor-left / stage-right split), and the
+   drop overlay drop-target.js renders into #app.
    Palette: black #000 / white #fff, System 7 mid gray #808080 for the stage,
    and a dark artwork well behind the pixel canvas so sprite art pops.
    --------------------------------------------------------------------------- */
@@ -57,11 +57,6 @@ body {
   position: relative;
   z-index: 20; /* the pick-atlas menu panel drops over the workspace */
 }
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-}
 
 /* ---- workspace: editor panel (left) | live 3D stage (right) ---- */
 #workspace {
@@ -97,53 +92,7 @@ body {
   image-rendering: crisp-edges;
 }
 
-/* Floating stage panels: white face, 1px black border, hard offset shadow —
-   the kit's raised-surface recipe, hand-rolled for these two page overlays. */
-.stage-controls {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 8px 12px;
-  background: var(--sm-white);
-  border: 1px solid var(--sm-black);
-  box-shadow: 2px 2px 0 0 var(--sm-black);
-}
-.stage-stats {
-  position: absolute;
-  left: 16px;
-  top: 16px;
-  max-width: min(60%, 340px);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 8px 10px;
-  background: var(--sm-white);
-  border: 1px solid var(--sm-black);
-  box-shadow: 2px 2px 0 0 var(--sm-black);
-}
-.stage-stats:empty {
-  display: none;
-}
-.stat {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-}
-.warn {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  --mod-icon-size: 14px;
-}
-.warn sp-icon-alert {
-  flex: none;
-  margin-top: 1px;
-}
-
-/* ---- whole-app drop overlay ---- */
+/* ---- whole-app drop overlay (rendered into #app by drop-target.js) ---- */
 .drop-overlay {
   position: fixed;
   inset: 0;
@@ -162,236 +111,4 @@ body {
   border: 2px solid var(--sm-black);
   box-shadow: 2px 2px 0 0 var(--sm-black);
   padding: 20px 28px;
-}
-
-/* Every sm-* component renders into the LIGHT DOM, so its host element sits
-   between its container and the classed markup it renders (e.g. <sm-editor>
-   between #editor-panel and the .editor column). `display: contents` removes
-   the host's box entirely, leaving the same box tree the chrome had before it
-   became custom elements — which is what keeps screenshots byte-identical. */
-sm-topbar,
-sm-stage-controls,
-sm-stats-readout,
-sm-editor,
-sm-face-picker,
-sm-tool-strip,
-sm-color-wells,
-sm-color-picker,
-sm-draw-canvas {
-  display: contents;
-}
-/* <sm-tool-options> is the exception: it IS the .editor-opts box (the class
-   rule below gives it display:flex), so its children are the bare controls —
-   the exact surface drive.mjs probes. */
-.editor {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--sm-white);
-}
-
-/* Settings row: tile-size field + the six-face cube picker. */
-.editor-settings {
-  flex: none;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 14px 32px;
-  padding: 12px 16px;
-}
-.editor-tile-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.editor-face-row {
-  display: flex;
-  gap: 14px;
-}
-.editor-face-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-}
-/* The cube art and the "selected" dither stack in one box: the art is in flow
-   (it sizes the wrapper), the dither rides over it via vf-img's own top/left. */
-.editor-face-art {
-  position: relative;
-  display: block;
-}
-/* The dither only paints for the checked face — vf-radio reflects `checked`, so
-   this tracks the group's own state, no re-mount needed. Visibility, not
-   display, so the component's own box rules are left alone. */
-.editor-face-selected {
-  visibility: hidden;
-}
-.editor-face-cell:has(vf-radio[checked]) .editor-face-selected {
-  visibility: visible;
-}
-
-/* The dotted rule between the settings row and the work area. */
-.editor-sep {
-  flex: none;
-  margin: 0 16px;
-  --vf-separator-color: var(--sm-black);
-  --vf-separator-style: dotted;
-}
-
-/* Main area: the tool/color rail beside the draw box. */
-.editor-main {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  gap: 14px;
-  padding: 14px 16px;
-}
-.editor-rail {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 18px;
-}
-
-/* Tool cells inside the vf-grid strip: plain buttons that fill their cell
-   (the grid draws the lattice + frame); the selected tool inverts. */
-.editor-toolstrip .editor-tool {
-  place-self: stretch;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: var(--sm-white);
-  color: var(--sm-black);
-  cursor: pointer;
-  --mod-icon-size: 18px;
-}
-.editor-toolstrip .editor-tool:active,
-.editor-toolstrip .editor-tool.active {
-  background: var(--sm-black);
-  color: var(--sm-white);
-}
-.editor-toolstrip .editor-tool:focus-visible {
-  outline: 1px dotted currentColor;
-  outline-offset: -4px;
-}
-
-/* Color wells: current ink over the last-used row and the transparent checker. */
-.editor-colors {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-.editor-recent {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-/* Mark the transparent swatch while the clear ink is active (the current-ink
-   swatch above also flips to the checker, but the source cell should read too). */
-vf-swatch.editor-transparent.active {
-  outline: 1px dotted var(--sm-black);
-  outline-offset: 2px;
-}
-
-/* The draw box: per-tool options bar over the dark artwork well. */
-.editor-drawbox {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--sm-black);
-  background: var(--sm-artwork);
-}
-.editor-opts {
-  flex: none;
-  min-height: 38px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 12px;
-  background: var(--sm-white);
-  border-bottom: 1px solid var(--sm-black);
-}
-.editor-size-slider {
-  flex: 1;
-  max-width: 260px;
-}
-
-/* The canvas CONTAINER fills the draw box below the options bar and centers the
-   integer-scaled canvas stack (sized by layout() in editor.js). */
-.editor-canvas-wrap {
-  flex: 1 1 auto;
-  min-height: 0; /* let it shrink so layout() can integer-fit the canvas inside */
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
-  overflow: hidden; /* clip if a tiny container forces the min (scale 1) canvas over */
-}
-/* The centered square holding the four aligned canvas layers; sized by layout(). */
-.editor-canvas-stack {
-  position: relative;
-  flex: 0 0 auto;
-}
-/* All four layers fill the stack (backing stores managed in JS): a background
-   (checkerboard via CSS + faded onion-skin, native tile res), the transparent pixel
-   canvas (native tile res), then the guide + cursor overlays (screen res). */
-.editor-canvas-stack > canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-}
-/* Only the pixel canvas takes pointer events (default auto); the others pass clicks
-   through to it. */
-.editor-canvas {
-  z-index: 1;
-  cursor: crosshair;
-  touch-action: none;
-}
-/* With the pencil or the eyedropper active, the hover outline (the stamp
-   footprint / the 1-cell sample target) IS the cursor, so hide the OS pointer
-   over the canvas — only the hairline outline shows what a click will touch. */
-.editor-canvas.hide-cursor {
-  cursor: none;
-}
-/* Faded onion-skin (drawn) over a checkerboard (CSS), UNDER the transparent pixel
-   canvas so both show through unpainted texels. */
-.editor-canvas-bg {
-  z-index: 0;
-  pointer-events: none;
-  /* Classic light transparency checker (pale gray + off-white), so empty texels read
-     as "no color" against the darker gray canvas well framing them. */
-  background-color: #a8a8a8;
-  background-image: linear-gradient(
-      45deg,
-      #d0d0d0 25%,
-      transparent 25%,
-      transparent 75%,
-      #d0d0d0 75%
-    ),
-    linear-gradient(45deg, #d0d0d0 25%, transparent 25%, transparent 75%, #d0d0d0 75%);
-  background-size: 16px 16px;
-  background-position:
-    0 0,
-    8px 8px;
-}
-/* Hairline extent rules sit ABOVE the pixel canvas; the cursor preview above them. */
-.editor-canvas-overlay {
-  z-index: 2;
-  pointer-events: none;
-}
-.editor-canvas-cursor {
-  z-index: 3;
-  pointer-events: none;
 }

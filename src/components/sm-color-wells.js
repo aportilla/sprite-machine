@@ -6,20 +6,49 @@
 // already-sliced last-used row), bubbling `sm-pick-color {rgb}` /
 // `sm-pick-transparent` / `sm-open-picker` events up.
 //
-// LIGHT DOM + `display: contents`, so `.editor-colors` keeps its box.
+// Shadow DOM; `:host { display: contents }`, so the wells sit in the rail
+// directly.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
-import { LitElement, html } from 'lit';
+import { css, LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { ifDefined } from 'lit/directives/if-defined.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { rgbKey } from '../lib/color.js';
+import { baseStyles } from './base-styles.js';
 
 const toHex2 = (n) => n.toString(16).padStart(2, '0');
 const rgbHex = ({ r, g, b }) => `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
 
 export class SmColorWells extends LitElement {
+  static styles = [
+    baseStyles,
+    css`
+      :host {
+        display: contents;
+      }
+      /* Color wells: current ink over the last-used row and the transparent checker. */
+      .editor-colors {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+      }
+      .editor-recent {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      /* Mark the transparent swatch while the clear ink is active (the current-ink
+       swatch above also flips to the checker, but the source cell should read too). */
+      vf-swatch.editor-transparent.active {
+        outline: 1px dotted var(--sm-black);
+        outline-offset: 2px;
+      }
+    `,
+  ];
+
   static properties = {
     ink: { attribute: false },
     erase: { type: Boolean },
@@ -33,10 +62,6 @@ export class SmColorWells extends LitElement {
     this.erase = false;
     /** @type {{r:number,g:number,b:number}[]} the last-used row (slot 0 excluded) */
     this.recent = [];
-  }
-
-  createRenderRoot() {
-    return this; // light DOM — style.css + `capture.sh dom` keep working
   }
 
   // The current-ink swatch doubles as the picker opener (a click drops the

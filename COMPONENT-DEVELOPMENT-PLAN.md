@@ -11,6 +11,12 @@
 > overlay painters split into `components/draw-overlays.js` to keep
 > `sm-draw-canvas.js` near the size audit. See README's Architecture section
 > for the as-built map.
+>
+> **Superseded in part (late Aug 2026):** the light-DOM-everywhere constraint
+> (§ "What the monolith got right", item 2) has since been retired — the
+> components moved to standard shadow DOM with per-component `static styles`,
+> `drive.mjs` grew shadow-piercing probes, and the DOM-dump baselines were
+> dropped. See README's "UI layer" section for the current contract.
 
 A scoping + implementation plan for breaking the three monolithic UI files —
 `src/components/sm-editor.js` (**1,382 lines**), `src/main.js` (**632**),

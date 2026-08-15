@@ -5,23 +5,44 @@
 // vf-change. `live()` diffs against the checkbox's own current state, not the
 // last rendered value, so a re-render can never skip a needed re-sync.
 //
-// LIGHT DOM + `display: contents`, so `.stage-controls` keeps its box.
+// Shadow DOM; `:host { display: contents }`, so `.stage-controls` positions
+// against #stage directly.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
-import { LitElement, html } from 'lit';
+import { css, LitElement, html } from 'lit';
 import { live } from 'lit/directives/live.js';
 import { prefs } from '../state/prefs.js';
 import { StoreController } from '../state/store-controller.js';
+import { baseStyles } from './base-styles.js';
 
 export class SmStageControls extends LitElement {
+  static styles = [
+    baseStyles,
+    css`
+      :host {
+        display: contents;
+      }
+      /* A floating stage panel: white face, 1px black border, hard offset shadow —
+         the kit's raised-surface recipe, hand-rolled for this page overlay. */
+      .stage-controls {
+        position: absolute;
+        right: 16px;
+        bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 8px 12px;
+        background: var(--sm-white);
+        border: 1px solid var(--sm-black);
+        box-shadow: 2px 2px 0 0 var(--sm-black);
+      }
+    `,
+  ];
+
   constructor() {
     super();
     new StoreController(this, prefs.store);
-  }
-
-  createRenderRoot() {
-    return this; // light DOM — style.css + `capture.sh dom` keep working
   }
 
   render() {

@@ -4,16 +4,17 @@
 // decode / unusable sample) REPLACES the readout until the next successful
 // build clears it; otherwise the measured lines over any build warnings.
 //
-// LIGHT DOM + `display: contents`, so `.stage-stats` keeps its box (and the
-// `:empty` rule still collapses the no-views case — lit's comment markers
-// don't count as content).
+// Shadow DOM; `:host { display: contents }`, so `.stage-stats` positions
+// against #stage directly (and the `:empty` rule still collapses the no-views
+// case — lit's comment markers don't count as content).
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
-import { LitElement, html } from 'lit';
+import { css, LitElement, html } from 'lit';
 import { build } from '../state/build.js';
 import { StoreController } from '../state/store-controller.js';
-import { label, warnRow } from './ui-bits.js';
+import { label, warnRow, warnStyles } from './ui-bits.js';
+import { baseStyles } from './base-styles.js';
 
 const statLine = (k, v) => html`
   <div class="stat">
@@ -23,13 +24,43 @@ const statLine = (k, v) => html`
 `;
 
 export class SmStatsReadout extends LitElement {
+  // The `.warn` row's styles live with its template (warnStyles, ui-bits.js).
+  static styles = [
+    baseStyles,
+    warnStyles,
+    css`
+      :host {
+        display: contents;
+      }
+      /* A floating stage panel: white face, 1px black border, hard offset shadow —
+         the kit's raised-surface recipe, hand-rolled for this page overlay. */
+      .stage-stats {
+        position: absolute;
+        left: 16px;
+        top: 16px;
+        max-width: min(60%, 340px);
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 8px 10px;
+        background: var(--sm-white);
+        border: 1px solid var(--sm-black);
+        box-shadow: 2px 2px 0 0 var(--sm-black);
+      }
+      .stage-stats:empty {
+        display: none;
+      }
+      .stat {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+      }
+    `,
+  ];
+
   constructor() {
     super();
     new StoreController(this, build.store);
-  }
-
-  createRenderRoot() {
-    return this; // light DOM — style.css + `capture.sh dom` keep working
   }
 
   render() {

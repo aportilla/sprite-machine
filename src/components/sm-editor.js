@@ -4,10 +4,9 @@
 // a face is always selected; the 3D view stays live + interactive on the
 // right. No imports from the voxel pipeline.
 //
-// A LitElement rendering into the LIGHT DOM (`createRenderRoot() { return this }`)
-// so style.css's `.editor-*` rules and `capture.sh dom` keep working untouched;
-// style.css gives the host `display: contents`, so the box tree is exactly the
-// `.editor` column it wraps.
+// A standard shadow-DOM LitElement; its `styles` own the panel layout, and
+// `:host { display: contents }` keeps the `.editor` column a direct flex child
+// of #editor-panel.
 //
 // THE ONLY EDITOR FILE THAT KNOWS THE STORE EXISTS. Two StoreControllers
 // re-render it on any session (brush state) or doc (structural) change; it
@@ -19,7 +18,7 @@
 //      <sm-face-picker> (sm-select-face → session.selectFace).
 //   2. A dotted separator.
 //   3. MAIN area (grows): the RAIL — <sm-tool-strip> over <sm-color-wells> —
-//      beside the DRAW BOX: <sm-tool-options> (it IS the .editor-opts bar) over
+//      beside the DRAW BOX: <sm-tool-options> (its host IS the options bar) over
 //      <sm-draw-canvas> (the pixel-canvas subsystem; its sm-live strokes fold
 //      into the doc, its eyedrops become session picks).
 //   4. <sm-color-picker>, the 256-color vf-dialog (lazy-built on first open).
@@ -37,7 +36,7 @@
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
-import { LitElement, html } from 'lit';
+import { css, LitElement, html } from 'lit';
 import { live } from 'lit/directives/live.js';
 import { maxCornerRadius } from '../lib/rect.js';
 import { session, RECENT_SLOTS } from '../state/session.js';
@@ -50,8 +49,74 @@ import './sm-color-wells.js'; // registers <sm-color-wells>
 import './sm-tool-options.js'; // registers <sm-tool-options>
 import './sm-color-picker.js'; // registers <sm-color-picker>
 import './sm-draw-canvas.js'; // registers <sm-draw-canvas>
+import { baseStyles } from './base-styles.js';
 
 export class SmEditor extends LitElement {
+  // The PANEL LAYOUT — a fixed flex column in the System 7 idiom: the settings
+  // row over a dotted rule over the main area (rail beside draw box). The
+  // leaves style their own internals.
+  static styles = [
+    baseStyles,
+    css`
+      /* The host box dissolves — #editor-panel's flex column sizes .editor. */
+      :host {
+        display: contents;
+      }
+      .editor {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--sm-white);
+      }
+      /* Settings row: tile-size field + the six-face cube picker. */
+      .editor-settings {
+        flex: none;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 14px 32px;
+        padding: 12px 16px;
+      }
+      .editor-tile-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      /* The dotted rule between the settings row and the work area. */
+      .editor-sep {
+        flex: none;
+        margin: 0 16px;
+        --vf-separator-color: var(--sm-black);
+        --vf-separator-style: dotted;
+      }
+      /* Main area: the tool/color rail beside the draw box. */
+      .editor-main {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        gap: 14px;
+        padding: 14px 16px;
+      }
+      .editor-rail {
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+      }
+      /* The draw box: per-tool options bar over the dark artwork well. */
+      .editor-drawbox {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--sm-black);
+        background: var(--sm-artwork);
+      }
+    `,
+  ];
+
   static properties = {
     // Session-constant inputs (main.js assigns them once at creation).
     palette: { attribute: false },
@@ -112,10 +177,6 @@ export class SmEditor extends LitElement {
   }
   get pickerOpen() {
     return session.get().pickerOpen;
-  }
-
-  createRenderRoot() {
-    return this; // light DOM — style.css + `capture.sh dom` keep working
   }
 
   // --- derived bounds --------------------------------------------------------
@@ -206,7 +267,6 @@ export class SmEditor extends LitElement {
           </div>
           <div class="editor-drawbox">
             <sm-tool-options
-              class="editor-opts"
               .tool=${this.tool}
               .pencilSize=${this.pencilSize}
               .brushMax=${this.#brushMax}
