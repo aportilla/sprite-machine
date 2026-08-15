@@ -18,5 +18,6 @@
 import '@spectrum-web-components/icons-workflow/icons/sp-icon-draw.js';
 import '@spectrum-web-components/icons-workflow/icons/sp-icon-rectangle.js';
 import '@spectrum-web-components/icons-workflow/icons/sp-icon-color-fill.js';
+import '@spectrum-web-components/icons-workflow/icons/sp-icon-erase.js';
 import '@spectrum-web-components/icons-workflow/icons/sp-icon-sampler.js';
 import '@spectrum-web-components/icons-workflow/icons/sp-icon-alert.js';

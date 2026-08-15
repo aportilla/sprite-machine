@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
-// <sm-tool-strip> — the rail's tool strip: pencil / rect / fill / eyedropper as
-// a 1-column vf-grid of square cells (the selected cell inverts, CSS off
-// `.active`). A presentational LEAF: props down (`tool`), bubbling
-// `sm-pick-tool {tool}` events up. All four cells are sibling sticky modes —
-// the eyedropper selects like any other tool.
+// <sm-tool-strip> — the rail's tool strip: pencil / rect / fill / eraser /
+// eyedropper as a 1-column vf-grid of square cells (the selected cell inverts,
+// CSS off `.active`). A presentational LEAF: props down (`tool`), bubbling
+// `sm-pick-tool {tool}` events up. All five cells are sibling sticky modes —
+// the eraser and eyedropper select like any other tool.
 //
 // Shadow DOM; `:host { display: contents }`, so the strip sits in the rail
 // directly.
@@ -15,12 +15,13 @@ import { classMap } from 'lit/directives/class-map.js';
 import '../icons.js'; // registers the <sp-icon-*> tool glyphs used below
 import { baseStyles } from './base-styles.js';
 
-// The four tool glyphs, as module-constant templates: a TemplateResult diffs to
+// The five tool glyphs, as module-constant templates: a TemplateResult diffs to
 // a no-op, where a freshly built element would make lit swap the icon on every
 // re-render.
 const ICON_DRAW = html`<sp-icon-draw></sp-icon-draw>`;
 const ICON_RECT = html`<sp-icon-rectangle></sp-icon-rectangle>`;
 const ICON_FILL = html`<sp-icon-color-fill></sp-icon-color-fill>`;
+const ICON_ERASE = html`<sp-icon-erase></sp-icon-erase>`;
 const ICON_SAMPLER = html`<sp-icon-sampler></sp-icon-sampler>`;
 
 export class SmToolStrip extends LitElement {
@@ -103,6 +104,13 @@ export class SmToolStrip extends LitElement {
           'fill — flood a region, or replace a color (G)',
           this.tool === 'fill',
           () => this.#pickTool('fill')
+        )}
+        ${cell(
+          'eraser',
+          ICON_ERASE,
+          'eraser — draw transparency (E; right-click erases with any tool)',
+          this.tool === 'eraser',
+          () => this.#pickTool('eraser')
         )}
         ${cell(
           'eyedropper',

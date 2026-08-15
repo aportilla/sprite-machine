@@ -1,10 +1,10 @@
 // ---------------------------------------------------------------------------
 // <sm-color-wells> — the rail's color group: the current-ink vf-swatch (a click
-// asks to open the 256-color picker), the "last used colors" row under it, and
-// the transparent checker swatch (the empty / clear "color", not an eraser
-// tool). A presentational LEAF: props down (`ink`, `erase`, `recent` — the
-// already-sliced last-used row), bubbling `sm-pick-color {rgb}` /
-// `sm-pick-transparent` / `sm-open-picker` events up.
+// asks to open the 256-color picker) and the "last used colors" row under it.
+// Purely COLOR — erasing is the eraser tool in the strip, so the ink here is
+// always a solid color. A presentational LEAF: props down (`ink`, `recent` —
+// the already-sliced last-used row), bubbling `sm-pick-color {rgb}` /
+// `sm-open-picker` events up.
 //
 // Shadow DOM; `:host { display: contents }`, so the wells sit in the rail
 // directly.
@@ -12,7 +12,6 @@
 
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
-import { classMap } from 'lit/directives/class-map.js';
 import { ifDefined } from 'lit/directives/if-defined.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { rgbKey } from '../lib/color.js';
@@ -28,7 +27,7 @@ export class SmColorWells extends LitElement {
       :host {
         display: contents;
       }
-      /* Color wells: current ink over the last-used row and the transparent checker. */
+      /* Color wells: current ink over the last-used row. */
       .editor-colors {
         display: flex;
         flex-direction: column;
@@ -40,18 +39,11 @@ export class SmColorWells extends LitElement {
         flex-direction: column;
         gap: 6px;
       }
-      /* Mark the transparent swatch while the clear ink is active (the current-ink
-       swatch above also flips to the checker, but the source cell should read too). */
-      vf-swatch.editor-transparent.active {
-        outline: 1px dotted var(--sm-black);
-        outline-offset: 2px;
-      }
     `,
   ];
 
   static properties = {
     ink: { attribute: false },
-    erase: { type: Boolean },
     recent: { attribute: false },
   };
 
@@ -59,18 +51,14 @@ export class SmColorWells extends LitElement {
     super();
     /** @type {{r:number,g:number,b:number}|null} */
     this.ink = null;
-    this.erase = false;
     /** @type {{r:number,g:number,b:number}[]} the last-used row (slot 0 excluded) */
     this.recent = [];
   }
 
   // The current-ink swatch doubles as the picker opener (a click drops the
-  // 256-color dialog). While the transparent ink is active it shows the kit's
-  // no-color checker — the same "empty color" the canvas shows through unpainted
-  // texels — which is just the `color` attribute going away.
+  // 256-color dialog).
   render() {
-    const clear = this.erase;
-    const inkHex = clear || !this.ink ? undefined : rgbHex(this.ink);
+    const inkHex = this.ink ? rgbHex(this.ink) : undefined;
     return html`
       <div class="editor-colors">
         <vf-swatch
@@ -83,14 +71,6 @@ export class SmColorWells extends LitElement {
           @click=${() => this.#emit('sm-open-picker')}
         ></vf-swatch>
         <div class="editor-recent">${this.#recentRow()}</div>
-        <vf-swatch
-          class=${classMap({ 'editor-transparent': true, active: clear })}
-          width="16"
-          height="16"
-          label="transparent (clear) color"
-          title="transparent — paint the empty / clear color (E, or right-click)"
-          @click=${() => this.#emit('sm-pick-transparent')}
-        ></vf-swatch>
       </div>
     `;
   }

@@ -17,17 +17,14 @@ test('boot: pencil active, ink seeded from the palette, recency row empty', () =
   assert.equal(st.tool, 'pencil');
   assert.deepEqual(st.ink, PENCIL_PALETTE[0].rgb);
   assert.deepEqual(st.recent, [], 'the untouched mount default never enters recency');
-  assert.equal(st.erase, false);
 });
 
-test('pickColor: copies the ink, clears erase, promotes to MRU', () => {
+test('pickColor: copies the ink and promotes to MRU', () => {
   const s = createSession();
-  s.selectTransparent();
   s.pickColor(RED);
   const st = s.get();
   assert.deepEqual(st.ink, RED);
   assert.notEqual(st.ink, RED, 'the ink is a copy, not the caller object');
-  assert.equal(st.erase, false);
   assert.deepEqual(st.recent, [RED], 'slot 0 is the current ink');
 });
 
@@ -37,8 +34,6 @@ test('eyedropper is a sticky tool: a pick leaves it selected', () => {
   assert.equal(s.get().tool, 'eyedropper');
   s.pickColor(RED); // an eyedrop of a painted texel
   assert.equal(s.get().tool, 'eyedropper', 'sampling does not switch tools');
-  s.selectTransparent(); // an eyedrop of empty space
-  assert.equal(s.get().tool, 'eyedropper', 'a transparent sample does not either');
   s.setTool('pencil');
   assert.equal(s.get().tool, 'pencil', 'only an explicit tool pick leaves it');
 });
@@ -62,22 +57,45 @@ test('MRU: the list caps at RECENT_SLOTS + 1 (current + the last-used row)', () 
   assert.deepEqual(recent.at(-1), inks[1], 'oldest surviving pick last');
 });
 
-test('selectTransparent: erase on, ink untouched', () => {
+test('eraserSize is its own setting — independent of pencilSize both ways', () => {
   const s = createSession();
-  s.pickColor(RED);
-  s.selectTransparent();
-  const st = s.get();
-  assert.equal(st.erase, true);
-  assert.deepEqual(st.ink, RED, 'the solid ink survives for when erase ends');
+  assert.equal(s.get().eraserSize, 1, 'boots at 1, like the pencil');
+  s.setPencilSize(4, 40);
+  s.setEraserSize(9, 40);
+  assert.equal(s.get().pencilSize, 4, 'setting the eraser leaves the pencil alone');
+  assert.equal(s.get().eraserSize, 9);
+  s.setPencilSize(12, 40);
+  assert.equal(s.get().eraserSize, 9, 'and vice versa');
 });
 
-test('setTool: selects the tool and returns to painting (out of eraser)', () => {
+test('setEraserSize clamps and rounds like the pencil (its own code path)', () => {
   const s = createSession();
-  s.selectTransparent();
-  s.setTool('rect');
+  s.setEraserSize(99, 40);
+  assert.equal(s.get().eraserSize, 40);
+  s.setEraserSize(0, 40);
+  assert.equal(s.get().eraserSize, 1, 'floor is 1');
+  s.setEraserSize(3.6, 40);
+  assert.equal(s.get().eraserSize, 4, 'rounded');
+  s.setEraserSize(NaN, 40);
+  assert.equal(s.get().eraserSize, 1, 'garbage falls back to 1');
+});
+
+test('the eraser is a sticky tool: selecting it leaves the ink untouched', () => {
+  const s = createSession();
+  s.pickColor(RED);
+  s.setTool('eraser');
   const st = s.get();
-  assert.equal(st.tool, 'rect');
-  assert.equal(st.erase, false);
+  assert.equal(st.tool, 'eraser');
+  assert.deepEqual(st.ink, RED, 'the solid ink survives for when erasing ends');
+});
+
+test('pickColor while the eraser is held returns to the pencil', () => {
+  const s = createSession();
+  s.setTool('eraser');
+  s.pickColor(GREEN); // picking a color means "paint with this"
+  const st = s.get();
+  assert.equal(st.tool, 'pencil');
+  assert.deepEqual(st.ink, GREEN);
 });
 
 test('setPencilSize / setCornerRadius clamp and round against the given bound', () => {
@@ -101,12 +119,15 @@ test('setPencilSize / setCornerRadius clamp and round against the given bound', 
 test('clampTools: a shrink re-clamps persisted values down (the resize rule)', () => {
   const s = createSession();
   s.setPencilSize(30, 40);
+  s.setEraserSize(25, 40);
   s.setCornerRadius(15, 20);
   s.clampTools(8, 4); // tile shrank
   assert.equal(s.get().pencilSize, 8);
+  assert.equal(s.get().eraserSize, 8);
   assert.equal(s.get().cornerRadius, 4);
   s.clampTools(64, 32); // a grow leaves in-bounds values alone
   assert.equal(s.get().pencilSize, 8);
+  assert.equal(s.get().eraserSize, 8);
   assert.equal(s.get().cornerRadius, 4);
 });
 

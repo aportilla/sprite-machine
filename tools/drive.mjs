@@ -211,11 +211,16 @@ async function click(x, y, opts = {}) {
 }
 
 // Press, drag, release — the gesture the rect tool and a pencil stroke need.
-async function drag(a, b, { modifiers = 0, beforeRelease } = {}) {
-  await mouse('mousePressed', a.x, a.y, { modifiers });
-  await mouse('mouseMoved', b.x, b.y, { buttons: 1, modifiers });
+// button/buttons override for the right-button drag (the rect-erase gesture).
+async function drag(
+  a,
+  b,
+  { modifiers = 0, beforeRelease, button = 'left', buttons = 1 } = {}
+) {
+  await mouse('mousePressed', a.x, a.y, { modifiers, button, buttons });
+  await mouse('mouseMoved', b.x, b.y, { buttons, modifiers, button });
   if (beforeRelease) await beforeRelease();
-  await mouse('mouseReleased', b.x, b.y, { buttons: 0, modifiers });
+  await mouse('mouseReleased', b.x, b.y, { buttons: 0, modifiers, button });
 }
 
 // --- assertions -------------------------------------------------------------
@@ -270,18 +275,24 @@ const PROBE = `(() => {${DEEP}
     stats[row.children[0].textContent.trim()] = row.children[1].textContent.trim();
   }
   return {
-    // All four tools are mutually exclusive sticky modes — exactly one cell is
+    // All five tools are mutually exclusive sticky modes — exactly one cell is
     // lit. The eyedropper is listed LAST so a drawing-tool cell wrongly left
     // active alongside it would win the find and fail the tool checks.
     drawTool:
-      ['pencil', 'rectangle', 'fill', 'eyedropper'].find((t) => tools[t]) || null,
+      ['pencil', 'rectangle', 'fill', 'eraser', 'eyedropper'].find((t) => tools[t]) ||
+      null,
     inkColor: sw ? sw.getAttribute('color') : null,
-    transparentActive: !!__q('vf-swatch.editor-transparent.active'),
     recent: __qa('.editor-recent vf-swatch').map((s) => s.getAttribute('color')),
     // The options bar IS <sm-tool-options>; its shadow root holds the bare controls.
     opts: [...__q('sm-tool-options').shadowRoot.children].map((c) =>
       c.tagName.toLowerCase()
     ),
+    // The bar's trailing readout ("N px" for the size sliders) — how the checks
+    // see a slider's value without reaching into the kit's internals.
+    optsReadout: (() => {
+      const ls = __q('sm-tool-options').shadowRoot.querySelectorAll('vf-label');
+      return ls.length ? ls[ls.length - 1].textContent.trim() : null;
+    })(),
     face: __q('.editor-face-picker').value,
     checkedRadio: checked ? checked.getAttribute('value') : null,
     tileField: __q('.editor-tile-size').value,
@@ -459,15 +470,39 @@ async function main() {
 
   await keyPress('e');
   s = await probe();
-  check('E selects the transparent ink', s.transparentActive === true);
-  check('E clears the current-ink swatch colour', s.inkColor === null, s.inkColor);
-  check('E leaves the eyedropper selected (sticky)', s.drawTool === 'eyedropper');
+  check('E selects the eraser tool', s.drawTool === 'eraser', s.drawTool);
+  check(
+    'eraser options are its own size slider',
+    s.opts.join(',') === 'vf-slider,vf-label',
+    s.opts.join(',')
+  );
+  check(
+    'the eraser leaves the ink swatch solid',
+    /^#[0-9a-f]{6}$/.test(s.inkColor || ''),
+    s.inkColor
+  );
+
+  // The eraser's tip size is its OWN persisted setting: click mid-track to
+  // drive its slider, flip back to the pencil, and the pencil's size must be
+  // untouched (both boot at 1 px).
+  const eraserSlider = await centreOf('.editor-size-slider');
+  await click(eraserSlider.x, eraserSlider.y);
+  await sleep(150);
+  s = await probe();
+  check(
+    "the eraser slider drives the eraser's size",
+    /^\d+ px$/.test(s.optsReadout || '') && s.optsReadout !== '1 px',
+    s.optsReadout
+  );
 
   await keyPress('b');
   s = await probe();
   check('B returns to the pencil', s.drawTool === 'pencil', s.drawTool);
-  check('B leaves the transparent ink', s.transparentActive === false);
-  check('B restores a solid ink swatch', /^#[0-9a-f]{6}$/.test(s.inkColor || ''));
+  check(
+    "…whose own size the eraser's slider did not touch",
+    s.optsReadout === '1 px',
+    s.optsReadout
+  );
 
   // The kit hosts its <input> in shadow DOM, so the guard has to read the
   // composed path — a retargeted document-level check would let this through.
@@ -581,6 +616,17 @@ async function main() {
     `in=${inSquare} out=${outsideSquare}`
   );
 
+  // Rect-ERASE is the right-button drag (the eraser tool itself strokes like a
+  // pencil): right-drag a box over the square just committed and it clears.
+  await drag(at(30, 4), at(38, 8), { button: 'right', buttons: 2 });
+  await sleep(200);
+  const rectErased = await texelAt(34, 8);
+  check(
+    'a right-drag rect erases the boxed texels',
+    rectErased[3] === 0,
+    `${rectErased}`
+  );
+
   // --- an edit must reach the voxel pipeline --------------------------------
   // Fresh load first: the headless reload artifact reliably strikes right after
   // the preceding Shift-drag, and this section carries tool + ink state across
@@ -589,13 +635,13 @@ async function main() {
   await freshPage();
   s = await probe();
   const statsBefore = JSON.stringify(s.stats);
-  await keyPress('r'); // rect
-  await keyPress('e'); // transparent ink
+  await keyPress('e'); // eraser tool
   await drag(at(8, 14), at(32, 34));
   await sleep(500);
   s = await probe();
+  // (20,24) sits exactly on the Bresenham run from (8,14) to (32,34).
   const erased = await texelAt(20, 24);
-  check('a rect erase clears the tile texels', erased[3] === 0, `${erased}`);
+  check('an eraser drag clears the stroked texels', erased[3] === 0, `${erased}`);
   check(
     'the erase reaches the voxel pipeline (mesh rebuilt)',
     JSON.stringify(s.stats) !== statsBefore,
@@ -759,7 +805,7 @@ async function main() {
     `${await texelAt(12, 12)}`
   );
 
-  await keyPress('e'); // transparent ink
+  await keyPress('e'); // eraser tool
   await click(at(12, 12).x, at(12, 12).y);
   await sleep(300);
   check('erasing the last texel blanks the face', await canvasEmpty());

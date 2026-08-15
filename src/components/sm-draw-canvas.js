@@ -1,10 +1,11 @@
 // ---------------------------------------------------------------------------
 // <sm-draw-canvas> — the pixel-canvas subsystem: the 4-layer stack (checker/
 // onion-skin background, the editable pixel canvas, the hairline guide overlay,
-// the cursor overlay), the working buffer, the pencil/rect/fill/eyedropper
-// gestures, the integer-scale layout fitting, and the gesture-scoped keys (Esc
-// cancels an in-flight rect, Shift square-locks it — document-level, but
-// canvas business).
+// the cursor overlay), the working buffer, the pencil/rect/fill/eraser/
+// eyedropper gestures (the eraser is a pencil that writes transparency — it
+// shares the stroke path but carries its OWN tip size), the integer-scale layout fitting, and
+// the gesture-scoped keys (Esc cancels an in-flight rect, Shift square-locks
+// it — document-level, but canvas business).
 //
 // A presentational LEAF: props down (tile geometry + view model + the brush
 // state), bubbling events up:
@@ -142,8 +143,8 @@ export class SmDrawCanvas extends LitElement {
     guides: { attribute: false },
     tool: {},
     ink: { attribute: false },
-    erase: { type: Boolean },
     pencilSize: { type: Number },
+    eraserSize: { type: Number },
     cornerRadius: { type: Number },
     fillReplace: { type: Boolean },
     fillAllTiles: { type: Boolean },
@@ -158,8 +159,8 @@ export class SmDrawCanvas extends LitElement {
     this.guides = null;
     this.tool = 'pencil';
     this.ink = null;
-    this.erase = false;
     this.pencilSize = 1;
+    this.eraserSize = 1;
     this.cornerRadius = 0;
     this.fillReplace = false;
     this.fillAllTiles = false;
@@ -218,9 +219,9 @@ export class SmDrawCanvas extends LitElement {
   // --- lifecycle -------------------------------------------------------------
   connectedCallback() {
     super.connectedCallback();
-    // Gesture-scoped keys only (Esc cancel, Shift square-lock, and the B/R/G
-    // mid-drag abandon) — they must work wherever focus is, so they live on the
-    // document; the general tool shortcuts belong to shortcuts.js.
+    // Gesture-scoped keys only (Esc cancel, Shift square-lock, and the
+    // B/R/G/E/I mid-drag abandon) — they must work wherever focus is, so they
+    // live on the document; the general tool shortcuts belong to shortcuts.js.
     document.addEventListener('keydown', this.#onKeyDown);
     document.addEventListener('keyup', this.#onKeyUp);
   }
@@ -279,8 +280,8 @@ export class SmDrawCanvas extends LitElement {
     // has to be re-stroked here.
     if (
       changed.has('tool') ||
-      changed.has('erase') ||
       changed.has('pencilSize') ||
+      changed.has('eraserSize') ||
       changed.has('cornerRadius') ||
       changed.has('ink') // the pencil's filled preview is tinted by the ink
     ) {
@@ -484,7 +485,7 @@ export class SmDrawCanvas extends LitElement {
 
   // --- gesture-scoped keyboard -------------------------------------------------
   // Esc aborts an in-flight rect drag (nothing committed); Shift held mid-drag
-  // locks the box to a square; B/R/G/I mid-drag abandon the box (shortcuts.js
+  // locks the box to a square; B/R/G/E/I mid-drag abandon the box (shortcuts.js
   // does the actual tool switch — abandoning is this canvas's business, so the
   // two compose without ordering coupling). Everything here is a no-op unless a
   // gesture is actually in flight.
@@ -511,8 +512,8 @@ export class SmDrawCanvas extends LitElement {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key.toLowerCase();
     // Switching tools mid rect-drag abandons the box (nothing committed) — same as
-    // ESC, so B/R/G/I can't leave a half-dragged rect wired to the old pointer.
-    if (k === 'b' || k === 'r' || k === 'g' || k === 'i') this.#cancelRect();
+    // ESC, so B/R/G/E/I can't leave a half-dragged rect wired to the old pointer.
+    if (k === 'b' || k === 'r' || k === 'g' || k === 'e' || k === 'i') this.#cancelRect();
   };
 
   // Releasing Shift mid-drag drops the square-lock and re-derives the free box.
@@ -547,12 +548,18 @@ export class SmDrawCanvas extends LitElement {
 
   // --- painting ---------------------------------------------------------------
   // The RGBA a write lays down right now: the active ink, or the hard-pixel
-  // erase under a right-click / the transparent ink (lib/brush.js primitives).
+  // erase under a right-click / the eraser tool (lib/brush.js primitives).
   #writeColor() {
-    const paint = !this.#forceErase && !this.erase;
+    const paint = !this.#forceErase && this.tool !== 'eraser';
     return paint
       ? { r: this.ink.r, g: this.ink.g, b: this.ink.b, a: 255 }
       : { r: 0, g: 0, b: 0, a: 0 };
+  }
+
+  // The N×N tip a stroke (or its hover preview) uses right now: the eraser
+  // carries its own size setting; every other stroking state is the pencil's.
+  get #tipSize() {
+    return this.tool === 'eraser' ? this.eraserSize : this.pencilSize;
   }
 
   // Continuous stroke: Bresenham from the previous texel (or a single stamp), so
@@ -568,7 +575,7 @@ export class SmDrawCanvas extends LitElement {
       from.py,
       px,
       py,
-      this.pencilSize,
+      this.#tipSize,
       color
     );
     this.#prev = { px, py };
@@ -595,11 +602,12 @@ export class SmDrawCanvas extends LitElement {
 
   // The hover preview on the topmost overlay, under the cursor: the pencil fills
   // the exact texels a stamp would paint with the active ink (WYSIWYG — the OS
-  // crosshair marks the position); the eyedropper outlines a single cell (its
+  // crosshair marks the position), and the eraser shows the same footprint in
+  // the red-tinted erase treatment; the eyedropper outlines a single cell (its
   // sample target). Cleared with t == null when the pointer leaves the canvas.
-  // Only these two have a hover preview — the rect tool relies on the OS
-  // crosshair when idle and its own drag preview when dragging — so for any
-  // other tool this just clears the overlay.
+  // Only these have a hover preview — the rect tool relies on the OS crosshair
+  // when idle and its own drag preview when dragging — so for any other tool
+  // this just clears the overlay.
   #drawCursor(t) {
     this.#hoverTexel = t;
     const g = this.#cursorCtx;
@@ -608,13 +616,14 @@ export class SmDrawCanvas extends LitElement {
       drawCursorOutline(g, this.#overlayView, t, 1, false);
       return;
     }
+    const strokes = this.tool === 'pencil' || this.tool === 'eraser';
     drawPencilPreview(
       g,
       this.#overlayView,
-      this.tool === 'pencil' ? t : null,
-      this.pencilSize,
+      strokes ? t : null,
+      this.#tipSize,
       this.ink,
-      this.erase
+      this.tool === 'eraser'
     );
   }
 
@@ -653,7 +662,7 @@ export class SmDrawCanvas extends LitElement {
       this.#rectBounds(),
       this.cornerRadius,
       this.ink,
-      this.#forceErase || this.erase
+      this.#forceErase
     );
   }
 
@@ -699,8 +708,9 @@ export class SmDrawCanvas extends LitElement {
 
   // --- sampling + fill ---------------------------------------------------------
   // An eyedrop: report what was hit — a painted texel's color, or empty space
-  // (the transparent "clear color"). The container turns these into session
-  // picks; the resulting prop changes redraw the hover footprint via updated().
+  // (which the container maps to the eraser tool: sampling emptiness hands you
+  // the eraser). The resulting prop changes redraw the hover footprint via
+  // updated().
   #sampleAt(px, py) {
     const work = this.#work;
     const i = (py * this.tileW + px) * 4;
@@ -713,10 +723,10 @@ export class SmDrawCanvas extends LitElement {
     }
   }
 
-  // The ink a fill lays down: the active color, or transparent when erasing (a
-  // right-click, or the eraser ink) — mirrors the pencil / rect erase rule.
+  // The ink a fill lays down: the active color, or transparent under a
+  // right-click — mirrors the pencil / rect erase rule.
   #fillInk(rightClick) {
-    return rightClick || this.erase
+    return rightClick
       ? { transparent: true }
       : { r: this.ink.r, g: this.ink.g, b: this.ink.b };
   }
@@ -780,6 +790,8 @@ export class SmDrawCanvas extends LitElement {
       this.#drawRectPreview();
       return;
     }
+    // The pencil and the eraser share the stroke path — #writeColor() decides
+    // whether the run lays ink or transparency.
     this.#forceErase = e.button === 2;
     this.#drawing = true;
     this.#prev = null;

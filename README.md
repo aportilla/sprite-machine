@@ -101,10 +101,10 @@ see [UI layer: Lit](#ui-layer-lit).
   scale fits** (crisp, never a fractional pixel), **re-fitting responsively** when
   the window resizes. See `#layout()` in `src/components/sm-draw-canvas.js`.
 - **Tools** — the left **rail** holds a **tool strip**: a single column of square
-  cells (**pencil `B`**, **rect `R`**, **fill `G`**, and the **eyedropper `I`**;
-  the selected cell inverts) — each an icon from the open-source **Adobe Spectrum
-  _workflow_** set (`draw` / `rectangle` / `color-fill` / `sampler`) in a
-  `vf-grid` lattice. The **tile-size** field (`tile size`, the classic
+  cells (**pencil `B`**, **rect `R`**, **fill `G`**, the **eraser `E`**, and the
+  **eyedropper `I`**; the selected cell inverts) — each an icon from the
+  open-source **Adobe Spectrum _workflow_** set (`draw` / `rectangle` /
+  `color-fill` / `erase` / `sampler`) in a `vf-grid` lattice. The **tile-size** field (`tile size`, the classic
   little-arrows number field) sits in the settings row, and the draw box carries a
   **per-tool options** bar. For the **pencil**, a **tip-size slider** (with an
   `N px` readout) that stamps an
@@ -121,9 +121,8 @@ see [UI layer: Lit](#ui-layer-lit).
   shorter extent wins, anchored at the start corner) — toggleable mid-drag, so the
   preview re-fits the instant you press or release Shift. Each corner rounds with a **convex** quarter-circle arc (bulging
   outward like a real rounded rectangle, not a concave scoop; clamped to half the
-  shorter side), so even `radius: 1` clips the corner texel; the rect
-  respects the active ink, so a **right-drag** (or the transparent ink) drags a
-  rectangular **erase**. The rounded-rect rasterization is a pure, Node-tested
+  shorter side), so even `radius: 1` clips the corner texel; a
+  **right-drag** drags a rectangular **erase**. The rounded-rect rasterization is a pure, Node-tested
   primitive (`src/lib/rect.js`) shared by the preview and the commit, so what you
   see is exactly what lands. For the **fill** (paint-bucket), two **checkboxes**:
   a plain click is a **contiguous 4-connected flood** from the clicked texel (the
@@ -133,28 +132,32 @@ see [UI layer: Lit](#ui-layer-lit).
   extends the recolor across **every tile in the atlas**, so it's a global
   find-and-replace of one color. Transparency is a first-class "color": clicking
   empty space targets transparent (so **replace** floods every empty texel with the
-  ink), and a **right-click** / the transparent ink fills _to_ transparent (delete a
+  ink), and a **right-click** fills _to_ transparent (delete a
   color). The flood + replace are pure, Node-tested primitives (`src/lib/fill.js`).
   There's **no undo**, so an all-tiles replace is committed immediately — reload the
-  sample to revert. Below the tool strip sit the **color wells**: the
-  **current-ink swatch** (a `vf-swatch` showing the active ink — the transparency
-  checker while the clear ink is active — that, **clicked**, opens the **"Colors"
-  dialog** over the **full 256-color palette**), the **last three used colors**
-  under it (a most-recently-used row — every pick, eyedrop, or recency re-pick
-  promotes its color; clicking one re-inks instantly), and a **transparent**
-  swatch (`E` / **right-click**) — the kit's **checkerboard no-color well** (the
-  same checker the canvas shows through unpainted texels, so it previews what it
-  paints) that selects the **empty / clear color**, not an eraser _tool_. The
-  **eyedropper** (`I`) is a sticky mode exactly like its three siblings: it stays
-  selected, and every canvas click samples the clicked texel into the **ink** — a
-  painted texel's color, or transparent ("clear color") for empty space — until
-  another tool is picked (while it's active a 1-cell hairline outline marks its
-  sample target under the OS crosshair).
-  Hold **Alt** instead for a momentary sample that doesn't leave the current
-  tool. The eyedropper and the transparent swatch pick the pencil's **ink**
-  rather than performing a drawing op: selecting transparent then drawing (or a
-  right-click, or the `E` ink) lays clear texels, so it reads as painting a color,
-  not wielding an eraser. The
+  sample to revert. The **eraser** (`E`) is a formal _tool_ mode, a full sibling
+  of the drawing ops in the strip — not a "transparent color" in the wells: a
+  pencil that writes **transparency**, sharing the pencil's stroke path but
+  carrying its **own tip-size** setting (a separate slider and a separately
+  persisted value — the two tools' settings are deliberately independent), its
+  hover footprint drawn in the red-tinted erase treatment. The ink stays a solid color throughout, and **picking any
+  color while the eraser is held returns to the pencil** — a pick means "paint
+  with this". A **right-click** is the _momentary_ erase with any tool (the
+  right-drag rect is the rectangular erase; a right-click fill deletes a
+  region); the eraser cell is the _sticky_ one. Below the tool strip sit the
+  **color wells**: the **current-ink swatch** (a `vf-swatch` showing the active
+  ink that, **clicked**, opens the **"Colors" dialog** over the **full 256-color
+  palette**) and the **last three used colors** under it (a most-recently-used
+  row — every pick, eyedrop, or recency re-pick promotes its color; clicking one
+  re-inks instantly). The
+  **eyedropper** (`I`) is a sticky mode exactly like its siblings: it stays
+  selected, and every canvas click samples the clicked texel — a painted texel's
+  color becomes the **ink**, and **empty space hands you the eraser** (sampling
+  emptiness selects the eraser tool) — until another tool is picked (while it's
+  active a 1-cell hairline outline marks its sample target under the OS
+  crosshair). Hold **Alt** instead for a momentary sample that doesn't leave the
+  current tool (with the same two exceptions: a color pick leaves the eraser, an
+  empty sample selects it). The
   dialog is a System 7 movable modal (`vf-dialog`) holding a 16×16 `vf-grid` of
   **256 distinct** swatches (**Esc** or the **close box** closes it). The base is
   the standard **xterm-256** set — but xterm-256

@@ -1,11 +1,14 @@
 // ---------------------------------------------------------------------------
 // <sm-tool-options> — the draw box's per-tool options bar: the pencil's
-// tip-size slider (with a live readout), the rect's corner-radius field, or the
+// tip-size slider (with a live readout), the eraser's OWN tip-size slider (an
+// independent setting and a deliberately separate branch — not a DRY slip; the
+// two tools' options may diverge), the rect's corner-radius field, or the
 // fill's two checkboxes. A presentational LEAF: props down (`tool`, values +
 // clamp BOUNDS — the clamping itself lives in the session actions the
-// container calls), bubbling `sm-set-pencil-size {n}` / `sm-set-corner-radius
-// {n}` / `sm-set-fill-opts {replace?|allTiles?}` events up. `live()` bindings
-// throughout, so a re-render can't skip a re-sync after typing.
+// container calls), bubbling `sm-set-pencil-size {n}` / `sm-set-eraser-size
+// {n}` / `sm-set-corner-radius {n}` / `sm-set-fill-opts {replace?|allTiles?}`
+// events up. `live()` bindings throughout, so a re-render can't skip a re-sync
+// after typing.
 //
 // This element IS the options bar (`:host` carries the box); its shadow root
 // holds the bare controls, exactly the surface drive.mjs probes.
@@ -42,6 +45,7 @@ export class SmToolOptions extends LitElement {
   static properties = {
     tool: {},
     pencilSize: { type: Number },
+    eraserSize: { type: Number },
     brushMax: { type: Number },
     cornerRadius: { type: Number },
     radiusMax: { type: Number },
@@ -53,6 +57,7 @@ export class SmToolOptions extends LitElement {
     super();
     this.tool = 'pencil';
     this.pencilSize = 1;
+    this.eraserSize = 1;
     this.brushMax = 1;
     this.cornerRadius = 0;
     this.radiusMax = 0;
@@ -75,6 +80,22 @@ export class SmToolOptions extends LitElement {
           @vf-input=${(e) => this.#emit('sm-set-pencil-size', { n: e.detail.value })}
         ></vf-slider>
         <vf-label dim>${this.pencilSize} px</vf-label>
+      `;
+    }
+    if (this.tool === 'eraser') {
+      // Mirrors the pencil's slider but binds the eraser's own size — kept as
+      // its own branch on purpose (see the header note).
+      return html`
+        <vf-slider
+          class="editor-size-slider"
+          min="1"
+          max=${this.brushMax}
+          step="1"
+          .value=${live(this.eraserSize)}
+          label="eraser size (1–${this.brushMax})"
+          @vf-input=${(e) => this.#emit('sm-set-eraser-size', { n: e.detail.value })}
+        ></vf-slider>
+        <vf-label dim>${this.eraserSize} px</vf-label>
       `;
     }
     if (this.tool === 'rect') {

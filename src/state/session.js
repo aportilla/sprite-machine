@@ -29,15 +29,20 @@ export function createSession() {
     // (the editor is always open); boot and sheet swaps fall back to this
     // default, and the ?edit= dev hook overrides it before the first mount.
     face: 'left',
-    tool: 'pencil', // the active tool: 'pencil' | 'rect' | 'fill' | 'eyedropper'
+    // The active tool: 'pencil' | 'rect' | 'fill' | 'eraser' | 'eyedropper'.
+    // The eraser is a formal tool mode (a pencil that writes transparency),
+    // not an ink: the ink below is always a solid color.
+    tool: 'pencil',
     // The active color. Seeded from the pencil palette so it is never null —
     // but NOT entered into `recent`: the untouched mount default never joins
     // the recency row.
     ink: { ...PENCIL_PALETTE[0].rgb },
-    erase: false, // the transparent ("clear") ink is selected
     /** @type {{r:number,g:number,b:number}[]} MRU inks, current at [0] */
     recent: [],
     pencilSize: 1, // the pencil's N×N tip footprint, in texels
+    // The eraser's N×N tip footprint — its OWN setting, deliberately
+    // independent of the pencil's (not a DRY slip: the two may diverge).
+    eraserSize: 1,
     cornerRadius: 0, // the rect tool's corner radius, in texels (0 = sharp)
     fillReplace: false,
     fillAllTiles: false,
@@ -54,18 +59,18 @@ export function createSession() {
       store.patch({ face });
     },
 
-    // Select a tool — the eyedropper is a sticky mode exactly like the drawing
-    // ops (it stays selected until another tool is picked). Selecting any tool
-    // returns to painting (out of the transparent ink); the ink is always set
-    // (seeded at boot), so there is nothing to "ensure".
-    /** @param {'pencil'|'rect'|'fill'|'eyedropper'} tool */
+    // Select a tool — every tool (the eraser and eyedropper included) is a
+    // sticky mode: it stays selected until another tool is picked. The ink is
+    // always set (seeded at boot), so there is nothing to "ensure".
+    /** @param {'pencil'|'rect'|'fill'|'eraser'|'eyedropper'} tool */
     setTool(tool) {
-      store.patch({ tool, erase: false });
+      store.patch({ tool });
     },
 
     // The single path every color pick funnels through (picker dialog, in-sprite
-    // eyedrop, recency swatch): make `color` the ink, clear the erase flag, and
-    // promote it to the top of the recency list. The TOOL is untouched — an
+    // eyedrop, recency swatch): make `color` the ink and promote it to the top
+    // of the recency list. Picking a color while the ERASER is held means "paint
+    // with this" — it returns to the pencil; any other tool is untouched, so an
     // eyedrop leaves the eyedropper selected (sticky modality).
     /** @param {{r:number,g:number,b:number}} color */
     pickColor(color) {
@@ -75,11 +80,9 @@ export function createSession() {
         0,
         RECENT_SLOTS + 1
       );
-      store.patch({ ink, erase: false, recent });
-    },
-
-    selectTransparent() {
-      store.patch({ erase: true });
+      const patch = { ink, recent };
+      if (store.get().tool === 'eraser') patch.tool = 'pencil';
+      store.patch(patch);
     },
 
     /** @param {number} n  @param {number} max */
@@ -88,17 +91,24 @@ export function createSession() {
     },
 
     /** @param {number} n  @param {number} max */
+    setEraserSize(n, max) {
+      store.patch({ eraserSize: clampBrush(n, max) });
+    },
+
+    /** @param {number} n  @param {number} max */
     setCornerRadius(n, max) {
       store.patch({ cornerRadius: clampRadius(n, max) });
     },
 
-    // A tile resize can leave the persisted pencil size / corner radius past the
-    // new bounds — re-clamp them (the old willUpdate clamp, relocated).
+    // A tile resize can leave the persisted pencil / eraser size or corner
+    // radius past the new bounds — re-clamp them (the old willUpdate clamp,
+    // relocated).
     /** @param {number} brushMax  @param {number} radiusMax */
     clampTools(brushMax, radiusMax) {
       const s = store.get();
       store.patch({
         pencilSize: clampBrush(s.pencilSize, brushMax),
+        eraserSize: clampBrush(s.eraserSize, brushMax),
         cornerRadius: clampRadius(s.cornerRadius, radiusMax),
       });
     },

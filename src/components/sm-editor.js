@@ -157,14 +157,14 @@ export class SmEditor extends LitElement {
   get ink() {
     return session.get().ink;
   }
-  get erase() {
-    return session.get().erase;
-  }
   get recent() {
     return session.get().recent;
   }
   get pencilSize() {
     return session.get().pencilSize;
+  }
+  get eraserSize() {
+    return session.get().eraserSize;
   }
   get cornerRadius() {
     return session.get().cornerRadius;
@@ -180,7 +180,8 @@ export class SmEditor extends LitElement {
   }
 
   // --- derived bounds --------------------------------------------------------
-  // The pencil tip is capped at the tile edge (a single stamp can't exceed the
+  // The pencil and eraser tips (independent settings, one geometric bound) are
+  // capped at the tile edge (a single stamp can't exceed the
   // canvas); the rect's corner radius at half the shorter tile side (the biggest a
   // full-tile rect could use — a per-rect clamp in roundedRectRows handles smaller
   // rects). Both derive from the live tile; the session actions do the clamping.
@@ -214,8 +215,8 @@ export class SmEditor extends LitElement {
   }
 
   willUpdate() {
-    // A tile resize can leave the persisted pencil size / corner radius past
-    // the new bounds — the clamp itself lives in the session action.
+    // A tile resize can leave the persisted pencil / eraser size or corner
+    // radius past the new bounds — the clamp itself lives in the session action.
     const d = doc.get();
     const k = this.#vmKey;
     if (d.tileW && d.tileH && (!k || k.tileW !== d.tileW || k.tileH !== d.tileH)) {
@@ -258,10 +259,8 @@ export class SmEditor extends LitElement {
             ></sm-tool-strip>
             <sm-color-wells
               .ink=${this.ink}
-              .erase=${this.erase}
               .recent=${this.recent.slice(1, RECENT_SLOTS + 1)}
               @sm-pick-color=${this.#onPickColor}
-              @sm-pick-transparent=${() => session.selectTransparent()}
               @sm-open-picker=${() => session.openPicker()}
             ></sm-color-wells>
           </div>
@@ -269,6 +268,7 @@ export class SmEditor extends LitElement {
             <sm-tool-options
               .tool=${this.tool}
               .pencilSize=${this.pencilSize}
+              .eraserSize=${this.eraserSize}
               .brushMax=${this.#brushMax}
               .cornerRadius=${this.cornerRadius}
               .radiusMax=${this.#radiusMax}
@@ -276,6 +276,8 @@ export class SmEditor extends LitElement {
               .fillAllTiles=${this.fillAllTiles}
               @sm-set-pencil-size=${(e) =>
                 session.setPencilSize(e.detail.n, this.#brushMax)}
+              @sm-set-eraser-size=${(e) =>
+                session.setEraserSize(e.detail.n, this.#brushMax)}
               @sm-set-corner-radius=${(e) =>
                 session.setCornerRadius(e.detail.n, this.#radiusMax)}
               @sm-set-fill-opts=${this.#onFillOpts}
@@ -288,8 +290,8 @@ export class SmEditor extends LitElement {
               .guides=${vm.guides}
               .tool=${this.tool}
               .ink=${this.ink}
-              .erase=${this.erase}
               .pencilSize=${this.pencilSize}
+              .eraserSize=${this.eraserSize}
               .cornerRadius=${this.cornerRadius}
               .fillReplace=${this.fillReplace}
               .fillAllTiles=${this.fillAllTiles}
@@ -298,7 +300,7 @@ export class SmEditor extends LitElement {
               .fillOnMount=${this.fillOnMount}
               @sm-live=${this.#onLive}
               @sm-pick-color=${this.#onPickColor}
-              @sm-pick-transparent=${() => session.selectTransparent()}
+              @sm-pick-transparent=${() => session.setTool('eraser')}
               @sm-replace-all-tiles=${this.#onReplaceAllTiles}
             ></sm-draw-canvas>
           </div>
@@ -318,9 +320,11 @@ export class SmEditor extends LitElement {
 
   // --- handlers ---------------------------------------------------------------
   // The single funnel every color pick routes through (recency swatch, canvas
-  // eyedrop; the dialog adds a close on top): the session action sets the ink,
-  // clears the erase flag, and promotes the MRU recency — the tool is left
-  // alone, so an eyedrop keeps the eyedropper selected (sticky modality).
+  // eyedrop; the dialog adds a close on top): the session action sets the ink
+  // and promotes the MRU recency — an active eraser returns to the pencil,
+  // every other tool is left alone, so an eyedrop keeps the eyedropper
+  // selected (sticky modality). An eyedrop of EMPTY space instead selects the
+  // eraser tool (sampling emptiness hands you the eraser).
   #onPickColor = (e) => {
     session.pickColor(e.detail.rgb);
   };
