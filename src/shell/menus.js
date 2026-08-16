@@ -329,6 +329,14 @@ export function initMenus(desktop, windows) {
     }
   });
 
+  on($('#menu-tools'), 'vf-menu-select', (e) => {
+    if (modalOpen()) return;
+    const v = menuDetail(e).value;
+    if (v === 'view-tools') shell.toggleWindow('tools');
+    else if (v.startsWith('tool-'))
+      session.setTool(/** @type {any} */ (v.slice('tool-'.length)));
+  });
+
   on($('#menu-view'), 'vf-menu-select', (e) => {
     if (modalOpen()) return;
     switch (menuDetail(e).value) {
@@ -359,15 +367,29 @@ export function initMenus(desktop, windows) {
 
   const itemStage = $('vf-menu-item[value="view-stage"]');
   const itemSprite = $('vf-menu-item[value="view-sprite"]');
+  const itemTools = $('vf-menu-item[value="view-tools"]');
   const itemGrid = $('vf-menu-item[value="show-grid"]');
   const syncView = () => {
     const s = shell.get();
     itemStage.checked = !!s.windows.stage;
     itemSprite.checked = !!s.windows.sprite;
+    itemTools.checked = !!s.windows.tools;
     itemGrid.checked = !!s.showGrid;
   };
   teardown.push(shell.subscribe(syncView));
   syncView();
+
+  // The Tools menu mirrors the sticky tool modes — exactly one item checked,
+  // off the same session truth the tool strip and the B/R/G/E/I keys write.
+  const toolItems = ['pencil', 'rect', 'fill', 'eraser', 'eyedropper'].map((t) => [
+    t,
+    $(`vf-menu-item[value="tool-${t}"]`),
+  ]);
+  const syncTools = () => {
+    for (const [t, item] of toolItems) item.checked = session.get().tool === t;
+  };
+  teardown.push(session.subscribe(syncTools));
+  syncTools();
 
   // The document window's close box routes through the same dirty check.
   windows.onDocumentClose = closeDocument;

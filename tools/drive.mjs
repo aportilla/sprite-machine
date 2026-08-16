@@ -366,7 +366,19 @@ const PROBE = `(() => {${DEEP}
     menuChecks: {
       sprite: __q('vf-menu-item[value="view-sprite"]').checked,
       stage: __q('vf-menu-item[value="view-stage"]').checked,
+      tools: __q('vf-menu-item[value="view-tools"]').checked,
       grid: __q('vf-menu-item[value="show-grid"]').checked,
+      // The Tools menu's checked tool item, sans its 'tool-' prefix. Exactly
+      // one must be checked (the sticky mode) — any other count reads '!N',
+      // so a stuck double-check fails the tool checks instead of hiding.
+      tool: (() => {
+        const on = __qa('vf-menu-item').filter(
+          (i) => i.checked && (i.getAttribute('value') || '').startsWith('tool-')
+        );
+        return on.length === 1
+          ? on[0].getAttribute('value').slice('tool-'.length)
+          : '!' + on.length;
+      })(),
       undoEnabled: !__q('vf-menu-item[value="undo"]').disabled,
       redoEnabled: !__q('vf-menu-item[value="redo"]').disabled,
     },
@@ -968,6 +980,43 @@ async function main() {
   await pickMenu('#menu-view', 'show-grid');
   s = await probe();
   check('View → Show Grid checks its item', s.menuChecks.grid === true);
+
+  // --- desktop: the Tools menu ------------------------------------------------
+  section('tools menu');
+  await freshPage();
+  s = await probe();
+  check(
+    'the Tools menu boots on the pencil',
+    s.menuChecks.tool === 'pencil',
+    s.menuChecks.tool
+  );
+  await pickMenu('#menu-tools', 'tool-eraser');
+  s = await probe();
+  check(
+    'Tools → Eraser selects the tool and moves the checkmark',
+    s.drawTool === 'eraser' && s.menuChecks.tool === 'eraser',
+    JSON.stringify({ strip: s.drawTool, menu: s.menuChecks.tool })
+  );
+  await keyPress('r');
+  s = await probe();
+  check(
+    'the R key moves the menu checkmark too',
+    s.menuChecks.tool === 'rect',
+    s.menuChecks.tool
+  );
+  await pickMenu('#menu-tools', 'view-tools');
+  s = await probe();
+  check(
+    'Tools → Tools Palette hides the windoid and unchecks the item',
+    s.windows.tools === false && s.menuChecks.tools === false,
+    JSON.stringify({ win: s.windows.tools, check: s.menuChecks.tools })
+  );
+  await pickMenu('#menu-tools', 'view-tools');
+  s = await probe();
+  check(
+    '…and a second pick brings it back',
+    s.windows.tools === true && s.menuChecks.tools === true
+  );
 
   // --- desktop: undo / redo ---------------------------------------------------
   section('undo / redo');

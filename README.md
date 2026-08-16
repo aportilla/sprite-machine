@@ -308,6 +308,11 @@ with the kit's page-drawn cursor (`applyCursor`) on top. The page sets
 - **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (disabled until the history has
   something — which also hands the key back to a focused field's native
   undo), _Pick Color…_ ⌘K (the 256-color dialog).
+- **Tools** — the five sticky tool modes — _Pencil_, _Rectangle_, _Fill_,
+  _Eraser_, _Eyedropper_ — with the active one checkmarked (the same session
+  truth the palette's tool strip and the B/R/G/E/I keys write, so a pick from
+  any of the three moves all three), plus a checkmarked _Tools Palette_
+  toggle for the floating windoid, the reopen path its close box needs.
 - **View** — checkmarked toggles for the _3D View_ and _Sprite View_ windows
   and _Show Grid_ ⌘G.
 
@@ -315,12 +320,14 @@ Key equivalents are the kit's own (`shortcut` on `vf-menu-item`; Ctrl stands
 in for ⌘ off-Mac). ⌘N/⌘W stay unassigned on purpose — the browser owns them
 before the page ever sees them. The bare-letter tool keys (B/R/G/I/E) keep
 living in `src/shortcuts.js`; the kit deliberately never matches an
-unmodified printable key.
+unmodified printable key — which is also what lets the Tools menu _display_
+those letters in its shortcut column without ever double-firing them.
 
 ### Windows
 
 All four open by default (persistent panels, not hunt-for-them popups);
-closing any is reversible via the View menu. Positions/sizes are authored
+closing any is reversible from the menu bar (View for the view windows,
+Tools → Tools Palette for the windoid). Positions/sizes are authored
 defaults clamped to the live raster at boot, and every window is `movable`
 (the document, sprite and 3D windows also `resizable` — the canvases re-fit
 via their own ResizeObservers, so the grow box works for free). The

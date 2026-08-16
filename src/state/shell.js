@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
 // `shell` slice — the desktop chrome's shared state: which of the four
-// windows are on screen, and the Show Grid toggle. Store-driven so the View
-// menu's checkmarks, the windows' `hidden` attributes, and the canvas's grid
-// overlay all read one truth (a menu pick, a close box, and a boot restore
-// are the same action).
+// windows are on screen, and the Show Grid toggle. Store-driven so the menu
+// checkmarks (View, plus the Tools menu's palette toggle), the windows'
+// `hidden` attributes, and the canvas's grid overlay all read one truth (a
+// menu pick, a close box, and a boot restore are the same action).
 // ---------------------------------------------------------------------------
 
 import { createStore } from './store.js';
@@ -14,7 +14,8 @@ export const WINDOW_IDS = ['document', 'tools', 'sprite', 'stage'];
 export function createShell() {
   const store = createStore({
     // All four windows are open by default (persistent panels, not
-    // hunt-for-them popups); closing any is reversible via the View menu.
+    // hunt-for-them popups); closing any is reversible from the menu bar
+    // (View for the view windows, Tools → Tools Palette for the windoid).
     /** @type {Record<string, boolean>} */
     windows: { document: true, tools: true, sprite: true, stage: true },
     showGrid: false,
