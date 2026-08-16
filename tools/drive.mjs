@@ -6,9 +6,10 @@
 // `tools/capture.sh` proves what the app LOOKS like; nothing there can click,
 // drag, or type. This drives the running dev app with `Input.dispatchMouseEvent`
 // / `Input.dispatchKeyEvent`, which produce *trusted* events — so pointer
-// capture, focus delegation into `vf-*` shadow roots, and the composed-path
-// guard that stops `B`/`R`/`G` from hijacking the tile field all behave exactly
-// as they do for a real user. Synthetic `dispatchEvent()` from page script would
+// capture, focus delegation into `vf-*` shadow roots, the kit's menu press
+// gesture and ⌘-key equivalents, and the composed-path guard that stops
+// `B`/`R`/`G` from hijacking a focused text field all behave exactly as they
+// do for a real user. Synthetic `dispatchEvent()` from page script would
 // not: `setPointerCapture` throws on an inactive pointerId, and `isTrusted`
 // checks and focus behaviour diverge.
 //
@@ -42,6 +43,12 @@
 //      plane-UNIONed by the carve, so BACK still covers the silhouette. What moves
 //      is the surface colouring and with it the triangle count, so the live-rebuild
 //      check asserts on the whole stats readout, not on `voxels`.
+//   3. Once a stroke has landed, every navigation trips the app's dirty-document
+//      beforeunload guard — a confirm dialog headless Chrome parks on FOREVER
+//      unless answered. The message handler auto-accepts Page.javascriptDialogOpening.
+//      Relatedly: repeated chorded drags (Shift-locked rects, right-button drags)
+//      can wedge the headless renderer outright — those semantics stay covered by
+//      the Node suites and docs/SMOKE-TEST.md instead.
 // ---------------------------------------------------------------------------
 
 import { spawn } from 'node:child_process';
@@ -176,7 +183,10 @@ const keyEvent = (type, k, modifiers) =>
 
 const keyDown = (name, modifiers = 0) => {
   const k = keyDesc(name);
-  return keyEvent(k.text ? 'keyDown' : 'rawKeyDown', k, modifiers);
+  // A ⌘/⌃ chord is a shortcut, not typing — rawKeyDown, so the browser never
+  // inserts the letter into a focused field.
+  const typing = k.text && !(modifiers & (CTRL | META));
+  return keyEvent(typing ? 'keyDown' : 'rawKeyDown', k, modifiers);
 };
 const keyUp = (name, modifiers = 0) => keyEvent('keyUp', keyDesc(name), modifiers);
 
@@ -191,6 +201,8 @@ async function typeText(str) {
 
 // Modifier bitmask: Alt=1, Ctrl=2, Meta=4, Shift=8.
 const ALT = 1;
+const CTRL = 2;
+const META = 4;
 const SHIFT = 8;
 
 async function mouse(type, x, y, { button = 'left', buttons = 1, modifiers = 0 } = {}) {
@@ -208,6 +220,29 @@ async function mouse(type, x, y, { button = 'left', buttons = 1, modifiers = 0 }
 async function click(x, y, opts = {}) {
   await mouse('mousePressed', x, y, opts);
   await mouse('mouseReleased', x, y, { ...opts, buttons: 0 });
+}
+
+// A real double-click: the second press/release pair carries clickCount 2, so
+// the browser synthesizes dblclick (what vf-icon's open gesture listens for).
+async function dblclick(x, y) {
+  await mouse('mousePressed', x, y, {});
+  await mouse('mouseReleased', x, y, { buttons: 0 });
+  await send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x,
+    y,
+    button: 'left',
+    buttons: 1,
+    clickCount: 2,
+  });
+  await send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x,
+    y,
+    button: 'left',
+    buttons: 0,
+    clickCount: 2,
+  });
 }
 
 // Press, drag, release — the gesture the rect tool and a pencil stroke need.
@@ -270,10 +305,21 @@ const PROBE = `(() => {${DEEP}
   const canvas = __q('.editor-canvas');
   const r = canvas.getBoundingClientRect();
   const checked = __q('vf-radio[checked]');
+  // The 3D View's status line: "grid 40px · voxels 4950 · tris 1784" (or a
+  // ⚠-prefixed error/warning) — parsed back into a stats map.
+  const buildLine = (() => {
+    const el = __q('sm-status-line[kind="build"]');
+    return el && el.shadowRoot ? el.shadowRoot.textContent.trim() : '';
+  })();
   const stats = {};
-  for (const row of __qa('.stage-stats .stat')) {
-    stats[row.children[0].textContent.trim()] = row.children[1].textContent.trim();
+  for (const m of buildLine.matchAll(/(grid|voxels|tris) ([^·]+)/g)) {
+    stats[m[1]] = m[2].trim();
   }
+  // The Colors dialog lives in <sm-color-picker>'s shadow root — the desktop's
+  // own dialogs (About, Open, …) are separate light-DOM vf-dialogs.
+  const picker = __q('sm-color-picker');
+  const colorsDialog =
+    picker && picker.shadowRoot ? picker.shadowRoot.querySelector('vf-dialog') : null;
   return {
     // All five tools are mutually exclusive sticky modes — exactly one cell is
     // lit. The eyedropper is listed LAST so a drawing-tool cell wrongly left
@@ -283,11 +329,11 @@ const PROBE = `(() => {${DEEP}
       null,
     inkColor: sw ? sw.getAttribute('color') : null,
     recent: __qa('.editor-recent vf-swatch').map((s) => s.getAttribute('color')),
-    // The options bar IS <sm-tool-options>; its shadow root holds the bare controls.
+    // The options strip IS <sm-tool-options>; its shadow root holds the bare controls.
     opts: [...__q('sm-tool-options').shadowRoot.children].map((c) =>
       c.tagName.toLowerCase()
     ),
-    // The bar's trailing readout ("N px" for the size sliders) — how the checks
+    // The strip's trailing readout ("N px" for the size sliders) — how the checks
     // see a slider's value without reaching into the kit's internals.
     optsReadout: (() => {
       const ls = __q('sm-tool-options').shadowRoot.querySelectorAll('vf-label');
@@ -295,13 +341,35 @@ const PROBE = `(() => {${DEEP}
     })(),
     face: __q('.editor-face-picker').value,
     checkedRadio: checked ? checked.getAttribute('value') : null,
-    tileField: __q('.editor-tile-size').value,
-    dialogOpen: !!(__q('vf-dialog') && __q('vf-dialog').open),
-    cursorStyle: getComputedStyle(canvas).cursor,
+    heading: __q('#win-document').heading,
+    tileStatus: (() => {
+      const el = __q('sm-status-line[kind="tile"]');
+      return el && el.shadowRoot ? el.shadowRoot.textContent.trim() : '';
+    })(),
+    colorsOpen: !!(colorsDialog && colorsDialog.open),
+    anyModalOpen: !!__q('vf-dialog[open]') || !!(colorsDialog && colorsDialog.open),
+    // The kit's page-drawn cursor claims the crosshair over the pixel canvas.
+    cursorClaim: canvas.getAttribute('data-vf-cursor'),
     rect: { left: r.left, top: r.top, width: r.width, height: r.height },
     tileW: canvas.width,
+    buildLine,
     stats,
     voxels: +(stats.voxels || 0),
+    docIcons: __qa('vf-icon').filter((i) => (i.dataset.key || '').startsWith('doc:'))
+      .length,
+    windows: {
+      document: !__q('#win-document').hidden,
+      tools: !__q('#win-tools').hidden,
+      sprite: !__q('#win-sprite').hidden,
+      stage: !__q('#win-stage').hidden,
+    },
+    menuChecks: {
+      sprite: __q('vf-menu-item[value="view-sprite"]').checked,
+      stage: __q('vf-menu-item[value="view-stage"]').checked,
+      grid: __q('vf-menu-item[value="show-grid"]').checked,
+      undoEnabled: !__q('vf-menu-item[value="undo"]').disabled,
+      redoEnabled: !__q('vf-menu-item[value="redo"]').disabled,
+    },
     stamp: window.__stamp || 'RELOADED',
   };
 })()`;
@@ -366,8 +434,9 @@ const hex = ([r, g, b]) =>
   '#' + [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('');
 
 const APP_READY = `(() => {${DEEP}
-  return !!(__q('.editor-canvas') &&
-    __q('.stage-stats').textContent.includes('voxels'));
+  const build = __q('sm-status-line[kind="build"]');
+  return !!(__q('.editor-canvas') && build && build.shadowRoot &&
+    build.shadowRoot.textContent.includes('voxels'));
 })()`;
 
 async function waitForApp() {
@@ -404,6 +473,13 @@ async function main() {
     ws.addEventListener('open', res);
     ws.addEventListener('error', rej);
   });
+  // A dropped connection (Chrome crash, watchdog kill) would otherwise leave
+  // every pending send() unresolved and the run exiting silently mid-section.
+  ws.addEventListener('close', () => {
+    const err = new Error('CDP connection closed (Chrome went away mid-run)');
+    for (const { reject } of pending.values()) reject(err);
+    pending.clear();
+  });
   ws.addEventListener('message', (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.id && pending.has(msg.id)) {
@@ -415,6 +491,12 @@ async function main() {
     }
     if (msg.method === 'Page.frameNavigated' && !msg.params.frame.parentId) {
       console.log('  ..   [navigated]', msg.params.frame.url);
+    }
+    if (msg.method === 'Page.javascriptDialogOpening') {
+      // The app's dirty-document beforeunload guard raises a confirm on every
+      // freshPage once a stroke has landed; unanswered it wedges navigation
+      // forever in headless. Accept and move on.
+      send('Page.handleJavaScriptDialog', { accept: true });
     }
     if (msg.method === 'Runtime.exceptionThrown') {
       const d = msg.params.exceptionDetails;
@@ -432,14 +514,44 @@ async function main() {
   const TILE = s.tileW;
   const at = (px, py) => texelPos(s.rect, TILE, px, py);
 
+  // Pick one item from a menu-bar menu with real pointer input: a quick tap
+  // on the menu's bar title opens the panel and leaves it open (the kit's
+  // press gesture), then a click on the item runs its ~250ms blink before
+  // vf-menu-select fires — hence the generous settle.
+  async function pickMenu(menuSel, itemValue) {
+    const m = await centreOf(menuSel);
+    await click(m.x, m.y);
+    await sleep(250);
+    const it = await centreOf(`vf-menu-item[value="${itemValue}"]`);
+    await click(it.x, it.y);
+    await sleep(650);
+  }
+
   section(`boot — face=${s.face} tile=${TILE}px`);
   check('boots with the pencil active', s.drawTool === 'pencil', s.drawTool);
-  check('pencil keeps the OS crosshair over the canvas', s.cursorStyle === 'crosshair');
-  check('options bar shows the pencil slider', s.opts.join(',') === 'vf-slider,vf-label');
+  check(
+    'the pixel canvas claims the kit crosshair cursor',
+    s.cursorClaim === 'crosshair',
+    s.cursorClaim
+  );
+  check(
+    'the options strip shows the pencil slider',
+    s.opts.join(',') === 'vf-slider,vf-label'
+  );
   check('face picker reflects ?edit=front', s.face === 'front', s.face);
   check('the checked radio follows the face', s.checkedRadio === 'front');
-  check('tile field shows the tile size', s.tileField === String(TILE));
-  check('stats read out a build', s.voxels > 0, JSON.stringify(s.stats));
+  check('the document window is titled for the sample', s.heading === 'Car', s.heading);
+  check(
+    'the document status bar reads the tile size',
+    s.tileStatus === `${TILE}px x ${TILE}px`,
+    s.tileStatus
+  );
+  check(
+    'all four desktop windows are open',
+    Object.values(s.windows).every(Boolean),
+    JSON.stringify(s.windows)
+  );
+  check('stats read out a build', s.voxels > 0, s.buildLine);
 
   // --- keyboard tool switching ----------------------------------------------
   section('keys');
@@ -451,7 +563,24 @@ async function main() {
     s.opts.join(',') === 'vf-label,vf-number-field',
     s.opts.join(',')
   );
-  check('the rect tool keeps the OS crosshair', s.cursorStyle === 'crosshair');
+
+  // The kit hosts its <input> in shadow DOM, so the tool-shortcut guard has to
+  // read the composed path — a retargeted document-level check would let this
+  // through. The radius field is the strip's always-mounted text input.
+  await evaluate(
+    `(() => {${DEEP} __q('sm-tool-options').shadowRoot
+        .querySelector('vf-number-field').shadowRoot.querySelector('input').focus(); })()`
+  );
+  await keyPress('g');
+  s = await probe();
+  check(
+    'a letter typed in the radius field does not switch tools',
+    s.drawTool === 'rectangle',
+    s.drawTool
+  );
+  await evaluate(`(() => { let a = document.activeElement;
+    while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+    if (a) a.blur(); })()`);
 
   await keyPress('g');
   s = await probe();
@@ -465,8 +594,11 @@ async function main() {
   await keyPress('i');
   s = await probe();
   check('I selects the eyedropper tool', s.drawTool === 'eyedropper', s.drawTool);
-  check('the eyedropper keeps the OS crosshair too', s.cursorStyle === 'crosshair');
-  check('the eyedropper has an empty options bar', s.opts.length === 0, s.opts.join(','));
+  check(
+    'the eyedropper has an empty options strip',
+    s.opts.length === 0,
+    s.opts.join(',')
+  );
 
   await keyPress('e');
   s = await probe();
@@ -503,23 +635,6 @@ async function main() {
     s.optsReadout === '1 px',
     s.optsReadout
   );
-
-  // The kit hosts its <input> in shadow DOM, so the guard has to read the
-  // composed path — a retargeted document-level check would let this through.
-  await evaluate(
-    `(() => {${DEEP} __q('.editor-tile-size').shadowRoot.querySelector('input').focus(); })()`
-  );
-  await keyPress('r');
-  s = await probe();
-  check(
-    'a letter typed in the tile field does not switch tools',
-    s.drawTool === 'pencil'
-  );
-  // Blur the INNERMOST focused element — document.activeElement is only the
-  // outermost shadow host.
-  await evaluate(`(() => { let a = document.activeElement;
-    while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
-    if (a) a.blur(); })()`);
 
   // --- pencil ---------------------------------------------------------------
   section('pencil');
@@ -588,7 +703,12 @@ async function main() {
     s.drawTool
   );
 
-  // --- rect: Esc cancel, Shift square-lock ----------------------------------
+  // --- rect: drag commit + Esc cancel ---------------------------------------
+  // Kept to the two gesture-shaped checks headless Chrome runs reliably under
+  // the desktop shell; the Shift square-lock and right-drag-erase SEMANTICS
+  // are pinned in Node (test/rect.test.mjs, test/brush.test.mjs) and in the
+  // manual guide (docs/SMOKE-TEST.md) — repeated synthesized chord-drags here
+  // wedge the headless renderer.
   section('rect');
   await keyPress('r');
   await drag(at(30, 4), at(34, 8), { beforeRelease: () => keyPress('Escape') });
@@ -596,36 +716,10 @@ async function main() {
   const escaped = await texelAt(32, 6);
   check('Esc mid-drag writes nothing', escaped[3] === 0, `texel=${escaped}`);
 
-  // Drag a 9x5 box, then hold Shift: the shorter extent wins, so only the 5x5
-  // square anchored at the start corner commits.
-  await mouse('mousePressed', at(30, 4).x, at(30, 4).y);
-  await mouse('mouseMoved', at(38, 8).x, at(38, 8).y, { buttons: 1 });
-  await keyDown('Shift', SHIFT);
-  await mouse('mouseMoved', at(38, 8).x, at(38, 8).y, { buttons: 1, modifiers: SHIFT });
-  await mouse('mouseReleased', at(38, 8).x, at(38, 8).y, {
-    buttons: 0,
-    modifiers: SHIFT,
-  });
-  await keyUp('Shift');
+  await drag(at(30, 4), at(34, 8));
   await sleep(200);
-  const inSquare = await texelAt(34, 8);
-  const outsideSquare = await texelAt(37, 6); // inside the wide box, outside the square
-  check(
-    'Shift locks the committed rect to a square',
-    inSquare[3] === 255 && outsideSquare[3] === 0,
-    `in=${inSquare} out=${outsideSquare}`
-  );
-
-  // Rect-ERASE is the right-button drag (the eraser tool itself strokes like a
-  // pencil): right-drag a box over the square just committed and it clears.
-  await drag(at(30, 4), at(38, 8), { button: 'right', buttons: 2 });
-  await sleep(200);
-  const rectErased = await texelAt(34, 8);
-  check(
-    'a right-drag rect erases the boxed texels',
-    rectErased[3] === 0,
-    `${rectErased}`
-  );
+  const committed = await texelAt(32, 6);
+  check('a plain drag commits the box', committed[3] === 255, `texel=${committed}`);
 
   // --- an edit must reach the voxel pipeline --------------------------------
   // Fresh load first: the headless reload artifact reliably strikes right after
@@ -674,55 +768,45 @@ async function main() {
     `${rowBeforeSwap} → ${s.recent.length}`
   );
 
-  // --- tile resize by the stepper -------------------------------------------
-  section('tile resize');
+  // --- Properties: the relocated tile stepper --------------------------------
+  // The tile-size field lives in File → Properties now; the whole flow runs
+  // on real menu + dialog input.
+  section('properties');
+  await freshPage();
+  await pickMenu('#menu-file', 'properties');
+  const props = await evaluate(`(() => {${DEEP} return {
+    open: __q('#dlg-props').open,
+    name: __q('#props-name').textContent.trim(),
+    dims: __q('#props-dims').textContent.trim(),
+    tile: __q('#props-tile').value,
+  }; })()`);
+  check('File → Properties opens the dialog', props.open === true);
+  check('…showing the document name', props.name === 'Car', props.name);
+  check('…and the atlas dimensions', props.dims.includes('120px'), props.dims);
+  check('…and the tile size', props.tile === String(TILE), props.tile);
+  // Click the stepper's up arrow: a centered, registration-preserving resize
+  // applied live behind the modal. Autorepeat can land more than one step, so
+  // assert direction, not delta.
   const stepper = await evaluate(
-    `(() => {${DEEP} const st = __q('.editor-tile-size')
+    `(() => {${DEEP} const st = __q('#props-tile')
         .shadowRoot.querySelector('[part="stepper"]').getBoundingClientRect();
       return { x: st.left + st.width / 2, y: st.top + st.height * 0.25 }; })()`
   );
   await click(stepper.x, stepper.y);
-  await sleep(600);
-  s = await probe();
-  // Press-and-hold autorepeat can land more than one step, so assert the
-  // direction and that the field agrees with the canvas, not an exact delta.
-  check(
-    'the stepper resizes the tile',
-    s.tileW > TILE && s.tileField === String(s.tileW),
-    `tileW=${s.tileW} field=${s.tileField}`
-  );
-  check('the editor stays on the same face after a resize', s.face === 'top', s.face);
-  check('the tool survives the resize', s.drawTool === 'fill', s.drawTool);
-  check('the canvas re-fits to the new tile size', s.rect.width > 0 && s.rect.height > 0);
-
-  // --- typed tile entry keeps focus -----------------------------------------
-  // The persistent element's payoff: the number field is never unmounted, so
-  // focus survives a resize with no refocus code behind it.
-  section('typed tile entry');
-  await freshPage();
-  await evaluate(
-    `(() => {${DEEP} __q('.editor-tile-size').shadowRoot.querySelector('input').focus(); })()`
-  );
-  // Clear with real keystrokes — an out-of-band `input.value = ''` races with
-  // live() re-asserting the bound value on the next render.
-  await keyPress('Backspace');
-  await keyPress('Backspace');
-  await typeText('42');
-  await keyPress('Enter');
   await sleep(700);
   s = await probe();
-  check('typing a tile size commits it', s.tileW === 42, `tileW=${s.tileW}`);
-  // Walk the whole delegated-focus chain (sm-editor → vf-number-field → input)
-  // and report the innermost host/leaf pair.
-  const focusAfter = await evaluate(
-    `(() => { const chain = []; let a = document.activeElement;
-      while (a) { chain.push(a.tagName.toLowerCase()); a = a.shadowRoot && a.shadowRoot.activeElement; }
-      return chain.length ? chain.slice(-2).join('/') : null; })()`
-  );
+  const steppedTile = s.tileW;
+  check('the stepper resizes the tile', steppedTile > TILE, `tileW=${steppedTile}`);
   check(
-    'keyboard focus stays in the tile field across the resize',
-    focusAfter === 'vf-number-field/input',
-    focusAfter
+    'the document status bar follows',
+    s.tileStatus === `${steppedTile}px x ${steppedTile}px`,
+    s.tileStatus
+  );
+  check('the editor stays on its face', s.face === 'front', s.face);
+  // Typed entry commits too (real keystrokes — a programmatic value write
+  // races the field's own bindings).
+  await evaluate(
+    `(() => {${DEEP} __q('#props-tile').shadowRoot.querySelector('input').focus(); })()`
   );
   await keyPress('Backspace');
   await keyPress('Backspace');
@@ -730,10 +814,19 @@ async function main() {
   await keyPress('Enter');
   await sleep(700);
   s = await probe();
+  check('typing a tile size commits it', s.tileW === 24, `tileW=${s.tileW}`);
+  const propsOk = await centreOf('#btn-props-ok');
+  await click(propsOk.x, propsOk.y);
+  await sleep(300);
+  // Both resizes recorded whole-atlas undo entries: ⌘Z returns to the
+  // stepped size (the typed 24 rolls back).
+  await keyPress('z', META);
+  await sleep(700);
+  s = await probe();
   check(
-    'a second typed size commits without a refocus',
-    s.tileW === 24,
-    `tileW=${s.tileW}`
+    '⌘Z undoes the typed resize back to the stepped size',
+    s.tileW === steppedTile,
+    `tileW=${s.tileW} vs ${steppedTile}`
   );
 
   // --- one element, one dialog, ever ----------------------------------------
@@ -742,7 +835,9 @@ async function main() {
   const inkSwatch = await centreOf('.editor-selected');
   await click(inkSwatch.x, inkSwatch.y);
   await sleep(400);
-  await evaluate(`(() => {${DEEP} __q('vf-dialog').close(); })()`);
+  await evaluate(
+    `(() => {${DEEP} __q('sm-color-picker').shadowRoot.querySelector('vf-dialog').close(); })()`
+  );
   await sleep(300);
   for (const face of ['top', 'back', 'left']) {
     const p = await centreOf(`vf-radio[value="${face}"]`);
@@ -753,7 +848,7 @@ async function main() {
   const counts = await evaluate(
     `(() => {${DEEP}
       return { editors: __qa('sm-editor').length,
-        dialogs: __qa('vf-dialog').length,
+        dialogs: __q('sm-color-picker').shadowRoot.querySelectorAll('vf-dialog').length,
         cells: __qa('.editor-picker-grid vf-swatch').length,
         canvases: __qa('.editor-canvas').length }; })()`
   );
@@ -817,8 +912,9 @@ async function main() {
   );
 
   // --- the 256-colour dialog ------------------------------------------------
-  // LAST on purpose: a synthesized mouse-up after a native modal closes is one of
-  // the states that provokes the headless reload described in the header.
+  // A synthesized mouse-up after a native modal closes is one of the states
+  // that provokes the headless reload described in the header — every section
+  // after this one starts from a deliberate fresh load.
   section('palette');
   await freshPage();
   s = await probe();
@@ -830,7 +926,7 @@ async function main() {
   await click(swatch.x, swatch.y);
   await sleep(400);
   s = await probe();
-  check('clicking the ink swatch opens the Colors dialog', s.dialogOpen === true);
+  check('clicking the ink swatch opens the Colors dialog', s.colorsOpen === true);
   const cell = await evaluate(
     `(() => {${DEEP} const cells = __qa('.editor-picker-grid vf-swatch');
       const c = cells[70]; const r = c.getBoundingClientRect();
@@ -845,13 +941,158 @@ async function main() {
   await click(cell.x, cell.y);
   await sleep(400);
   s = await probe();
-  check('picking a swatch closes the dialog', s.dialogOpen === false);
+  check('picking a swatch closes the dialog', s.colorsOpen === false);
   check('picking a swatch becomes the ink', s.inkColor === cell.color, `${s.inkColor}`);
   check(
     'the previous ink drops into the last-used row',
     s.recent[0] === inkBeforePalette,
     `${JSON.stringify(s.recent)} vs ${inkBeforePalette}`
   );
+
+  // --- desktop: the View menu ------------------------------------------------
+  section('view menu');
+  await freshPage();
+  await pickMenu('#menu-view', 'view-sprite');
+  s = await probe();
+  check(
+    'View → Sprite View hides the window and unchecks the item',
+    s.windows.sprite === false && s.menuChecks.sprite === false,
+    JSON.stringify({ win: s.windows.sprite, check: s.menuChecks.sprite })
+  );
+  await pickMenu('#menu-view', 'view-sprite');
+  s = await probe();
+  check(
+    '…and a second pick brings it back',
+    s.windows.sprite === true && s.menuChecks.sprite === true
+  );
+  await pickMenu('#menu-view', 'show-grid');
+  s = await probe();
+  check('View → Show Grid checks its item', s.menuChecks.grid === true);
+
+  // --- desktop: undo / redo ---------------------------------------------------
+  section('undo / redo');
+  await freshPage();
+  s = await probe();
+  check('Undo boots disabled', s.menuChecks.undoEnabled === false);
+  await keyPress('b');
+  await click(at(2, 2).x, at(2, 2).y);
+  await sleep(400);
+  check('the stroke landed', (await texelAt(2, 2))[3] === 255);
+  s = await probe();
+  check('a committed gesture enables Undo', s.menuChecks.undoEnabled === true);
+  await keyPress('z', META);
+  await sleep(700);
+  check('⌘Z undoes the stroke', (await texelAt(2, 2))[3] === 0, `${await texelAt(2, 2)}`);
+  await keyPress('z', META | SHIFT);
+  await sleep(700);
+  check('⇧⌘Z redoes it', (await texelAt(2, 2))[3] === 255, `${await texelAt(2, 2)}`);
+  s = await probe();
+  check(
+    'menu enablement follows the stacks',
+    s.menuChecks.undoEnabled === true && s.menuChecks.redoEnabled === false,
+    JSON.stringify(s.menuChecks)
+  );
+
+  // --- desktop: window drag + grow box ---------------------------------------
+  section('windows');
+  await freshPage();
+  const posBefore = await evaluate(
+    `(() => {${DEEP} const w = __q('#win-document'); return { top: w.top, left: w.left }; })()`
+  );
+  const bar = await evaluate(
+    `(() => {${DEEP} const r = __q('#win-document').getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + 9 }; })()`
+  );
+  await mouse('mousePressed', bar.x, bar.y);
+  await mouse('mouseMoved', bar.x + 20, bar.y + 12, { buttons: 1 });
+  await mouse('mouseMoved', bar.x + 40, bar.y + 24, { buttons: 1 });
+  await mouse('mouseReleased', bar.x + 40, bar.y + 24, { buttons: 0 });
+  await sleep(300);
+  const posAfter = await evaluate(
+    `(() => {${DEEP} const w = __q('#win-document'); return { top: w.top, left: w.left }; })()`
+  );
+  check(
+    'dragging the title bar moves the window',
+    posAfter.left === posBefore.left + 40 && posAfter.top === posBefore.top + 24,
+    JSON.stringify({ posBefore, posAfter })
+  );
+
+  const growPos = await evaluate(
+    `(() => {${DEEP} const g = __q('#win-stage').shadowRoot
+        .querySelector('[part="grow-box"]').getBoundingClientRect();
+      return { x: g.left + g.width / 2, y: g.top + g.height / 2 }; })()`
+  );
+  const sizeBefore = await evaluate(
+    `(() => {${DEEP} const w = __q('#win-stage');
+      return { w: w.width, h: w.height, cw: __q('#viewport').clientWidth }; })()`
+  );
+  await mouse('mousePressed', growPos.x, growPos.y);
+  await mouse('mouseMoved', growPos.x + 15, growPos.y + 10, { buttons: 1 });
+  await mouse('mouseMoved', growPos.x + 30, growPos.y + 20, { buttons: 1 });
+  await mouse('mouseReleased', growPos.x + 30, growPos.y + 20, { buttons: 0 });
+  await sleep(400);
+  const sizeAfter = await evaluate(
+    `(() => {${DEEP} const w = __q('#win-stage');
+      return { w: w.width, h: w.height, cw: __q('#viewport').clientWidth }; })()`
+  );
+  check(
+    'the grow box resizes the 3D View window',
+    sizeAfter.w === sizeBefore.w + 30 && sizeAfter.h === sizeBefore.h + 20,
+    JSON.stringify({ sizeBefore, sizeAfter })
+  );
+  check(
+    'the THREE canvas follows the resize',
+    sizeAfter.cw > sizeBefore.cw,
+    `${sizeBefore.cw} → ${sizeAfter.cw}`
+  );
+
+  // --- desktop: save / open round-trip ---------------------------------------
+  // The full persistence loop on real input: draw → ⌘S → name it → File → New
+  // → double-click the saved doc's icon → the pixels come back. (IndexedDB is
+  // fully available to headless Chrome; each run's profile starts empty.)
+  section('save / open round-trip');
+  await freshPage();
+  s = await probe();
+  check('a fresh profile has no saved-doc icons', s.docIcons === 0, `${s.docIcons}`);
+  await keyPress('b');
+  await click(at(1, 1).x, at(1, 1).y);
+  await sleep(400);
+  await keyPress('s', META);
+  await sleep(800); // the menu blink, then the save prompt
+  const nameOpen = await evaluate(`(() => {${DEEP} return __q('#dlg-name').open; })()`);
+  check('⌘S raises the save-name prompt for an untitled doc', nameOpen === true);
+  // Clear the prefilled name, then type the new one with real keystrokes.
+  await evaluate(
+    `(() => {${DEEP} const f = __q('#name-field'); f.value = '';
+      f.shadowRoot.querySelector('input').focus(); })()`
+  );
+  await typeText('Test Doc');
+  await keyPress('Enter');
+  await sleep(900);
+  s = await probe();
+  check('the save titles the document window', s.heading === 'Test Doc', s.heading);
+  check('a desktop icon appears for the saved doc', s.docIcons === 1, `${s.docIcons}`);
+  await pickMenu('#menu-file', 'new');
+  s = await probe();
+  check('File → New opens a blank untitled', s.heading === 'untitled', s.heading);
+  const blankTexel = await texelAt(1, 1);
+  check('…with an empty canvas', blankTexel[3] === 0, `${blankTexel}`);
+  const iconPos = await evaluate(
+    `(() => {${DEEP}
+      const i = __qa('vf-icon').find((el) => (el.dataset.key || '').startsWith('doc:'));
+      const r = i.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + 20 }; })()`
+  );
+  await dblclick(iconPos.x, iconPos.y);
+  await sleep(1000);
+  s = await probe();
+  check(
+    'double-clicking its icon re-opens the saved doc',
+    s.heading === 'Test Doc',
+    s.heading
+  );
+  const restored = await texelAt(1, 1);
+  check('…with its pixels restored from storage', restored[3] === 255, `${restored}`);
 
   console.log(
     `\n${passed} passed, ${failures.length} failed` +

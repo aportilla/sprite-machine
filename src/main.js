@@ -1,33 +1,48 @@
 // ---------------------------------------------------------------------------
 // The composition root — the only file that assembles the app, with no logic
-// of its own: parse the boot params, seed the stores, create the THREE stage +
-// mesh rebuilder, mount the (connected) chrome and editor components, wire the
-// global shortcuts and drop target, and load the boot sample. Everything else
-// coordinates through the state slices (state/) — see README's Architecture
-// section.
+// of its own: parse the boot params, seed the stores, fit the desktop raster
+// and take over the cursor, wire the shell (windows / menus / icons /
+// persistence), create the THREE stage + mesh rebuilder, hand the editor its
+// constants, and load the boot document. Everything else coordinates through
+// the state slices (state/) — see README's Architecture section.
 // ---------------------------------------------------------------------------
 
 import './style.css';
+import 'vintage-frames';
+import { applyCursor, onScaleChange } from 'vintage-frames';
 import { SAMPLES } from './lib/sprite-data.js';
-import { TILE_MIN, TILE_MAX } from './lib/atlas.js';
-import { PENCIL_PALETTE, PALETTE_256 } from './lib/constants.js';
+import { PALETTE_256 } from './lib/constants.js';
 import { doc } from './state/doc.js';
 import { session } from './state/session.js';
 import { prefs } from './state/prefs.js';
+import { shell } from './state/shell.js';
+import { files } from './state/files.js';
 import { parseBootParams } from './boot/params.js';
 import { createStage } from './scene/stage.js';
 import { initRebuilder } from './scene/rebuilder.js';
 import { loadSample } from './loaders.js';
 import { initDropTarget } from './drop-target.js';
 import { initShortcuts } from './shortcuts.js';
+import { createStorageIfAvailable } from './storage/db.js';
+import {
+  imageDataToPngBytes,
+  bytesToImageData,
+  tileToIconDataUri,
+  genericDocIconDataUri,
+} from './image-io.js';
+import { initWindows } from './shell/windows.js';
+import { initMenus } from './shell/menus.js';
+import { initIcons } from './shell/icons.js';
+import { createDesktopState } from './shell/desktop-state.js';
 import './components/sm-editor.js'; // registers <sm-editor>
-import './components/sm-topbar.js'; // registers <sm-topbar>
-import './components/sm-stage-controls.js'; // registers <sm-stage-controls>
-import './components/sm-stats-readout.js'; // registers <sm-stats-readout>
+import './components/sm-options-bar.js'; // registers <sm-options-bar>
+import './components/sm-tools-panel.js'; // registers <sm-tools-panel>
+import './components/sm-atlas-view.js'; // registers <sm-atlas-view>
+import './components/sm-status-line.js'; // registers <sm-status-line>
 
 // --- boot params → store seeds ---------------------------------------------
 // Applied BEFORE any subscriber exists, so seeding can't fire phantom
-// rebuilds — and the editor mounts with the seeded state already in place.
+// rebuilds — and the components mount with the seeded state already in place.
 // The dev hooks' state halves are ordinary store actions; only the
 // canvas-paint halves ride as one-shot props on the editor (consumed by
 // <sm-draw-canvas> on its first update). See boot/params.js.
@@ -54,6 +69,51 @@ if (boot.fill) {
   session.setFillAllTiles(boot.fill.all);
 }
 
+// --- the desktop raster + cursor -------------------------------------------
+// The page owns the viewport: measure it, let fitWithin() derive the largest
+// whole raster that fits, re-derive on resize and scale change (zoom, a
+// monitor swap). The kit's System 7 pointer set takes over the cursor.
+const desktop = /** @type {import('vintage-frames').VfDesktop} */ (
+  document.getElementById('desktop')
+);
+const fitDesktop = () => {
+  desktop.fitWithin(
+    document.documentElement.clientWidth,
+    document.documentElement.clientHeight
+  );
+};
+fitDesktop();
+window.addEventListener('resize', fitDesktop);
+const offScale = onScaleChange(fitDesktop);
+const removeCursor = applyCursor();
+
+// --- persistence wiring ------------------------------------------------------
+// The files slice gets its browser dependencies here (it stays Node-testable
+// with stubs); desktop layout rides localStorage, both disabled by ?fresh=1.
+files.init({
+  storage: createStorageIfAvailable(),
+  doc,
+  encodeAtlas: imageDataToPngBytes,
+  decodeAtlas: bytesToImageData,
+  makeIcon: async (state) =>
+    tileToIconDataUri(state.views.front) ?? genericDocIconDataUri(),
+});
+const dstate = createDesktopState(boot.fresh);
+if (dstate.saved?.showGrid) shell.setShowGrid(true);
+
+// --- shell ------------------------------------------------------------------
+const windows = initWindows(desktop, { saved: dstate.saved, hide: boot.hide });
+const menus = initMenus(desktop, windows);
+const icons = initIcons(desktop, {
+  actions: menus.actions,
+  savedPos: dstate.iconPos,
+  fresh: boot.fresh,
+});
+const stopPersist = dstate.start({
+  windows: windows.byId,
+  iconsRoot: desktop.querySelector('#desktop-icons'),
+});
+
 // --- scene ------------------------------------------------------------------
 const stage = createStage(
   /** @type {HTMLCanvasElement} */ (document.getElementById('viewport')),
@@ -61,53 +121,74 @@ const stage = createStage(
 );
 const rebuilder = initRebuilder(stage, { flat: boot.flat, diag: boot.diag });
 
-// --- chrome + editor --------------------------------------------------------
-// The components are CONNECTED (each reads its slices itself); this root just
-// places them. The editor gets its session constants and the one-shot canvas
-// dev hooks; ONE element, docked forever.
-document.getElementById('topbar').replaceChildren(document.createElement('sm-topbar'));
-document
-  .getElementById('stage')
-  .append(
-    document.createElement('sm-stage-controls'),
-    document.createElement('sm-stats-readout')
-  );
-const editor = /** @type {any} */ (document.createElement('sm-editor'));
+// --- editor -----------------------------------------------------------------
+// The single <sm-editor> lives in the document window's markup; it gets its
+// session constants and the one-shot canvas dev hooks. ONE element, forever.
+const editor = /** @type {any} */ (document.querySelector('sm-editor'));
 Object.assign(editor, {
-  palette: PENCIL_PALETTE,
   palette256: PALETTE_256,
   faces: ['left', 'right', 'front', 'back', 'top', 'bottom'], // mirror pairs
-  sizeMin: TILE_MIN,
-  sizeMax: TILE_MAX,
   previewCursor: boot.cursor != null,
   previewRect: boot.rect,
   fillOnMount: boot.fill,
 });
-document.getElementById('editor-panel').replaceChildren(editor);
 
-initDropTarget();
-// The global tool shortcuts (B/R/G/I/E → session actions); the gesture-scoped
-// keys (Esc / Shift on an in-flight rect) live inside <sm-draw-canvas>.
+const disposeDrop = initDropTarget();
+// The global tool shortcuts (B/R/G/I/E → session actions); the menu key
+// equivalents (⌘S, ⌘Z, …) are the kit's own, declared on the menu items.
 const disposeShortcuts = initShortcuts();
+
+// The safety net under explicit Save: leaving with unsaved changes warns.
+const onBeforeUnload = (e) => {
+  if (files.get().dirty) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+};
+window.addEventListener('beforeunload', onBeforeUnload);
 
 // --- HMR teardown -----------------------------------------------------------
 // Vite re-executes this module's top level on edit without unloading the old
-// instance; the stage loop/listeners, the rebuilder's subscriptions, and the
-// shortcut handler would each accumulate a duplicate without this. (The store
-// singletons persist — only this execution's listeners are dropped.)
+// instance; everything wired above would accumulate a duplicate without this.
+// (The store singletons persist — only this execution's listeners are dropped;
+// files.init re-wires its doc subscriptions cleanly on the next run.)
 const hot = /** @type {any} */ (import.meta).hot;
 if (hot) {
   hot.dispose(() => {
     stage.dispose();
     rebuilder.dispose();
     disposeShortcuts();
+    disposeDrop();
+    windows.dispose();
+    menus.dispose();
+    icons.dispose();
+    stopPersist();
+    window.removeEventListener('resize', fitDesktop);
+    window.removeEventListener('beforeunload', onBeforeUnload);
+    offScale();
+    removeCursor();
   });
 }
 
-// --- boot -------------------------------------------------------------------
-// Load the boot sample (?sample=<index|name> overrides, handy for testing).
-loadSample(SAMPLES[boot.sampleIndex]).then(() => {
+// --- boot document -----------------------------------------------------------
+// An explicit ?sample beats everything (the deterministic test path); else
+// the last open document restores; else the default sample as an untitled.
+// Only the restore path BLOCKS on storage — the sample path must not wait on
+// an IndexedDB round-trip (which can stall the whole boot under the capture
+// tool's virtual-time budget), so its listing refresh runs in the background.
+(async () => {
+  const wantRestore = !boot.fresh && !boot.sampleExplicit && !!dstate.saved?.lastDocId;
+  if (wantRestore) {
+    await files.refresh();
+    if (files.get().available) {
+      const ok = await files.open(dstate.saved.lastDocId).catch(() => false);
+      if (ok) return;
+    }
+  } else {
+    files.refresh();
+  }
+  await loadSample(SAMPLES[boot.sampleIndex]);
   // Dev hook: ?tile / ?tile=WxH resizes the fresh sheet once (the capture tool
   // can't click the stepper); the editor re-derives at the new size.
   if (boot.tile) doc.resizeTiles(boot.tile.w, boot.tile.h);
-});
+})();

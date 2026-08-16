@@ -169,6 +169,35 @@ export function createDoc(scheduler = {}) {
       return true;
     },
 
+    // Restore ONE face's art wholesale (the undo/redo path): blit the tile —
+    // or transparency for a blank/null one — into the canonical sheet and
+    // re-slice, so the change is STRUCTURAL (templates re-derive, the canvas
+    // resets its working buffer, the rebuilder rebuilds). The tile's data is
+    // COPIED in by the blit; callers may keep their snapshot.
+    /** @param {string} face  @param {{width:number,height:number,data:Uint8ClampedArray}|null} tile */
+    restoreTile(face, tile) {
+      const s = store.get();
+      const cell = cellOf(face);
+      if (!s.atlasImage || !cell) return;
+      this.dropLive();
+      const t = tile ?? {
+        width: s.tileW,
+        height: s.tileH,
+        data: new Uint8ClampedArray(s.tileW * s.tileH * 4),
+      };
+      blitTile(s.atlasImage, t, cell.c * s.tileW, cell.r * s.tileH);
+      store.patch(slicedPatch(s.atlasImage));
+    },
+
+    // Restore the WHOLE sheet (the undo/redo path for resize / replace-all).
+    // The image is adopted BY REFERENCE — pass a copy if the snapshot must
+    // survive later edits. No sheet bump: this is the same document.
+    /** @param {{width:number,height:number,data:Uint8ClampedArray}} image */
+    restoreAtlas(image) {
+      this.dropLive();
+      store.patch({ atlasImage: image, ...slicedPatch(image) });
+    },
+
     // Replace every `target` texel with `fill` across all six tiles. Scoped to
     // the tiled region (the top-left cols*tileW × rows*tileH block) so a
     // non-divisible sheet's remainder pixels are left untouched. Returns whether

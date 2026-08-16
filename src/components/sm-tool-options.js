@@ -10,7 +10,8 @@
 // events up. `live()` bindings throughout, so a re-render can't skip a re-sync
 // after typing.
 //
-// This element IS the options bar (`:host` carries the box); its shadow root
+// This element IS the options area (`:host` carries the box — it fills the
+// desktop's options strip beside the tool-name caption); its shadow root
 // holds the bare controls, exactly the surface drive.mjs probes.
 // ---------------------------------------------------------------------------
 
@@ -21,19 +22,18 @@ import { baseStyles } from './base-styles.js';
 
 export class SmToolOptions extends LitElement {
   // The one sm-* host with a REAL box (no `display: contents`): this element
-  // IS the options bar, so `:host` carries its flex-row layout.
+  // IS the options area, so `:host` carries its flex-row layout. The strip
+  // around it (sm-options-bar) paints the white band; this host stays
+  // chromeless and just lays its controls out.
   static styles = [
     baseStyles,
     css`
       :host {
-        flex: none;
-        min-height: 38px;
+        flex: 1;
+        min-width: 0;
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 6px 12px;
-        background: var(--sm-white);
-        border-bottom: 1px solid var(--sm-black);
       }
       .editor-size-slider {
         flex: 1;

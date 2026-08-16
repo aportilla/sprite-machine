@@ -75,6 +75,8 @@ export function parseBootParams(search, { sampleNames = [] } = {}) {
   }
 
   // ?sample=<index|name>: a known name wins; else a clamped index; else 0.
+  // `sampleExplicit` records whether the param was GIVEN — an explicit sample
+  // is a test path and beats the boot restore of the last open document.
   let sampleIndex = 0;
   const q = params.get('sample');
   if (q != null && sampleNames.length) {
@@ -103,5 +105,16 @@ export function parseBootParams(search, { sampleNames = [] } = {}) {
     rect,
     fill,
     sampleIndex,
+    sampleExplicit: q != null,
+    // ?fresh=1: boot with storage ignored — no desktop-state restore, no
+    // last-doc restore, no saved-doc icons, no state writes. Deterministic
+    // captures on a machine with saved docs.
+    fresh: params.get('fresh') === '1',
+    /** @type {string[]} ?hide=<window>[,<window>] — shell window ids to hide
+     *  at boot (a capture may need a window out of frame). */
+    hide: (params.get('hide') || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
   };
 }

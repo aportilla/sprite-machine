@@ -1,15 +1,14 @@
 /* ---------------------------------------------------------------------------
-   Sprite Machine — System 7 chrome via the `vintage-frames` web component kit.
+   Sprite Machine — a System 7 virtual desktop via the `vintage-frames` kit.
 
-   The kit's components carry their own styles (1-bit borders, Chicago/Geneva
-   bitmap faces, hard offset shadows), and every sm-* component carries ITS own
-   (standard Lit `static styles`, scoped to its shadow root). This sheet
-   supplies only the PAGE's share: the shared palette tokens (custom properties
-   inherit into every shadow tree), the reset, the app frame index.html
-   declares (header strip over an editor-left / stage-right split), and the
-   drop overlay drop-target.js renders into #app.
-   Palette: black #000 / white #fff, System 7 mid gray #808080 for the stage,
-   and a dark artwork well behind the pixel canvas so sprite art pops.
+   The kit's components carry their own styles, and every sm-* component
+   carries ITS own (standard Lit `static styles`, scoped to its shadow root).
+   This sheet supplies only the PAGE's share: the shared palette tokens
+   (custom properties inherit into every shadow tree), the reset, the black
+   ground behind the desktop bezel, the 3D viewport canvas's fill rules, the
+   desktop-icon column width, and the drop overlay drop-target.js renders
+   into the page. If a rule here paints a border or a color on kit chrome,
+   it's a bug — the kit draws everything.
    --------------------------------------------------------------------------- */
 
 :root {
@@ -17,6 +16,8 @@
   --sm-white: #fff;
   --sm-stage: #808080; /* System 7 desktop mid gray (matches the 3D scene bg) */
   --sm-artwork: #56565a; /* dark well behind the pixel canvas */
+  /* Clear the 20px menu bar (+4px reserve) for the kit's clipped popup panels. */
+  --vf-popup-inset-top: 24px;
 }
 
 * {
@@ -26,9 +27,14 @@ html,
 body {
   height: 100%;
   margin: 0;
+  /* The desktop is the viewport; a space-consuming scrollbar would shrink the
+     fitWithin measurement it derives the raster from. */
+  overflow: hidden;
 }
 body {
-  background: var(--sm-white);
+  /* The ground behind the desktop bezel: the sub-system-pixel slack fitWithin
+     leaves stays invisible against black. */
+  background: var(--sm-black);
   color: var(--sm-black);
   /* Fallback for stray page text; real captions are vf-label / vf-paragraph. */
   font-family: 'VF Display', 'Chicago', 'Geneva', 'Helvetica Neue', Helvetica, Arial,
@@ -38,61 +44,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-#app {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-/* ---- header strip: brand left, atlas actions right ---- */
-#topbar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 10px 16px;
-  background: var(--sm-white);
-  border-bottom: 1px solid var(--sm-black);
-  position: relative;
-  z-index: 20; /* the pick-atlas menu panel drops over the workspace */
-}
-
-/* ---- workspace: editor panel (left) | live 3D stage (right) ---- */
-#workspace {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-}
-#editor-panel {
-  flex: 1 1 0;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--sm-white);
-  border-right: 1px solid var(--sm-black);
-  overflow: hidden;
-}
-#stage {
-  flex: 1 1 0;
-  min-width: 0;
-  position: relative;
-  background: var(--sm-stage);
-  overflow: hidden;
-}
+/* The THREE canvas fills the 3D View window's (flush) body. */
 #viewport {
-  position: absolute;
-  inset: 0;
   width: 100%;
   height: 100%;
   display: block;
+  background: var(--sm-stage);
   /* Low-res render buffer upscaled crisply by CSS. */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 
-/* ---- whole-app drop overlay (rendered into #app by drop-target.js) ---- */
+/* ---- whole-app drop overlay (rendered into <body> by drop-target.js) ---- */
 .drop-overlay {
   position: fixed;
   inset: 0;
@@ -101,9 +64,9 @@ body {
   justify-content: center;
   background: rgba(255, 255, 255, 0.75);
   z-index: 1000;
-  pointer-events: none; /* let the drop event fall through to #app */
+  pointer-events: none; /* let the drop event fall through to the page */
 }
-#app.app-drag .drop-overlay {
+body.app-drag .drop-overlay {
   display: flex;
 }
 .drop-overlay-msg {

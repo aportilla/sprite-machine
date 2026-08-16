@@ -33,6 +33,20 @@ export function drawGuides(g, guides, scale, cssW, cssH) {
   if (vMax != null) g.fillRect(0, (vMax + 1) * scale - T, cssW, T); // bottom extent
 }
 
+// The View → Show Grid texel lattice, drawn OVER the guide layer's current
+// content (no clear — drawGuides clears first). Only drawn at scales where
+// the hairlines don't swamp the art; GRID_MIN_SCALE is that threshold.
+export const GRID_MIN_SCALE = 4;
+
+/** @param {CanvasRenderingContext2D} g @param {number} tileW @param {number} tileH
+ *  @param {number} scale @param {number} cssW @param {number} cssH */
+export function drawTexelGrid(g, tileW, tileH, scale, cssW, cssH) {
+  if (scale < GRID_MIN_SCALE) return;
+  g.fillStyle = 'rgba(0, 0, 0, 0.2)';
+  for (let x = 1; x < tileW; x++) g.fillRect(x * scale, 0, 1, cssH);
+  for (let y = 1; y < tileH; y++) g.fillRect(0, y * scale, cssW, 1);
+}
+
 // The haloed hairline box both cursor overlays share: a dark halo so the
 // outline reads on any art color, then the 1px line (red while erasing).
 function haloBox(g, rx, ry, rw, rh, erasing) {

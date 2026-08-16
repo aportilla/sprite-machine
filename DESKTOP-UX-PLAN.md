@@ -1,5 +1,18 @@
 # Desktop UX plan
 
+> **Status: IMPLEMENTED** (all six phases, August 2026). The README's
+> [The desktop](README.md#the-desktop) section is now the living spec;
+> `docs/SMOKE-TEST.md` is the manual checklist for the residue the automated
+> surfaces don't cover. Deviations from this plan, chosen in implementation:
+> the render toggles live in Settings… only (a 15px status strip can't hold
+> checkboxes — the 3D View's strip carries the build readout instead); the 3D
+> stage rides its existing ResizeObserver rather than `vf-resize` (it also
+> covers programmatic resizes, so the boot-restore path needs no special
+> case); a wholesale load **clears** the undo history rather than snapshotting
+> across it (undo must never resurrect another document's pixels); and Save
+> stays enabled when storage is unavailable, raising the explanatory notice on
+> pick (a disabled item can't explain itself).
+
 Sprite Machine becomes a **full System 7 virtual desktop**: a menu bar, movable
 windows, a floating tool palette, and user documents that live as **files on
 the desktop** — saved in the browser, reopened by double-clicking their icons.
@@ -19,15 +32,15 @@ underneath.
 
 Almost everything the mockup shows already exists as a component:
 
-| Mockup element | Existing piece | Where |
-| --- | --- | --- |
-| Desktop (gray dither, window stacking, active window) | `vf-desktop` | vintage-frames 0.3.0 (bump from ^0.2.1, Phase 1) |
-| Menu bar + drop menus | `vf-menu-bar` / `vf-menu` / `vf-menu-item` | vintage-frames (we already use `vf-menu` in `sm-topbar`) |
-| Document / satellite windows | `vf-window` (`closable zoomable movable resizable`) | vintage-frames |
-| Floating tool palette | `vf-window variant="utility"` — floats above the document tier automatically | vintage-frames |
-| Desktop file icons (select, drag, rename in place, double-click to open) | `vf-icon` (`selectable movable editable`, `vf-open` event) | vintage-frames |
-| Modal dialogs / alerts | `vf-dialog` (already used for the Colors picker) | vintage-frames |
-| Face picker, canvas, tool strip, color wells, per-tool options, stage controls, stats | the existing `sm-*` leaves | `src/components/` |
+| Mockup element                                                                        | Existing piece                                                               | Where                                                    |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Desktop (gray dither, window stacking, active window)                                 | `vf-desktop`                                                                 | vintage-frames 0.3.0 (bump from ^0.2.1, Phase 1)         |
+| Menu bar + drop menus                                                                 | `vf-menu-bar` / `vf-menu` / `vf-menu-item`                                   | vintage-frames (we already use `vf-menu` in `sm-topbar`) |
+| Document / satellite windows                                                          | `vf-window` (`closable zoomable movable resizable`)                          | vintage-frames                                           |
+| Floating tool palette                                                                 | `vf-window variant="utility"` — floats above the document tier automatically | vintage-frames                                           |
+| Desktop file icons (select, drag, rename in place, double-click to open)              | `vf-icon` (`selectable movable editable`, `vf-open` event)                   | vintage-frames                                           |
+| Modal dialogs / alerts                                                                | `vf-dialog` (already used for the Colors picker)                             | vintage-frames                                           |
+| Face picker, canvas, tool strip, color wells, per-tool options, stage controls, stats | the existing `sm-*` leaves                                                   | `src/components/`                                        |
 
 `~/MyProjects/system7web` is the reference application for every desktop
 idiom and should be read before implementing (its `src/main.ts` especially):
@@ -36,7 +49,7 @@ idiom and should be read before implementing (its `src/main.ts` especially):
   on `resize` + `onScaleChange`; the page owns the leftover sub-pixel slack.
 - **`applyCursor()`** — the kit's System 7 pointer set (arrow, I-beam,
   crosshair, wristwatch), driven by `aria-busy` / `data-vf-cursor` state.
-- **Window placement** — center on the *current* raster at open time, snapped
+- **Window placement** — center on the _current_ raster at open time, snapped
   to the drag lattice (`snapSys`, `systemPxQuantum`) and clamped below the
   20px menu bar; a dragged window keeps its position across close/reopen.
 - **Close wiring** — `vf-close` on the desktop, `event.target.hidden = true`;
@@ -50,7 +63,7 @@ idiom and should be read before implementing (its `src/main.ts` especially):
 One difference from system7web: that repo authors its desktop as static
 markup in `index.html` with behavior in one script. Sprite Machine keeps its
 own architecture — **connected Lit components reading store slices** — so the
-desktop skeleton lives in `index.html` (it *is* layout), but menus, icons,
+desktop skeleton lives in `index.html` (it _is_ layout), but menus, icons,
 and window visibility are driven by components/modules wired to the store,
 exactly like today's chrome.
 
@@ -71,48 +84,52 @@ exactly like today's chrome.
 ### 2.2 Menu bar (per the mockup, clause by clause)
 
 **SpriteModel** (the app menu)
-- *About…* — `vf-dialog` with the app blurb (content from today's README intro).
-- *Settings…* — `vf-dialog` holding the render prefs that today live in
+
+- _About…_ — `vf-dialog` with the app blurb (content from today's README intro).
+- _Settings…_ — `vf-dialog` holding the render prefs that today live in
   `sm-stage-controls`: smooth slopes (lowpoly), auto-rotate. Room to grow.
-- *Quit* — closes the open document (dirty check, §3.5) and every window,
+- _Quit_ — closes the open document (dirty check, §3.5) and every window,
   leaving the bare desktop with its file icons. Reopen anything by icon.
 
 **File**
-- *New* — new untitled document (blank atlas via `loadBlank()`), opens the
+
+- _New_ — new untitled document (blank atlas via `loadBlank()`), opens the
   document window. Untitled docs exist only in memory until saved.
-- *Open…* — `vf-dialog` listing saved documents (name, size, modified date)
+- _Open…_ — `vf-dialog` listing saved documents (name, size, modified date)
   plus the built-in samples; double-clicking a desktop icon is the faster path.
-- *Close* — closes the document window (dirty check), back to the desktop.
-- *Save* — persists the current doc (§3). First save of an untitled doc asks
+- _Close_ — closes the document window (dirty check), back to the desktop.
+- _Save_ — persists the current doc (§3). First save of an untitled doc asks
   for a name (dialog with a text field); a saved doc saves silently in place
   and its desktop icon appears/refreshes.
-- *Duplicate* — saves a copy as "«name» copy", which becomes the open doc.
-- *Rename…* — dialog with a text field; renames the stored doc + window title.
+- _Duplicate_ — saves a copy as "«name» copy", which becomes the open doc.
+- _Rename…_ — dialog with a text field; renames the stored doc + window title.
   (Desktop icons also rename in place — `vf-icon editable` — and the two paths
   converge on the same store action.)
-- *Export…* — downloads the document `.png` **verbatim** (metadata chunks
+- _Export…_ — downloads the document `.png` **verbatim** (metadata chunks
   included, §3.2), named after it (`cargo-ship.png`); an untitled doc exports
   a freshly encoded file. Round-trips losslessly through the drop target.
-- *Properties…* — dialog for document metadata: name, atlas dimensions
+- _Properties…_ — dialog for document metadata: name, atlas dimensions
   (read-only), and the **tile-size stepper**, which relocates here from the
   editor's settings row (the mockup's document window shows tile size only as
   a status-bar readout).
 
 **Edit**
-- *Undo / Redo* — new capability, phased separately (§5, Phase 5). Menu items
+
+- _Undo / Redo_ — new capability, phased separately (§5, Phase 5). Menu items
   render disabled until that phase lands.
-- *Pick Color…* — opens the existing 256-color Colors dialog
+- _Pick Color…_ — opens the existing 256-color Colors dialog
   (`session.openPicker()`).
 
 **View**
-- *3D View* / *Sprite View* — checkmarked toggles showing/hiding those two
+
+- _3D View_ / _Sprite View_ — checkmarked toggles showing/hiding those two
   windows (`hidden` on the `vf-window`, checkmark mirrors it).
-- *Show Grid* — checkmarked toggle drawing a texel grid on the pixel canvas's
+- _Show Grid_ — checkmarked toggle drawing a texel grid on the pixel canvas's
   overlay (new painter in `draw-overlays.js`; drawn only at scales where the
   hairlines don't swamp the art, e.g. scale ≥ 4).
 
 **Key equivalents** — `shortcut` on `vf-menu-item` (0.3.0, §5a) renders the
-right-aligned glyph column *and* owns the live app-wide keydown match, so
+right-aligned glyph column _and_ owns the live app-wide keydown match, so
 these are one attribute each: Save **⌘S**, Open **⌘O**, Duplicate **⌘D**,
 Export **⇧⌘E**, Undo **⌘Z**, Redo **⇧⌘Z**, Pick Color **⌘K**, Show Grid
 **⌘G** (Ctrl stands in for ⌘ off-Mac, per the kit). Two System 7 staples stay
@@ -146,7 +163,7 @@ document icon.
 2. **Tools palette** — `variant="utility" movable`: the tool strip over the
    color wells (today's `sm-tool-strip` + `sm-color-wells`), floating above
    the document tier, never deactivating the document window.
-3. **Full Sprite View** — *new leaf component* `sm-atlas-view`: the whole 3×2
+3. **Full Sprite View** — _new leaf component_ `sm-atlas-view`: the whole 3×2
    atlas drawn nearest-neighbor at the largest integer scale that fits, the
    `status` slot showing atlas dimensions ("120px x 80px"). Subscribes to the
    doc's **live channel** (`onLive`) so it tracks strokes at rAF rate —
@@ -156,7 +173,7 @@ document icon.
    `status` slot holds today's `sm-stage-controls` (camera presets, toggles
    that don't graduate to Settings) and `sm-stats-readout`. The stage
    resizes on the window's **`vf-resize`** event (0.3.0): stream events fire
-   *after* the new box is applied to layout, so the handler measures the
+   _after_ the new box is applied to layout, so the handler measures the
    resized body and calls `stage.resize` live through the drag, with the
    `commit: true` event as the settle point. One contract to respect: the
    event is gesture-only — a programmatic `width`/`height` write fires
@@ -199,21 +216,21 @@ wristwatch, per the kit's modal async-work pattern.
 
 ### 3.1 Storage mechanism: IndexedDB (recommendation)
 
-localStorage would *work* — a max-size atlas (tile 64 → 192×128) is a few KB
+localStorage would _work_ — a max-size atlas (tile 64 → 192×128) is a few KB
 as PNG — but IndexedDB is the right call:
 
 - **Blobs are first-class** — we store the PNG bytes the doc already
   round-trips through (`imageDataToBlob`), no base64 inflation or string
   quota games (localStorage's ~5MB is shared with everything else).
 - **Async by nature** — saves can't jank a stroke.
-- **Blob-shaped truth** — the store holds the document *file* (one PNG blob
+- **Blob-shaped truth** — the store holds the document _file_ (one PNG blob
   per record, §3.2) plus rebuildable listing caches, indexed by id.
 
 Kept in the project's zero-dependency spirit: a ~60-line promise wrapper
 (`src/storage/db.js`), one database (`sprite-machine`, version 1), one object
 store (`docs`, keyPath `id`). No library.
 
-localStorage still gets the *desktop* state (§3.4) — tiny, synchronous at
+localStorage still gets the _desktop_ state (§3.4) — tiny, synchronous at
 boot, exactly what it's good at.
 
 ### 3.2 The document IS a .png
@@ -226,21 +243,21 @@ works because of two facts:
    auto-derived from the image dimensions and the fixed 3×2 grid (the
    existing `sliceAtlas` contract — a 120×80 sheet ⇒ 40×40 tiles); the
    desktop icon is rendered from the FRONT tile; atlas dimensions are the
-   image's. Loading a doc *is* today's `loadFile` path. Any bare PNG in the
+   image's. Loading a doc _is_ today's `loadFile` path. Any bare PNG in the
    right layout is a valid document with nothing lost but its name.
 2. **PNG carries metadata natively.** The format is a signature plus a chunk
    list, and ancillary text chunks (`tEXt`, `iTXt`) are standard, ignored by
    every decoder, and sized without meaningful limit. The spec even
    predefines the keys we want:
 
-   | Chunk key | Carries |
-   | --- | --- |
-   | `Title` | the document name ("Cargo Ship") |
-   | `Creation Time` | created timestamp |
-   | `Software` | `sprite-machine <version>` (doubles as the schema marker) |
+   | Chunk key                   | Carries                                                                                                                                       |
+   | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `Title`                     | the document name ("Cargo Ship")                                                                                                              |
+   | `Creation Time`             | created timestamp                                                                                                                             |
+   | `Software`                  | `sprite-machine <version>` (doubles as the schema marker)                                                                                     |
    | `sprite-machine:transforms` | per-view rot/flip JSON, written **only when non-identity** (editor-authored docs never need it; it exists for imported unconventional sheets) |
 
-**`src/lib/png-chunks.js`** — a new *pure* module (~100 lines, zero deps):
+**`src/lib/png-chunks.js`** — a new _pure_ module (~100 lines, zero deps):
 parse the chunk list from a `Uint8Array`, read/insert/replace `tEXt`/`iTXt`
 chunks (with the CRC32 table), splicing between `IHDR` and the first `IDAT`.
 Pure typed-array code, so it slots straight into the project's Node-tested
@@ -262,14 +279,14 @@ inside it would be churn with no reader. Rename = rewrite the `Title` chunk
 (+ the cache field).
 
 **The payoff — one artifact, three doors:** File → Export downloads the
-saved bytes *verbatim*, so an exported file **is** the document, name and
+saved bytes _verbatim_, so an exported file **is** the document, name and
 all; dropping any exported PNG back onto the desktop (or any machine's
 sprite-machine) restores it losslessly, title included; and any foreign 3×2
 sprite sheet is a legal, if anonymous, document. Save, Export, and the
 existing drop-import converge on a single format.
 
 **Degradation is graceful by construction:** an optimizer, editor, or chat
-app that strips text chunks costs the *name and timestamps only* — the
+app that strips text chunks costs the _name and timestamps only_ — the
 pixels still carry everything structural, and the drop path falls back to
 the dropped file's own filename for the title.
 
@@ -362,14 +379,14 @@ surfaced **shipped in 0.3.0** (on npm; this repo bumps `^0.2.1 → ^0.3.0` as
 Phase 1's first task). What landed, and where the plan consumes it:
 
 1. **`vf-resize` on `vf-window`** — detail `{width, height, commit}`, whole
-   system px. Stream events fire once per size the drag writes, *after* the
+   system px. Stream events fire once per size the drag writes, _after_ the
    new box is applied to layout (a measuring handler reads the resized
    state); a final `commit: true` fires as the gesture settles, only if the
    size changed. Gesture-only by contract — programmatic writes fire
    nothing. → Consumed by the 3D View stage (§2.4.4).
 2. **`shortcut` on `vf-menu-item`** — glyph-spelled ("⇧⌘Z"), draws the
    right-anchored key column, mirrors to `aria-keyshortcuts`, and is a
-   *live* app-wide key equivalent (menu open or not; Ctrl stands in for ⌘
+   _live_ app-wide key equivalent (menu open or not; Ctrl stands in for ⌘
    off-Mac; bare printable keys deliberately never match). → Consumed by the
    File/Edit/View assignments (§2.2), with B/R/G/I/E staying app-side.
 3. **`status` slot on `vf-window`** — the classic bottom readout strip (1px
@@ -381,7 +398,7 @@ Phase 1's first task). What landed, and where the plan consumes it:
    negative. The label plate still inverts. → Consumed by every generated
    front-tile document icon (§2.5).
 
-Any *new* gap that surfaces during implementation follows the same loop: kit
+Any _new_ gap that surfaces during implementation follows the same loop: kit
 change → `npm link` to verify here → publish → version bump (the dependency
 stays the published package, per system7web's split).
 
@@ -396,8 +413,8 @@ Bump `vintage-frames` to `^0.3.0`, then
 body, palette, options strip, 3D canvas + controls); `sm-topbar` retired with
 its functions temporarily parked in menus (Export works; Open lists samples
 only). Tile stepper moves to Properties. Windows close/reopen via View menu.
-No persistence yet. *This phase eats the screenshot-baseline churn in one
-bite.*
+No persistence yet. _This phase eats the screenshot-baseline churn in one
+bite._
 
 **Phase 2 — desktop behaviors.**
 Placement defaults + lattice clamp, cursor, Show Grid, About + Settings

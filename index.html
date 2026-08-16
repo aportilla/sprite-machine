@@ -6,15 +6,235 @@
     <title>Sprite Machine — pixel sprites → 3D</title>
   </head>
   <body>
-    <div id="app">
-      <header id="topbar"></header>
-      <div id="workspace">
-        <aside id="editor-panel"></aside>
-        <section id="stage">
-          <canvas id="viewport"></canvas>
-        </section>
-      </div>
-    </div>
+    <!-- The System 7 virtual desktop. The raster's width/height are set by
+         main.js: the page measures the viewport and fitWithin() derives the
+         largest whole raster on resize and scale changes; the black page body
+         shows behind the bezel. Windows MUST be direct children of the
+         desktop (its stacking manager only sees direct vf-window children).
+         Everything aesthetic is the kit's; this markup is layout only. -->
+    <vf-desktop id="desktop" bezel="10">
+      <!-- ============================== Menu bar ======================== -->
+      <!-- `shortcuts` grants every item's `shortcut` attribute its live
+           app-wide key equivalent (Ctrl stands in for ⌘ off-Mac). The two
+           System 7 staples ⌘N/⌘W stay unassigned on purpose: the browser
+           owns them before the page ever sees them. -->
+      <vf-menu-bar shortcuts>
+        <vf-menu id="menu-app" label="Sprite Machine">
+          <vf-menu-item value="about">About Sprite Machine…</vf-menu-item>
+          <vf-menu-item value="settings">Settings…</vf-menu-item>
+          <vf-separator></vf-separator>
+          <vf-menu-item value="quit">Quit</vf-menu-item>
+        </vf-menu>
+        <vf-menu id="menu-file" label="File">
+          <vf-menu-item value="new">New</vf-menu-item>
+          <vf-menu-item value="open" shortcut="⌘O">Open…</vf-menu-item>
+          <vf-separator></vf-separator>
+          <vf-menu-item value="close">Close</vf-menu-item>
+          <vf-menu-item value="save" shortcut="⌘S">Save</vf-menu-item>
+          <vf-menu-item value="duplicate" shortcut="⌘D">Duplicate</vf-menu-item>
+          <vf-menu-item value="rename">Rename…</vf-menu-item>
+          <vf-separator></vf-separator>
+          <vf-menu-item value="export" shortcut="⇧⌘E">Export…</vf-menu-item>
+          <vf-separator></vf-separator>
+          <vf-menu-item value="properties">Properties…</vf-menu-item>
+        </vf-menu>
+        <vf-menu id="menu-edit" label="Edit">
+          <vf-menu-item value="undo" shortcut="⌘Z" disabled>Undo</vf-menu-item>
+          <vf-menu-item value="redo" shortcut="⇧⌘Z" disabled>Redo</vf-menu-item>
+          <vf-separator></vf-separator>
+          <vf-menu-item value="pick-color" shortcut="⌘K">Pick Color…</vf-menu-item>
+        </vf-menu>
+        <vf-menu id="menu-view" label="View">
+          <vf-menu-item value="view-stage" checked>3D View</vf-menu-item>
+          <vf-menu-item value="view-sprite" checked>Sprite View</vf-menu-item>
+          <vf-separator></vf-separator>
+          <vf-menu-item value="show-grid" shortcut="⌘G">Show Grid</vf-menu-item>
+        </vf-menu>
+      </vf-menu-bar>
+
+      <!-- The options strip: the active tool's name + its options, a fixed
+           full-width band under the menu bar (persistent in-flow controls,
+           not a window). -->
+      <sm-options-bar></sm-options-bar>
+
+      <!-- ========================= The four windows ===================== -->
+      <!-- All open by default; closing any is reversible via the View menu
+           or the document icon. Positions are authored defaults in system
+           px, clamped to the live raster at boot (shell/windows.js). The
+           document window is slotted LAST of the document tier, so it boots
+           active. -->
+      <vf-window
+        id="win-sprite"
+        heading="Full Sprite View"
+        movable
+        resizable
+        flush
+        width="400"
+        height="250"
+        top="64"
+        left="560"
+      >
+        <sm-atlas-view></sm-atlas-view>
+        <sm-status-line kind="atlas" slot="status"></sm-status-line>
+      </vf-window>
+
+      <vf-window
+        id="win-stage"
+        heading="3D View"
+        movable
+        resizable
+        flush
+        width="400"
+        height="330"
+        top="330"
+        left="560"
+      >
+        <canvas id="viewport"></canvas>
+        <sm-status-line kind="build" slot="status"></sm-status-line>
+      </vf-window>
+
+      <vf-window
+        id="win-document"
+        heading="untitled"
+        movable
+        resizable
+        flush
+        width="430"
+        height="560"
+        top="64"
+        left="110"
+      >
+        <sm-editor></sm-editor>
+        <sm-status-line kind="tile" slot="status"></sm-status-line>
+      </vf-window>
+
+      <!-- The floating Tools palette: utility tier — floats above the
+           document windows and never deactivates them. -->
+      <vf-window
+        id="win-tools"
+        variant="utility"
+        heading="Tools"
+        movable
+        flush
+        width="64"
+        height="240"
+        top="64"
+        left="14"
+      >
+        <sm-tools-panel></sm-tools-panel>
+      </vf-window>
+
+      <!-- ======================= Desktop file icons ===================== -->
+      <!-- One selection domain across every icon (the listbox owner is what
+           makes selection announceable); shell/icons.js renders the sample
+           cluster and one icon per saved document into it. -->
+      <div
+        id="desktop-icons"
+        role="listbox"
+        aria-multiselectable="true"
+        aria-label="Desktop"
+      ></div>
+
+      <!-- ============================ Dialogs =========================== -->
+      <vf-dialog
+        id="dlg-about"
+        heading="About Sprite Machine"
+        closable
+        width="420"
+        height="240"
+      >
+        <vf-stack width="370" gap="10">
+          <vf-paragraph>
+            Sprite Machine turns low-resolution pixel-art face sprites (top / front / side
+            / …) into a real, rotatable 3D object — the chunky look is baked into the
+            geometry, not faked by a shader.
+          </vf-paragraph>
+          <vf-paragraph>
+            One sheet, six tiles: a 3×2 atlas is carved into a voxel solid by multi-view
+            visual-hull reconstruction — 1 pixel = 1 voxel = 1 cube — and smoothed with
+            additive 45° wedges.
+          </vf-paragraph>
+        </vf-stack>
+        <vf-button id="btn-about-ok" slot="buttons" variant="default">OK</vf-button>
+      </vf-dialog>
+
+      <vf-dialog id="dlg-settings" heading="Settings" closable width="300" height="170">
+        <vf-stack width="250" gap="12">
+          <vf-checkbox id="set-lowpoly">smooth slopes</vf-checkbox>
+          <vf-checkbox id="set-rotate">auto rotate</vf-checkbox>
+        </vf-stack>
+        <vf-button id="btn-settings-ok" slot="buttons" variant="default">OK</vf-button>
+      </vf-dialog>
+
+      <vf-dialog id="dlg-open" heading="Open" closable width="360" height="330">
+        <vf-stack width="312" gap="10">
+          <vf-list id="open-list" fill-width aria-label="Documents"></vf-list>
+        </vf-stack>
+        <vf-button id="btn-open-cancel" slot="buttons">Cancel</vf-button>
+        <vf-button id="btn-open-ok" slot="buttons" variant="default">Open</vf-button>
+      </vf-dialog>
+
+      <!-- One name-prompt dialog, two uses (first save / rename); menus.js
+           swaps the heading + default-button label per use. -->
+      <vf-dialog id="dlg-name" heading="Save" closable width="340" height="140">
+        <vf-stack width="292" gap="10">
+          <vf-stack fill-width direction="row" gap="8">
+            <vf-label for="name-field">Name:</vf-label>
+            <vf-text-field fill-width id="name-field" value=""></vf-text-field>
+          </vf-stack>
+        </vf-stack>
+        <vf-button id="btn-name-cancel" slot="buttons">Cancel</vf-button>
+        <vf-button id="btn-name-ok" slot="buttons" variant="default">Save</vf-button>
+      </vf-dialog>
+
+      <vf-dialog id="dlg-props" heading="Properties" closable width="340" height="220">
+        <vf-stack width="292" gap="12">
+          <vf-stack fill-width direction="row" gap="8">
+            <vf-label width="80">Name:</vf-label>
+            <vf-label id="props-name"></vf-label>
+          </vf-stack>
+          <vf-stack fill-width direction="row" gap="8">
+            <vf-label width="80">Atlas:</vf-label>
+            <vf-label id="props-dims"></vf-label>
+          </vf-stack>
+          <vf-stack fill-width direction="row" gap="8" place="start">
+            <vf-stack pad="4 0 0">
+              <vf-label width="80" for="props-tile">Tile size:</vf-label>
+            </vf-stack>
+            <vf-number-field id="props-tile" min="1" max="64" step="1"></vf-number-field>
+          </vf-stack>
+        </vf-stack>
+        <vf-button id="btn-props-ok" slot="buttons" variant="default">OK</vf-button>
+      </vf-dialog>
+
+      <!-- The unsaved-changes alert: no close box — a choice is required
+           (Escape reads as Cancel). -->
+      <vf-dialog id="dlg-unsaved" label="Unsaved Changes" width="400" height="150">
+        <vf-stack width="352" gap="10">
+          <vf-paragraph face="display" id="unsaved-msg"></vf-paragraph>
+        </vf-stack>
+        <vf-button id="btn-unsaved-dont" slot="buttons">Don’t Save</vf-button>
+        <vf-button id="btn-unsaved-cancel" slot="buttons">Cancel</vf-button>
+        <vf-button id="btn-unsaved-save" slot="buttons" variant="default">Save</vf-button>
+      </vf-dialog>
+
+      <vf-dialog
+        id="dlg-storage"
+        heading="Storage Unavailable"
+        closable
+        width="380"
+        height="170"
+      >
+        <vf-stack width="332" gap="10">
+          <vf-paragraph>
+            Documents can’t be saved in this browser session (storage is unavailable — a
+            private window, perhaps). Everything else works; use File → Export to keep
+            your work as a .png.
+          </vf-paragraph>
+        </vf-stack>
+        <vf-button id="btn-storage-ok" slot="buttons" variant="default">OK</vf-button>
+      </vf-dialog>
+    </vf-desktop>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

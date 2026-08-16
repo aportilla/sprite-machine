@@ -21,30 +21,39 @@ server:
 ```bash
 tools/capture.sh shot 'http://localhost:5173/?sample=car&rotate=0' /tmp/shot.png
 tools/capture.sh dom  'http://localhost:5173/?diag=1&rotate=0'   # light-DOM shell + title
-node tools/drive.mjs                                             # editor smoke test
+node tools/drive.mjs                                             # desktop + editor smoke test
 ```
 
 `capture.sh` shows what the app **looks** like — its shots are byte-deterministic
-(fixed window size, DSF 1, virtual time budget, `rotate=0`), so `cmp` between two
-runs is a real regression check rather than a judgment call (its `dom` mode only
-serializes light DOM — the page shell and `<title>` — since the components render
-in shadow DOM). `drive.mjs` covers what no screenshot can: it drives the editor
-over the DevTools Protocol with real trusted input (keys, drags, the color dialog,
-face swaps, tile resizes), probing through the components' shadow roots, and exits
-non-zero on any failure.
+(fixed window size, DSF 1, virtual time budget, `rotate=0`, and `?fresh=1` on a
+machine with saved docs), so `cmp` between two runs is a real regression check
+rather than a judgment call (its `dom` mode only serializes light DOM — the
+desktop skeleton and `<title>`, never the components' shadow internals).
+`drive.mjs` covers what no screenshot can: it drives the desktop over the
+DevTools Protocol with real trusted input (keys, menu picks, ⌘-equivalents,
+drags, window moves and grow-box resizes, the dialogs, a save → reopen
+round-trip through IndexedDB), probing through the components' shadow roots,
+and exits non-zero on any failure. The residue neither can cover reliably is
+a short manual checklist: `docs/SMOKE-TEST.md`.
 
-**Pick a built-in sample**, or load your own **3×2 sprite sheet** — open the
-_pick atlas_ menu in the header or drop a PNG anywhere on the window. **Smooth
-slopes** (low-poly additive 45° wedges) is on by default and toggles live; greedy
-meshing is always on. Sprites are hard pixel art — every texel is fully opaque or
-fully transparent — and every face with no view of its own is mirror-filled from
-its opposite at render time. The UI is drawn with the
-[`vintage-frames`](https://github.com/aportilla/vintage-frames) web component kit
-(classic Apple System 7 chrome): a white **header strip** over a **50/50 split** —
-the **tools panel** always open on one face on the left, the live 3D object on
-the right. The **face picker** (six pixel-art cube icons over radio buttons) switches
-which of the six you're editing (a mirror-derived face reads empty — an honest
-view of the sheet) — see [Drawing editor](#drawing-editor).
+The app is a **System 7 virtual desktop**, drawn end to end with the
+[`vintage-frames`](https://github.com/aportilla/vintage-frames) web component
+kit: a menu bar, an options strip, four movable windows — the **document
+window** (face picker + pixel canvas), a floating **Tools palette**, the
+**Full Sprite View** (the whole atlas, live), and the **3D View** — plus
+documents that live as **files on the desktop**, saved in the browser and
+reopened by double-clicking their icons. See [The desktop](#the-desktop).
+
+**Double-click a sample icon** (Car, Cube — they open as fresh untitled
+copies), pick File → Open…, or drop your own **3×2 sprite sheet** PNG
+anywhere on the window. **Smooth slopes** (low-poly additive 45° wedges) is
+on by default and toggles live in Settings; greedy meshing is always on.
+Sprites are hard pixel art — every texel is fully opaque or fully
+transparent — and every face with no view of its own is mirror-filled from
+its opposite at render time. The **face picker** (six pixel-art cube icons
+over radio buttons) switches which of the six you're editing (a
+mirror-derived face reads empty — an honest view of the sheet) — see
+[Drawing editor](#drawing-editor).
 
 ## Input: a 3×2 atlas
 
@@ -83,30 +92,30 @@ follow the convention.
 
 ## Drawing editor
 
-The **tools panel** fills the left half of the window and is always open on one
-face; the 3D view stays live on the right and rebuilds as you draw. Pick a face
-with the **face picker**; a **header strip** across the top holds the brand, the
-_pick atlas_ menu, and _download_. Every control is a `vintage-frames` System 7
-web component (`vf-number-field`, `vf-radio-group`, `vf-slider`, `vf-checkbox`,
-`vf-swatch`, `vf-grid`, `vf-dialog`, `vf-menu`, …), driven from a Lit template —
-see [UI layer: Lit](#ui-layer-lit).
+The **document window** holds the drawing surface — the face picker row over
+the black-framed artwork well — and the 3D View rebuilds live as you draw.
+The tools live in the floating **Tools palette**, their per-tool options in
+the **options strip** under the menu bar, and the tile-size stepper in
+File → Properties…. Every control is a `vintage-frames` System 7 web
+component (`vf-number-field`, `vf-radio-group`, `vf-slider`, `vf-checkbox`,
+`vf-swatch`, `vf-grid`, `vf-dialog`, `vf-menu`, …), driven from a Lit
+template — see [UI layer: Lit](#ui-layer-lit).
 
-- **Panel layout** — a fixed flex column in the System 7 idiom: a **settings
-  row** (top, fixed) holds the **tile-size** number field and the **face picker**
-  over a dotted rule; the **main area** below grows — a left **rail** (the tool
-  strip over the color wells) beside the black-framed **draw box** (the per-tool
-  **options bar** over the dark **artwork well**). The pixel canvas fills the
-  artwork well — its height is **CSS-driven** (flex), no JS pin — and the square
-  editable canvas is **centered** in it and drawn **as large as an integer texel
-  scale fits** (crisp, never a fractional pixel), **re-fitting responsively** when
-  the window resizes. See `#layout()` in `src/components/sm-draw-canvas.js`.
-- **Tools** — the left **rail** holds a **tool strip**: a single column of square
+- **Canvas layout** — the pixel canvas fills the artwork well — its height is
+  **CSS-driven** (flex), no JS pin — and the square editable canvas is
+  **centered** in it and drawn **as large as an integer texel scale fits**
+  (crisp, never a fractional pixel), **re-fitting responsively** when the
+  window (or its grow box) resizes. See `#layout()` in
+  `src/components/sm-draw-canvas.js`. View → Show Grid (⌘G) draws the texel
+  lattice on the overlay, only at scales ≥ 4 where the hairlines don't swamp
+  the art.
+- **Tools** — the **Tools palette** holds the **tool strip**: a single column of square
   cells (**pencil `B`**, **rect `R`**, **fill `G`**, the **eraser `E`**, and the
   **eyedropper `I`**; the selected cell inverts) — each an icon from the
   open-source **Adobe Spectrum _workflow_** set (`draw` / `rectangle` /
-  `color-fill` / `erase` / `sampler`) in a `vf-grid` lattice. The **tile-size** field (`tile size`, the classic
-  little-arrows number field) sits in the settings row, and the draw box carries a
-  **per-tool options** bar. For the **pencil**, a **tip-size slider** (with an
+  `color-fill` / `erase` / `sampler`) in a `vf-grid` lattice. The **options
+  strip** (the white band under the menu bar) names the active tool and holds
+  its options. For the **pencil**, a **tip-size slider** (with an
   `N px` readout) that stamps an
   **N×N** square footprint and **previews it filled with the active ink** on the
   canvas as you hover — the exact texels a stamp will cover, looking exactly as
@@ -134,8 +143,10 @@ see [UI layer: Lit](#ui-layer-lit).
   empty space targets transparent (so **replace** floods every empty texel with the
   ink), and a **right-click** fills _to_ transparent (delete a
   color). The flood + replace are pure, Node-tested primitives (`src/lib/fill.js`).
-  There's **no undo**, so an all-tiles replace is committed immediately — reload the
-  sample to revert. The **eraser** (`E`) is a formal _tool_ mode, a full sibling
+  Every edit is **undoable** (Edit → Undo ⌘Z / Redo ⇧⌘Z): a gesture — stroke,
+  rect, fill — undoes as one step, and an all-tiles replace or tile resize as
+  one whole-sheet step (bounded history, ~50 entries, cleared on a document
+  load). The **eraser** (`E`) is a formal _tool_ mode, a full sibling
   of the drawing ops in the strip — not a "transparent color" in the wells: a
   pencil that writes **transparency**, sharing the pencil's stroke path but
   carrying its **own tip-size** setting (a separate slider and a separately
@@ -186,7 +197,7 @@ see [UI layer: Lit](#ui-layer-lit).
   `test/palette.test.mjs` pins the exact set. Every stroke is hard-pixel: fully opaque or fully erased, never
   anti-aliased.
 - **Face picker** — six **cube-view icons** over a radio row (a `vf-radio-group`)
-  in the settings row switch which face you edit, laid out as mirror pairs
+  across the document window's top switch which face you edit, laid out as mirror pairs
   (`left`/`right`, `front`/`back`, `top`/`bottom`)
   so you can flip between a pair for reference. Each icon is a **21×26 pixel-art**
   isometric cube (`src/assets/faces/`, wired up inside `sm-face-picker.js` — the one
@@ -209,10 +220,12 @@ see [UI layer: Lit](#ui-layer-lit).
   the mirrored opposite behind it for reference; it becomes its own independent art
   only once you actually change a pixel — switching away and back leaves it derived,
   and erasing it fully reverts it to derived.
-- **Live + canonical** — edits write straight back into the current sheet, so the
-  **download** button saves the edited atlas as `atlas.png`, and the model
-  rebuilds (rAF-debounced) with no camera jump.
-- **Tile size** — a single **square-tile number field** in the settings row
+- **Live + canonical** — edits write straight back into the current sheet, so
+  File → Save persists exactly what you see, File → Export downloads it (see
+  [Documents](#documents-a-document-is-a-png)), the **Full Sprite View**
+  tracks every stroke at frame rate, and the model rebuilds (rAF-debounced)
+  with no camera jump.
+- **Tile size** — a single **square-tile number field** in File → Properties…
   retiles the whole atlas to any integer **1–64** (the ceiling keeps the
   live per-stroke carve — a synchronous O(n³) walk — tractable). Tiles are **locked square**, so
   every resize is **registration-preserving**, and the stepper **keeps the art centered**:
@@ -267,7 +280,91 @@ checkboxes (`replace=r`, `all-tiles=a`), and fill at `(x,y)` on mount (the mount
 is always applied to the current tile only — combine with `?pick=<N>` to fill with a
 specific palette color) so a shot can show the tool + result — the
 stepper, face picker, dialog, swatch pick, hover preview, rect drag, and fill click
-can't be driven headlessly.
+can't be driven headlessly. Two shell-era params round the set out:
+`?fresh=1` boots with **storage ignored** (no desktop-state restore, no
+last-doc reopen, no saved-doc icons, no state writes — deterministic captures
+on a machine with saved docs) and `?hide=<window>[,<window>]`
+(`document|tools|sprite|stage`) hides windows a capture needs out of frame.
+
+---
+
+## The desktop
+
+The shell is a full System 7 virtual desktop: `index.html` is one
+`<vf-desktop>` skeleton (menu bar, options strip, four windows, dialogs, the
+icon layer) fitted to the viewport at boot (`fitWithin` + `onScaleChange`),
+with the kit's page-drawn cursor (`applyCursor`) on top. The page sets
+**layout only** — every aesthetic is the kit's.
+
+### Menu bar
+
+- **Sprite Machine** — _About…_, _Settings…_ (the render prefs: smooth
+  slopes, auto rotate), _Quit_ (dirty-checked; closes every window to the
+  bare desktop).
+- **File** — _New_, _Open…_ ⌘O (saved docs + samples), _Close_, _Save_ ⌘S
+  (first save of an untitled doc prompts for a name), _Duplicate_ ⌘D,
+  _Rename…_, _Export…_ ⇧⌘E (downloads the document `.png` verbatim), and
+  _Properties…_ (name, atlas dims, the tile-size stepper).
+- **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (disabled until the history has
+  something — which also hands the key back to a focused field's native
+  undo), _Pick Color…_ ⌘K (the 256-color dialog).
+- **View** — checkmarked toggles for the _3D View_ and _Sprite View_ windows
+  and _Show Grid_ ⌘G.
+
+Key equivalents are the kit's own (`shortcut` on `vf-menu-item`; Ctrl stands
+in for ⌘ off-Mac). ⌘N/⌘W stay unassigned on purpose — the browser owns them
+before the page ever sees them. The bare-letter tool keys (B/R/G/I/E) keep
+living in `src/shortcuts.js`; the kit deliberately never matches an
+unmodified printable key.
+
+### Windows
+
+All four open by default (persistent panels, not hunt-for-them popups);
+closing any is reversible via the View menu. Positions/sizes are authored
+defaults clamped to the live raster at boot, and every window is `movable`
+(the document, sprite and 3D windows also `resizable` — the canvases re-fit
+via their own ResizeObservers, so the grow box works for free). The
+**document window**'s title is the document's name and its `status` strip
+reads the tile size; the **Tools palette** is a `variant="utility"` windoid
+floating above the document tier; the **Full Sprite View** (`sm-atlas-view`)
+draws the whole atlas nearest-neighbor at the largest integer scale that
+fits and subscribes to the doc's **live channel**, so it tracks strokes at
+rAF rate (the second live subscriber ever, after the rebuilder); the **3D
+View** hosts the THREE canvas with the build readout in its status strip.
+
+### Documents: a document IS a .png
+
+A document is exactly one sprite `.png` — the 3×2 atlas — with all metadata
+in standard PNG text chunks (`lib/png-chunks.js`): `Title`, `Creation Time`,
+`Software`, and `sprite-machine:transforms` (written only when
+non-identity). The pixels alone are already a complete document (tile size
+derives from the dimensions), so **Save, Export and drop-import converge on
+a single format**: File → Export downloads the saved bytes verbatim,
+dropping any exported PNG back restores it losslessly (title included — the
+drop path reads the chunks), and any foreign 3×2 sheet is a legal, if
+anonymous, document. A chunk-stripping optimizer costs the name and
+timestamps only.
+
+Storage is IndexedDB (`storage/db.js`: one `docs` store; the record is the
+PNG bytes plus rebuildable listing caches — name, timestamps, icon data-URI,
+dims — where the chunk wins on any disagreement), driven by the `files`
+slice (`state/files.js`). Explicit Save is the contract (System 7 idiom);
+dirty tracking rides the doc's own channels and a `beforeunload` guard is
+the safety net. Where IndexedDB is broken (private windows), Save raises an
+explanatory dialog and everything else still works.
+
+### Desktop icons & state
+
+Every saved doc gets a `vf-icon` (`selectable movable editable` — Return
+renames in place, converging on the same store action as File → Rename…),
+plus a read-only cluster of sample icons; double-click opens (samples as
+fresh untitled copies), and the open doc's icon wears the kit's `open`
+ghost. Icon art is generated **from the document itself**: the FRONT tile
+drawn into 32×32 → data URI, regenerated on every save (empty front tile ⇒ a
+generic document glyph), declared `color` so selection darkens instead of
+inverting. Window/icon layout, Show Grid, and the last open doc persist in
+one versioned localStorage key (`shell/desktop-state.js`), restored at boot
+and snapshotted on change/exit; the documents themselves live in IndexedDB.
 
 ---
 
@@ -375,7 +472,10 @@ the no-op guards, and a full-tile flood that can't overflow the stack).
 derived from `css`, and the exact set of within-wedge-tolerance color pairs (the
 six saturated system-vs-cube overlaps included) so the wedge-safety note can't drift.
 `test/brush.test.mjs` pins the pencil primitives (Bresenham continuity, footprint
-anchoring, the transparent-idempotence rule).
+anchoring, the transparent-idempotence rule). `test/png-chunks.test.mjs` pins
+the document format's chunk surgery (round-trip, CRC against the published
+IEND reference, splice position, replace semantics, unknown-chunk
+passthrough).
 
 The **app-state layer** (`src/state/`) is pure JS with the same treatment:
 `test/store.test.mjs` (the observable store: by-reference values, silent no-op
@@ -383,7 +483,12 @@ patches), `test/session.test.mjs` (tool/ink semantics, MRU recency promotion,
 clamp-on-resize), `test/doc.test.mjs` (the two-channel canonical document: silent
 stroke writes, rAF-coalesced blit-then-notify via an injectable scheduler, the
 drain-before-consume guard, blank-revert, the sheet generation), `test/derive.test.mjs`
-(the per-face view model: tile identity, derived faces, mirrored onion-skin), and
+(the per-face view model: tile identity, derived faces, mirrored onion-skin),
+`test/files.test.mjs` (the saved-document layer against an in-memory storage
+stub: save/open/duplicate/rename/remove, the chunk metadata round-trip, dirty
+tracking off the doc's channels, storage degradation),
+`test/history.test.mjs` (undo/redo: tile-gesture and whole-atlas entries,
+snapshot copy-in/copy-out, the bound, load-boundary clearing), and
 `test/params.test.mjs` (the whole `?param` dev-hook surface, typed).
 
 Beyond that pipeline integration, the pure modules also have direct unit suites:
@@ -420,6 +525,7 @@ src/lib/
   mesh.js         quads -> merged, vertex-colored THREE.Mesh    (voxel mode; THREE)
   wedge-mesh.js   voxel solid + additive 45° wedges             (low-poly mode; THREE)
   sprite-data.js  built-in samples (as atlases) + grid->ImageData helper
+  png-chunks.js   PNG chunk surgery: parse + tEXt/iTXt read/replace, CRC32 — the document format (pure)
   diag.js         geometry watertightness self-check (dev only; ?diag=1)
 src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-tested)
   store.js            createStore(): get / patch / subscribe — values BY REFERENCE, silent no-op patches
@@ -427,36 +533,56 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
   doc.js              the canonical document (atlas + sliced views + tile geometry) with TWO channels:
                       change (structural) and live (stroke-rate, rAF-coalesced blit-then-notify);
                       owns applyTileEdit / drain / dropLive / loadAtlas / resizeTiles / replaceAllTiles
+                      / restoreTile / restoreAtlas (the undo paths)
   session.js          editor session: face, tool, ink, MRU recency, per-tool options, picker flag —
                       named actions carrying the old element semantics verbatim
-  prefs.js            lowpoly / autoRotate (the render toggles)
-  build.js            dims / voxels / tris / warnings / error — written by the rebuilder, read by the stats readout
+  prefs.js            lowpoly / autoRotate (the render toggles; Settings… writes them)
+  build.js            dims / voxels / tris / warnings / error — written by the rebuilder, read by the status line
+  files.js            the saved-document layer: listing, open identity (id/name/dirty), save/open/
+                      duplicate/rename/export — browser deps (storage, PNG codec, icon art) injected
+  shell.js            window visibility + showGrid (menus, close boxes and boot restore share one truth)
+  history.js          bounded undo/redo: tile-gesture + whole-atlas snapshot entries over the doc's restores
   derive.js           pure selectors: editorViewModel(doc, face) -> { tile, mirrorBehind, guides, wasDerived }
+src/storage/
+  db.js           the IndexedDB promise wrapper (one `docs` store) the files slice takes by injection
 src/scene/
   stage.js        renderer, camera + orbit controls, lights, ground, framing, on-demand render loop, resize
   rebuilder.js    the pipeline's ONLY consumer: doc(change+live)/prefs subscriber -> buildVoxels -> mesh swap -> build stats
+src/shell/        the desktop's behavior modules (imperative wiring over the index.html skeleton)
+  windows.js      shell-slice visibility <-> the vf-windows' hidden, close-box routing, doc title, boot clamp
+  menus.js        vf-menu-select -> store/file actions; checkmark + enabled sync; every dialog flow
+                  (About / Settings / Open / name prompt / Properties / unsaved-changes / storage notice)
+  icons.js        the icon layer: sample cluster + one vf-icon per saved doc, generated front-tile art,
+                  open/rename wiring, the open ghost
+  desktop-state.js  window/icon layout + Show Grid + last doc id in one versioned localStorage key
 src/
-  main.js         the composition root: parse params -> seed stores -> stage + rebuilder -> mount components -> boot load
+  main.js         the composition root: parse params -> seed stores -> fit desktop + cursor -> shell wiring
+                  -> stage + rebuilder -> editor constants -> boot document
   boot/params.js  URL-param parsing -> one typed boot object (pure, Node-tested)
-  loaders.js      every way a sheet enters (sample / file / blank): decode + validateSheet -> doc.loadAtlas | build.setError
+  loaders.js      every way a sheet enters (sample / file / blank): decode + validateSheet -> doc.loadAtlas
+                  | build.setError; a dropped PNG's Title/transforms chunks restore its identity
   drop-target.js  whole-app drag & drop + overlay -> loaders
-  shortcuts.js    document-level B/R/G/I/E -> session actions (Esc/Shift are gesture-scoped and live in the canvas)
+  shortcuts.js    document-level B/R/G/I/E -> session actions (menu key equivalents are the kit's;
+                  Esc/Shift are gesture-scoped and live in the canvas)
   components/     all Lit, standard SHADOW DOM (mostly `:host { display: contents }`) — see "UI layer" below
-    sm-editor.js       CONNECTED container: panel layout + leaf wiring; memoizes the per-face view model
-                       (face / views-identity / geometry) and translates leaf events into store actions —
-                       the only editor file that knows the store exists
+    sm-editor.js       CONNECTED container: the document window's body — face picker + artwork well +
+                       Colors dialog; memoizes the per-face view model (face / views-identity / geometry),
+                       feeds canvas gesture commits to the history
     sm-draw-canvas.js  leaf: the pixel-canvas subsystem — working buffer (+ImageData view, by reference),
-                       pencil/rect/fill gestures, integer-scale layout, overlay layers, gesture-scoped keys
-    draw-overlays.js   pure canvas painters for the guide hairlines / hover footprint / rect drag preview
+                       pencil/rect/fill gestures, integer-scale layout, overlay layers, gesture-scoped keys,
+                       per-gesture undo capture (sm-commit)
+    draw-overlays.js   pure canvas painters for the guide hairlines / texel grid / hover footprint /
+                       rect drag preview
     sm-face-picker.js, sm-tool-strip.js, sm-color-wells.js, sm-tool-options.js, sm-color-picker.js
                        presentational leaves: props down, bubbling sm-* events up, no store imports
-    sm-topbar.js, sm-stage-controls.js, sm-stats-readout.js
-                       connected chrome: pick-atlas menu + download / prefs toggles / build readout
+    sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-status-line.js
+                       connected chrome: the options strip / the Tools palette body / the live
+                       full-atlas view / the windows' status readouts
     ui-bits.js         shared caption + warning-row template helpers (+ the warn row's styles,
                        a css export its consumers compose into their own `static styles`)
     base-styles.js     the shared border-box reset every component composes first (box-sizing
                        doesn't inherit across shadow boundaries)
-  image-io.js     File/URL -> ImageData decode + ImageData -> PNG download (browser)
+  image-io.js     File/URL/bytes <-> ImageData codecs, PNG downloads, generated icon art (browser)
   icons.js        registers the Adobe Spectrum workflow <sp-icon-*> tool-cell + warning glyphs, written literally in the component templates (color via currentColor, size via --mod-icon-size; no sp-theme)
 ```
 
@@ -464,58 +590,67 @@ src/
 
 The chrome is `lit`, the library `vintage-frames` itself is built on (one deduped
 copy — `npm ls lit`), organized in **three layers with dependency arrows only
-pointing down**: presentation (`components/` + `scene/`) → app state (`state/`)
-→ domain (`lib/`). The state mechanism is a ~40-line observable store
-(`createStore`: get / patch / subscribe) with four slices — `doc` (the canonical
-document), `session` (the editor's brush state), `prefs`, `build` — and a
-`StoreController` (a Lit ReactiveController) that re-renders a host on any
-slice change. **Connected** components (`sm-editor` and the chrome) read slices
-and call named actions; the editor **leaves** are dumb — props down, bubbling
-`sm-*` events up, no store imports — so store coupling stays visible and
-greppable. Every component is a **standard shadow-DOM Lit element**: its
+pointing down**: presentation (`components/` + `scene/` + `shell/`) → app
+state (`state/`) → domain (`lib/`, with `storage/` a leaf the files slice
+takes by injection, so it stays Node-testable). The state mechanism is a
+~40-line observable store (`createStore`: get / patch / subscribe) with seven
+slices — `doc` (the canonical document), `session` (the editor's brush
+state), `prefs`, `build`, `files` (the saved-document layer), `shell` (window
+visibility + Show Grid), `history` (undo/redo) — and a `StoreController` (a
+Lit ReactiveController) that re-renders a host on any slice change.
+**Connected** components (`sm-editor` and the chrome) read slices and call
+named actions, and the `shell/` modules wire the desktop's static skeleton
+(menus, windows, icons — index.html markup, behavior only) to the same
+slices; the editor **leaves** are dumb — props down, bubbling `sm-*` events
+up, no store imports — so store coupling stays visible and greppable. Every
+component is a **standard shadow-DOM Lit element**: its
 styles live with it as ``static styles = css`…` ``, scoped to its own root and
 composed over a shared `baseStyles` (`components/base-styles.js` — the
 border-box reset, which does not inherit across shadow boundaries). Hosts that
 are pure containers dissolve with `:host { display: contents }`, so the
 flattened box tree is exactly what the classed markup lays out;
-`<sm-tool-options>` is the one host with a real box (it IS the options bar).
-Leaf events are dispatched on the host element itself — the host lives in the
-parent's tree, so they reach the container without `composed`. `style.css`
-keeps only the page's share: the palette tokens (custom properties inherit
-into every shadow tree), the reset, the `#app` header/split frame, and the
+`<sm-tool-options>` and `<sm-options-bar>` carry real boxes (they ARE the
+options area and its strip). Leaf events are dispatched on the host element
+itself — the host lives in the parent's tree, so they reach the container
+without `composed`. `style.css` keeps only the page's share: the palette
+tokens (custom properties inherit into every shadow tree), the reset, the
+black ground behind the desktop bezel, the 3D viewport's fill rules, and the
 drop overlay `drop-target.js` renders into the page. The `.warn` row's styles
 live with its template as ui-bits' `warnStyles` export, composed by whoever
-renders `warnRow()`. One consequence for tooling: `tools/capture.sh dom` only
-serializes light DOM (the page shell + `<title>`), so a DOM dump says nothing
-about the UI — the byte-deterministic screenshots and the shadow-piercing
-`drive.mjs` are the regression surface.
+renders `warnRow()`. One consequence for tooling: `tools/capture.sh dom`
+serializes light DOM only — now the desktop skeleton (menus, windows,
+dialogs) plus `<title>`, but never the components' internals — so the
+byte-deterministic screenshots and the shadow-piercing `drive.mjs` remain
+the regression surface.
 
 **The two-speed state system** is the correctness core. Store state is what
 templates read; everything the canvas hot paths touch is a plain `#private`
 field in `<sm-draw-canvas>` (the pixel buffer and its `ImageData` view,
 stroke/drag state, the on-screen scale) — so a pencil drag can never schedule a
 re-render at pointer-move rate. The doc formalizes the split with **two
-channels**: `subscribe` (change — structural: load / resize / replace-all,
-drives templates and view-model re-derivation) and `onLive` (stroke-rate,
-rAF-coalesced blit-then-notify, whose only subscriber is the mesh rebuilder).
-A live stroke lands via `applyTileEdit`, which stores the canvas's working
-buffer **by reference** into `views[face]` _silently_ on the change channel —
-guides and onion-skin recompute only on a face switch or structural change,
-never mid-stroke — and every canonical-atlas consumer (download, resize,
-replace-all) folds the pending stroke in first through the one `drain()` guard.
+channels**: `subscribe` (change — structural: load / resize / replace-all /
+undo restore, drives templates, view-model re-derivation, dirty tracking and
+menu sync) and `onLive` (stroke-rate, rAF-coalesced blit-then-notify, whose
+only subscribers are the mesh rebuilder and — same cost class, one blit per
+frame — the Full Sprite View). A live stroke lands via `applyTileEdit`,
+which stores the canvas's working buffer **by reference** into `views[face]`
+_silently_ on the change channel — guides and onion-skin recompute only on a
+face switch or structural change, never mid-stroke — and every
+canonical-atlas consumer (save, export, resize, replace-all, an undo
+snapshot) folds the pending stroke in first through the one `drain()` guard.
 Canvas backing stores are sized imperatively in `updated()`, never bound in a
 template (a bound `width` would clear the buffer mid-diff); user-editable
 `vf-*` values are controlled bindings with `live()`, so a re-render can't skip
 a re-sync after typing.
 
 **One element, forever — and state that outlives it:** the single `<sm-editor>`
-is docked at boot and never destroyed (that's what keeps the tile field's
-keyboard focus alive across resizes with no refocus hack), and the brush state
-lives in the session slice, so it couldn't die with a DOM node anyway. A face
-swap, tile resize or all-tiles replace is just a store action; the editor
-re-derives its per-face view model (memoized on face / `views`-identity / tile
-geometry) and the canvas resets its working buffer only when the tile's
-IDENTITY actually changes.
+lives in the document window's markup and is never destroyed — the window
+**hides**, never unmounts, so canvas identity and focus behavior survive a
+close/reopen — and the brush state lives in the session slice, so it couldn't
+die with a DOM node anyway. A face swap, tile resize, all-tiles replace or
+undo is just a store action; the editor re-derives its per-face view model
+(memoized on face / `views`-identity / tile geometry) and the canvas resets
+its working buffer only when the tile's IDENTITY actually changes.
 
 ## Known limitations & next steps
 
@@ -538,5 +673,9 @@ IDENTITY actually changes.
   trivially transferable — and `scene/rebuilder.js` is the pipeline's only
   caller, so making it async is a local change). For a scene of _many_ objects,
   batch identical ones with an object-level `InstancedMesh`.
+- **Multi-document** — the store slices are singletons, so one document is
+  open at a time (matching the File-menu grammar). True multi-doc means
+  doc-scoped slices — future work. Autosave is a deliberate non-goal for now:
+  explicit Save is the contract, with the `beforeunload` guard as the net.
 - **Export** — the merged mesh is glTF-ready (`GLTFExporter`) for use in other
   engines / animation.

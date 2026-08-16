@@ -11,6 +11,8 @@
 // state), bubbling events up:
 //   - sm-live        { tile, dirty }  on each actual pixel change (the tile is
 //                    the working buffer BY REFERENCE — never cloned)
+//   - sm-commit      { before, after }  one finished gesture's snapshot pair
+//                    (copies), for the container's undo history
 //   - sm-pick-color  { rgb }          an eyedrop hit a painted texel
 //   - sm-pick-transparent             an eyedrop hit empty space
 //   - sm-replace-all-tiles { target, fill }  a fill click with replace+all on
@@ -45,6 +47,7 @@ import { roundedRectRows, squareEnd } from '../lib/rect.js';
 import { keyAt, floodFill, replaceColor } from '../lib/fill.js';
 import {
   drawGuides,
+  drawTexelGrid,
   drawCursorOutline,
   drawPencilPreview,
   drawRectPreview,
@@ -90,7 +93,9 @@ export class SmDrawCanvas extends LitElement {
         image-rendering: crisp-edges;
       }
       /* Only the pixel canvas takes pointer events (default auto); the others pass
-       clicks through to it. */
+       clicks through to it. The kit's page-drawn cursor claims the crosshair via
+       the template's data-vf-cursor; the CSS cursor is the fallback for any boot
+       state where applyCursor hasn't taken over yet. */
       .editor-canvas {
         z-index: 1;
         cursor: crosshair;
@@ -148,6 +153,7 @@ export class SmDrawCanvas extends LitElement {
     cornerRadius: { type: Number },
     fillReplace: { type: Boolean },
     fillAllTiles: { type: Boolean },
+    showGrid: { type: Boolean },
   };
 
   constructor() {
@@ -164,6 +170,7 @@ export class SmDrawCanvas extends LitElement {
     this.cornerRadius = 0;
     this.fillReplace = false;
     this.fillAllTiles = false;
+    this.showGrid = false;
 
     // Dev hooks (plain: consumed once on the first update, never re-read).
     this.previewCursor = false;
@@ -180,6 +187,10 @@ export class SmDrawCanvas extends LitElement {
   #drawing = false; // a pencil stroke is in progress
   #prev = null; // last painted texel this stroke, for line interpolation
   #forceErase = false; // right-click erases regardless of the active ink
+  // Undo capture: the tile's bytes at gesture start, and whether the gesture
+  // actually changed a pixel — a commit emits sm-commit {before, after}.
+  #gestureBefore = null;
+  #gestureChanged = false;
   #hoverTexel = null; // last hovered texel, for the footprint preview
   // Rect-tool drag state: the anchor + moving corner, and the pointer we captured
   // (kept so ESC / pointercancel can release it).
@@ -243,8 +254,10 @@ export class SmDrawCanvas extends LitElement {
       this.#resetWorking();
     } else if (changed.has('tool')) {
       // Switching tools abandons any in-flight gesture — the rect box is
-      // discarded (nothing committed) and a live pencil stroke ends.
+      // discarded (nothing committed) and a live pencil stroke ends (its
+      // pixels stay, so it still commits an undo entry).
       this.#cancelRect();
+      this.#endGesture();
       this.#drawing = false;
       this.#prev = null;
       this.#forceErase = false;
@@ -287,6 +300,7 @@ export class SmDrawCanvas extends LitElement {
     ) {
       this.#redrawCursorLayer();
     }
+    if (!geom && changed.has('showGrid')) this.#drawGuidesLayer();
 
     // One-shot dev hooks fire on the first update WITH REAL GEOMETRY — the
     // element can mount before the first sheet arrives (tileW 0), and the
@@ -311,6 +325,8 @@ export class SmDrawCanvas extends LitElement {
     this.#imgData = w > 0 && h > 0 ? new ImageData(this.#work, w, h) : null;
     this.#dirty = false;
     // Nothing in flight can belong to the buffer we just replaced.
+    this.#gestureBefore = null;
+    this.#gestureChanged = false;
     this.#drawing = false;
     this.#prev = null;
     this.#forceErase = false;
@@ -409,6 +425,18 @@ export class SmDrawCanvas extends LitElement {
   #drawGuidesLayer() {
     if (!this.#overlayCtx) return;
     drawGuides(this.#overlayCtx, this.guides, this.#scale, this.#cssW, this.#cssH);
+    // View → Show Grid: the texel lattice on the same layer (drawTexelGrid
+    // no-ops below its minimum legible scale).
+    if (this.showGrid) {
+      drawTexelGrid(
+        this.#overlayCtx,
+        this.tileW,
+        this.tileH,
+        this.#scale,
+        this.#cssW,
+        this.#cssH
+      );
+    }
   }
 
   // --- one-shot dev hooks (canvas halves; the state halves are boot actions) --
@@ -457,6 +485,7 @@ export class SmDrawCanvas extends LitElement {
           <canvas class="editor-canvas-bg" ${ref(this.#bg)}></canvas>
           <canvas
             class="editor-canvas"
+            data-vf-cursor="crosshair"
             ${ref(this.#canvas)}
             @pointerdown=${this.#onPointerDown}
             @pointermove=${this.#onPointerMove}
@@ -481,6 +510,30 @@ export class SmDrawCanvas extends LitElement {
 
   #notifyLive() {
     this.#emit('sm-live', { tile: this.#workingTile, dirty: this.#dirty });
+  }
+
+  // --- undo capture -----------------------------------------------------------
+  // A gesture (pencil/eraser stroke, rect drag, fill click) brackets its pixel
+  // writes with begin/end; end emits `sm-commit {before, after}` — snapshot
+  // copies, so the container can hand them straight to the history — only when
+  // the gesture actually changed something. A cancelled rect discards its
+  // capture in #cancelRect instead (nothing was written).
+  #beginGesture() {
+    this.#gestureBefore = this.#work ? this.#work.slice() : null;
+    this.#gestureChanged = false;
+  }
+
+  #endGesture() {
+    if (this.#gestureBefore && this.#gestureChanged) {
+      const w = this.tileW;
+      const h = this.tileH;
+      this.#emit('sm-commit', {
+        before: { width: w, height: h, data: this.#gestureBefore },
+        after: { width: w, height: h, data: this.#work.slice() },
+      });
+    }
+    this.#gestureBefore = null;
+    this.#gestureChanged = false;
   }
 
   // --- gesture-scoped keyboard -------------------------------------------------
@@ -584,6 +637,7 @@ export class SmDrawCanvas extends LitElement {
 
   #commitPixels() {
     this.#dirty = true;
+    this.#gestureChanged = true;
     this.#repaint();
     this.#notifyLive();
   }
@@ -690,6 +744,9 @@ export class SmDrawCanvas extends LitElement {
     this.#rectEnd = null;
     this.#forceErase = false;
     this.#shiftLock = false;
+    // The box wrote nothing — drop its undo capture without emitting.
+    this.#gestureBefore = null;
+    this.#gestureChanged = false;
     this.#cursorCtx?.clearRect(0, 0, this.#cssW, this.#cssH);
     if (this.#rectPointer != null) {
       this.#canvas.value?.releasePointerCapture?.(this.#rectPointer);
@@ -772,7 +829,12 @@ export class SmDrawCanvas extends LitElement {
       return;
     }
     if (this.tool === 'fill') {
-      this.#doFill(t, e.button === 2); // single click — no drag, no pointer capture
+      // Single click — no drag, no pointer capture; the whole gesture is
+      // synchronous (the all-tiles path writes nothing locally, so its
+      // capture drops silently — the container snapshots the atlas instead).
+      this.#beginGesture();
+      this.#doFill(t, e.button === 2);
+      this.#endGesture();
       return;
     }
     if (this.tool === 'rect') {
@@ -782,6 +844,7 @@ export class SmDrawCanvas extends LitElement {
       if (this.#rectDragging && this.#rectPointer != null) return;
       this.#forceErase = e.button === 2;
       this.#shiftLock = e.shiftKey; // Shift held at press → start square-locked
+      this.#beginGesture();
       this.#rectDragging = true;
       this.#rectStart = t;
       this.#rectEnd = t;
@@ -793,6 +856,7 @@ export class SmDrawCanvas extends LitElement {
     // The pencil and the eraser share the stroke path — #writeColor() decides
     // whether the run lays ink or transparency.
     this.#forceErase = e.button === 2;
+    this.#beginGesture();
     this.#drawing = true;
     this.#prev = null;
     this.#canvas.value.setPointerCapture?.(e.pointerId);
@@ -820,6 +884,7 @@ export class SmDrawCanvas extends LitElement {
       if (e.pointerId !== this.#rectPointer) return; // ignore a stray second pointer
       this.#rectEnd = this.#toTexelClamped(e);
       this.#commitRect();
+      this.#endGesture();
       this.#rectDragging = false;
       this.#rectStart = null;
       this.#rectEnd = null;
@@ -830,6 +895,7 @@ export class SmDrawCanvas extends LitElement {
       this.#cursorCtx.clearRect(0, 0, this.#cssW, this.#cssH); // commit is on `#work`
       return;
     }
+    this.#endGesture();
     this.#drawing = false;
     this.#prev = null;
     this.#forceErase = false;
@@ -837,13 +903,15 @@ export class SmDrawCanvas extends LitElement {
   };
 
   // pointercancel (gesture interrupted) discards an in-flight rect rather than
-  // committing a box the user didn't finish; a pencil stroke is already committed.
+  // committing a box the user didn't finish; a pencil stroke is already
+  // committed (its pixels stay, so its undo entry still lands).
   #onPointerCancel = (e) => {
     if (this.#rectDragging) {
       if (e.pointerId !== this.#rectPointer) return; // a non-owner can't abort the drag
       this.#cancelRect();
       return;
     }
+    this.#endGesture();
     this.#drawing = false;
     this.#prev = null;
     this.#forceErase = false;

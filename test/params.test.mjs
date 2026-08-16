@@ -23,6 +23,9 @@ test('defaults: everything off / null on an empty query', () => {
       rect: b.rect,
       fill: b.fill,
       sampleIndex: b.sampleIndex,
+      sampleExplicit: b.sampleExplicit,
+      fresh: b.fresh,
+      hide: b.hide,
     },
     {
       flat: false,
@@ -38,8 +41,25 @@ test('defaults: everything off / null on an empty query', () => {
       rect: null,
       fill: null,
       sampleIndex: 0,
+      sampleExplicit: false,
+      fresh: false,
+      hide: [],
     }
   );
+});
+
+test('?fresh and ?hide (the desktop-shell capture hooks)', () => {
+  assert.equal(parseBootParams('?fresh=1').fresh, true);
+  assert.equal(parseBootParams('?fresh=0').fresh, false);
+  assert.deepEqual(parseBootParams('?hide=stage').hide, ['stage']);
+  assert.deepEqual(parseBootParams('?hide=stage,sprite').hide, ['stage', 'sprite']);
+  assert.deepEqual(parseBootParams('?hide=').hide, []);
+});
+
+test('?sample marks itself explicit (beats the last-doc boot restore)', () => {
+  const names = { sampleNames: ['Car', 'Cube'] };
+  assert.equal(parseBootParams('?sample=cube', names).sampleExplicit, true);
+  assert.equal(parseBootParams('', names).sampleExplicit, false);
 });
 
 test('scene flags: lowpoly tri-state, rotate=0, flat/diag/cam', () => {
