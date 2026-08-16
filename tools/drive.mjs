@@ -1046,6 +1046,63 @@ async function main() {
     `${sizeBefore.cw} → ${sizeAfter.cw}`
   );
 
+  // A raise makes vf-desktop re-order the slotted windows in the light DOM
+  // (DOM order is kept in step with z-order), which disconnects + reconnects
+  // every element inside the moved window. The canvases tear their
+  // ResizeObservers down on disconnect, so they must rebuild them on
+  // reconnect — the regression left both canvases blind to the grow box
+  // after any raise. Raise the sprite window, then the document window (both
+  // nodes move), then grow each window and expect its canvas to re-fit.
+  const raise = async (id) => {
+    const t = await evaluate(
+      `(() => {${DEEP} const r = __q('${id}').getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + 9 }; })()`
+    );
+    await click(t.x, t.y);
+    await sleep(200);
+  };
+  const grow = async (id, dx, dy) => {
+    const g = await evaluate(
+      `(() => {${DEEP} const b = __q('${id}').shadowRoot
+          .querySelector('[part="grow-box"]').getBoundingClientRect();
+        return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`
+    );
+    await mouse('mousePressed', g.x, g.y);
+    await mouse('mouseMoved', g.x + Math.round(dx / 2), g.y + Math.round(dy / 2), {
+      buttons: 1,
+    });
+    await mouse('mouseMoved', g.x + dx, g.y + dy, { buttons: 1 });
+    await mouse('mouseReleased', g.x + dx, g.y + dy, { buttons: 0 });
+    await sleep(300);
+  };
+  const atlasWidth = () =>
+    evaluate(
+      `(() => {${DEEP} return __q('sm-atlas-view').shadowRoot
+          .querySelector('canvas').getBoundingClientRect().width; })()`
+    );
+  const drawWidth = () =>
+    evaluate(
+      `(() => {${DEEP} return __q('.editor-canvas').getBoundingClientRect().width; })()`
+    );
+  await raise('#win-sprite');
+  await raise('#win-document');
+  const atlasBefore = await atlasWidth();
+  await grow('#win-sprite', 40, 60);
+  const atlasAfter = await atlasWidth();
+  check(
+    'the sprite view re-fits after a raise re-orders the DOM',
+    atlasAfter > atlasBefore,
+    `${atlasBefore} → ${atlasAfter}`
+  );
+  const drawBefore = await drawWidth();
+  await grow('#win-document', 96, 96);
+  const drawAfter = await drawWidth();
+  check(
+    'the draw canvas re-fits after a raise re-orders the DOM',
+    drawAfter > drawBefore,
+    `${drawBefore} → ${drawAfter}`
+  );
+
   // --- desktop: save / open round-trip ---------------------------------------
   // The full persistence loop on real input: draw → ⌘S → name it → File → New
   // → double-click the saved doc's icon → the pixels come back. (IndexedDB is

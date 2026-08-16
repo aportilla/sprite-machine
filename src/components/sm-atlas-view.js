@@ -1,6 +1,7 @@
 // ---------------------------------------------------------------------------
 // <sm-atlas-view> — the Full Sprite View window's body: the whole 3×2 atlas
-// drawn nearest-neighbor at the largest integer scale that fits the window.
+// drawn nearest-neighbor, scaled to fit the window as large as its aspect
+// ratio allows (fractional scale — never an overflow, never a clip).
 // A CONNECTED leaf over the doc alone — it subscribes to BOTH channels:
 //   - change (structural): a new sheet / tile size — resize the backing
 //     store, re-fit, repaint;
@@ -8,7 +9,7 @@
 //     (blit-then-notify), so tracking a stroke is one putImageData per frame
 //     — the second live subscriber ever, after the rebuilder, and the same
 //     cost class.
-// The canvas keeps a native atlas-resolution backing store (CSS upscales it
+// The canvas keeps a native atlas-resolution backing store (CSS scales it
 // crisp); a ResizeObserver re-fits on any window resize, so the grow box
 // works for free.
 // ---------------------------------------------------------------------------
@@ -74,6 +75,17 @@ export class SmAtlasView extends LitElement {
       doc.subscribe(() => this.#syncGeometry()),
       doc.onLive(() => this.#paint()),
     ];
+    // Setup mirrors disconnectedCallback's teardown: raising any window makes
+    // vf-desktop re-order the slotted windows in the light DOM, which
+    // disconnects + reconnects this element — everything torn down there must
+    // come back here, not in the once-ever firstUpdated. Observing the host
+    // needs no refs; #layout() no-ops until the canvas exists.
+    if (typeof ResizeObserver !== 'undefined') {
+      this.#resizeObs = new ResizeObserver(() => this.#layout());
+      this.#resizeObs.observe(this);
+    }
+    // A reconnect may have missed structural doc changes while unsubscribed.
+    if (this.#ctx) this.#syncGeometry();
   }
 
   disconnectedCallback() {
@@ -86,10 +98,6 @@ export class SmAtlasView extends LitElement {
 
   firstUpdated() {
     this.#ctx = this.#canvas.value.getContext('2d');
-    if (typeof ResizeObserver !== 'undefined') {
-      this.#resizeObs = new ResizeObserver(() => this.#layout());
-      this.#resizeObs.observe(this);
-    }
     this.#syncGeometry();
   }
 
@@ -113,8 +121,8 @@ export class SmAtlasView extends LitElement {
     this.#paint();
   }
 
-  // The largest integer scale that fits the host's content box (min 1; the
-  // host clips an overflow on a tiny window).
+  // Scale-to-fit the host's content box: the largest (fractional) scale that
+  // keeps the whole atlas visible at its own aspect ratio — never an overflow.
   #layout() {
     const canvas = this.#canvas.value;
     if (!canvas || !this.#atlasW) return;
@@ -127,10 +135,7 @@ export class SmAtlasView extends LitElement {
       1,
       this.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
     );
-    const s = Math.max(
-      1,
-      Math.floor(Math.min(availW / this.#atlasW, availH / this.#atlasH)) || 1
-    );
+    const s = Math.min(availW / this.#atlasW, availH / this.#atlasH);
     if (s === this.#scale) return;
     this.#scale = s;
     canvas.style.width = `${this.#atlasW * s}px`;

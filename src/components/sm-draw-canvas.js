@@ -235,6 +235,12 @@ export class SmDrawCanvas extends LitElement {
     // live on the document; the general tool shortcuts belong to shortcuts.js.
     document.addEventListener('keydown', this.#onKeyDown);
     document.addEventListener('keyup', this.#onKeyUp);
+    // Setup mirrors disconnectedCallback's teardown: raising any window makes
+    // vf-desktop re-order the slotted windows in the light DOM, which
+    // disconnects + reconnects this element — the observer torn down there
+    // must come back here. On the first connect there's no wrap yet, so this
+    // no-ops and firstUpdated does the initial setup.
+    this.#observeResize();
   }
 
   disconnectedCallback() {
@@ -268,16 +274,19 @@ export class SmDrawCanvas extends LitElement {
     this.#ctx = this.#canvas.value.getContext('2d');
     this.#overlayCtx = this.#overlay.value.getContext('2d');
     this.#cursorCtx = this.#cursor.value.getContext('2d');
-    // Re-fit whenever the canvas container resizes — it fills the flex draw box, so
-    // a window resize (or any change to the fixed regions above) reflows its height
-    // and the centered canvas must re-scale. Observing `wrap` directly is
-    // feedback-free: #layout() never sets wrap's height (only the stack/overlay/
-    // cursor INSIDE it), so resizing those never changes wrap's own box, and a
-    // no-op re-run (same scale) early-returns.
-    if (typeof ResizeObserver !== 'undefined') {
-      this.#resizeObs = new ResizeObserver(() => this.#layout());
-      this.#resizeObs.observe(this.#wrap.value);
-    }
+    this.#observeResize();
+  }
+
+  // Re-fit whenever the canvas container resizes — it fills the flex draw box, so
+  // a window resize (or any change to the fixed regions above) reflows its height
+  // and the centered canvas must re-scale. Observing `wrap` directly is
+  // feedback-free: #layout() never sets wrap's height (only the stack/overlay/
+  // cursor INSIDE it), so resizing those never changes wrap's own box, and a
+  // no-op re-run (same scale) early-returns.
+  #observeResize() {
+    if (typeof ResizeObserver === 'undefined' || !this.#wrap.value) return;
+    this.#resizeObs = new ResizeObserver(() => this.#layout());
+    this.#resizeObs.observe(this.#wrap.value);
   }
 
   updated(changed) {

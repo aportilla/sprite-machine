@@ -327,8 +327,9 @@ via their own ResizeObservers, so the grow box works for free). The
 **document window**'s title is the document's name and its `status` strip
 reads the tile size; the **Tools palette** is a `variant="utility"` windoid
 floating above the document tier; the **Full Sprite View** (`sm-atlas-view`)
-draws the whole atlas nearest-neighbor at the largest integer scale that
-fits and subscribes to the doc's **live channel**, so it tracks strokes at
+draws the whole atlas nearest-neighbor, scaled to fit the window as large
+as its aspect ratio allows (never clipped, never scrolled), and subscribes
+to the doc's **live channel**, so it tracks strokes at
 rAF rate (the second live subscriber ever, after the rebuilder); the **3D
 View** hosts the THREE canvas with the build readout in its status strip.
 
