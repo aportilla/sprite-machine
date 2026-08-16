@@ -3,7 +3,7 @@
 Sprite Machine becomes a **full System 7 virtual desktop**: a menu bar, movable
 windows, a floating tool palette, and user documents that live as **files on
 the desktop** — saved in the browser, reopened by double-clicking their icons.
-The mockup this plan implements is `Frame 16` (2026-08-16): menu bar +
+The mockup this plan implements is /Users/adam/Desktop/MOCKUP.png: menu bar +
 per-tool options strip up top, a document window ("Cargo Ship") holding the
 face picker and pixel canvas, a floating tools palette on the left, and two
 satellite windows — **Full Sprite View** and **3D View** — on the right.
@@ -21,7 +21,7 @@ Almost everything the mockup shows already exists as a component:
 
 | Mockup element | Existing piece | Where |
 | --- | --- | --- |
-| Desktop (gray dither, window stacking, active window) | `vf-desktop` | vintage-frames 0.2.x (already a dependency) |
+| Desktop (gray dither, window stacking, active window) | `vf-desktop` | vintage-frames 0.3.0 (bump from ^0.2.1, Phase 1) |
 | Menu bar + drop menus | `vf-menu-bar` / `vf-menu` / `vf-menu-item` | vintage-frames (we already use `vf-menu` in `sm-topbar`) |
 | Document / satellite windows | `vf-window` (`closable zoomable movable resizable`) | vintage-frames |
 | Floating tool palette | `vf-window variant="utility"` — floats above the document tier automatically | vintage-frames |
@@ -111,6 +111,16 @@ exactly like today's chrome.
   overlay (new painter in `draw-overlays.js`; drawn only at scales where the
   hairlines don't swamp the art, e.g. scale ≥ 4).
 
+**Key equivalents** — `shortcut` on `vf-menu-item` (0.3.0, §5a) renders the
+right-aligned glyph column *and* owns the live app-wide keydown match, so
+these are one attribute each: Save **⌘S**, Open **⌘O**, Duplicate **⌘D**,
+Export **⇧⌘E**, Undo **⌘Z**, Redo **⇧⌘Z**, Pick Color **⌘K**, Show Grid
+**⌘G** (Ctrl stands in for ⌘ off-Mac, per the kit). Two System 7 staples stay
+unassigned on purpose: the browser owns **⌘N**/**⌘W** before the page ever
+sees them, and a shortcut column showing keys that can't fire would be a lie.
+The kit deliberately never matches a bare printable key, so the existing
+B/R/G/I/E tool keys keep living in `src/shortcuts.js`, unchanged.
+
 ### 2.3 The options strip
 
 The full-width white band under the menu bar (mockup: "Pencil Tool · Size
@@ -127,8 +137,9 @@ hunt-for-them popups); closing any is reversible via the View menu or the
 document icon.
 
 1. **Document window** — title = document name; body = face picker row over
-   the pixel canvas; status bar reads the tile size ("40px x 40px").
-   `closable movable resizable`; the canvas's existing ResizeObserver +
+   the pixel canvas; the window's **`status` slot** (kit chrome as of 0.3.0)
+   reads the tile size ("40px x 40px"), with the grow box flush in its right
+   end. `closable movable resizable`; the canvas's existing ResizeObserver +
    integer-texel-scale layout (`#layout()` in `sm-draw-canvas.js`) already
    handles an arbitrary box, so the grow box works for free. Closing it =
    File → Close (dirty check).
@@ -136,17 +147,21 @@ document icon.
    color wells (today's `sm-tool-strip` + `sm-color-wells`), floating above
    the document tier, never deactivating the document window.
 3. **Full Sprite View** — *new leaf component* `sm-atlas-view`: the whole 3×2
-   atlas drawn nearest-neighbor at the largest integer scale that fits,
-   status bar showing atlas dimensions ("120px x 80px"). Subscribes to the
+   atlas drawn nearest-neighbor at the largest integer scale that fits, the
+   `status` slot showing atlas dimensions ("120px x 80px"). Subscribes to the
    doc's **live channel** (`onLive`) so it tracks strokes at rAF rate —
    the second live subscriber ever, after the rebuilder; the channel is
    already multi-listener.
 4. **3D View** — the THREE `<canvas>` moves into this window's body; the
-   bottom strip holds today's `sm-stage-controls` (camera presets, toggles
-   that don't graduate to Settings) and `sm-stats-readout`. The stage's
-   resize handling re-anchors to a ResizeObserver on the canvas's box
-   (`vf-window` emits no resize event today; the grow box just writes
-   `width`/`height` — a candidate kit addition, §5a).
+   `status` slot holds today's `sm-stage-controls` (camera presets, toggles
+   that don't graduate to Settings) and `sm-stats-readout`. The stage
+   resizes on the window's **`vf-resize`** event (0.3.0): stream events fire
+   *after* the new box is applied to layout, so the handler measures the
+   resized body and calls `stage.resize` live through the drag, with the
+   `commit: true` event as the settle point. One contract to respect: the
+   event is gesture-only — a programmatic `width`/`height` write fires
+   nothing — so the two programmatic call-sites (boot restore of a persisted
+   size, any future zoom-box handling) resize the stage explicitly.
 
 Default layout mirrors the mockup: document window center-left, palette at
 the left edge, sprite view upper-right, 3D view lower-right — authored as
@@ -164,6 +179,9 @@ off-raster on a small viewport).
   drawn nearest-neighbor into a 32×32 canvas → data URI → the icon's
   `vf-img`. Regenerated on every save. (Sample icons same treatment, done
   once at boot.) Fallback for an empty front tile: a generic document glyph.
+  These are color art, so every generated icon declares **`color`** (0.3.0):
+  selection darkens it the way System 7 darkened color icons, instead of
+  inverting it into a photographic negative.
 - In-place rename (Return on a selected icon) renames the stored doc.
 - Dragged icon positions persist (§3.4).
 
@@ -337,30 +355,35 @@ Load-bearing constraints, carried forward:
 
 ---
 
-## 5a. The vintage-frames workstream
+## 5a. Kit features delivered (vintage-frames 0.3.0)
 
-The kit's author is this project's author, so missing behaviors get **fixed in
-the kit and published**, never worked around here (system7web's contribution
-rule, now with teeth). Candidates surfaced by this plan, roughly by value:
+The kit's author is this project's author, and the four gaps this plan
+surfaced **shipped in 0.3.0** (on npm; this repo bumps `^0.2.1 → ^0.3.0` as
+Phase 1's first task). What landed, and where the plan consumes it:
 
-1. **`vf-resize` on `vf-window`** — fired as the grow box drags (and on
-   commit), so content like the WebGL stage doesn't need a ResizeObserver to
-   learn its box moved. Detail `{width, height}` in system px.
-2. **Menu key equivalents** — a `key` attribute on `vf-menu-item` rendering
-   the right-aligned ⌘-glyph column and (ideally) owning the keydown match,
-   so File → Save shows and answers ⌘S without app-side plumbing.
-3. **A `status` slot / status-bar part on `vf-window`** — the mockup's
-   bottom strips ("40px x 40px" beside the grow box) are a classic anatomy
-   worth having as kit chrome rather than app layout.
-4. **Non-inverting color icon selection** — `vf-icon` documents that color
-   art inverts photographically; our generated front-tile icons are color,
-   so the System 7 darkening treatment becomes worth building.
+1. **`vf-resize` on `vf-window`** — detail `{width, height, commit}`, whole
+   system px. Stream events fire once per size the drag writes, *after* the
+   new box is applied to layout (a measuring handler reads the resized
+   state); a final `commit: true` fires as the gesture settles, only if the
+   size changed. Gesture-only by contract — programmatic writes fire
+   nothing. → Consumed by the 3D View stage (§2.4.4).
+2. **`shortcut` on `vf-menu-item`** — glyph-spelled ("⇧⌘Z"), draws the
+   right-anchored key column, mirrors to `aria-keyshortcuts`, and is a
+   *live* app-wide key equivalent (menu open or not; Ctrl stands in for ⌘
+   off-Mac; bare printable keys deliberately never match). → Consumed by the
+   File/Edit/View assignments (§2.2), with B/R/G/I/E staying app-side.
+3. **`status` slot on `vf-window`** — the classic bottom readout strip (1px
+   rule over a 15px band), zero-height until populated, grow box flush in
+   its right end. → Consumed by the Document window ("40px x 40px"), Full
+   Sprite View ("120px x 80px"), and the 3D View's controls strip (§2.4).
+4. **`color` on `vf-icon`** — declares slotted art as color; selection
+   darkens it (the System 7 treatment) instead of `invert(1)`'s photographic
+   negative. The label plate still inverts. → Consumed by every generated
+   front-tile document icon (§2.5).
 
-Each lands as: kit change → `npm link` to verify here → publish → version
-bump in this repo (the dependency stays the published package, per
-system7web's split). None of Phase 1–2 blocks on any of these —
-ResizeObserver, app-side keydown, and app-layout status bars are working
-fallbacks — so kit work can trail the shell swap without stalling it.
+Any *new* gap that surfaces during implementation follows the same loop: kit
+change → `npm link` to verify here → publish → version bump (the dependency
+stays the published package, per system7web's split).
 
 ## 5. Phases
 
@@ -368,6 +391,7 @@ Each phase lands green (`npm test`, `typecheck`, `lint`, `drive.mjs`,
 re-baselined captures) before the next starts.
 
 **Phase 1 — the shell swap (no new features).**
+Bump `vintage-frames` to `^0.3.0`, then
 `vf-desktop` + menu bar + four windows; existing leaves re-homed (editor
 body, palette, options strip, 3D canvas + controls); `sm-topbar` retired with
 its functions temporarily parked in menus (Export works; Open lists samples
@@ -412,7 +436,9 @@ machine with saved docs).
   JS-drawn cursor never paints in captures.
 - **`tools/drive.mjs`** — biggest churn: probe paths now descend through
   `vf-window` bodies; new scenarios for menu selection (the press-drag
-  gesture), window drag, icon double-click, save/open round-trip
+  gesture), menu key equivalents (⌘S as trusted input), window drag +
+  grow-box resize (asserting `vf-resize` reaches the stage), icon
+  double-click, save/open round-trip
   (IndexedDB is fully available to headless Chrome). The dev-hook params all
   survive because they act on the store, not the layout.
 - **Node suites** — new: `test/png-chunks.test.mjs` (chunk round-trip, CRC,
@@ -429,9 +455,8 @@ machine with saved docs).
   will overlap; the clamp keeps everything grabbable, but a real
   small-screen layout is out of scope (the kit's scale system is the
   eventual answer).
-- **Kit gaps** — not a risk, a workstream (§5a): anything missing gets added
-  to vintage-frames and published. The only cost is sequencing, and every
-  identified gap has an app-side fallback, so nothing blocks.
+- **Kit gaps** — closed: 0.3.0 shipped everything this plan asks of the kit
+  (§5a). Anything new that surfaces follows the same kit-first loop.
 - **Multi-document** — the store slices are singletons, so v1 is **one open
   document at a time** (matching the mockup and the File-menu grammar).
   True multi-doc means doc-scoped slices — noted as future work, not
