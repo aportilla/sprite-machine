@@ -3,8 +3,10 @@
 // name, the current-ink swatch (every tool but the eraser — clicking it opens
 // the Colors dialog), and the per-tool options (<sm-tool-options>:
 // pencil/eraser tip sliders, rect radius stepper, fill checkboxes). A fixed
-// strip, not a window — always present, blank-ish when a tool has no options
-// (the standing preference for persistent, in-flow controls over popups).
+// strip, not a window — blank-ish when a tool has no options (the standing
+// preference for persistent, in-flow controls over popups), and — like the
+// utility windoids — on screen only while the application is active: a
+// desktop click hides the whole band, and it returns with the app.
 //
 // THE BAND IS A KIT PANEL: the strip composes the kit's exported `vfPanel`
 // recipe (`.vf-panel` — white surface, a `calc(--vf-scale × 1px)` black
@@ -94,15 +96,16 @@ export class SmOptionsBar extends LitElement {
   }
 
   render() {
-    // Desktop focused: the strip belongs to the application, so its content
-    // clears — the panel band itself stays (it's structural chrome the window
-    // clamp reserves space under), an empty white run like an app with no
-    // tool showing.
+    // Desktop focused: the strip belongs to the application, so — like the
+    // utility windoids — the whole band hides (the desktop dither runs right
+    // up to the menu bar, the Finder look), returning with the app. The
+    // window clamp still reserves its space (TOP_RESERVE), so windows never
+    // shuffle when it comes back.
+    if (!shell.get().appActive) return nothing;
     return html`<div class="strip vf-panel">${this.#content()}</div>`;
   }
 
   #content() {
-    if (!shell.get().appActive) return nothing;
     const s = session.get();
     return html`
       <vf-label class="tool-name">${TOOL_NAME[s.tool] ?? ''}</vf-label>

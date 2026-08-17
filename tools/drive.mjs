@@ -346,7 +346,7 @@ const PROBE = `(() => {${DEEP}
     inkSwatchShown: !!sw,
     inkColor: sw ? sw.getAttribute('color') : null,
     // The options strip IS <sm-tool-options>; its shadow root holds the bare
-    // controls. Null-safe: the strip renders EMPTY while the app is
+    // controls. Null-safe: the whole strip hides while the app is
     // deactivated (desktop focus), so the element may not exist at probe time.
     opts: (() => {
       const o = __q('sm-tool-options');
@@ -397,10 +397,11 @@ const PROBE = `(() => {${DEEP}
     docWindows: [...document.querySelectorAll('vf-window')].filter((w) =>
       w.id.startsWith('win-doc-')).length,
     // The focus model: whether a document window holds the active state
-    // (appActive's visible half), and whether the options strip is showing
-    // its blank deactivated face.
+    // (appActive's visible half), and whether the options strip's band is on
+    // screen (it hides with the application, like the windoids — the probe
+    // reads the band element itself, not just its controls).
     docActive: !!__doc() && __doc().hasAttribute('active'),
-    optionsBlank: !__q('sm-tool-options'),
+    optionsStrip: !!__q('sm-options-bar')?.shadowRoot?.querySelector('.strip'),
     // Enabled states for the focus-gated menu grammar (the Finder role).
     menuEnabled: {
       newDoc: !__q('vf-menu-item[value="new"]').disabled,
@@ -1267,7 +1268,7 @@ async function main() {
   // The two-role model: clicking the desktop's own surface is "clicking the
   // Finder" — the document window drops its active state, the utility
   // windoids hide (they return with the application), the options strip
-  // blanks, the bare-letter tool keys go inert, and the menus fall to the
+  // hides with them, the bare-letter tool keys go inert, and the menus fall to the
   // Finder grammar (New always; Open only with an icon selected, acting on
   // it). Clicking back into the document window — or opening from an icon —
   // undoes all of it.
@@ -1275,9 +1276,13 @@ async function main() {
   await freshPage();
   s = await probe();
   check(
-    'the app boots active: windoids up, document window active',
-    s.docActive && s.windows.tools && s.windows.sprite && s.windows.stage,
-    JSON.stringify({ docActive: s.docActive, windows: s.windows })
+    'the app boots active: windoids up, options strip up, document window active',
+    s.docActive &&
+      s.windows.tools &&
+      s.windows.sprite &&
+      s.windows.stage &&
+      s.optionsStrip,
+    JSON.stringify({ docActive: s.docActive, windows: s.windows, strip: s.optionsStrip })
   );
   // A bare-desktop point, computed against the LIVE layout: earlier sections'
   // window drags persist through desktop-state, so no hardcoded point is safe.
@@ -1306,7 +1311,7 @@ async function main() {
     !s.windows.tools && !s.windows.sprite && !s.windows.stage && s.windows.document,
     JSON.stringify(s.windows)
   );
-  check('…the options strip blanks', s.optionsBlank === true);
+  check('…the options strip hides with the application', s.optionsStrip === false);
   check(
     '…the Finder menu grammar lands: New stays, the rest grey out',
     s.menuEnabled.newDoc === true &&
@@ -1341,8 +1346,12 @@ async function main() {
   s = await probe();
   check(
     '⌘O opens the selection and reactivates the application',
-    s.docActive === true && s.windows.tools && s.windows.sprite && s.windows.stage,
-    JSON.stringify({ docActive: s.docActive, windows: s.windows })
+    s.docActive === true &&
+      s.windows.tools &&
+      s.windows.sprite &&
+      s.windows.stage &&
+      s.optionsStrip,
+    JSON.stringify({ docActive: s.docActive, windows: s.windows, strip: s.optionsStrip })
   );
   // And the pointer path back in: deactivate again, then click the document
   // window — stripes and windoids return where they were.
@@ -1356,9 +1365,13 @@ async function main() {
   await sleep(300);
   s = await probe();
   check(
-    'clicking the document window reactivates: stripes and windoids return',
-    s.docActive === true && s.windows.tools && s.windows.sprite && s.windows.stage,
-    JSON.stringify({ docActive: s.docActive, windows: s.windows })
+    'clicking the document window reactivates: stripes, windoids and strip return',
+    s.docActive === true &&
+      s.windows.tools &&
+      s.windows.sprite &&
+      s.windows.stage &&
+      s.optionsStrip,
+    JSON.stringify({ docActive: s.docActive, windows: s.windows, strip: s.optionsStrip })
   );
 
   // --- desktop: multiple documents ---------------------------------------------

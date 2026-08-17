@@ -320,7 +320,7 @@ window the desktop's active window?**
   the icon layer its own presses, through `desktop.clearActive()`. Then
   every document window
   goes plain, the three windoids **hide** (they return with the
-  application), the options strip blanks, the bare-letter tool keys
+  application), the options strip hides with them, the bare-letter tool keys
   go inert, and the menus drop to the **Finder grammar** — About / Settings
   / Quit / New stay enabled, Open… enables when a desktop icon is selected
   (and then opens the selection instead of the listing dialog), everything
@@ -693,7 +693,7 @@ src/
                        presentational leaves: props down, bubbling sm-* events up, no store imports
     sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-status-line.js, sm-color-picker.js
                        connected chrome: the options strip (a kit vfPanel band: tool name +
-                       current-ink swatch + options; blank while the desktop is focused;
+                       current-ink swatch + options; hidden while the desktop is focused;
                        bounds from the active document) / the Tools palette body / the live
                        full-atlas view (follows the active document) / the windows' status
                        readouts (tile = per-window ctx; atlas = active doc; build = build slice) /

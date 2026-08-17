@@ -11,8 +11,8 @@ browser, `http://localhost:5173/`.
 
 - [ ] **Desktop click deactivates**: click the bare desktop dither — the
       document window's title stripes vanish, all three windoids (Tools,
-      Sprite View, 3D View) disappear, the options strip goes blank, and
-      B/R/G/E/I do nothing.
+      Sprite View, 3D View) disappear, the options strip hides (the dither
+      runs right up to the menu bar), and B/R/G/E/I do nothing.
 - [ ] **The Finder menu grammar**: while deactivated, pull each menu — only
       About…/Settings…/Quit and File → New stay enabled; File → Open…
       enables the moment you select a desktop icon (and then opens that
