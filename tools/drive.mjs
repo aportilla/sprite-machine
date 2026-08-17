@@ -399,12 +399,8 @@ const PROBE = `(() => {${DEEP}
       pickColor: !__q('vf-menu-item[value="pick-color"]').disabled,
       grid: !__q('vf-menu-item[value="show-grid"]').disabled,
       toolPencil: !__q('vf-menu-item[value="tool-pencil"]').disabled,
-      viewSprite: !__q('vf-menu-item[value="view-sprite"]').disabled,
     },
     menuChecks: {
-      sprite: __q('vf-menu-item[value="view-sprite"]').checked,
-      stage: __q('vf-menu-item[value="view-stage"]').checked,
-      tools: __q('vf-menu-item[value="view-tools"]').checked,
       grid: __q('vf-menu-item[value="show-grid"]').checked,
       // The Tools menu's checked tool item, sans its 'tool-' prefix. Exactly
       // one must be checked (the sticky mode) — any other count reads '!N',
@@ -1000,21 +996,28 @@ async function main() {
     `${JSON.stringify(s.recent)} vs ${inkBeforePalette}`
   );
 
-  // --- desktop: the View menu ------------------------------------------------
+  // --- desktop: the View menu + the permanent windoids -------------------------
   section('view menu');
   await freshPage();
-  await pickMenu('#menu-view', 'view-sprite');
-  s = await probe();
-  check(
-    'View → Sprite View hides the window and unchecks the item',
-    s.windows.sprite === false && s.menuChecks.sprite === false,
-    JSON.stringify({ win: s.windows.sprite, check: s.menuChecks.sprite })
+  // The windoids are non-closeable chrome: no close box renders in any of
+  // their bars, and no menu item can hide them (visibility is appActive's).
+  const windoidCloseBoxes = await evaluate(
+    `(() => {${DEEP} return ['#win-sprite', '#win-stage', '#win-tools'].map((sel) =>
+        !!__q(sel).shadowRoot.querySelector('[part="close-box"]')); })()`
   );
-  await pickMenu('#menu-view', 'view-sprite');
-  s = await probe();
   check(
-    '…and a second pick brings it back',
-    s.windows.sprite === true && s.menuChecks.sprite === true
+    'the utility windoids render no close box (non-closeable)',
+    windoidCloseBoxes.every((b) => b === false),
+    JSON.stringify(windoidCloseBoxes)
+  );
+  const windoidMenuItems = await evaluate(
+    `(() => {${DEEP} return ['view-sprite', 'view-stage', 'view-tools']
+        .filter((v) => __q('vf-menu-item[value="' + v + '"]')); })()`
+  );
+  check(
+    'no menu item toggles a windoid',
+    windoidMenuItems.length === 0,
+    JSON.stringify(windoidMenuItems)
   );
   await pickMenu('#menu-view', 'show-grid');
   s = await probe();
@@ -1042,19 +1045,6 @@ async function main() {
     'the R key moves the menu checkmark too',
     s.menuChecks.tool === 'rect',
     s.menuChecks.tool
-  );
-  await pickMenu('#menu-tools', 'view-tools');
-  s = await probe();
-  check(
-    'Tools → Tools Palette hides the windoid and unchecks the item',
-    s.windows.tools === false && s.menuChecks.tools === false,
-    JSON.stringify({ win: s.windows.tools, check: s.menuChecks.tools })
-  );
-  await pickMenu('#menu-tools', 'view-tools');
-  s = await probe();
-  check(
-    '…and a second pick brings it back',
-    s.windows.tools === true && s.menuChecks.tools === true
   );
 
   // --- desktop: undo / redo ---------------------------------------------------
@@ -1227,7 +1217,7 @@ async function main() {
   // --- desktop: focus / deactivation ------------------------------------------
   // The two-role model: clicking the desktop's own surface is "clicking the
   // Finder" — the document window drops its active state, the utility
-  // windoids hide (their View-menu intent preserved), the options strip
+  // windoids hide (they return with the application), the options strip
   // blanks, the bare-letter tool keys go inert, and the menus fall to the
   // Finder grammar (New always; Open only with an icon selected, acting on
   // it). Clicking back into the document window — or opening from an icon —
@@ -1269,11 +1259,6 @@ async function main() {
   );
   check('…the options strip blanks', s.optionsBlank === true);
   check(
-    '…the View-menu checkmarks keep the intent (wanted flags survive)',
-    s.menuChecks.sprite && s.menuChecks.stage && s.menuChecks.tools,
-    JSON.stringify(s.menuChecks)
-  );
-  check(
     '…the Finder menu grammar lands: New stays, the rest grey out',
     s.menuEnabled.newDoc === true &&
       s.menuEnabled.open === false &&
@@ -1281,8 +1266,7 @@ async function main() {
       s.menuEnabled.close === false &&
       s.menuEnabled.pickColor === false &&
       s.menuEnabled.grid === false &&
-      s.menuEnabled.toolPencil === false &&
-      s.menuEnabled.viewSprite === false,
+      s.menuEnabled.toolPencil === false,
     JSON.stringify(s.menuEnabled)
   );
   await keyPress('r');

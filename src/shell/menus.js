@@ -213,7 +213,7 @@ export function initMenus(desktop, windows) {
   // Quit: the System 7 cascade — every open document in turn, one
   // unsaved-changes alert per dirty one (its window brought forward as it's
   // asked about); Cancel anywhere aborts the rest. A completed quit leaves
-  // the bare desktop, the windoid wanted flags intact.
+  // the bare desktop, the windoid arrangement intact.
   const quit = () => {
     const ctxs = workspace.get().contexts;
     if (!ctxs.length) return;
@@ -400,24 +400,13 @@ export function initMenus(desktop, windows) {
   on($('#menu-tools'), 'vf-menu-select', (e) => {
     if (modalOpen()) return;
     const v = menuDetail(e).value;
-    if (v === 'view-tools') shell.toggleWindow('tools');
-    else if (v.startsWith('tool-'))
+    if (v.startsWith('tool-'))
       session.setTool(/** @type {any} */ (v.slice('tool-'.length)));
   });
 
   on($('#menu-view'), 'vf-menu-select', (e) => {
     if (modalOpen()) return;
-    switch (menuDetail(e).value) {
-      case 'view-stage':
-        shell.toggleWindow('stage');
-        break;
-      case 'view-sprite':
-        shell.toggleWindow('sprite');
-        break;
-      case 'show-grid':
-        shell.setShowGrid(!shell.get().showGrid);
-        break;
-    }
+    if (menuDetail(e).value === 'show-grid') shell.setShowGrid(!shell.get().showGrid);
   });
 
   // --- checkmark + enabled sync ----------------------------------------------
@@ -463,9 +452,6 @@ export function initMenus(desktop, windows) {
     'tool-fill',
     'tool-eraser',
     'tool-eyedropper',
-    'view-tools',
-    'view-stage',
-    'view-sprite',
     'show-grid',
   ];
   const docItems = DOC_SCOPED.map((v) => $(`vf-menu-item[value="${v}"]`));
@@ -478,16 +464,9 @@ export function initMenus(desktop, windows) {
   teardown.push(shell.subscribe(syncGate));
   syncGate();
 
-  const itemStage = $('vf-menu-item[value="view-stage"]');
-  const itemSprite = $('vf-menu-item[value="view-sprite"]');
-  const itemTools = $('vf-menu-item[value="view-tools"]');
   const itemGrid = $('vf-menu-item[value="show-grid"]');
   const syncView = () => {
-    const s = shell.get();
-    itemStage.checked = !!s.windows.stage;
-    itemSprite.checked = !!s.windows.sprite;
-    itemTools.checked = !!s.windows.tools;
-    itemGrid.checked = !!s.showGrid;
+    itemGrid.checked = !!shell.get().showGrid;
   };
   teardown.push(shell.subscribe(syncView));
   syncView();

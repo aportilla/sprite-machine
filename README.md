@@ -315,8 +315,8 @@ window the desktop's active window?**
   "the Finder"): `shell/windows.js` routes a press on the bare dither, and
   the icon layer its own presses, through `desktop.clearActive()`. Then
   every document window
-  goes plain, the three windoids **hide** (their View-menu toggles are
-  remembered, not lost), the options strip blanks, the bare-letter tool keys
+  goes plain, the three windoids **hide** (they return with the
+  application), the options strip blanks, the bare-letter tool keys
   go inert, and the menus drop to the **Finder grammar** — About / Settings
   / Quit / New stay enabled, Open… enables when a desktop icon is selected
   (and then opens the selection instead of the listing dialog), everything
@@ -365,10 +365,9 @@ strip's clamp bounds, and the Undo/Redo enablement.
 - **Tools** — the five sticky tool modes — _Pencil_, _Rectangle_, _Fill_,
   _Eraser_, _Eyedropper_ — with the active one checkmarked (the same session
   truth the palette's tool strip and the B/R/G/E/I keys write, so a pick from
-  any of the three moves all three), plus a checkmarked _Tools Palette_
-  toggle for the floating windoid, the reopen path its close box needs.
-- **View** — checkmarked toggles for the _3D View_ and _Sprite View_ windows
-  and _Show Grid_ ⌘G.
+  any of the three moves all three).
+- **View** — _Show Grid_ ⌘G (checkmarked). The windoids need no toggles:
+  they're permanent, up whenever a document window is active.
 
 Key equivalents are the kit's own (`shortcut` on `vf-menu-item`; Ctrl stands
 in for ⌘ off-Mac). ⌘N/⌘W stay unassigned on purpose — the browser owns them
@@ -390,13 +389,13 @@ Two tiers, two regimes:
   exactly as long as the document is open.
 - **Utility windoids** (floating tier, `variant="utility"`): the **Tools
   palette**, the **Full Sprite View**, and the **3D View** — static markup,
-  all open by default (persistent panels, not hunt-for-them popups), each
-  reversible from the menu bar (View for the view windows, Tools → Tools
-  Palette for the palette). They float above every document window, never
+  **permanently open**: persistent panels with no close box and no menu
+  toggle, always on screen for the active document (only the desktop's
+  deactivation hides them). They float above every document window, never
   take the active state (clicking the 3D View can't deactivate the window
-  you're drawing in), show the kit's slim 11px dot bar (no title text — the
-  heading still labels the close box for assistive tech), and hide as a set
-  whenever the application deactivates, their wanted flags intact. The
+  you're drawing in), show the kit's slim 11px dot bar (no title text, no
+  close box — the heading still names the window for assistive tech), and
+  hide as a set whenever the application deactivates, returning with it. The
   sprite and 3D windoids stay `resizable` — the canvases re-fit via their
   own ResizeObservers, so the grow box works for free. The **Full Sprite
   View** (`sm-atlas-view`) draws the whole atlas nearest-neighbor, scaled to
@@ -638,8 +637,8 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
   files.js            the document LIBRARY: listing + availability + per-document storage ops
                       (save/load/rename/remove/export, each taking an explicit doc + identity) —
                       browser deps (storage, PNG codec, icon art) injected
-  shell.js            windoid wanted flags + appActive + icon selection + showGrid (menus, close
-                      boxes, the focus gating and boot restore share one truth)
+  shell.js            appActive + icon selection + showGrid (the menus, the focus gating and the
+                      boot restore share one truth; the windoids are permanent — no flags)
   history.js          bounded undo/redo: tile-gesture + whole-atlas snapshot entries over the doc's
                       restores. A FACTORY — one instance per open document (no singleton)
   derive.js           pure selectors: editorViewModel(doc, face) -> { tile, mirrorBehind, guides, wasDerived }
@@ -651,7 +650,7 @@ src/scene/
                   re-wired per activation) + prefs -> buildVoxels -> mesh swap -> build stats;
                   a window switch re-frames the camera (a new subject)
 src/shell/        the desktop's behavior modules (imperative wiring over the index.html skeleton)
-  windows.js      the two window regimes: windoid visibility (wanted && appActive) <-> hidden, and
+  windows.js      the two window regimes: windoid visibility (appActive <-> hidden; non-closeable), and
                   the document-window reconciler (template clone per context, stagger/restore,
                   title sync, close-box routing); the vf-activate wire into shell.appActive +
                   workspace.activeKey; boot clamp
@@ -708,7 +707,7 @@ takes by injection, so it stays Node-testable). The state mechanism is a
 ~40-line observable store (`createStore`: get / patch / subscribe). The
 app-level slices are `workspace` (the open documents — see below),
 `session` (the editor's brush state), `prefs`, `build`, `files` (the
-document library), and `shell` (windoid wanted flags + appActive + icon
+document library), and `shell` (appActive + icon
 selection + Show Grid); `doc` (the canonical document) and `history`
 (undo/redo) are **factories, instantiated per open document** inside each
 workspace DocContext. Two Lit ReactiveControllers bridge them:

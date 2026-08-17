@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
 // Desktop state in localStorage — tiny, synchronous at boot, exactly what
 // it's good at (the documents themselves live in IndexedDB). One versioned
-// JSON key, v2 for the multi-document world: per-windoid wanted/geometry,
+// JSON key, v2 for the multi-document world: per-windoid geometry (the
+// windoids are permanent — nothing to persist about visibility),
 // per-open-SAVED-document window geometry + edited face (untitled windows
 // are deliberately absent — no autosave, explicit Save is the contract),
 // which document was active, per-icon position, and the Show Grid toggle.
@@ -88,7 +89,6 @@ export function createDesktopState(fresh) {
         for (const id of WINDOW_IDS) {
           const el = windows.byId[id];
           utility[id] = {
-            hidden: !sh.windows[id],
             top: el.top,
             left: el.left,
             width: el.width,
@@ -140,7 +140,7 @@ export function createDesktopState(fresh) {
         timer = setTimeout(write, WRITE_DEBOUNCE_MS);
       };
 
-      // Store changes (visibility, grid, the open set, titles/faces) and
+      // Store changes (grid, the open set, titles/faces) and
       // desktop gestures (window/icon drags and resizes end in a pointerup)
       // both schedule a write; leaving the page flushes one synchronously.
       const unsubs = [

@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 115 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 112 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -18,10 +18,12 @@ browser, `http://localhost:5173/`.
       enables the moment you select a desktop icon (and then opens that
       icon — note the kit currently drops the selection if you _click_ the
       menu bar, so use ⌘O; an open kit ask).
-- [ ] **Reactivation restores the arrangement**: close the Sprite View,
-      drag the Tools palette somewhere odd, click the desktop (all hide),
-      then click the document window — Tools comes back where you put it,
-      the Sprite View stays closed, the checkmarks agree.
+- [ ] **Reactivation restores the arrangement**: drag the Tools palette
+      somewhere odd, click the desktop (all three windoids hide), then click
+      the document window — all three come back, Tools where you put it.
+- [ ] **Windoids are non-closeable**: none of the three windoid bars shows a
+      close box, and no menu item hides them — they're up whenever a
+      document window is active.
 - [ ] **Icon click is a Finder click**: a single click on any icon
       deactivates the app and selects the icon; a double-click opens it and
       the app comes back, windoids included.
@@ -88,7 +90,7 @@ browser, `http://localhost:5173/`.
 ## Desktop state (localStorage)
 
 - [ ] Open two saved documents, drag their windows and an icon, resize the
-      3D View, hide the Sprite View, toggle Show Grid, then reload — both
+      3D View, toggle Show Grid, then reload — both
       documents reopen in their windows (the one that was active is active
       again, each on its edited face), and the layout comes back. An
       untitled document deliberately does NOT survive the reload.

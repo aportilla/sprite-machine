@@ -2,8 +2,9 @@
 // Window plumbing for the desktop shell — two kinds of window, two regimes:
 //
 //   UTILITY WINDOIDS (Tools palette, Full Sprite View, 3D View): static
-//   markup in index.html, visibility = shell-slice wanted flag && appActive
-//   (a desktop click hides the palettes without forgetting which were up).
+//   markup in index.html, permanent chrome — no close box (closable is set
+//   false here) and no menu toggle; visibility = appActive alone (a desktop
+//   click hides the palettes, clicking back into a document returns them).
 //   They hide, never unmount — canvas identity survives.
 //
 //   DOCUMENT WINDOWS: one per open document, reconciled from the workspace
@@ -27,9 +28,9 @@
 // kit adds its own null when the last document window leaves. Boot always
 // comes up active and ?hide=document captures keep their utility windows.
 //
-// Close boxes never hide windows directly: a windoid close routes through
-// the shell slice, a document close through the injected dirty-checking
-// flow (menus.js), and the store subscriptions do the writing.
+// Close boxes never hide windows directly: the windoids have no close box
+// at all, and a document window's close routes through the injected
+// dirty-checking flow (menus.js) — the workspace does the removing.
 // ---------------------------------------------------------------------------
 
 import { snapSys, systemPxQuantum, VfWindow } from 'vintage-frames';
@@ -75,7 +76,9 @@ export function clampWindow(desktop, win) {
  *   clamp; per-fileId document geometry applied as those docs open); hide:
  *   window ids to hide at boot (?hide= dev hook — 'document' hides the
  *   document windows, which stay ACTIVE, so the utility windows survive for
- *   captures that need them alone).
+ *   captures that need them alone; a windoid id keeps that windoid out of
+ *   frame for the whole session — the only way to hide one, there being no
+ *   runtime toggle).
  */
 export function initWindows(desktop, { saved = null, hide = [] } = {}) {
   /** @type {(() => void)[]} */
@@ -86,25 +89,28 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
   const byId = {};
   for (const id of WINDOW_IDS) {
     byId[id] = /** @type {VfWindow} */ (desktop.querySelector(`#win-${id}`));
+    // Non-closeable by design: the windoids are permanent chrome, on screen
+    // whenever the application is. `closable` defaults true and markup can't
+    // express the off state (a boolean attribute), so it's set here.
+    byId[id].closable = false;
     const s = saved?.utility?.[id];
     if (s) {
       if (Number.isFinite(s.left)) byId[id].left = s.left;
       if (Number.isFinite(s.top)) byId[id].top = s.top;
       if (Number.isFinite(s.width) && byId[id].resizable) byId[id].width = s.width;
       if (Number.isFinite(s.height) && byId[id].resizable) byId[id].height = s.height;
-      shell.setWindowVisible(id, !s.hidden);
     }
     clampWindow(desktop, byId[id]);
   }
-  for (const id of hide) if (id !== 'document') shell.setWindowVisible(id, false);
+  const hiddenAtBoot = new Set(hide.filter((id) => id !== 'document'));
   const hideDocs = hide.includes('document');
 
-  // --- utility visibility: store -> hidden -------------------------------------
-  // A windoid belongs to the application, so it is on screen only while the
-  // app is active — the wanted flag survives a deactivation untouched.
+  // --- utility visibility: appActive -> hidden ---------------------------------
+  // A windoid belongs to the application, so it is on screen exactly while
+  // the app is active (?hide= keeps one out of frame for captures).
   const syncUtility = () => {
-    const { windows: wanted, appActive } = shell.get();
-    for (const id of WINDOW_IDS) byId[id].hidden = !(wanted[id] && appActive);
+    const { appActive } = shell.get();
+    for (const id of WINDOW_IDS) byId[id].hidden = !appActive || hiddenAtBoot.has(id);
   };
   unsubs.push(shell.subscribe(syncUtility));
   syncUtility();
@@ -225,9 +231,9 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
 
   // --- close boxes ------------------------------------------------------------
   // A window's close box fires vf-close on the window itself (dialog closes
-  // have a non-window target and pass through). A document window routes
-  // through the dirty-checking flow menus.js injects; a windoid is a plain
-  // wanted-flag toggle.
+  // have a non-window target and pass through). Only document windows carry
+  // one — the windoids are non-closeable — and it routes through the
+  // dirty-checking flow menus.js injects.
   const api = {
     byId,
     /** Injected by menus.js: the dirty-checking close flow, per context key. */
@@ -270,11 +276,6 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
   const onClose = (e) => {
     const t = e.target;
     if (!(t instanceof VfWindow)) return;
-    const id = WINDOW_IDS.find((k) => byId[k] === t);
-    if (id) {
-      shell.setWindowVisible(id, false);
-      return;
-    }
     const key = keyOf(t);
     if (key != null) api.onDocumentClose?.(key);
   };

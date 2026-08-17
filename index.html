@@ -58,13 +58,8 @@
           <vf-menu-item value="tool-fill" shortcut="G">Fill</vf-menu-item>
           <vf-menu-item value="tool-eraser" shortcut="E">Eraser</vf-menu-item>
           <vf-menu-item value="tool-eyedropper" shortcut="I">Eyedropper</vf-menu-item>
-          <vf-separator></vf-separator>
-          <vf-menu-item value="view-tools" checked>Tools Palette</vf-menu-item>
         </vf-menu>
         <vf-menu id="menu-view" label="View">
-          <vf-menu-item value="view-stage" checked>3D View</vf-menu-item>
-          <vf-menu-item value="view-sprite" checked>Sprite View</vf-menu-item>
-          <vf-separator></vf-separator>
           <vf-menu-item value="show-grid" shortcut="⌘G">Show Grid</vf-menu-item>
         </vf-menu>
       </vf-menu-bar>
@@ -75,15 +70,17 @@
       <sm-options-bar></sm-options-bar>
 
       <!-- ==================== The three utility windoids ================ -->
-      <!-- All open by default; closing any is reversible via the View /
-           Tools menus. Positions are authored defaults in system px, clamped
+      <!-- Permanent chrome: always on screen while the application is
+           active — no close box (shell/windows.js sets closable=false;
+           markup can't express a boolean attribute's off state) and no menu
+           toggle. Positions are authored defaults in system px, clamped
            to the live raster at boot (shell/windows.js). All three are
            utility windoids: they float above the document tier, never take
            the active state, and hide with the application when the desktop
-           is clicked (shell/windows.js gates their hidden on
-           wanted && appActive). A windoid bar shows no title text (the
-           kit's 11px bar has no title patch); the heading still labels the
-           close box for assistive tech. DOCUMENT windows are not here: one
+           is clicked (shell/windows.js gates their hidden on appActive
+           alone). A windoid bar shows no title text (the kit's 11px bar
+           has no title patch); the heading still names the window for
+           assistive tech. DOCUMENT windows are not here: one
            exists per open document, cloned from #tpl-document-window by the
            reconciler in shell/windows.js and appended as a direct child of
            the desktop (its stacking manager only sees direct vf-window
