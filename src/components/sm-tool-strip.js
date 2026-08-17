@@ -43,7 +43,10 @@ export class SmToolStrip extends LitElement {
         border: 0;
         background: var(--sm-white);
         color: var(--sm-black);
-        cursor: pointer;
+        /* Reads the kit's cursor token first: applyCursor's blanket can't pierce
+         this shadow root, and a bare \`cursor: pointer\` would put the native hand
+         back alongside the kit's drawn arrow. */
+        cursor: var(--vf-cursor, pointer);
         --mod-icon-size: 18px;
       }
       .editor-toolstrip .editor-tool:active,

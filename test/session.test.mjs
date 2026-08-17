@@ -1,31 +1,28 @@
-// Node-runnable tests for the editor-session slice: the tool/ink/recency
-// semantics that used to live as element methods (#selectColor, #switchTool,
-// #touchRecent, the willUpdate clamps). Run: node --test
+// Node-runnable tests for the editor-session slice: the tool/ink semantics
+// that used to live as element methods (#selectColor, #switchTool, the
+// willUpdate clamps). Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createSession, RECENT_SLOTS } from '../src/state/session.js';
+import { createSession } from '../src/state/session.js';
 import { PENCIL_PALETTE } from '../src/lib/constants.js';
 
 const RED = { r: 255, g: 0, b: 0 };
 const GREEN = { r: 0, g: 255, b: 0 };
-const BLUE = { r: 0, g: 0, b: 255 };
 
-test('boot: pencil active, ink seeded from the palette, recency row empty', () => {
+test('boot: pencil active, ink seeded from the palette', () => {
   const s = createSession();
   const st = s.get();
   assert.equal(st.tool, 'pencil');
   assert.deepEqual(st.ink, PENCIL_PALETTE[0].rgb);
-  assert.deepEqual(st.recent, [], 'the untouched mount default never enters recency');
 });
 
-test('pickColor: copies the ink and promotes to MRU', () => {
+test('pickColor: copies the ink', () => {
   const s = createSession();
   s.pickColor(RED);
   const st = s.get();
   assert.deepEqual(st.ink, RED);
   assert.notEqual(st.ink, RED, 'the ink is a copy, not the caller object');
-  assert.deepEqual(st.recent, [RED], 'slot 0 is the current ink');
 });
 
 test('eyedropper is a sticky tool: a pick leaves it selected', () => {
@@ -36,25 +33,6 @@ test('eyedropper is a sticky tool: a pick leaves it selected', () => {
   assert.equal(s.get().tool, 'eyedropper', 'sampling does not switch tools');
   s.setTool('pencil');
   assert.equal(s.get().tool, 'pencil', 'only an explicit tool pick leaves it');
-});
-
-test('MRU: a second pick pushes the first down; a re-pick promotes, not duplicates', () => {
-  const s = createSession();
-  s.pickColor(RED);
-  s.pickColor(GREEN);
-  assert.deepEqual(s.get().recent, [GREEN, RED]);
-  s.pickColor(RED); // recency re-pick
-  assert.deepEqual(s.get().recent, [RED, GREEN], 'promoted, no duplicate');
-});
-
-test('MRU: the list caps at RECENT_SLOTS + 1 (current + the last-used row)', () => {
-  const s = createSession();
-  const inks = [RED, GREEN, BLUE, { r: 9, g: 9, b: 9 }, { r: 7, g: 7, b: 7 }];
-  for (const c of inks) s.pickColor(c);
-  const recent = s.get().recent;
-  assert.equal(recent.length, RECENT_SLOTS + 1);
-  assert.deepEqual(recent[0], inks[4], 'newest first');
-  assert.deepEqual(recent.at(-1), inks[1], 'oldest surviving pick last');
 });
 
 test('eraserSize is its own setting — independent of pencilSize both ways', () => {

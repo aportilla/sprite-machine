@@ -64,9 +64,11 @@
         </vf-menu>
       </vf-menu-bar>
 
-      <!-- The options strip: the active tool's name + its options, a fixed
+      <!-- The options strip: the active tool's name, the current-ink swatch
+           (every tool but the eraser), and the tool's options — a fixed
            full-width band under the menu bar (persistent in-flow controls,
-           not a window). -->
+           not a window), drawn as the kit's .vf-panel so its edge scales
+           with the raster. -->
       <sm-options-bar></sm-options-bar>
 
       <!-- ==================== The three utility windoids ================ -->
@@ -118,15 +120,17 @@
       </vf-window>
 
       <!-- The floating Tools palette: utility tier — floats above the
-           document windows and never deactivates them. -->
+           document windows and never deactivates them. Sized to hug the tool
+           strip: 5×(28+1)+1 grid + 8/6px panel padding + the windoid chrome
+           (1px borders, 12px bar). -->
       <vf-window
         id="win-tools"
         variant="utility"
         heading="Tools"
         movable
         flush
-        width="64"
-        height="240"
+        width="44"
+        height="176"
         top="64"
         left="14"
       >
@@ -243,6 +247,13 @@
         </vf-stack>
         <vf-button id="btn-storage-ok" slot="buttons" variant="default">OK</vf-button>
       </vf-dialog>
+
+      <!-- The Colors dialog (the 256-color picker): connected chrome driven by
+           session.pickerOpen, rendered into its LIGHT DOM on purpose — the
+           kit's page-drawn cursor stays above a modal only when it can observe
+           the vf-dialog's `open` attribute flip, and its observer sees the
+           light DOM alone (a shadow-rooted dialog opens above the cursor). -->
+      <sm-color-picker></sm-color-picker>
     </vf-desktop>
 
     <!-- ================== The document-window template ================== -->

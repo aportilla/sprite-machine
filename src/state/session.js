@@ -1,14 +1,13 @@
 // ---------------------------------------------------------------------------
 // `session` slice — the shared editor UI state that used to trap six UI regions
-// inside one element: the active tool and ink, the MRU color recency, the
-// per-tool options, and the picker dialog's open flag. APP-LEVEL by design
-// (System 7: one palette, one ink, however many documents are open); the
-// per-window half — which face a document window is editing — lives on its
-// workspace context, not here.
+// inside one element: the active tool and ink, the per-tool options, and the
+// picker dialog's open flag. APP-LEVEL by design (System 7: one palette, one
+// ink, however many documents are open); the per-window half — which face a
+// document window is editing — lives on its workspace context, not here.
 //
 // Every action is a named, Node-tested function carrying the exact semantics of
-// the old element methods (`#selectColor`, `#switchTool`, `#touchRecent`, the
-// willUpdate clamps). Pure JS, zero deps beyond the palette it seeds from.
+// the old element methods (`#selectColor`, `#switchTool`, the willUpdate
+// clamps). Pure JS, zero deps beyond the palette it seeds from.
 //
 // Clamp BOUNDS are the caller's job (they derive from the doc's tile geometry,
 // which this slice deliberately doesn't know); the clamping itself lives here so
@@ -17,11 +16,6 @@
 
 import { createStore } from './store.js';
 import { PENCIL_PALETTE } from '../lib/constants.js';
-import { rgbKey } from '../lib/color.js';
-
-// How many "last used" colors show under the current swatch (recency slot 0 is
-// the current ink itself, so the list holds one extra).
-export const RECENT_SLOTS = 3;
 
 const clampBrush = (n, max) => Math.max(1, Math.min(max, Math.round(Number(n) || 1)));
 const clampRadius = (n, max) => Math.max(0, Math.min(max, Math.round(Number(n) || 0)));
@@ -32,12 +26,8 @@ export function createSession() {
     // The eraser is a formal tool mode (a pencil that writes transparency),
     // not an ink: the ink below is always a solid color.
     tool: 'pencil',
-    // The active color. Seeded from the pencil palette so it is never null —
-    // but NOT entered into `recent`: the untouched mount default never joins
-    // the recency row.
+    // The active color. Seeded from the pencil palette so it is never null.
     ink: { ...PENCIL_PALETTE[0].rgb },
-    /** @type {{r:number,g:number,b:number}[]} MRU inks, current at [0] */
-    recent: [],
     pencilSize: 1, // the pencil's N×N tip footprint, in texels
     // The eraser's N×N tip footprint — its OWN setting, deliberately
     // independent of the pencil's (not a DRY slip: the two may diverge).
@@ -61,20 +51,14 @@ export function createSession() {
       store.patch({ tool });
     },
 
-    // The single path every color pick funnels through (picker dialog, in-sprite
-    // eyedrop, recency swatch): make `color` the ink and promote it to the top
-    // of the recency list. Picking a color while the ERASER is held means "paint
-    // with this" — it returns to the pencil; any other tool is untouched, so an
-    // eyedrop leaves the eyedropper selected (sticky modality).
+    // The single path every color pick funnels through (picker dialog,
+    // in-sprite eyedrop): make `color` the ink. Picking a color while the
+    // ERASER is held means "paint with this" — it returns to the pencil; any
+    // other tool is untouched, so an eyedrop leaves the eyedropper selected
+    // (sticky modality).
     /** @param {{r:number,g:number,b:number}} color */
     pickColor(color) {
-      const ink = { r: color.r, g: color.g, b: color.b };
-      const key = rgbKey(ink);
-      const recent = [ink, ...store.get().recent.filter((x) => rgbKey(x) !== key)].slice(
-        0,
-        RECENT_SLOTS + 1
-      );
-      const patch = { ink, recent };
+      const patch = { ink: { r: color.r, g: color.g, b: color.b } };
       if (store.get().tool === 'eraser') patch.tool = 'pencil';
       store.patch(patch);
     },

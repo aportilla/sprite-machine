@@ -94,11 +94,15 @@ export class SmDrawCanvas extends LitElement {
       }
       /* Only the pixel canvas takes pointer events (default auto); the others pass
        clicks through to it. The kit's page-drawn cursor claims the crosshair via
-       the template's data-vf-cursor; the CSS cursor is the fallback for any boot
-       state where applyCursor hasn't taken over yet. */
+       the template's data-vf-cursor — and this declaration must read the kit's
+       --vf-cursor token first (the \`* { cursor: none }\` blanket applyCursor
+       installs can't pierce a shadow root, and a bare \`cursor: crosshair\` here
+       out-cascades the inherited none, so BOTH crosshairs would show). The native
+       crosshair is only the fallback for any boot state where applyCursor hasn't
+       taken over yet. */
       .editor-canvas {
         z-index: 1;
-        cursor: crosshair;
+        cursor: var(--vf-cursor, crosshair);
         touch-action: none;
       }
       /* Faded onion-skin (drawn) over a checkerboard (CSS), UNDER the transparent

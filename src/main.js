@@ -35,6 +35,7 @@ import { initMenus } from './shell/menus.js';
 import { initIcons } from './shell/icons.js';
 import { createDesktopState } from './shell/desktop-state.js';
 import './components/sm-editor.js'; // registers <sm-editor>
+import './components/sm-color-picker.js'; // registers <sm-color-picker>
 import './components/sm-options-bar.js'; // registers <sm-options-bar>
 import './components/sm-tools-panel.js'; // registers <sm-tools-panel>
 import './components/sm-atlas-view.js'; // registers <sm-atlas-view>

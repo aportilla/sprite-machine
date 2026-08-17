@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 112 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 116 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -70,6 +70,11 @@ browser, `http://localhost:5173/`.
 - [ ] **Show Grid** (⌘G): texel lattice appears at canvas scales ≥ 4; shrink
       the document window until the scale drops below 4 — the lattice
       disappears rather than swamping the art.
+- [ ] **One cursor, everywhere**: over the pixel canvas only the kit's drawn
+      crosshair shows (no native crosshair beneath it), and the tool cells
+      show only the kit's arrow (no native hand). Open the Colors dialog
+      (⌘K or the ink swatch) — the drawn arrow stays visible over the
+      dialog and its swatches, not swallowed by the modal.
 
 ## File flows
 

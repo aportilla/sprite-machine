@@ -6,8 +6,9 @@
 // it lives until the document closes — a hide (or the desktop's DOM
 // re-orders) never unmounts it, so canvas identity and focus behavior
 // survive. What it holds: the FACE PICKER row over the black-framed artwork
-// well holding <sm-draw-canvas>, plus the 256-color Colors dialog
-// (top-layer, so living in this template can't clip).
+// well holding <sm-draw-canvas>. (The 256-color Colors dialog is app-level
+// chrome now — <sm-color-picker> in index.html's dialog set, light-DOM so
+// the kit's cursor can stack above its modal.)
 //
 // Store wiring (the editor's share of it): StoreControllers re-render on any
 // session (brush state), shell (Show Grid), or workspace (face, activation)
@@ -24,14 +25,12 @@
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { maxCornerRadius } from '../lib/rect.js';
-import { PALETTE_256 } from '../lib/constants.js';
 import { session } from '../state/session.js';
 import { shell } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
 import { editorViewModel } from '../state/derive.js';
 import { StoreController } from '../state/store-controller.js';
 import './sm-face-picker.js'; // registers <sm-face-picker>
-import './sm-color-picker.js'; // registers <sm-color-picker>
 import './sm-draw-canvas.js'; // registers <sm-draw-canvas>
 import { baseStyles } from './base-styles.js';
 
@@ -91,11 +90,10 @@ export class SmEditor extends LitElement {
     super();
     /** @type {import('../state/workspace.js').DocContext|null} */
     this.ctx = null;
-    this.palette256 = PALETTE_256;
 
     // Any session action (brush state), shell toggle (Show Grid), or
-    // workspace change (this window's face, the activation state the Colors
-    // dialog gates on) re-renders; live strokes are silent on all by design.
+    // workspace change (this window's face, the activation state the tool
+    // clamp gates on) re-renders; live strokes are silent on all by design.
     new StoreController(this, session.store);
     new StoreController(this, shell.store);
     new StoreController(this, workspace.store);
@@ -216,15 +214,6 @@ export class SmEditor extends LitElement {
             @sm-replace-all-tiles=${this.#onReplaceAllTiles}
           ></sm-draw-canvas>
         </div>
-        <sm-color-picker
-          .palette=${this.palette256}
-          .open=${s.pickerOpen && this.#isActive}
-          @sm-pick-color=${(e) => {
-            session.pickColor(e.detail.rgb);
-            session.closePicker();
-          }}
-          @sm-close=${() => session.closePicker()}
-        ></sm-color-picker>
       </div>
     `;
   }

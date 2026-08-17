@@ -1,29 +1,30 @@
 // ---------------------------------------------------------------------------
-// <sm-tools-panel> — the floating Tools palette's body: the tool strip over
-// the color wells, the same two leaves the editor rail used to hold, now in a
-// `vf-window variant="utility"`. A CONNECTED chrome component: session drives
-// the leaves' props, and their events become session actions — the exact
-// wiring the old <sm-editor> rail carried, relocated with it.
+// <sm-tools-panel> — the floating Tools palette's body: the tool strip alone
+// (the current-ink swatch lives in the options strip now, and the "last used"
+// recency row is gone — the Colors dialog badges the document's used colors
+// instead). A CONNECTED chrome component: session drives the strip's props,
+// and its events become session actions.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
-import { session, RECENT_SLOTS } from '../state/session.js';
+import { session } from '../state/session.js';
 import { StoreController } from '../state/store-controller.js';
 import { baseStyles } from './base-styles.js';
 import './sm-tool-strip.js'; // registers <sm-tool-strip>
-import './sm-color-wells.js'; // registers <sm-color-wells>
 
 export class SmToolsPanel extends LitElement {
   static styles = [
     baseStyles,
     css`
+      /* Kit-scaled metrics: the windoid's declared box is system px, so the
+       padding must ride the same --vf-scale or the panel misfits at any
+       display scale other than 1. */
       :host {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 14px;
-        padding: 8px 6px;
+        padding: calc(var(--vf-scale, 1) * 8px) calc(var(--vf-scale, 1) * 6px);
       }
     `,
   ];
@@ -34,18 +35,11 @@ export class SmToolsPanel extends LitElement {
   }
 
   render() {
-    const s = session.get();
     return html`
       <sm-tool-strip
-        .tool=${s.tool}
+        .tool=${session.get().tool}
         @sm-pick-tool=${(e) => session.setTool(e.detail.tool)}
       ></sm-tool-strip>
-      <sm-color-wells
-        .ink=${s.ink}
-        .recent=${s.recent.slice(1, RECENT_SLOTS + 1)}
-        @sm-pick-color=${(e) => session.pickColor(e.detail.rgb)}
-        @sm-open-picker=${() => session.openPicker()}
-      ></sm-color-wells>
     `;
   }
 }

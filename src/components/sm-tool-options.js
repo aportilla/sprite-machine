@@ -28,16 +28,18 @@ export class SmToolOptions extends LitElement {
   static styles = [
     baseStyles,
     css`
+      /* Kit-scaled metrics: the strip band is drawn in system px (the kit's
+       vfPanel recipe), so the lengths in it ride the same --vf-scale. */
       :host {
         flex: 1;
         min-width: 0;
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: calc(var(--vf-scale, 1) * 12px);
       }
       .editor-size-slider {
         flex: 1;
-        max-width: 260px;
+        max-width: calc(var(--vf-scale, 1) * 260px);
       }
     `,
   ];

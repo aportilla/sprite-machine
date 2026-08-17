@@ -118,8 +118,10 @@ template — see [UI layer: Lit](#ui-layer-lit).
   **eyedropper `I`**; the selected cell inverts) — each an icon from the
   open-source **Adobe Spectrum _workflow_** set (`draw` / `rectangle` /
   `color-fill` / `erase` / `sampler`) in a `vf-grid` lattice. The **options
-  strip** (the white band under the menu bar) names the active tool and holds
-  its options. For the **pencil**, a **tip-size slider** (with an
+  strip** (a kit-drawn panel band under the menu bar — the kit's exported
+  `vfPanel` recipe, so its black edge and every metric in it scale with the
+  raster) names the active tool and holds the **current-ink swatch** plus the
+  tool's options. For the **pencil**, a **tip-size slider** (with an
   `N px` readout) that stamps an
   **N×N** square footprint and **previews it filled with the active ink** on the
   canvas as you hover — the exact texels a stamp will cover, looking exactly as
@@ -159,12 +161,14 @@ template — see [UI layer: Lit](#ui-layer-lit).
   color while the eraser is held returns to the pencil** — a pick means "paint
   with this". A **right-click** is the _momentary_ erase with any tool (the
   right-drag rect is the rectangular erase; a right-click fill deletes a
-  region); the eraser cell is the _sticky_ one. Below the tool strip sit the
-  **color wells**: the **current-ink swatch** (a `vf-swatch` showing the active
-  ink that, **clicked**, opens the **"Colors" dialog** over the **full 256-color
-  palette**) and the **last three used colors** under it (a most-recently-used
-  row — every pick, eyedrop, or recency re-pick promotes its color; clicking one
-  re-inks instantly). The
+  region); the eraser cell is the _sticky_ one. The **current-ink swatch**
+  lives in the **options strip** (a lone `vf-swatch` well wearing the kit's
+  hard shadow), shown for **every tool but the eraser** — the one mode that
+  paints no color — and, **clicked**, it opens the **"Colors" dialog** over
+  the **full 256-color palette**. There is no "recent colors" row: instead
+  the dialog **badges every color used in the active document** with a little
+  **white corner tag** (a black-seamed dog-ear on the cell's top-right
+  corner), rescanned from the live per-face views each time it opens. The
   **eyedropper** (`I`) is a sticky mode exactly like its siblings: it stays
   selected, and every canvas click samples the clicked texel — a painted texel's
   color becomes the **ink**, and **empty space hands you the eraser** (sampling
@@ -337,7 +341,7 @@ question lives entirely on the close paths. Opening an already-open stored
 document just activates its existing window. Untitled names count up
 (`untitled`, `untitled 2`, …). Each document window carries its own
 editor, its own edited-face selection, and its own bounded undo history;
-the tool, ink, and recency stay app-level (one palette, one ink, System 7
+the tool and ink stay app-level (one palette, one ink, System 7
 style). The utility windoids and the Edit menu always serve the **active**
 document: switching windows re-targets the 3D View (the camera re-frames —
 a window switch is a new subject), the Full Sprite View, the options
@@ -360,8 +364,8 @@ strip's clamp bounds, and the Undo/Redo enablement.
   all of the active document).
 - **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (the ACTIVE document's history;
   disabled until it has something — which also hands the key back to a
-  focused field's native undo), _Pick Color…_ ⌘K (the 256-color dialog, in
-  the active window).
+  focused field's native undo), _Pick Color…_ ⌘K (the 256-color dialog —
+  app-level, like the ink it picks).
 - **Tools** — the five sticky tool modes — _Pencil_, _Rectangle_, _Fill_,
   _Eraser_, _Eyedropper_ — with the active one checkmarked (the same session
   truth the palette's tool strip and the B/R/G/E/I keys write, so a pick from
@@ -567,7 +571,7 @@ passthrough).
 
 The **app-state layer** (`src/state/`) is pure JS with the same treatment:
 `test/store.test.mjs` (the observable store: by-reference values, silent no-op
-patches), `test/session.test.mjs` (tool/ink semantics, MRU recency promotion,
+patches), `test/session.test.mjs` (tool/ink semantics,
 clamp-on-resize), `test/doc.test.mjs` (the two-channel canonical document: silent
 stroke writes, rAF-coalesced blit-then-notify via an injectable scheduler, the
 drain-before-consume guard, blank-revert, the sheet generation), `test/derive.test.mjs`
@@ -632,7 +636,7 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
                       activeKey (the kit's vf-activate mirrored in), untitled naming, per-context
                       dirty tracking, the stored flows (openStored/save/duplicate/rename/export),
                       and followActive() — the follow-the-active-document primitive
-  session.js          editor session (app-level): tool, ink, MRU recency, per-tool options, picker
+  session.js          editor session (app-level): tool, ink, per-tool options, picker
                       flag — one palette, one ink, however many documents are open
   prefs.js            lowpoly / autoRotate (the render toggles; Settings… writes them)
   build.js            dims / voxels / tris / warnings / error — written by the rebuilder, read by the status line
@@ -674,9 +678,10 @@ src/
   drop-target.js  whole-app drag & drop + overlay -> loaders -> the new window surfaces
   shortcuts.js    document-level B/R/G/I/E -> session actions, gated on appActive (menu key
                   equivalents are the kit's; Esc/Shift are gesture-scoped and live in the canvas)
-  components/     all Lit, standard SHADOW DOM (mostly `:host { display: contents }`) — see "UI layer" below
+  components/     all Lit, standard SHADOW DOM (mostly `:host { display: contents }`; the one
+                  exception is sm-color-picker — light DOM, see its entry) — see "UI layer" below
     sm-editor.js       CONNECTED container: a document window's body, one per open document — face
-                       picker + artwork well + Colors dialog over ITS DocContext (`ctx`, assigned by
+                       picker + artwork well over ITS DocContext (`ctx`, assigned by
                        the reconciler pre-append); memoizes the per-face view model (face /
                        views-identity / geometry), feeds canvas gesture commits to ITS history
     sm-draw-canvas.js  leaf: the pixel-canvas subsystem — working buffer (+ImageData view, by reference),
@@ -684,13 +689,18 @@ src/
                        per-gesture undo capture (sm-commit)
     draw-overlays.js   pure canvas painters for the guide hairlines / texel grid / hover footprint /
                        rect drag preview
-    sm-face-picker.js, sm-tool-strip.js, sm-color-wells.js, sm-tool-options.js, sm-color-picker.js
+    sm-face-picker.js, sm-tool-strip.js, sm-tool-options.js
                        presentational leaves: props down, bubbling sm-* events up, no store imports
-    sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-status-line.js
-                       connected chrome: the options strip (blank while the desktop is focused;
+    sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-status-line.js, sm-color-picker.js
+                       connected chrome: the options strip (a kit vfPanel band: tool name +
+                       current-ink swatch + options; blank while the desktop is focused;
                        bounds from the active document) / the Tools palette body / the live
                        full-atlas view (follows the active document) / the windows' status
-                       readouts (tile = per-window ctx; atlas = active doc; build = build slice)
+                       readouts (tile = per-window ctx; atlas = active doc; build = build slice) /
+                       the app-level Colors dialog (in index.html's dialog set, rendered into its
+                       LIGHT DOM on purpose: the kit's page-drawn cursor stays above a modal only
+                       when it can observe the vf-dialog's `open` flip, and its observer sees the
+                       light DOM alone — a shadow-rooted dialog would open above the cursor)
     ui-bits.js         shared caption + warning-row template helpers (+ the warn row's styles,
                        a css export its consumers compose into their own `static styles`)
     base-styles.js     the shared border-box reset every component composes first (box-sizing
@@ -724,7 +734,16 @@ up, no store imports — so store coupling stays visible and greppable. Every
 component is a **standard shadow-DOM Lit element**: its
 styles live with it as ``static styles = css`…` ``, scoped to its own root and
 composed over a shared `baseStyles` (`components/base-styles.js` — the
-border-box reset, which does not inherit across shadow boundaries). Hosts that
+border-box reset, which does not inherit across shadow boundaries). The one
+deliberate exception is `<sm-color-picker>`, which renders into its **light
+DOM**: the kit's page-drawn cursor keeps itself above a modal by re-promoting
+its top-layer popover when it observes a `vf-dialog`'s `open` attribute flip,
+and its MutationObserver watches the light DOM only — a shadow-rooted dialog
+opens above the cursor art. The same token discipline applies inside shadow
+roots that state a cursor of their own (the canvas's crosshair, the tool
+cells): `applyCursor()`'s `* { cursor: none }` blanket can't pierce a shadow
+root, so those declarations read `var(--vf-cursor, …)` first, exactly like
+the kit's own chrome. Hosts that
 are pure containers dissolve with `:host { display: contents }`, so the
 flattened box tree is exactly what the classed markup lays out;
 `<sm-tool-options>` and `<sm-options-bar>` carry real boxes (they ARE the
@@ -732,7 +751,8 @@ options area and its strip). Leaf events are dispatched on the host element
 itself — the host lives in the parent's tree, so they reach the container
 without `composed`. `style.css` keeps only the page's share: the palette
 tokens (custom properties inherit into every shadow tree), the reset, the
-black ground behind the desktop bezel, the 3D viewport's fill rules, and the
+black ground behind the desktop bezel, the light-DOM Colors-dialog host's
+display, the 3D viewport's fill rules, and the
 drop overlay `drop-target.js` renders into the page. The `.warn` row's styles
 live with its template as ui-bits' `warnStyles` export, composed by whoever
 renders `warnRow()`. One consequence for tooling: `tools/capture.sh dom`

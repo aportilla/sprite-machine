@@ -36,7 +36,7 @@
 // TWO TRAPS, learned the hard way — read before adding checks:
 //   1. Headless Chrome intermittently RELOADS the page mid-run under synthesized
 //      input (it does so on any build; it is not app behaviour). A reload wipes
-//      tool / ink / recency, which reads as a pile of false failures. Every probe
+//      tool / ink state, which reads as a pile of false failures. Every probe
 //      re-checks a `window.__stamp` and reports the reload, and each section that
 //      asserts carried state starts from a deliberate fresh load.
 //   2. Erasing part of FRONT does NOT lower the voxel count — opposite views are
@@ -329,11 +329,11 @@ const PROBE = `(() => {${DEEP}
   for (const m of buildLine.matchAll(/(grid|voxels|tris) ([^·]+)/g)) {
     stats[m[1]] = m[2].trim();
   }
-  // The Colors dialog lives in <sm-color-picker>'s shadow root — the desktop's
-  // own dialogs (About, Open, …) are separate light-DOM vf-dialogs.
+  // The Colors dialog is light-DOM chrome like the desktop's own dialogs
+  // (About, Open, …): the kit's cursor observer must see its \`open\` flip
+  // to keep the page-drawn cursor above the modal.
   const picker = __q('sm-color-picker');
-  const colorsDialog =
-    picker && picker.shadowRoot ? picker.shadowRoot.querySelector('vf-dialog') : null;
+  const colorsDialog = picker ? picker.querySelector('vf-dialog') : null;
   return {
     // All five tools are mutually exclusive sticky modes — exactly one cell is
     // lit. The eyedropper is listed LAST so a drawing-tool cell wrongly left
@@ -341,8 +341,10 @@ const PROBE = `(() => {${DEEP}
     drawTool:
       ['pencil', 'rectangle', 'fill', 'eraser', 'eyedropper'].find((t) => tools[t]) ||
       null,
+    // The current-ink swatch lives in the options strip and hides for the
+    // eraser (the one tool that paints no color) — inkColor reads null then.
+    inkSwatchShown: !!sw,
     inkColor: sw ? sw.getAttribute('color') : null,
-    recent: __qa('.editor-recent vf-swatch').map((s) => s.getAttribute('color')),
     // The options strip IS <sm-tool-options>; its shadow root holds the bare
     // controls. Null-safe: the strip renders EMPTY while the app is
     // deactivated (desktop focus), so the element may not exist at probe time.
@@ -369,6 +371,15 @@ const PROBE = `(() => {${DEEP}
     anyModalOpen: !!__q('vf-dialog[open]') || !!(colorsDialog && colorsDialog.open),
     // The kit's page-drawn cursor claims the crosshair over the pixel canvas.
     cursorClaim: canvas ? canvas.getAttribute('data-vf-cursor') : null,
+    // Computed cursors: applyCursor's takeover reaches into the shadow roots
+    // only via the --vf-cursor token, so a bare shadow \`cursor:\` declaration
+    // would put a native cursor back alongside the kit's drawn one.
+    nativeCursor: canvas ? getComputedStyle(canvas).cursor : null,
+    toolCursor: (() => {
+      const cell = __q('.editor-tool');
+      return cell ? getComputedStyle(cell).cursor : null;
+    })(),
+    colorsDialogLightDom: !!(colorsDialog && colorsDialog.getRootNode() === document),
     rect: { left: r.left, top: r.top, width: r.width, height: r.height },
     tileW: canvas ? canvas.width : 0,
     buildLine,
@@ -574,12 +585,29 @@ async function main() {
     await sleep(650);
   }
 
+  // The kit's drawn cursor takes over asynchronously (after its art decodes);
+  // wait for the takeover so the computed-cursor checks below can't race it.
+  for (let i = 0; i < 20 && s.nativeCursor !== 'none'; i++) {
+    await sleep(100);
+    s = await probe();
+  }
+
   section(`boot — face=${s.face} tile=${TILE}px`);
   check('boots with the pencil active', s.drawTool === 'pencil', s.drawTool);
   check(
     'the pixel canvas claims the kit crosshair cursor',
     s.cursorClaim === 'crosshair',
     s.cursorClaim
+  );
+  check(
+    'the native cursor is hidden over the canvas (kit crosshair only)',
+    s.nativeCursor === 'none',
+    s.nativeCursor
+  );
+  check(
+    'the native cursor is hidden over the tool cells',
+    s.toolCursor === 'none',
+    s.toolCursor
   );
   check(
     'the options strip shows the pencil slider',
@@ -646,6 +674,11 @@ async function main() {
     s.opts.length === 0,
     s.opts.join(',')
   );
+  check(
+    'the eyedropper still shows the ink swatch',
+    s.inkSwatchShown && /^#[0-9a-f]{6}$/.test(s.inkColor || ''),
+    s.inkColor
+  );
 
   await keyPress('e');
   s = await probe();
@@ -655,11 +688,7 @@ async function main() {
     s.opts.join(',') === 'vf-slider,vf-label',
     s.opts.join(',')
   );
-  check(
-    'the eraser leaves the ink swatch solid',
-    /^#[0-9a-f]{6}$/.test(s.inkColor || ''),
-    s.inkColor
-  );
+  check('the eraser hides the ink swatch', s.inkSwatchShown === false, s.inkColor);
 
   // The eraser's tip size is its OWN persisted setting: click mid-track to
   // drive its slider, flip back to the pencil, and the pencil's size must be
@@ -695,7 +724,7 @@ async function main() {
     `start=${strokeStart} end=${strokeEnd}`
   );
 
-  // --- eyedropper + recency -------------------------------------------------
+  // --- eyedropper -----------------------------------------------------------
   section('eyedropper');
   const inkAtBoot = (await probe()).inkColor;
   await click(at(20, 26).x, at(20, 26).y, { modifiers: ALT });
@@ -706,11 +735,10 @@ async function main() {
     s.inkColor !== inkAtBoot && /^#[0-9a-f]{6}$/.test(s.inkColor || ''),
     `${inkAtBoot} → ${s.inkColor}`
   );
-  // Recency slot 0 IS the current ink (the big swatch shows it), so the
-  // "last used" row only fills from the second pick on.
   const firstInk = s.inkColor;
-  check('one pick leaves the last-used row empty', s.recent.length === 0);
 
+  // A second sample of a DIFFERENT color, so the sticky-tool check below has
+  // a real ink change to observe when it re-samples the first texel.
   let secondInk = null;
   for (const [px, py] of [
     [20, 20],
@@ -728,9 +756,9 @@ async function main() {
   }
   s = await probe();
   check(
-    'a second pick pushes the first into the last-used row',
-    s.inkColor === secondInk && s.recent.length === 1 && s.recent[0] === firstInk,
-    `ink=${s.inkColor}/${secondInk} row=${JSON.stringify(s.recent)}`
+    'a second pick replaces the ink',
+    s.inkColor === secondInk,
+    `ink=${s.inkColor}/${secondInk}`
   );
 
   // The eyedropper TOOL (vs the momentary Alt-hold above) is sticky: a plain
@@ -799,7 +827,6 @@ async function main() {
   await sleep(150);
   await keyPress('g'); // fill tool, so we can watch it survive
   s = await probe();
-  const rowBeforeSwap = s.recent.length;
   const inkBeforeSwap = s.inkColor;
   const topRadio = await centreOf('vf-radio[value="top"]');
   await click(topRadio.x, topRadio.y);
@@ -809,11 +836,6 @@ async function main() {
   check('the selected-face dither follows', s.checkedRadio === 'top', s.checkedRadio);
   check('the tool survives the face swap', s.drawTool === 'fill', s.drawTool);
   check('the ink survives the face swap', s.inkColor === inkBeforeSwap);
-  check(
-    'the last-used row survives the face swap',
-    rowBeforeSwap >= 1 && s.recent.length === rowBeforeSwap,
-    `${rowBeforeSwap} → ${s.recent.length}`
-  );
 
   // --- Properties: the relocated tile stepper --------------------------------
   // The tile-size field lives in File → Properties now; the whole flow runs
@@ -883,7 +905,7 @@ async function main() {
   await click(inkSwatch.x, inkSwatch.y);
   await sleep(400);
   await evaluate(
-    `(() => {${DEEP} __q('sm-color-picker').shadowRoot.querySelector('vf-dialog').close(); })()`
+    `(() => {${DEEP} __q('sm-color-picker').querySelector('vf-dialog').close(); })()`
   );
   await sleep(300);
   for (const face of ['top', 'back', 'left']) {
@@ -895,7 +917,7 @@ async function main() {
   const counts = await evaluate(
     `(() => {${DEEP}
       return { editors: __qa('sm-editor').length,
-        dialogs: __q('sm-color-picker').shadowRoot.querySelectorAll('vf-dialog').length,
+        dialogs: __q('sm-color-picker').querySelectorAll('vf-dialog').length,
         cells: __qa('.editor-picker-grid vf-swatch').length,
         canvases: __qa('.editor-canvas').length }; })()`
   );
@@ -964,20 +986,23 @@ async function main() {
   // after this one starts from a deliberate fresh load.
   section('palette');
   await freshPage();
-  s = await probe();
-  // Eyedrop first, so the dialog pick has a predecessor to demote into the row.
-  await click(at(20, 26).x, at(20, 26).y, { modifiers: ALT });
-  await sleep(200);
-  const inkBeforePalette = (await probe()).inkColor;
   const swatch = await centreOf('.editor-selected');
   await click(swatch.x, swatch.y);
   await sleep(400);
   s = await probe();
   check('clicking the ink swatch opens the Colors dialog', s.colorsOpen === true);
+  check(
+    'the Colors dialog lives in the light DOM (the kit cursor stacks above it)',
+    s.colorsDialogLightDom === true
+  );
+  // Pick a cell the document does NOT use yet (no used-in-document corner tag
+  // on this open) — after drawing with it, reopening must badge exactly it.
   const cell = await evaluate(
     `(() => {${DEEP} const cells = __qa('.editor-picker-grid vf-swatch');
-      const c = cells[70]; const r = c.getBoundingClientRect();
-      return { count: cells.length, x: r.left + r.width / 2, y: r.top + r.height / 2,
+      const tag = (c) => !!c.closest('.picker-cell').querySelector('.picker-used-tag');
+      const c = cells.find((x) => !tag(x)); const r = c.getBoundingClientRect();
+      return { count: cells.length, tagged: cells.filter(tag).length,
+               x: r.left + r.width / 2, y: r.top + r.height / 2,
                color: c.getAttribute('color') }; })()`
   );
   check(
@@ -990,11 +1015,35 @@ async function main() {
   s = await probe();
   check('picking a swatch closes the dialog', s.colorsOpen === false);
   check('picking a swatch becomes the ink', s.inkColor === cell.color, `${s.inkColor}`);
-  check(
-    'the previous ink drops into the last-used row',
-    s.recent[0] === inkBeforePalette,
-    `${JSON.stringify(s.recent)} vs ${inkBeforePalette}`
+  // Paint one EMPTY texel with the picked ink (adds a used color, deletes
+  // none), reopen: the corner tag must appear on that exact cell, alongside
+  // every tag the document already wore.
+  await keyPress('b');
+  await click(at(1, 1).x, at(1, 1).y);
+  await sleep(300);
+  await keyPress('k', META);
+  await sleep(400);
+  s = await probe();
+  check('⌘K reopens the Colors dialog', s.colorsOpen === true);
+  const badged = await evaluate(
+    `(() => {${DEEP} const cells = __qa('.editor-picker-grid vf-swatch');
+      const tag = (c) => !!c.closest('.picker-cell').querySelector('.picker-used-tag');
+      return { picked: tag(cells.find((c) => c.getAttribute('color') === '${cell.color}')),
+               tagged: cells.filter(tag).length }; })()`
   );
+  check(
+    'drawing with the picked color badges its cell as used in the document',
+    badged.picked === true
+  );
+  check(
+    "…without disturbing the document's existing badges",
+    badged.tagged === cell.tagged + 1,
+    `${cell.tagged} → ${badged.tagged}`
+  );
+  await evaluate(
+    `(() => {${DEEP} __q('sm-color-picker').querySelector('vf-dialog').close(); })()`
+  );
+  await sleep(300);
 
   // --- desktop: the View menu + the permanent windoids -------------------------
   section('view menu');

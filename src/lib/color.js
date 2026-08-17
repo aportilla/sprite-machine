@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Small shared color helpers (pure — no DOM, no THREE). The editor palette build
-// (constants.js), the editor's live "in sprite" palette (editor.js), and main.js's
-// cross-face used-color scan all funnel through these so the parse/key/scan logic
+// (constants.js) and the Colors dialog's used-in-document badge scan
+// (sm-color-picker.js) funnel through these so the parse/key/scan logic
 // lives in exactly one place.
 //
 // NOTE: rgbKey is a 24-bit BIG-endian RGB key (0xRRGGBB) for Set/Map dedup of

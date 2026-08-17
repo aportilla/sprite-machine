@@ -37,10 +37,11 @@ import { snapSys, systemPxQuantum, VfWindow } from 'vintage-frames';
 import { shell, WINDOW_IDS } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
 
-// The raster band reserved above windows: the 20px menu bar plus the 28px
-// options strip — a window clamped below it always keeps its title bar
-// grabbable.
-const TOP_RESERVE = 48;
+// The raster band reserved above windows: the 20px menu bar plus the options
+// strip's kit panel (a 37px band whose top border rides the bar's bottom
+// rule, so its box bottoms out at 20 − 1 + 37 = 56) — a window clamped below
+// it always keeps its title bar grabbable.
+const TOP_RESERVE = 56;
 
 // A new document window's authored default box, staggered System 7 style:
 // each additional open document offsets down-right by one step.
