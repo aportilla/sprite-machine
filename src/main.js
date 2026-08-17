@@ -84,24 +84,25 @@ const bootHooks =
 // --- the desktop raster + cursor -------------------------------------------
 // The page owns the viewport: measure it, let fitWithin() derive the largest
 // whole raster that fits, re-derive on resize and scale change (zoom, a
-// monitor swap). Every re-fit re-pins the windows (windows.js keeps each
-// one's relative top/left across the size change) — live in the same
-// handler, un-debounced: the raster itself re-fits per resize event, so a
-// debounce would leave the windows hanging off a shrunk raster mid-drag and
-// then jump. The kit's System 7 pointer set takes over the cursor.
+// monitor swap). Every re-fit re-pins the windows AND the desktop icons
+// (windows.js / icons.js each keep their relative top/left across the size
+// change, in their own frames) — live in the same handler, un-debounced:
+// the raster itself re-fits per resize event, so a debounce would leave the
+// windows hanging off a shrunk raster mid-drag and then jump. The kit's
+// System 7 pointer set takes over the cursor.
 const desktop = /** @type {import('vintage-frames').VfDesktop} */ (
   document.getElementById('desktop')
 );
-/** Bound to windows.onDesktopResized once the shell is wired (the boot fit
- *  below runs before any window exists). */
-let repinWindows = (/** @type {{width: number, height: number}} */ _before) => {};
+/** Bound to the windows' + icons' re-pins once the shell is wired (the boot
+ *  fit below runs before any window or icon exists). */
+let repinDesktop = (/** @type {{width: number, height: number}} */ _before) => {};
 const fitDesktop = () => {
   const before = { width: desktop.width, height: desktop.height };
   desktop.fitWithin(
     document.documentElement.clientWidth,
     document.documentElement.clientHeight
   );
-  repinWindows(before);
+  repinDesktop(before);
 };
 fitDesktop();
 window.addEventListener('resize', fitDesktop);
@@ -123,13 +124,18 @@ if (dstate.saved?.showGrid) shell.setShowGrid(true);
 
 // --- shell ------------------------------------------------------------------
 const windows = initWindows(desktop, { saved: dstate.saved, hide: boot.hide });
-repinWindows = (before) => windows.onDesktopResized(before);
 const menus = initMenus(desktop, windows);
 const icons = initIcons(desktop, {
   actions: menus.actions,
   savedPos: dstate.iconPos,
   fresh: boot.fresh,
 });
+// Wired only now — nothing between the boot fit and here can fire a resize
+// (this top level runs synchronously to completion before any event task).
+repinDesktop = (before) => {
+  windows.onDesktopResized(before);
+  icons.onDesktopResized(before);
+};
 const stopPersist = dstate.start({
   windows,
   iconsRoot: desktop.querySelector('#desktop-icons'),

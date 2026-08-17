@@ -1,9 +1,18 @@
-// Node-runnable tests for the desktop's window arithmetic (shell/layout.js):
-// the smart initial placement and the resize re-pin rule. Run: node --test
+// Node-runnable tests for the desktop's window + icon arithmetic
+// (shell/layout.js): the smart initial placement, the icons' default
+// lattice, and the resize re-pin rule in both frames. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { initialPlacement, pinOf, pinTo, TOP_RESERVE } from '../src/shell/layout.js';
+import {
+  initialPlacement,
+  iconDefault,
+  pinOf,
+  pinTo,
+  TOP_RESERVE,
+  MENU_BAR,
+  ICON_CELL,
+} from '../src/shell/layout.js';
 
 const TOOLS = { width: 30, height: 158 };
 // The capture tool's raster (1000×850 CSS at DSF 1, minus the 10px bezel).
@@ -121,4 +130,55 @@ test('pin: a zero-sized raster degrades gracefully', () => {
   const pin = pinOf({ left: 10, top: 100 }, { width: 0, height: 0 });
   const pos = pinTo(pin, { width: 600, height: 500 });
   assert.ok(Number.isFinite(pos.left) && Number.isFinite(pos.top));
+});
+
+test('icon defaults: a raster-derived column below the Tools band, wrapping', () => {
+  // The tall case: one column at the classic left edge, 72px pitch.
+  assert.deepEqual(iconDefault(0, 830), { left: 16, top: 340 });
+  assert.deepEqual(iconDefault(1, 830), { left: 16, top: 412 });
+  // 830 tall fits six cells (the sixth tops at 700, whose 64px cell still
+  // bottoms inside the raster); the seventh folds into a second column back
+  // at the top of the band, one 80px column pitch to the right.
+  assert.deepEqual(iconDefault(5, 830), { left: 16, top: 700 });
+  assert.deepEqual(iconDefault(6, 830), { left: 96, top: 340 });
+  // A short raster wraps sooner: at 410 only one cell fits per column.
+  assert.deepEqual(iconDefault(1, 410), { left: 96, top: 340 });
+  // Every default cell it deals out bottoms inside the raster it was dealt
+  // for (the whole point of deriving from it).
+  for (let slot = 0; slot < 12; slot++) {
+    const p = iconDefault(slot, 620);
+    assert.ok(p.top + ICON_CELL <= 620, `slot ${slot}: top ${p.top}`);
+  }
+  // A raster too short for even one cell still yields finite positions
+  // (a single row — the boot clamp pulls it up into frame).
+  const p = iconDefault(3, 100);
+  assert.ok(Number.isFinite(p.left) && Number.isFinite(p.top));
+});
+
+test('icon pin: the frame is the desktop below the MENU BAR, not the strip', () => {
+  // 50% down the space below the 20px menu bar, 10% across.
+  const pin = pinOf(
+    { left: 100, top: MENU_BAR + 405 },
+    { width: 1000, height: MENU_BAR + 810 },
+    MENU_BAR
+  );
+  assert.deepEqual(pinTo(pin, { width: 500, height: MENU_BAR + 400 }, MENU_BAR), {
+    left: 50,
+    top: MENU_BAR + 200,
+  });
+  // An icon riding the menu bar's bottom edge stays riding it at any height.
+  const high = pinOf({ left: 16, top: MENU_BAR }, { width: 1000, height: 830 }, MENU_BAR);
+  assert.equal(pinTo(high, { width: 1000, height: 300 }, MENU_BAR).top, MENU_BAR);
+  assert.equal(pinTo(high, { width: 1000, height: 2000 }, MENU_BAR).top, MENU_BAR);
+});
+
+test('icon pin: an icon under the options strip is NOT pinned to it (unlike a window)', () => {
+  // The strip is application chrome, no part of the icon frame: an icon at
+  // the strip's bottom edge scales away from it as the raster grows — where
+  // the same box pinned in the WINDOW frame would stay tucked against it.
+  const box = { left: 16, top: TOP_RESERVE };
+  const wide = { width: 1000, height: 820 };
+  const tall = { width: 1000, height: 1620 };
+  assert.equal(pinTo(pinOf(box, wide), tall).top, TOP_RESERVE);
+  assert.ok(pinTo(pinOf(box, wide, MENU_BAR), tall, MENU_BAR).top > TOP_RESERVE);
 });

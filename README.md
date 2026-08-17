@@ -512,7 +512,20 @@ the document itself**: the FRONT tile, **trimmed to its content's bounding
 box** (`contentBounds` — the art fills the icon however small it sits in its
 tile), drawn into 32×32 → data URI, regenerated on every save (empty front
 tile ⇒ a generic document glyph),
-declared `color` so selection darkens instead of inverting. Windoid/icon
+declared `color` so selection darkens instead of inverting. Icon
+**placement is the windows' regime in the icons' own frame** — the whole
+desktop below the **menu bar** (icons are the Finder's furniture; the
+options strip is application chrome, hidden whenever the desktop takes
+focus, so unlike the windows it reserves nothing above an icon): the
+default lattice derives from the live raster (`iconDefault` in
+`shell/layout.js` — the classic left-edge column below the Tools band,
+folding into further columns when a cell would run off a short raster's
+bottom), a saved position wins, pulled on-raster at boot (an off-raster
+icon has nothing to grab, so it would be unreachable — the windows'
+boot-clamp discipline), and on a **browser resize** every icon keeps its
+**relative pin** in the same stroke as the windows: the same
+unrounded-fraction truth cache, the same no-clamp reversibility, so a
+shrink-then-grow round-trips every icon exactly home. Windoid/icon
 layout, Show Grid, and the open SAVED documents (each window's geometry +
 edited face, and which was active) persist in one versioned localStorage
 key (`shell/desktop-state.js`, v2 — a v1 blob migrates shallowly), restored
@@ -649,11 +662,13 @@ mirror, the stored flows, and `followActive`),
 `test/history.test.mjs` (undo/redo: tile-gesture and whole-atlas entries,
 snapshot copy-in/copy-out, the bound, load-boundary clearing),
 `test/params.test.mjs` (the whole `?param` dev-hook surface, typed), and
-`test/layout.test.mjs` (the desktop's window arithmetic, `shell/layout.js`:
+`test/layout.test.mjs` (the desktop's window + icon arithmetic, `shell/layout.js`:
 the smart placement — the 3:4 rail, the centered two-thirds document box,
-the 30% width cap, tiny rasters degrading gracefully — and the resize
-re-pin rule: plain fractions (left of the raster width, top of the open
-space below the options strip), no position clamp — an edge window may hang
+the 30% width cap, tiny rasters degrading gracefully — the raster-derived
+icon lattice (the column wrap), and the resize re-pin rule: plain fractions
+(left of the raster width, top of the open space below the reserved chrome
+band — the options strip for windows, the bare menu bar for icons), no
+position clamp — an edge window may hang
 off a shrunk raster so shrink-then-grow round-trips home exactly, though a
 window bigger than the open area shrinks to fit (and grows back the same
 way — the grow box must stay reachable);
@@ -730,8 +745,10 @@ src/scene/
                   re-wired per activation) + prefs -> buildVoxels -> mesh swap -> build stats;
                   a window switch re-frames the camera (a new subject)
 src/shell/        the desktop's behavior modules (imperative wiring over the index.html skeleton)
-  layout.js       the window arithmetic (pure, Node-tested): initialPlacement (the smart boot/open
-                  arrangement from the raster) + pinOf/pinTo (the relative pin across raster resizes)
+  layout.js       the window + icon arithmetic (pure, Node-tested): initialPlacement (the smart
+                  boot/open arrangement from the raster) + iconDefault (the raster-derived icon
+                  lattice) + pinOf/pinTo (the relative pin across raster resizes, framed per tier:
+                  windows below the options strip, icons below the menu bar)
   windows.js      the two window regimes: windoid visibility (appActive <-> hidden; non-closeable), and
                   the document-window reconciler (template clone per context, smart default/
                   stagger/restore, title sync, close-box routing); the vf-activate wire into
@@ -740,7 +757,8 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   focus gating + checkmark sync; every dialog flow (About / Settings / Open /
                   name prompt / Properties / unsaved-changes / storage notice); the quit cascade
   icons.js        the icon layer: sample cluster + one vf-icon per saved doc, generated front-tile art,
-                  open/rename wiring, open ghosts, the Finder wire (icon presses deactivate; the
+                  open/rename wiring, open ghosts, raster-derived placement + boot clamp + the
+                  resize re-pin (below the menu bar), the Finder wire (icon presses deactivate; the
                   selection feeds the shell slice for the desktop-focused File → Open)
   desktop-state.js  windoid/icon layout + Show Grid + the open saved docs (geometry, face, active)
                   in one versioned localStorage key (v2; v1 migrates)

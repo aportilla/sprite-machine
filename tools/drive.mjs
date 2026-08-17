@@ -1678,13 +1678,15 @@ async function main() {
   const restored = await texelAt(1, 1);
   check('…with its pixels restored from storage', restored[3] === 255, `${restored}`);
 
-  // --- desktop: browser resize re-pins the windows -----------------------------
+  // --- desktop: browser resize re-pins the windows and icons -------------------
   // A viewport change re-fits the raster and every window keeps its RELATIVE
   // top/left pin (shell/layout.js pinOf/pinTo: left as a fraction of the
   // raster width, top of the space below the options strip), un-clamped, so
-  // growing back round-trips home exactly. Emulation.setDeviceMetricsOverride
-  // changes the layout viewport and fires a real `resize` — the same path a
-  // user's window drag takes.
+  // growing back round-trips home exactly — and every desktop icon keeps the
+  // same kind of pin in ITS frame (the desktop below the 20px menu bar; the
+  // options strip is application chrome, no part of the Finder's furniture).
+  // Emulation.setDeviceMetricsOverride changes the layout viewport and fires
+  // a real `resize` — the same path a user's window drag takes.
   section('browser resize');
   await freshPage();
   const layoutSnap = () =>
@@ -1700,7 +1702,10 @@ async function main() {
           h: w.height,
           r: w.resizable,
         }));
-      return { dw: d.width, dh: d.height, wins };
+      const icons = [...document.querySelectorAll('#desktop-icons vf-icon')].map(
+        (i) => ({ id: i.dataset.key, left: i.left, top: i.top })
+      );
+      return { dw: d.width, dh: d.height, wins, icons };
     })()`);
   const metrics = (width, height) =>
     send('Emulation.setDeviceMetricsOverride', {
@@ -1747,6 +1752,24 @@ async function main() {
       }),
     JSON.stringify({ wide: pins(wide), narrow: pins(narrow) })
   );
+  // The icons' pin frame is the whole desktop below the MENU BAR alone
+  // (shell/layout.js MENU_BAR = 20) — deliberately not TOP_RESERVE.
+  const iconPins = (snap) =>
+    snap.icons.map((i) => ({
+      id: i.id,
+      x: i.left / Math.max(1, snap.dw),
+      y: (i.top - 20) / Math.max(1, snap.dh - 20),
+    }));
+  check(
+    'every desktop icon keeps its relative pin (below the menu bar) too',
+    narrow.icons.length > 0 &&
+      narrow.icons.length === wide.icons.length &&
+      iconPins(narrow).every((p) => {
+        const o = iconPins(wide).find((q) => q.id === p.id);
+        return o && Math.abs(p.x - o.x) < 0.01 && Math.abs(p.y - o.y) < 0.01;
+      }),
+    JSON.stringify({ wide: iconPins(wide), narrow: iconPins(narrow) })
+  );
   // The ONE size intervention on this path: a resizable window BIGGER than
   // the open area shrinks to fit it (otherwise its grow-box corner is
   // unreachable at any position — the title bar can't leave the raster
@@ -1792,6 +1815,17 @@ async function main() {
       return o && w.left === o.left && w.top === o.top && w.w === o.w && w.h === o.h;
     }),
     JSON.stringify({ before: wide.wins, after: back.wins })
+  );
+  // The icons ride the same truth cache (icons.js `pins`), so home must be
+  // exact for them too — the ratchet regression would show here first (an
+  // icon is small enough that one notch per event marches it visibly).
+  check(
+    '…and every desktop icon exactly home',
+    back.icons.every((i) => {
+      const o = wide.icons.find((x) => x.id === i.id);
+      return o && i.left === o.left && i.top === o.top;
+    }),
+    JSON.stringify({ before: wide.icons, after: back.icons })
   );
   await send('Emulation.clearDeviceMetricsOverride');
 

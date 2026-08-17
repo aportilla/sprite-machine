@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
-// The desktop's window arithmetic — PURE (no DOM, Node-tested), the numbers
-// shell/windows.js applies:
+// The desktop's window + icon arithmetic — PURE (no DOM, Node-tested), the
+// numbers shell/windows.js and shell/icons.js apply:
 //
 //   initialPlacement() is the authored arrangement computed from the live
 //   raster instead of hard-coded markup: the Tools palette top-left, the
@@ -10,24 +10,32 @@
 //   them, centered. windows.js applies these first, then any saved
 //   geometry, then the clamp — a restored layout always wins.
 //
+//   iconDefault() is the icons' half of the same idea: the classic
+//   left-edge column below the Tools band, derived from the raster instead
+//   of a fixed stack — it folds into further columns when the next cell
+//   would run off a short raster's bottom.
+//
 //   pinOf() / pinTo() are the resize rule, and it is DELIBERATELY dumb:
 //   left as a plain fraction of the raster width, top as a plain fraction
-//   of the OPEN SPACE BELOW the options strip (the menu-bar + strip band is
-//   fixed-height chrome, so the pin's y = 0 line is the strip's bottom edge
-//   — a window tucked under the strip stays tucked under it instead of
-//   sliding up beneath the menu bar on a shrink), read once (pinOf) and
-//   re-expressed on any later raster (pinTo). No travel-range cleverness,
-//   no clamping, no visibility guarantee — a window near an edge may hang
-//   partly off a shrunk raster, and that is fine: the same fraction always
-//   maps back exactly, so growing back returns it whole (a clamp would
-//   rewrite the fraction at the small size and turn the round trip into a
-//   drift — tried, rejected). The split into two functions matters:
-//   windows.js keeps the UNROUNDED fraction as the per-window truth between
-//   resize events, because re-deriving it each event from the just-rounded,
-//   just-snapped position ratchets: the placement lattice's quantum is 2 or
-//   4 system px at fractional display scales, and rounding onto it breaks
-//   ties toward +∞ — a long resize drag walked every window down the
-//   screen, one notch per odd landing, never back up.
+//   of the open space below a fixed-height RESERVE band of chrome — so a
+//   box riding the band's bottom edge stays riding it instead of sliding
+//   up beneath the chrome on a shrink. The reserve names the frame:
+//   TOP_RESERVE (the default) for windows — the menu bar plus the options
+//   strip — and MENU_BAR for icons, which are the FINDER's furniture: the
+//   options strip belongs to the application (it hides whenever the desktop
+//   takes focus), so it reserves nothing above an icon. The pin is read
+//   once (pinOf) and re-expressed on any later raster (pinTo). No
+//   travel-range cleverness, no clamping, no visibility guarantee — a
+//   window near an edge may hang partly off a shrunk raster, and that is
+//   fine: the same fraction always maps back exactly, so growing back
+//   returns it whole (a clamp would rewrite the fraction at the small size
+//   and turn the round trip into a drift — tried, rejected). The split into
+//   two functions matters: the callers keep the UNROUNDED fraction as the
+//   per-box truth between resize events, because re-deriving it each event
+//   from the just-rounded, just-snapped position ratchets: the placement
+//   lattice's quantum is 2 or 4 system px at fractional display scales, and
+//   rounding onto it breaks ties toward +∞ — a long resize drag walked
+//   every window down the screen, one notch per odd landing, never back up.
 // ---------------------------------------------------------------------------
 
 // The raster band reserved above windows: the 20px menu bar plus the options
@@ -36,12 +44,26 @@
 // it always keeps its title bar grabbable.
 export const TOP_RESERVE = 56;
 
+// The raster band reserved above ICONS: the menu bar alone — the icons' pin
+// and clamp frame is the whole desktop below it (see the header).
+export const MENU_BAR = 20;
+
 const EDGE = 14; // side inset — the Tools palette's classic left
 const GAP = 8; // vertical breathing room: below the strip, between / below the rail
 
 const RAIL_ASPECT = 3 / 4; // the rail windoids' width : height
 const RAIL_MAX_W = 0.3; // …capped so a squat raster can't grow them past 30% wide
 const DOC_FILL = 2 / 3; // the document window's share of the vacant middle
+
+// The default icon lattice: columns from the left edge, below the Tools
+// palette's classic band.
+const ICON_COL_X = 16;
+const ICON_ROW_Y0 = 340;
+const ICON_ROW_PITCH = 72;
+const ICON_COL_PITCH = 80; // the 64px icon plate + a 16px gutter
+// The cell an icon must fit inside the raster: its 64px plate (the label
+// hugs under the art well inside it) — also the margin icons.js clamps by.
+export const ICON_CELL = 64;
 
 /**
  * The smart boot arrangement for a `desktopW`×`desktopH` system-px raster.
@@ -94,32 +116,58 @@ export function initialPlacement(desktopW, desktopH, tools) {
 }
 
 /**
- * A window's relative pin: left as a plain (unrounded) fraction of the
- * raster width, top of the open space below the options strip. The caller
- * keeps this as the truth between resize events — see the header.
+ * The default position for icon `slot` on a raster `desktopH` system px
+ * tall: the classic left-edge column, folding into further columns when the
+ * next cell would run off the bottom — a squat raster keeps every icon on
+ * screen instead of marching a stack off it. A raster too short for even
+ * one cell degrades to a single row (icons.js's boot clamp pulls it up into
+ * frame).
  *
- * @param {{left: number, top: number}} box
- * @param {{width: number, height: number}} raster
- * @returns {{fx: number, fy: number}}
+ * @param {number} slot
+ * @param {number} desktopH
+ * @returns {{left: number, top: number}}
  */
-export function pinOf(box, raster) {
+export function iconDefault(slot, desktopH) {
+  const rows = Math.max(
+    1,
+    Math.floor((desktopH - ICON_ROW_Y0 - ICON_CELL) / ICON_ROW_PITCH) + 1
+  );
   return {
-    fx: box.left / Math.max(1, raster.width),
-    fy: (box.top - TOP_RESERVE) / Math.max(1, raster.height - TOP_RESERVE),
+    left: ICON_COL_X + Math.floor(slot / rows) * ICON_COL_PITCH,
+    top: ICON_ROW_Y0 + (slot % rows) * ICON_ROW_PITCH,
   };
 }
 
 /**
- * The pin re-expressed on a raster as a concrete top/left. Nothing clamps —
- * see the header.
+ * A box's relative pin: left as a plain (unrounded) fraction of the raster
+ * width, top of the open space below `reserve` — the fixed chrome band of
+ * the caller's frame (TOP_RESERVE for windows, MENU_BAR for icons; see the
+ * header). The caller keeps this as the truth between resize events.
+ *
+ * @param {{left: number, top: number}} box
+ * @param {{width: number, height: number}} raster
+ * @param {number} [reserve]
+ * @returns {{fx: number, fy: number}}
+ */
+export function pinOf(box, raster, reserve = TOP_RESERVE) {
+  return {
+    fx: box.left / Math.max(1, raster.width),
+    fy: (box.top - reserve) / Math.max(1, raster.height - reserve),
+  };
+}
+
+/**
+ * The pin re-expressed on a raster as a concrete top/left, in the same
+ * `reserve` frame it was read in. Nothing clamps — see the header.
  *
  * @param {{fx: number, fy: number}} pin
  * @param {{width: number, height: number}} raster
+ * @param {number} [reserve]
  * @returns {{left: number, top: number}}
  */
-export function pinTo(pin, raster) {
+export function pinTo(pin, raster, reserve = TOP_RESERVE) {
   return {
     left: Math.round(pin.fx * raster.width),
-    top: Math.round(TOP_RESERVE + pin.fy * Math.max(1, raster.height - TOP_RESERVE)),
+    top: Math.round(reserve + pin.fy * Math.max(1, raster.height - reserve)),
   };
 }
