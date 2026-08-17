@@ -66,6 +66,34 @@ export const isBlank = (tile) => {
 };
 
 /**
+ * The tight bounding box of a tile's non-transparent texels — the same
+ * alpha!==0 rule as isBlank, so the two can never disagree about emptiness:
+ * contentBounds(t) === null exactly when isBlank(t). The icon generator trims
+ * to this box so a sprite fills its icon instead of shipping the tile's
+ * transparent margin.
+ * @param {{width:number,height:number,data:ArrayLike<number>}} tile
+ * @returns {{x:number,y:number,width:number,height:number}|null}
+ */
+export function contentBounds(tile) {
+  const { width: w, height: h, data } = tile;
+  let x0 = w;
+  let y0 = h;
+  let x1 = -1;
+  let y1 = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (data[(y * w + x) * 4 + 3] === 0) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      y1 = y;
+    }
+  }
+  if (x1 < 0) return null;
+  return { x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
+}
+
+/**
  * Validate an ImageData-like sheet at an ingestion boundary: finite positive
  * dimensions and a data buffer long enough for width*height RGBA texels. Returns
  * an error string (surfaced to the user), or null when the sheet is usable — so

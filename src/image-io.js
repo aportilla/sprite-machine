@@ -1,6 +1,8 @@
 // Browser image decoding helpers -> ImageData (the {width,height,data} shape the
 // pipeline consumes). Standalone so the loaders and the topbar's download share it.
 
+import { contentBounds } from './lib/atlas.js';
+
 async function bitmapToImageData(bmp) {
   const c = document.createElement('canvas');
   c.width = bmp.width;
@@ -61,14 +63,20 @@ export const downloadPngBytes = (bytes, filename) =>
 
 // --- desktop icon art --------------------------------------------------------
 // A document's desktop icon is generated from the document itself: the FRONT
-// tile drawn nearest-neighbor into a 32×32 canvas → data URI (regenerated on
-// every save; sample icons get the same treatment once at boot). Small tiles
-// take the largest integer upscale that fits; larger ones downsample with
-// smoothing off so the pixel look survives.
+// tile, trimmed to its content's tight bounding box, drawn nearest-neighbor
+// into a 32×32 canvas → data URI (regenerated on every save; sample icons get
+// the same treatment once at boot). The trim means the art fills the icon
+// however small it sits in its tile; a fully transparent tile returns null,
+// falling through to the generic document glyph at every call site. The art
+// scales to fit exactly — its larger axis spans the full icon — with smoothing
+// off so hard edges survive (at a fractional scale texels land a device pixel
+// uneven; accepted, a filled icon beats a uniform-but-small one).
 /** @param {{width:number,height:number,data:Uint8ClampedArray}|null} tile
  *  @returns {string|null} */
 export function tileToIconDataUri(tile, size = 32) {
   if (!tile || !tile.width || !tile.height) return null;
+  const box = contentBounds(tile);
+  if (!box) return null;
   const src = document.createElement('canvas');
   src.width = tile.width;
   src.height = tile.height;
@@ -84,11 +92,20 @@ export function tileToIconDataUri(tile, size = 32) {
   out.height = size;
   const g = out.getContext('2d');
   g.imageSmoothingEnabled = false;
-  const fit = Math.min(size / tile.width, size / tile.height);
-  const s = fit >= 1 ? Math.floor(fit) : fit; // integer upscale when possible
-  const w = Math.max(1, Math.round(tile.width * s));
-  const h = Math.max(1, Math.round(tile.height * s));
-  g.drawImage(src, (size - w) >> 1, (size - h) >> 1, w, h);
+  const fit = Math.min(size / box.width, size / box.height);
+  const w = Math.max(1, Math.round(box.width * fit));
+  const h = Math.max(1, Math.round(box.height * fit));
+  g.drawImage(
+    src,
+    box.x,
+    box.y,
+    box.width,
+    box.height,
+    (size - w) >> 1,
+    (size - h) >> 1,
+    w,
+    h
+  );
   return out.toDataURL('image/png');
 }
 

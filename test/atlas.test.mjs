@@ -9,6 +9,8 @@ import {
   validateSheet,
   blitTile,
   cellOf,
+  contentBounds,
+  isBlank,
   resizeTile,
   resizeTileTo,
   resizeAtlas,
@@ -110,6 +112,45 @@ test('cellOf returns the correct {r,c} for all six views', () => {
     assert.deepEqual(cellOf(name), rc, `cell for ${name}`);
   }
   assert.equal(cellOf('nope'), null, 'unknown view → null');
+});
+
+// --- contentBounds (the icon generator's transparent-margin trim) -----------
+
+// A w×h tile with opaque texels only at the given [x,y] coordinates.
+function dottedTile(w, h, dots) {
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (const [x, y] of dots) data[(y * w + x) * 4 + 3] = 255;
+  return { width: w, height: h, data };
+}
+
+test('contentBounds: tight box around scattered content, whole tile when full', () => {
+  // Content at (2,1) and (5,4) inside an 8×6 tile → the box spans exactly them.
+  const t = dottedTile(8, 6, [
+    [2, 1],
+    [5, 4],
+  ]);
+  assert.deepEqual(contentBounds(t), { x: 2, y: 1, width: 4, height: 4 });
+  // A single texel is a 1×1 box.
+  assert.deepEqual(contentBounds(dottedTile(3, 3, [[1, 2]])), {
+    x: 1,
+    y: 2,
+    width: 1,
+    height: 1,
+  });
+  // A fully-opaque tile trims nothing.
+  const full = { width: 4, height: 3, data: new Uint8ClampedArray(4 * 3 * 4).fill(255) };
+  assert.deepEqual(contentBounds(full), { x: 0, y: 0, width: 4, height: 3 });
+});
+
+test('contentBounds: null exactly when isBlank (the shared alpha!==0 rule)', () => {
+  const blank = dottedTile(4, 4, []);
+  assert.equal(contentBounds(blank), null, 'all-transparent → null');
+  assert.ok(isBlank(blank), '…and isBlank agrees');
+  // A single texel of ANY nonzero alpha counts as content, matching isBlank.
+  const faint = dottedTile(4, 4, []);
+  faint.data[(2 * 4 + 3) * 4 + 3] = 1;
+  assert.deepEqual(contentBounds(faint), { x: 3, y: 2, width: 1, height: 1 });
+  assert.ok(!isBlank(faint), '…and isBlank agrees');
 });
 
 // --- tile / atlas resize ----------------------------------------------------

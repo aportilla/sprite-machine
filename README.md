@@ -442,8 +442,10 @@ untitled copies, stored docs into their existing window if one is open),
 selecting an icon deactivates the application (a press in the icon layer is
 a press on the Finder) and arms the desktop-focused File → Open, and every
 open doc's icon wears the kit's `open` ghost. Icon art is generated **from
-the document itself**: the FRONT tile drawn into 32×32 → data URI,
-regenerated on every save (empty front tile ⇒ a generic document glyph),
+the document itself**: the FRONT tile, **trimmed to its content's bounding
+box** (`contentBounds` — the art fills the icon however small it sits in its
+tile), drawn into 32×32 → data URI, regenerated on every save (empty front
+tile ⇒ a generic document glyph),
 declared `color` so selection darkens instead of inverting. Windoid/icon
 layout, Show Grid, and the open SAVED documents (each window's geometry +
 edited face, and which was active) persist in one versioned localStorage
