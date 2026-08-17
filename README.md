@@ -418,7 +418,31 @@ Two tiers, two regimes:
   rebuilder); the **3D View** hosts the THREE canvas with the build readout
   in its status strip.
 
-Positions/sizes are authored defaults clamped to the live raster at boot.
+Positions/sizes come from a **smart placement** computed against the live
+raster (`shell/layout.js`, pure): the Tools palette top-left, the Full
+Sprite View over the 3D View as a right-hand rail of 3:4 (w:h) windoids
+splitting the height below the options strip, and each newly opened
+document window filling about two thirds of the vacant middle between
+them, centered (then staggered per additional open). Saved geometry always
+wins over the defaults, and everything clamps onto the raster's lattice.
+When the **browser window resizes**, the raster re-fits and every window
+keeps its **relative pin**: its left as a plain fraction of the raster's
+width, its top as a plain fraction of the **open space below the options
+strip** (the menu-bar + strip band is fixed-height chrome — the pin's
+y = 0 line is the strip's bottom edge, so a window tucked under the strip
+stays tucked under it instead of sliding beneath the menu bar) — live,
+per resize event (the raster itself re-fits live, so the windows track it
+in the same stroke), sizes untouched. The
+**unrounded fraction is the per-window truth** between events, re-derived
+only when the window has actually been moved (a drag, a restore) —
+re-reading it each event from the just-snapped position ratchets, because
+the placement lattice's round-half-up walks windows down the screen
+across a long resize drag, one notch at a time, never back up.
+Deliberately **no clamp** and no visibility guarantee on this path: a
+window near an edge may hang partly off a shrunk raster, and that's the
+point — the same fraction always maps back exactly, so growing back
+returns it whole (clamping at the small size rewrites the fraction and
+turns the round trip into a drift).
 
 ### Documents: a document IS a .png
 
@@ -594,8 +618,16 @@ open documents: per-context doc + history + face + identity, untitled
 naming, per-context dirty tracking off the doc's channels, the activation
 mirror, the stored flows, and `followActive`),
 `test/history.test.mjs` (undo/redo: tile-gesture and whole-atlas entries,
-snapshot copy-in/copy-out, the bound, load-boundary clearing), and
-`test/params.test.mjs` (the whole `?param` dev-hook surface, typed).
+snapshot copy-in/copy-out, the bound, load-boundary clearing),
+`test/params.test.mjs` (the whole `?param` dev-hook surface, typed), and
+`test/layout.test.mjs` (the desktop's window arithmetic, `shell/layout.js`:
+the smart placement — the 3:4 rail, the centered two-thirds document box,
+the 30% width cap, tiny rasters degrading gracefully — and the resize
+re-pin rule: plain fractions (left of the raster width, top of the open
+space below the options strip), no clamp — an edge window may hang off a
+shrunk raster so shrink-then-grow round-trips home exactly;
+`tools/drive.mjs` drives the real thing over CDP, where a viewport change
+fires a true `resize`).
 
 Beyond that pipeline integration, the pure modules also have direct unit suites:
 `test/carve.test.mjs` (vox/unvox round-trip, `extractSurface` masks + counts,
@@ -667,10 +699,12 @@ src/scene/
                   re-wired per activation) + prefs -> buildVoxels -> mesh swap -> build stats;
                   a window switch re-frames the camera (a new subject)
 src/shell/        the desktop's behavior modules (imperative wiring over the index.html skeleton)
+  layout.js       the window arithmetic (pure, Node-tested): initialPlacement (the smart boot/open
+                  arrangement from the raster) + pinOf/pinTo (the relative pin across raster resizes)
   windows.js      the two window regimes: windoid visibility (appActive <-> hidden; non-closeable), and
-                  the document-window reconciler (template clone per context, stagger/restore,
-                  title sync, close-box routing); the vf-activate wire into shell.appActive +
-                  workspace.activeKey; boot clamp
+                  the document-window reconciler (template clone per context, smart default/
+                  stagger/restore, title sync, close-box routing); the vf-activate wire into
+                  shell.appActive + workspace.activeKey; boot clamp + the resize re-pin
   menus.js        vf-menu-select -> workspace/file actions on the ACTIVE document; the two-role
                   focus gating + checkmark sync; every dialog flow (About / Settings / Open /
                   name prompt / Properties / unsaved-changes / storage notice); the quit cascade

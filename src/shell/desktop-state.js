@@ -140,9 +140,10 @@ export function createDesktopState(fresh) {
         timer = setTimeout(write, WRITE_DEBOUNCE_MS);
       };
 
-      // Store changes (grid, the open set, titles/faces) and
-      // desktop gestures (window/icon drags and resizes end in a pointerup)
-      // both schedule a write; leaving the page flushes one synchronously.
+      // Store changes (grid, the open set, titles/faces), desktop gestures
+      // (window/icon drags and resizes end in a pointerup), and browser
+      // resizes (every window re-pins to the new raster) all schedule a
+      // write; leaving the page flushes one synchronously.
       const unsubs = [
         shell.subscribe(writeSoon),
         files.subscribe(writeSoon),
@@ -154,6 +155,7 @@ export function createDesktopState(fresh) {
       };
       document.addEventListener('pointerup', onPointerUp);
       document.addEventListener('visibilitychange', onHide);
+      window.addEventListener('resize', writeSoon);
       window.addEventListener('beforeunload', write);
 
       return () => {
@@ -161,6 +163,7 @@ export function createDesktopState(fresh) {
         for (const u of unsubs) u();
         document.removeEventListener('pointerup', onPointerUp);
         document.removeEventListener('visibilitychange', onHide);
+        window.removeEventListener('resize', writeSoon);
         window.removeEventListener('beforeunload', write);
       };
     },

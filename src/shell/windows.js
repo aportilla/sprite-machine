@@ -17,6 +17,16 @@
 //   forward). A context closing removes its window outright: a document
 //   window's visibility IS its existence.
 //
+// PLACEMENT comes from shell/layout.js (pure): the smart arrangement is
+// computed from the live raster at boot (windoids) and per document open
+// (the default box, staggered) — saved geometry always wins over it, and
+// everything clamps onto the raster's lattice. When the raster RESIZES
+// (main.js re-fits it per browser-resize event and calls onDesktopResized),
+// every window keeps its relative top/left pin — left a plain fraction of
+// the raster width, top of the open space below the options strip — live
+// and un-debounced, deliberately WITHOUT the boot clamp: reversibility
+// over visibility (see onDesktopResized).
+//
 // APP ACTIVATION has one writer: the desktop's vf-activate event (the kit
 // fires it on every change of active document-tier window, null included)
 // lands here and is mirrored into BOTH truths — shell.appActive (the
@@ -36,16 +46,10 @@
 import { snapSys, systemPxQuantum, VfWindow } from 'vintage-frames';
 import { shell, WINDOW_IDS } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
+import { initialPlacement, pinOf, pinTo, TOP_RESERVE } from './layout.js';
 
-// The raster band reserved above windows: the 20px menu bar plus the options
-// strip's kit panel (a 37px band whose top border rides the bar's bottom
-// rule, so its box bottoms out at 20 − 1 + 37 = 56) — a window clamped below
-// it always keeps its title bar grabbable.
-const TOP_RESERVE = 56;
-
-// A new document window's authored default box, staggered System 7 style:
-// each additional open document offsets down-right by one step.
-const DOC_DEFAULT = { left: 110, top: 64, width: 430, height: 560 };
+// Each additional open document window offsets down-right by one step from
+// the smart default box, System 7 style.
 const STAGGER = 24;
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
@@ -85,15 +89,33 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
   /** @type {(() => void)[]} */
   const unsubs = [];
 
-  // --- utility windoids: boot restore + clamp ---------------------------------
+  // --- utility windoids: smart placement -> boot restore -> clamp -------------
   /** @type {Record<string, VfWindow>} shell id -> element */
   const byId = {};
   for (const id of WINDOW_IDS) {
     byId[id] = /** @type {VfWindow} */ (desktop.querySelector(`#win-${id}`));
+  }
+  // The smart arrangement, computed from the live raster (shell/layout.js):
+  // Tools top-left, the sprite/stage rail right. The Tools palette's
+  // content-hugging size stays authored in index.html and feeds the math.
+  const smartLayout = () =>
+    initialPlacement(desktop.width, desktop.height, {
+      width: byId.tools.width ?? 0,
+      height: byId.tools.height ?? 0,
+    });
+  const smart = smartLayout();
+  for (const id of WINDOW_IDS) {
     // Non-closeable by design: the windoids are permanent chrome, on screen
     // whenever the application is. `closable` defaults true and markup can't
     // express the off state (a boolean attribute), so it's set here.
     byId[id].closable = false;
+    const sm = smart[id];
+    byId[id].left = sm.left;
+    byId[id].top = sm.top;
+    if ('width' in sm && byId[id].resizable) {
+      byId[id].width = sm.width;
+      byId[id].height = sm.height;
+    }
     const s = saved?.utility?.[id];
     if (s) {
       if (Number.isFinite(s.left)) byId[id].left = s.left;
@@ -142,11 +164,15 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
     );
     win.id = `win-doc-${ctx.key}`;
     win.setAttribute('heading', ctx.name);
+    // The default box is the smart placement's vacant-middle fill, computed
+    // against the CURRENT raster (the desktop may have resized since boot),
+    // staggered per creation.
+    const d = smartLayout().doc;
     const g = savedDocGeom.get(ctx.fileId ?? '') ?? {
-      left: DOC_DEFAULT.left + STAGGER * staggerSlot,
-      top: DOC_DEFAULT.top + STAGGER * staggerSlot,
-      width: DOC_DEFAULT.width,
-      height: DOC_DEFAULT.height,
+      left: d.left + STAGGER * staggerSlot,
+      top: d.top + STAGGER * staggerSlot,
+      width: d.width,
+      height: d.height,
     };
     staggerSlot = (staggerSlot + 1) % 8; // wrap before a cascade walks off-raster
     for (const k of ['left', 'top', 'width', 'height']) {
@@ -235,6 +261,11 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
   // have a non-window target and pass through). Only document windows carry
   // one — the windoids are non-closeable — and it routes through the
   // dirty-checking flow menus.js injects.
+  /** Per-window relative pin across raster resizes: the unrounded fraction
+   *  plus the top/left this path last applied (a mismatch there means
+   *  someone moved the window, so its pin re-derives). See onDesktopResized. */
+  const pins = new WeakMap();
+
   const api = {
     byId,
     /** Injected by menus.js: the dirty-checking close flow, per context key. */
@@ -256,6 +287,44 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
      *  boot document's), or null. */
     editorFor(key) {
       return byKey.get(key)?.editor ?? null;
+    },
+    /** The raster changed size (a browser resize / zoom re-fit — main.js
+     *  calls this right after fitWithin, per event, un-debounced: the raster
+     *  re-fits live, so the windows track it in the same stroke). Every
+     *  window — windoid and document alike — keeps its relative pin
+     *  (shell/layout.js: left as a plain fraction of the raster width, top
+     *  of the open space below the options strip — the fixed chrome band
+     *  is the pin's y = 0 line, so a window tucked under the strip stays
+     *  tucked under it). Deliberately NO clamp and no visibility guarantee: a clamp at the
+     *  small size rewrites the fraction and turns grow-back into a drift, so
+     *  a window near an edge just hangs partly off a shrunk raster and
+     *  returns whole. Sizes are left alone; the bare snap keeps the chrome
+     *  on the system-px lattice.
+     *
+     *  The UNROUNDED fraction is the per-window truth between events (the
+     *  `pins` cache), re-derived only when the window has moved since this
+     *  path last placed it (a drag, a restore, a fresh window). Re-deriving
+     *  it every event from the just-snapped position ratchets — the
+     *  lattice's round-half-up walked windows down the screen across a long
+     *  resize drag, one notch per odd landing, never back up. */
+    onDesktopResized(before) {
+      const after = { width: desktop.width, height: desktop.height };
+      if (before.width === after.width && before.height === after.height) return;
+      const wins = [
+        ...WINDOW_IDS.map((id) => byId[id]),
+        ...[...byKey.values()].map((rec) => rec.win),
+      ];
+      for (const win of wins) {
+        const cur = { left: win.left ?? 0, top: win.top ?? 0 };
+        let rec = pins.get(win);
+        if (!rec || rec.left !== cur.left || rec.top !== cur.top) {
+          rec = { pin: pinOf(cur, before) };
+        }
+        const pos = pinTo(rec.pin, after);
+        win.left = snapSys(pos.left, win);
+        win.top = snapSys(pos.top, win);
+        pins.set(win, { pin: rec.pin, left: win.left, top: win.top });
+      }
     },
     /** Deactivate the application programmatically (nothing calls this on
      *  the happy paths — closing the last window deactivates via the kit —

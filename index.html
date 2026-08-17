@@ -78,14 +78,17 @@
       <!-- Permanent chrome: always on screen while the application is
            active — no close box (shell/windows.js sets closable=false;
            markup can't express a boolean attribute's off state) and no menu
-           toggle. Positions are authored defaults in system px, clamped
-           to the live raster at boot (shell/windows.js). All three are
-           utility windoids: they float above the document tier, never take
-           the active state, and hide with the application when the desktop
-           is clicked (shell/windows.js gates their hidden on appActive
-           alone). A windoid bar shows no title text (the kit's 11px bar
-           has no title patch); the heading still names the window for
-           assistive tech. DOCUMENT windows are not here: one
+           toggle. Geometry is NOT authored here: shell/windows.js computes
+           the smart arrangement from the live raster at boot (the Tools
+           palette top-left, the sprite/stage rail of 3:4 windoids right —
+           shell/layout.js), lets any saved layout override it, and clamps;
+           a browser resize re-pins every window proportionally. All three
+           are utility windoids: they float above the document tier, never
+           take the active state, and hide with the application when the
+           desktop is clicked (shell/windows.js gates their hidden on
+           appActive alone). A windoid bar shows no title text (the kit's
+           11px bar has no title patch); the heading still names the window
+           for assistive tech. DOCUMENT windows are not here: one
            exists per open document, cloned from #tpl-document-window by the
            reconciler in shell/windows.js and appended as a direct child of
            the desktop (its stacking manager only sees direct vf-window
@@ -97,10 +100,6 @@
         movable
         resizable
         flush
-        width="400"
-        height="250"
-        top="64"
-        left="560"
       >
         <sm-atlas-view></sm-atlas-view>
         <sm-status-line kind="atlas" slot="status"></sm-status-line>
@@ -113,18 +112,15 @@
         movable
         resizable
         flush
-        width="400"
-        height="330"
-        top="330"
-        left="560"
       >
         <canvas id="viewport"></canvas>
         <sm-status-line kind="build" slot="status"></sm-status-line>
       </vf-window>
 
       <!-- The floating Tools palette: utility tier — floats above the
-           document windows and never deactivates them. Sized to hug the tool
-           strip: 5×(28+1)+1 grid + 8/6px panel padding + the windoid chrome
+           document windows and never deactivates them. Its SIZE stays
+           authored (the one box layout.js takes as input): hugging the tool
+           strip, 5×(28+1)+1 grid + 8/6px panel padding + the windoid chrome
            (1px borders, 12px bar). -->
       <vf-window
         id="win-tools"
@@ -134,8 +130,6 @@
         flush
         width="44"
         height="176"
-        top="64"
-        left="14"
       >
         <sm-tools-panel></sm-tools-panel>
       </vf-window>

@@ -1652,6 +1652,90 @@ async function main() {
   const restored = await texelAt(1, 1);
   check('…with its pixels restored from storage', restored[3] === 255, `${restored}`);
 
+  // --- desktop: browser resize re-pins the windows -----------------------------
+  // A viewport change re-fits the raster and every window keeps its RELATIVE
+  // top/left pin (shell/layout.js pinOf/pinTo: left as a fraction of the
+  // raster width, top of the space below the options strip), un-clamped, so
+  // growing back round-trips home exactly. Emulation.setDeviceMetricsOverride
+  // changes the layout viewport and fires a real `resize` — the same path a
+  // user's window drag takes.
+  section('browser resize');
+  await freshPage();
+  const layoutSnap = () =>
+    evaluate(`(() => {
+      const d = document.querySelector('#desktop');
+      const wins = [...document.querySelectorAll('vf-window')]
+        .filter((w) => !w.hidden)
+        .map((w) => ({ id: w.id, left: w.left, top: w.top, w: w.width, h: w.height }));
+      return { dw: d.width, dh: d.height, wins };
+    })()`);
+  const metrics = (width, height) =>
+    send('Emulation.setDeviceMetricsOverride', {
+      width,
+      height,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+  // Establish the wide state through the SAME override the round trip ends
+  // on: the native headless client height is smaller than --window-size (the
+  // window chrome is taken out of it), so a bare boot snapshot would compare
+  // a 743-tall raster against the override's true 850-tall one and read the
+  // windows' correct relative re-pin as drift.
+  await metrics(1000, 850);
+  await sleep(400);
+  const wide = await layoutSnap();
+  await metrics(780, 640);
+  await sleep(400);
+  const narrow = await layoutSnap();
+  check(
+    'the raster re-fits to the smaller viewport',
+    narrow.dw < wide.dw && narrow.dh < wide.dh,
+    JSON.stringify({ before: [wide.dw, wide.dh], after: [narrow.dw, narrow.dh] })
+  );
+  // The relative pin: left as a plain fraction of the raster width, top of
+  // the open space below the options strip (the 56px menu-bar + strip band
+  // is fixed chrome — shell/layout.js TOP_RESERVE), preserved across the
+  // re-fit for every window (to the snap lattice's rounding). Deliberately
+  // NO on-raster assertion: the re-pin doesn't clamp — a window near an
+  // edge may hang partly off the shrunk raster so the round trip below can
+  // be exact.
+  const pins = (snap) =>
+    snap.wins.map((w) => ({
+      id: w.id,
+      x: w.left / Math.max(1, snap.dw),
+      y: (w.top - 56) / Math.max(1, snap.dh - 56),
+    }));
+  check(
+    'every window keeps its relative pin on the shrunk raster',
+    narrow.wins.length === wide.wins.length &&
+      pins(narrow).every((p) => {
+        const o = pins(wide).find((q) => q.id === p.id);
+        return o && Math.abs(p.x - o.x) < 0.01 && Math.abs(p.y - o.y) < 0.01;
+      }),
+    JSON.stringify({ wide: pins(wide), narrow: pins(narrow) })
+  );
+  // Wiggle the height up and down a few times before coming home — the
+  // ratchet regression (re-deriving the fraction from the just-snapped
+  // position each event) crept windows DOWN one notch per event and never
+  // back up, so a wiggle run is what catches it; the pin cache maps the
+  // same fraction every event, so home must be EXACT.
+  for (const h of [700, 560, 760, 620, 800]) {
+    await metrics(780, h);
+    await sleep(150);
+  }
+  await metrics(1000, 850); // back to the wide baseline
+  await sleep(400);
+  const back = await layoutSnap();
+  check(
+    'a resize wiggle round-trips every window exactly home',
+    back.wins.every((w) => {
+      const o = wide.wins.find((x) => x.id === w.id);
+      return o && w.left === o.left && w.top === o.top;
+    }),
+    JSON.stringify({ before: wide.wins, after: back.wins })
+  );
+  await send('Emulation.clearDeviceMetricsOverride');
+
   console.log(
     `\n${passed} passed, ${failures.length} failed` +
       (reloads ? `, ${reloads} headless page reload(s)` : '')
