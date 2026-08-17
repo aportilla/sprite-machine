@@ -1,7 +1,10 @@
 // ---------------------------------------------------------------------------
 // `session` slice — the shared editor UI state that used to trap six UI regions
-// inside one element: which face is edited, the active tool and ink, the MRU
-// color recency, the per-tool options, and the picker dialog's open flag.
+// inside one element: the active tool and ink, the MRU color recency, the
+// per-tool options, and the picker dialog's open flag. APP-LEVEL by design
+// (System 7: one palette, one ink, however many documents are open); the
+// per-window half — which face a document window is editing — lives on its
+// workspace context, not here.
 //
 // Every action is a named, Node-tested function carrying the exact semantics of
 // the old element methods (`#selectColor`, `#switchTool`, `#touchRecent`, the
@@ -25,10 +28,6 @@ const clampRadius = (n, max) => Math.max(0, Math.min(max, Math.round(Number(n) |
 
 export function createSession() {
   const store = createStore({
-    // Which of the six atlas faces is being edited. A face is ALWAYS selected
-    // (the editor is always open); boot and sheet swaps fall back to this
-    // default, and the ?edit= dev hook overrides it before the first mount.
-    face: 'left',
     // The active tool: 'pencil' | 'rect' | 'fill' | 'eraser' | 'eyedropper'.
     // The eraser is a formal tool mode (a pencil that writes transparency),
     // not an ink: the ink below is always a solid color.
@@ -53,11 +52,6 @@ export function createSession() {
     store,
     get: store.get,
     subscribe: store.subscribe,
-
-    /** @param {string} face */
-    selectFace(face) {
-      store.patch({ face });
-    },
 
     // Select a tool — every tool (the eraser and eyedropper included) is a
     // sticky mode: it stays selected until another tool is picked. The ink is

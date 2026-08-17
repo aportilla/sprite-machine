@@ -1,13 +1,15 @@
-// Node-runnable tests for the files slice: save/open/duplicate/rename/remove
-// against an in-memory storage stub, the PNG-chunk metadata round-trip, dirty
-// tracking off the doc's two channels, and graceful degradation when storage
-// is absent or broken.
+// Node-runnable tests for the files slice — the document LIBRARY:
+// save/load/rename/remove/export against an in-memory storage stub, the
+// PNG-chunk metadata round-trip, and graceful degradation when storage is
+// absent or broken. Per-document identity and dirty state moved to the
+// workspace (workspace.test.mjs); every operation here takes an explicit doc
+// + identity.
 // Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createDoc } from '../src/state/doc.js';
-import { createFiles, docFilename, SOFTWARE, UNTITLED } from '../src/state/files.js';
+import { createFiles, docFilename, SOFTWARE } from '../src/state/files.js';
 import { crc32, readTextChunks } from '../src/lib/png-chunks.js';
 
 // --- stubs -------------------------------------------------------------------
@@ -128,25 +130,24 @@ function makeWorld({ storage = memStorage(), icon = 'data:icon' } = {}) {
   let n = 0;
   const files = createFiles({
     storage,
-    doc,
     encodeAtlas,
     decodeAtlas,
     makeIcon: async () => icon,
     now: () => t++,
     newId: () => `id-${++n}`,
   });
-  doc.loadAtlas(sheet(6, 4)); // a 3×2 atlas of 2×2 tiles, fresh untitled
+  doc.loadAtlas(sheet(6, 4)); // a 3×2 atlas of 2×2 tiles
   return { files, doc, frames, storage };
 }
 
-const stroke = (doc, files) => {
-  // A live edit: silent tile write + a flushed live frame → dirty.
+const stroke = (doc) => {
+  // A live edit: silent tile write (drain folds it in).
   const tile = { width: 2, height: 2, data: new Uint8ClampedArray(16) };
   tile.data[3] = 255;
   doc.applyTileEdit('front', tile);
 };
 
-// --- identity & naming -------------------------------------------------------
+// --- naming --------------------------------------------------------------------
 
 test('docFilename slugifies', () => {
   assert.equal(docFilename('Cargo Ship'), 'cargo-ship.png');
@@ -154,43 +155,13 @@ test('docFilename slugifies', () => {
   assert.equal(docFilename(''), 'untitled.png');
 });
 
-test('a wholesale load resets identity to a clean untitled', () => {
-  const { files, doc } = makeWorld();
-  assert.equal(files.get().currentId, null);
-  assert.equal(files.get().currentName, UNTITLED);
-  assert.equal(files.get().dirty, false);
-  files.adoptUntitled('Car');
-  assert.equal(files.get().currentName, 'Car');
-  assert.equal(files.get().currentId, null, 'adopting a name keeps it untitled');
-  doc.loadAtlas(sheet(6, 4));
-  assert.equal(files.get().currentName, UNTITLED, 'a new load re-unstitles');
-});
+// --- save / load ----------------------------------------------------------------
 
-// --- dirty tracking ----------------------------------------------------------
-
-test('live strokes and structural edits mark dirty; a load marks clean', () => {
-  const { files, doc, frames } = makeWorld();
-  assert.equal(files.get().dirty, false);
-  stroke(doc, files);
-  frames.frame();
-  assert.equal(files.get().dirty, true, 'a live flush dirties');
-  doc.loadAtlas(sheet(6, 4));
-  assert.equal(files.get().dirty, false, 'a fresh load cleans');
-  doc.resizeTiles(3, 3);
-  assert.equal(files.get().dirty, true, 'a structural resize dirties');
-});
-
-// --- save / open -------------------------------------------------------------
-
-test('saveCurrent persists PNG bytes with the metadata chunks', async () => {
-  const { files, storage, doc, frames } = makeWorld();
-  stroke(doc, frames);
-  const id = await files.saveCurrent('Cargo Ship');
-  assert.equal(id, 'id-1');
+test('save persists PNG bytes with the metadata chunks and returns the identity', async () => {
+  const { files, storage, doc } = makeWorld();
+  const res = await files.save(doc, { name: 'Cargo Ship' });
+  assert.deepEqual(res, { id: 'id-1', name: 'Cargo Ship' });
   const s = files.get();
-  assert.equal(s.currentId, 'id-1');
-  assert.equal(s.currentName, 'Cargo Ship');
-  assert.equal(s.dirty, false, 'a save cleans');
   assert.equal(s.list.length, 1);
   assert.equal(s.list[0].name, 'Cargo Ship');
   assert.equal(s.list[0].icon, 'data:icon');
@@ -211,8 +182,8 @@ test('saveCurrent persists PNG bytes with the metadata chunks', async () => {
 
 test('a save folds the pending live stroke in first (drain-before-consume)', async () => {
   const { files, doc, storage } = makeWorld();
-  stroke(doc, files); // pending — its frame never cranked
-  await files.saveCurrent('X');
+  stroke(doc); // pending — its frame never cranked
+  await files.save(doc, { name: 'X' });
   const rec = storage.map.get('id-1');
   const img = await decodeAtlas(rec.png);
   // FRONT is tile (col 1, row 0) of 2×2 tiles: the stroke's texel (0,0) with
@@ -224,137 +195,98 @@ test('a save folds the pending live stroke in first (drain-before-consume)', asy
   );
 });
 
-test('a saved doc saves silently in place; createdAt survives, modifiedAt moves', async () => {
+test('a save with a fileId lands in place; createdAt survives, modifiedAt moves', async () => {
   const { files, storage, doc, frames } = makeWorld();
-  await files.saveCurrent('Ship');
-  const first = storage.map.get('id-1');
-  stroke(doc, frames);
+  const first = await files.save(doc, { name: 'Ship' });
+  const rec1 = storage.map.get(first.id);
+  stroke(doc);
   frames.frame();
-  await files.saveCurrent();
-  const second = storage.map.get('id-1');
+  await files.save(doc, { fileId: first.id, name: 'Ship' });
+  const rec2 = storage.map.get(first.id);
   assert.equal(storage.map.size, 1, 'same record, no duplicate');
-  assert.equal(second.name, 'Ship');
-  assert.equal(second.createdAt, first.createdAt);
-  assert.ok(second.modifiedAt > first.modifiedAt);
+  assert.equal(rec2.name, 'Ship');
+  assert.equal(rec2.createdAt, rec1.createdAt);
+  assert.ok(rec2.modifiedAt > rec1.modifiedAt);
+});
+
+test('a save without a fileId is always a NEW record (the duplicate path)', async () => {
+  const { files, storage, doc } = makeWorld();
+  await files.save(doc, { name: 'Ship' });
+  const copy = await files.save(doc, { name: 'Ship copy' });
+  assert.equal(copy.id, 'id-2');
+  assert.equal(storage.map.size, 2);
+  assert.equal(readTextChunks(storage.map.get('id-2').png).Title, 'Ship copy');
 });
 
 test('non-identity transforms round-trip through the chunk', async () => {
   const { files, doc, storage } = makeWorld();
   doc.loadAtlas(sheet(6, 4), { front: { rot: 1 } });
-  await files.saveCurrent('T');
+  await files.save(doc, { name: 'T' });
   const meta = readTextChunks(storage.map.get('id-1').png);
   assert.equal(meta['sprite-machine:transforms'], '{"front":{"rot":1}}');
 
-  // Open it back: the transforms land in the doc.
-  doc.loadAtlas(sheet(6, 4)); // wipe
-  assert.deepEqual(doc.get().transforms, {});
-  await files.open('id-1');
-  assert.deepEqual(doc.get().transforms, { front: { rot: 1 } });
+  const loaded = await files.load('id-1');
+  assert.deepEqual(loaded.transforms, { front: { rot: 1 } });
 });
 
-test('open restores pixels, name and a clean identity', async () => {
+test('load hands back pixels, name and transforms; a missing id resolves null', async () => {
   const { files, doc, frames } = makeWorld();
-  stroke(doc, frames);
+  stroke(doc);
   frames.frame();
-  await files.saveCurrent('Cargo Ship');
-  doc.loadAtlas(sheet(6, 4)); // something else, untitled
-  assert.equal(files.get().currentId, null);
+  await files.save(doc, { name: 'Cargo Ship' });
 
-  const ok = await files.open('id-1');
-  assert.equal(ok, true);
-  assert.equal(files.get().currentId, 'id-1');
-  assert.equal(files.get().currentName, 'Cargo Ship');
-  assert.equal(files.get().dirty, false);
-  // The stroked texel came back through the codec.
-  assert.equal(doc.get().atlasImage.data[(0 * 6 + 2) * 4 + 3], 255);
+  const loaded = await files.load('id-1');
+  assert.equal(loaded.name, 'Cargo Ship');
+  assert.deepEqual(loaded.transforms, {});
+  assert.equal(loaded.image.data[(0 * 6 + 2) * 4 + 3], 255, 'pixels round-trip');
+
+  assert.equal(await files.load('nope'), null);
 });
 
-test('open of a missing id resolves false and touches nothing', async () => {
-  const { files } = makeWorld();
-  files.adoptUntitled('Keep');
-  assert.equal(await files.open('nope'), false);
-  assert.equal(files.get().currentName, 'Keep');
-});
+// --- rename / remove -------------------------------------------------------------
 
-// --- duplicate / rename / remove / close ------------------------------------
-
-test('duplicate saves "«name» copy" as a new doc and opens it', async () => {
-  const { files, storage } = makeWorld();
-  await files.saveCurrent('Ship');
-  await files.duplicate();
-  const s = files.get();
-  assert.equal(s.currentId, 'id-2');
-  assert.equal(s.currentName, 'Ship copy');
-  assert.equal(storage.map.size, 2);
-  assert.equal(readTextChunks(storage.map.get('id-2').png).Title, 'Ship copy');
-});
-
-test('rename rewrites the Title chunk and the cache field', async () => {
-  const { files, storage } = makeWorld();
-  await files.saveCurrent('Old');
-  await files.rename('New');
-  assert.equal(files.get().currentName, 'New');
+test('renameById rewrites the Title chunk and the cache field', async () => {
+  const { files, storage, doc } = makeWorld();
+  await files.save(doc, { name: 'Old' });
+  await files.renameById('id-1', 'New');
   const rec = storage.map.get('id-1');
   assert.equal(rec.name, 'New');
   assert.equal(readTextChunks(rec.png).Title, 'New');
   assert.equal(files.get().list[0].name, 'New');
 });
 
-test('renameById renames a NON-open doc without touching the open identity', async () => {
+test('remove deletes the record and the listing row', async () => {
   const { files, storage, doc } = makeWorld();
-  await files.saveCurrent('First');
-  doc.loadAtlas(sheet(6, 4));
-  files.adoptUntitled('Working');
-  await files.renameById('id-1', 'Renamed');
-  assert.equal(storage.map.get('id-1').name, 'Renamed');
-  assert.equal(readTextChunks(storage.map.get('id-1').png).Title, 'Renamed');
-  assert.equal(files.get().currentName, 'Working', 'the open untitled doc is untouched');
-});
-
-test('rename of an untitled doc just takes the display name', async () => {
-  const { files, storage } = makeWorld();
-  await files.rename('Nameless');
-  assert.equal(files.get().currentName, 'Nameless');
-  assert.equal(storage.map.size, 0);
-});
-
-test('remove deletes the record; the open doc reverts to untitled identity', async () => {
-  const { files, storage } = makeWorld();
-  await files.saveCurrent('Doomed');
+  await files.save(doc, { name: 'Doomed' });
   await files.remove('id-1');
   assert.equal(storage.map.size, 0);
-  assert.equal(files.get().currentId, null);
   assert.equal(files.get().list.length, 0);
-});
-
-test('close resets to a clean untitled identity', async () => {
-  const { files, doc, frames } = makeWorld();
-  await files.saveCurrent('Ship');
-  stroke(doc, frames);
-  frames.frame();
-  files.close();
-  const s = files.get();
-  assert.equal(s.currentId, null);
-  assert.equal(s.currentName, UNTITLED);
-  assert.equal(s.dirty, false);
 });
 
 // --- export ------------------------------------------------------------------
 
 test('export hands back the saved bytes verbatim when clean', async () => {
-  const { files, storage } = makeWorld();
-  await files.saveCurrent('Ship');
-  const { bytes, name } = await files.exportCurrent();
+  const { files, storage, doc } = makeWorld();
+  const { id } = await files.save(doc, { name: 'Ship' });
+  const { bytes, name } = await files.exportBytes(doc, {
+    fileId: id,
+    name: 'Ship',
+    dirty: false,
+  });
   assert.equal(name, 'Ship');
   assert.deepEqual(bytes, storage.map.get('id-1').png);
 });
 
 test('export re-encodes when dirty, chunks included', async () => {
   const { files, doc, frames, storage } = makeWorld();
-  await files.saveCurrent('Ship');
-  stroke(doc, frames);
+  const { id } = await files.save(doc, { name: 'Ship' });
+  stroke(doc);
   frames.frame();
-  const { bytes } = await files.exportCurrent();
+  const { bytes } = await files.exportBytes(doc, {
+    fileId: id,
+    name: 'Ship',
+    dirty: true,
+  });
   assert.notDeepEqual(bytes, storage.map.get('id-1').png, 'not the stale stored bytes');
   const img = await decodeAtlas(bytes);
   assert.equal(img.data[(0 * 6 + 2) * 4 + 3], 255, 'the new stroke is in the export');
@@ -362,9 +294,8 @@ test('export re-encodes when dirty, chunks included', async () => {
 });
 
 test('an untitled export encodes fresh with its display name', async () => {
-  const { files } = makeWorld();
-  files.adoptUntitled('Car');
-  const { bytes, name } = await files.exportCurrent();
+  const { files, doc } = makeWorld();
+  const { bytes, name } = await files.exportBytes(doc, { name: 'Car' });
   assert.equal(name, 'Car');
   assert.equal(readTextChunks(bytes).Title, 'Car');
 });
@@ -380,17 +311,15 @@ test('refresh resolves availability: present storage true, broken false, none fa
   await bad.files.refresh();
   assert.equal(bad.files.get().available, false);
 
-  const doc = createDoc(fakeScheduler());
-  const none = createFiles({ storage: null, doc, encodeAtlas, decodeAtlas });
+  const none = createFiles({ storage: null, encodeAtlas, decodeAtlas });
   await none.refresh();
   assert.equal(none.get().available, false);
 });
 
 test('the listing sorts by creation order', async () => {
   const { files, doc } = makeWorld();
-  await files.saveCurrent('B');
-  doc.loadAtlas(sheet(6, 4));
-  await files.saveCurrent('A');
+  await files.save(doc, { name: 'B' });
+  await files.save(doc, { name: 'A' });
   assert.deepEqual(
     files.get().list.map((r) => r.name),
     ['B', 'A']

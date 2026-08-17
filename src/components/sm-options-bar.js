@@ -15,8 +15,9 @@ import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { maxCornerRadius } from '../lib/rect.js';
 import { session } from '../state/session.js';
-import { doc } from '../state/doc.js';
-import { StoreController } from '../state/store-controller.js';
+import { shell } from '../state/shell.js';
+import { workspace } from '../state/workspace.js';
+import { StoreController, ActiveDocController } from '../state/store-controller.js';
 import { baseStyles } from './base-styles.js';
 import './sm-tool-options.js'; // registers <sm-tool-options>
 
@@ -51,22 +52,33 @@ export class SmOptionsBar extends LitElement {
   constructor() {
     super();
     new StoreController(this, session.store);
-    new StoreController(this, doc.store);
+    new StoreController(this, shell.store);
+    // The clamp bounds derive from the ACTIVE document's tile geometry — the
+    // strip's controls apply to whichever window is being edited.
+    new ActiveDocController(this, workspace);
   }
 
-  // The same geometric bounds the old editor derived: tips capped at the tile
+  // The same geometric bounds the editor derives: tips capped at the tile
   // edge, the radius at half the shorter side (the clamping itself lives in
   // the session actions).
+  get #activeDoc() {
+    return workspace.active()?.doc.get() ?? null;
+  }
   get #brushMax() {
-    const d = doc.get();
-    return Math.max(1, Math.min(d.tileW || 1, d.tileH || 1));
+    const d = this.#activeDoc;
+    return Math.max(1, Math.min(d?.tileW || 1, d?.tileH || 1));
   }
   get #radiusMax() {
-    const d = doc.get();
-    return maxCornerRadius(d.tileW || 1, d.tileH || 1);
+    const d = this.#activeDoc;
+    return maxCornerRadius(d?.tileW || 1, d?.tileH || 1);
   }
 
   render() {
+    // Desktop focused: the strip belongs to the application, so its content
+    // clears — the band itself stays (it's structural chrome the window
+    // clamp reserves space under), an empty white run like an app with no
+    // tool showing.
+    if (!shell.get().appActive) return html``;
     const s = session.get();
     return html`
       <vf-label class="tool-name">${TOOL_NAME[s.tool] ?? ''}</vf-label>

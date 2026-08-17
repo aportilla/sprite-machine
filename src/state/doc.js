@@ -227,4 +227,5 @@ export function createDoc(scheduler = {}) {
   };
 }
 
-export const doc = createDoc();
+// No singleton: every document context (state/workspace.js) owns its own
+// createDoc() instance — one canonical doc per open document window.

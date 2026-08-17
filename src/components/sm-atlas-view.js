@@ -2,13 +2,17 @@
 // <sm-atlas-view> — the Full Sprite View window's body: the whole 3×2 atlas
 // drawn nearest-neighbor, scaled to fit the window as large as its aspect
 // ratio allows (fractional scale — never an overflow, never a clip).
-// A CONNECTED leaf over the doc alone — it subscribes to BOTH channels:
+// A CONNECTED leaf that FOLLOWS THE ACTIVE DOCUMENT (the utility windows
+// serve the active document only): followActive re-wires it across
+// activation switches onto that context's doc, BOTH channels:
 //   - change (structural): a new sheet / tile size — resize the backing
 //     store, re-fit, repaint;
 //   - live (stroke-rate, rAF-coalesced): the canonical sheet was just blitted
 //     (blit-then-notify), so tracking a stroke is one putImageData per frame
 //     — the second live subscriber ever, after the rebuilder, and the same
 //     cost class.
+// With no active document it just keeps its last pixels — the windoid is
+// hidden whenever the application is inactive, so nothing stale ever shows.
 // The canvas keeps a native atlas-resolution backing store (CSS scales it
 // crisp); a ResizeObserver re-fits on any window resize, so the grow box
 // works for free.
@@ -16,7 +20,7 @@
 
 import { css, LitElement, html } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
-import { doc } from '../state/doc.js';
+import { workspace, followActive } from '../state/workspace.js';
 import { baseStyles } from './base-styles.js';
 
 export class SmAtlasView extends LitElement {
@@ -64,17 +68,24 @@ export class SmAtlasView extends LitElement {
   #canvas = createRef();
   #ctx = null;
   #resizeObs = null;
-  #unsubs = [];
+  #stopFollow = null;
   #atlasW = 0;
   #atlasH = 0;
   #scale = 0;
 
   connectedCallback() {
     super.connectedCallback();
-    this.#unsubs = [
-      doc.subscribe(() => this.#syncGeometry()),
-      doc.onLive(() => this.#paint()),
-    ];
+    // Follow the active document: each activation re-wires both doc channels
+    // onto the new context and adopts its sheet immediately.
+    this.#stopFollow = followActive(workspace, (ctx) => {
+      if (!ctx) return;
+      const unsubs = [
+        ctx.doc.subscribe(() => this.#syncGeometry()),
+        ctx.doc.onLive(() => this.#paint()),
+      ];
+      if (this.#ctx) this.#syncGeometry();
+      return () => unsubs.forEach((u) => u());
+    });
     // Setup mirrors disconnectedCallback's teardown: raising any window makes
     // vf-desktop re-order the slotted windows in the light DOM, which
     // disconnects + reconnects this element — everything torn down there must
@@ -90,8 +101,8 @@ export class SmAtlasView extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    for (const u of this.#unsubs) u();
-    this.#unsubs = [];
+    this.#stopFollow?.();
+    this.#stopFollow = null;
     this.#resizeObs?.disconnect();
     this.#resizeObs = null;
   }
@@ -110,7 +121,7 @@ export class SmAtlasView extends LitElement {
   // then re-fit and repaint.
   #syncGeometry() {
     const canvas = this.#canvas.value;
-    const img = doc.get().atlasImage;
+    const img = workspace.active()?.doc.get().atlasImage;
     if (!canvas || !img) return;
     if (img.width !== this.#atlasW || img.height !== this.#atlasH) {
       this.#atlasW = canvas.width = img.width;
@@ -145,7 +156,7 @@ export class SmAtlasView extends LitElement {
   // One blit of the canonical sheet. The live channel fires AFTER the sheet
   // blit (blit-then-notify), so the atlas is always current here.
   #paint() {
-    const img = doc.get().atlasImage;
+    const img = workspace.active()?.doc.get().atlasImage;
     if (!this.#ctx || !img || !this.#atlasW) return;
     const id =
       img instanceof ImageData

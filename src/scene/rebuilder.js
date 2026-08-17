@@ -1,17 +1,20 @@
 // ---------------------------------------------------------------------------
 // The mesh rebuilder — the voxel pipeline's ONLY consumer, and just another
-// store subscriber: it listens to the doc's change channel (load / resize /
-// replace-all), the doc's LIVE channel (the rAF-coalesced stroke flushes — it
-// is that channel's only subscriber), and the lowpoly pref; each event runs
+// store subscriber: it FOLLOWS THE ACTIVE DOCUMENT (the 3D View serves the
+// active window), wiring that context's doc channels — change (load / resize
+// / replace-all) and LIVE (the rAF-coalesced stroke flushes; it is that
+// channel's only subscriber) — plus the lowpoly pref; each event runs
 // ingest → carve → colorize → mesh and swaps the result into the stage. It
-// writes what it measured into the `build` slice for the stats readout.
+// writes what it measured into the `build` slice for the stats readout. No
+// active document (the desktop focused with nothing open) empties the stage.
 //
-// Framing: a build of a NEW sheet (the doc's `sheet` generation moved) frames
-// the camera; every other rebuild is in place and carries the auto-rotate spin
-// forward (a fresh mesh starts at rotation 0 — without this the angle would
-// visibly snap on every stroke). The generation is left unconsumed on an empty
-// build, so the first real build of a fresh sheet still frames (e.g. the first
-// stroke on a blank atlas).
+// Framing: a build of a NEW sheet (the doc's `sheet` generation moved) — or
+// of a newly ACTIVATED document (a window switch is a new subject) — frames
+// the camera; every other rebuild is in place and carries the auto-rotate
+// spin forward (a fresh mesh starts at rotation 0 — without this the angle
+// would visibly snap on every stroke). The generation is left unconsumed on
+// an empty build, so the first real build of a fresh sheet still frames
+// (e.g. the first stroke on a blank atlas).
 //
 // This being the pipeline's single call site is what makes the future
 // Web-Worker carve a drop-in: making this function async is a local change.
@@ -21,7 +24,7 @@ import { buildVoxels } from '../lib/pipeline.js';
 import { voxelMesh } from '../lib/mesh.js';
 import { wedgeMesh } from '../lib/wedge-mesh.js';
 import { VIEW_NAMES } from '../lib/views.js';
-import { doc } from '../state/doc.js';
+import { workspace, followActive } from '../state/workspace.js';
 import { prefs } from '../state/prefs.js';
 import { build } from '../state/build.js';
 
@@ -31,26 +34,36 @@ import { build } from '../state/build.js';
  */
 export function initRebuilder(stage, { flat = false, diag = false } = {}) {
   let current = null; // THREE.Object3D in the scene
-  let framedSheet = 0; // doc sheet generation at the last framed build
+  let activeCtx = null; // the followed context
+  let framedSheet = 0; // active doc's sheet generation at the last framed build
+
+  function removeMesh() {
+    if (!current) return;
+    stage.scene.remove(current);
+    // Free the GPU resources of the mesh we're replacing. Both builders emit a
+    // single vertex-colored MeshStandardMaterial (no textures to dispose).
+    current.traverse?.((o) => {
+      o.geometry?.dispose?.();
+      o.material?.dispose?.();
+    });
+    current = null;
+    stage.setSpinTarget(null);
+  }
 
   function rebuild() {
-    const d = doc.get();
+    const ctx = activeCtx;
+    if (!ctx) {
+      removeMesh();
+      build.setStats({ dims: null, voxels: 0, triangles: 0, warnings: [] });
+      stage.requestRender();
+      return;
+    }
+    const d = ctx.doc.get();
     const opts = { transforms: d.transforms };
     const provided = VIEW_NAMES.filter((n) => d.views[n]);
 
     const prevRotY = current ? current.rotation.y : null;
-
-    if (current) {
-      stage.scene.remove(current);
-      // Free the GPU resources of the mesh we're replacing. Both builders emit a
-      // single vertex-colored MeshStandardMaterial (no textures to dispose).
-      current.traverse?.((o) => {
-        o.geometry?.dispose?.();
-        o.material?.dispose?.();
-      });
-      current = null;
-      stage.setSpinTarget(null);
-    }
+    removeMesh();
 
     if (provided.length === 0) {
       build.setStats({ dims: null, voxels: 0, triangles: 0, warnings: [] });
@@ -96,24 +109,36 @@ export function initRebuilder(stage, { flat = false, diag = false } = {}) {
     stage.requestRender(); // the mesh changed — redraw once even if the camera is idle
   }
 
-  // Structural changes and live flushes both rebuild; a lowpoly toggle rebuilds
-  // too (autoRotate doesn't — the loop reads it per frame).
+  // Follow the active document: structural changes and live flushes of ITS
+  // doc rebuild; an activation switch is a new subject, so framing resets
+  // (`framedSheet` back to never-matching) and the switch itself rebuilds.
+  const stopFollow = followActive(workspace, (ctx) => {
+    activeCtx = ctx;
+    framedSheet = -1;
+    if (!ctx) {
+      rebuild();
+      return;
+    }
+    const unsubs = [ctx.doc.subscribe(() => rebuild()), ctx.doc.onLive(() => rebuild())];
+    rebuild();
+    return () => unsubs.forEach((u) => u());
+  });
+
+  // A lowpoly toggle rebuilds too (autoRotate doesn't — the loop reads it per
+  // frame).
   let lastLowpoly = prefs.get().lowpoly;
-  const unsubs = [
-    doc.subscribe(() => rebuild()),
-    doc.onLive(() => rebuild()),
-    prefs.subscribe((p) => {
-      if (p.lowpoly !== lastLowpoly) {
-        lastLowpoly = p.lowpoly;
-        rebuild();
-      }
-    }),
-  ];
+  const unsubPrefs = prefs.subscribe((p) => {
+    if (p.lowpoly !== lastLowpoly) {
+      lastLowpoly = p.lowpoly;
+      rebuild();
+    }
+  });
 
   return {
     // HMR teardown: stop listening (the stage disposes the scene itself).
     dispose() {
-      for (const u of unsubs) u();
+      stopFollow();
+      unsubPrefs();
     },
   };
 }

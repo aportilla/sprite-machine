@@ -1,37 +1,43 @@
 // ---------------------------------------------------------------------------
-// <sm-editor> — the document window's body: the CONNECTED container for the
-// drawing surface. Docked into the window by index.html and never destroyed
-// (ONE ELEMENT, FOREVER — the window hides, never unmounts, so canvas
-// identity and focus behavior survive). Slimmed by the desktop shell: the
-// tool strip / color wells live in the Tools palette (<sm-tools-panel>), the
-// per-tool options in the options strip (<sm-options-bar>), and the
-// tile-size stepper in File → Properties — what remains is the FACE PICKER
-// row over the black-framed artwork well holding <sm-draw-canvas>, plus the
-// 256-color Colors dialog (top-layer, so living in this template can't clip).
+// <sm-editor> — a document window's body: the CONNECTED container for the
+// drawing surface. ONE EDITOR PER DOCUMENT, for the document's lifetime: the
+// window reconciler (shell/windows.js) clones it into every document window
+// with its `ctx` (the workspace DocContext) assigned BEFORE the append, and
+// it lives until the document closes — a hide (or the desktop's DOM
+// re-orders) never unmounts it, so canvas identity and focus behavior
+// survive. What it holds: the FACE PICKER row over the black-framed artwork
+// well holding <sm-draw-canvas>, plus the 256-color Colors dialog
+// (top-layer, so living in this template can't clip).
 //
-// Store wiring (the editor's share of it): two StoreControllers re-render on
-// any session (brush state) or doc (structural) change, plus the shell slice
-// for the Show Grid toggle; the per-face view model is memoized on (face,
-// views-identity, tile geometry) — the two-speed contract depends on it: a
-// live stroke mutates `views[face]` SILENTLY (same object), so guides /
+// Store wiring (the editor's share of it): StoreControllers re-render on any
+// session (brush state), shell (Show Grid), or workspace (face, activation)
+// change; the context's own doc is wired by hand in connectedCallback (the
+// context isn't known at construction) and re-wired across the desktop's
+// disconnect/reconnect node moves. The per-face view model is memoized on
+// (face, views-identity, tile geometry) — the two-speed contract depends on
+// it: a live stroke mutates `views[face]` SILENTLY (same object), so guides /
 // onion-skin / the working tile's identity stay put mid-stroke and the canvas
-// never resets its buffer. Canvas gesture commits feed the undo history
-// (sm-commit → history.pushTile; an all-tiles replace snapshots the atlas).
+// never resets its buffer. Canvas gesture commits feed THIS document's undo
+// history (sm-commit → ctx.history.pushTile).
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { maxCornerRadius } from '../lib/rect.js';
+import { PALETTE_256 } from '../lib/constants.js';
 import { session } from '../state/session.js';
-import { doc } from '../state/doc.js';
 import { shell } from '../state/shell.js';
-import { history } from '../state/history.js';
+import { workspace } from '../state/workspace.js';
 import { editorViewModel } from '../state/derive.js';
 import { StoreController } from '../state/store-controller.js';
 import './sm-face-picker.js'; // registers <sm-face-picker>
 import './sm-color-picker.js'; // registers <sm-color-picker>
 import './sm-draw-canvas.js'; // registers <sm-draw-canvas>
 import { baseStyles } from './base-styles.js';
+
+// The face-picker row order: mirror pairs, so flipping between a pair for
+// reference is one step.
+const FACES = ['left', 'right', 'front', 'back', 'top', 'bottom'];
 
 export class SmEditor extends LitElement {
   static styles = [
@@ -76,40 +82,57 @@ export class SmEditor extends LitElement {
   ];
 
   static properties = {
-    // Session-constant inputs (main.js assigns them once at creation).
-    palette256: { attribute: false },
-    faces: { attribute: false },
+    /** The workspace DocContext this editor edits — assigned by the window
+     *  reconciler BEFORE the element enters the DOM, constant for life. */
+    ctx: { attribute: false },
   };
 
   constructor() {
     super();
-    this.palette256 = [];
-    /** @type {string[]|null} */
-    this.faces = null;
+    /** @type {import('../state/workspace.js').DocContext|null} */
+    this.ctx = null;
+    this.palette256 = PALETTE_256;
 
-    // Any session action (brush state), structural doc change, or shell
-    // toggle (Show Grid) re-renders; live strokes are silent on all by design.
+    // Any session action (brush state), shell toggle (Show Grid), or
+    // workspace change (this window's face, the activation state the Colors
+    // dialog gates on) re-renders; live strokes are silent on all by design.
     new StoreController(this, session.store);
-    new StoreController(this, doc.store);
     new StoreController(this, shell.store);
+    new StoreController(this, workspace.store);
+  }
 
-    // One-shot canvas dev hooks (?cursor / ?rect / ?fill paint halves) —
-    // assigned by main.js before docking, handed to <sm-draw-canvas>, consumed
-    // there on its first update with real tile geometry.
-    this.previewCursor = false;
-    this.previewRect = null;
-    this.fillOnMount = null;
+  // The context's doc: wired by hand (the context isn't known at
+  // construction), and re-wired on every reconnect — the desktop re-orders
+  // slotted windows in the light DOM on raises, which disconnects and
+  // reconnects this element.
+  #unsubDoc = null;
+  connectedCallback() {
+    super.connectedCallback();
+    if (this.ctx) {
+      this.#unsubDoc = this.ctx.doc.subscribe(() => this.requestUpdate());
+      this.requestUpdate(); // a reconnect may have missed structural changes
+    }
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.#unsubDoc?.();
+    this.#unsubDoc = null;
+  }
+
+  /** Whether this editor's window is the active document window. */
+  get #isActive() {
+    return !!this.ctx && workspace.get().activeKey === this.ctx.key;
   }
 
   // --- derived bounds --------------------------------------------------------
   // The session actions clamp against these; sm-options-bar derives the same
-  // pair for its controls.
+  // pair from the active context for its controls.
   get #brushMax() {
-    const d = doc.get();
+    const d = this.ctx.doc.get();
     return Math.max(1, Math.min(d.tileW || 1, d.tileH || 1));
   }
   get #radiusMax() {
-    const d = doc.get();
+    const d = this.ctx.doc.get();
     return maxCornerRadius(d.tileW || 1, d.tileH || 1);
   }
 
@@ -117,8 +140,8 @@ export class SmEditor extends LitElement {
   #vm = null;
   #vmKey = null; // identities the memo is valid for
   #viewModel() {
-    const d = doc.get();
-    const face = session.get().face;
+    const d = this.ctx.doc.get();
+    const face = this.ctx.face;
     const k = this.#vmKey;
     if (
       !this.#vm ||
@@ -135,26 +158,36 @@ export class SmEditor extends LitElement {
 
   willUpdate() {
     // A tile resize can leave the persisted pencil / eraser size or corner
-    // radius past the new bounds — the clamp itself lives in the session action.
-    const d = doc.get();
+    // radius past the new bounds — the clamp itself lives in the session
+    // action. Only the ACTIVE window clamps: the session sliders are
+    // app-level, and they bound against the document actually being edited.
+    if (!this.ctx) return;
+    const d = this.ctx.doc.get();
     const k = this.#vmKey;
-    if (d.tileW && d.tileH && (!k || k.tileW !== d.tileW || k.tileH !== d.tileH)) {
+    if (
+      this.#isActive &&
+      d.tileW &&
+      d.tileH &&
+      (!k || k.tileW !== d.tileW || k.tileH !== d.tileH)
+    ) {
       session.clampTools(this.#brushMax, this.#radiusMax);
     }
   }
 
   // --- template --------------------------------------------------------------
   render() {
-    const d = doc.get();
+    if (!this.ctx) return html``;
+    const d = this.ctx.doc.get();
     const s = session.get();
     const vm = this.#viewModel();
+    const hooks = this.ctx.hooks;
     return html`
       <div class="editor">
         <div class="editor-settings">
           <sm-face-picker
-            .faces=${this.faces}
-            .selected=${s.face}
-            @sm-select-face=${(e) => session.selectFace(e.detail.face)}
+            .faces=${FACES}
+            .selected=${this.ctx.face}
+            @sm-select-face=${(e) => workspace.setFace(this.ctx.key, e.detail.face)}
           ></sm-face-picker>
         </div>
         <vf-separator class="editor-sep"></vf-separator>
@@ -173,9 +206,9 @@ export class SmEditor extends LitElement {
             .fillReplace=${s.fillReplace}
             .fillAllTiles=${s.fillAllTiles}
             .showGrid=${shell.get().showGrid}
-            .previewCursor=${this.previewCursor}
-            .previewRect=${this.previewRect}
-            .fillOnMount=${this.fillOnMount}
+            .previewCursor=${hooks?.previewCursor ?? false}
+            .previewRect=${hooks?.previewRect ?? null}
+            .fillOnMount=${hooks?.fillOnMount ?? null}
             @sm-live=${this.#onLive}
             @sm-commit=${this.#onCommit}
             @sm-pick-color=${(e) => session.pickColor(e.detail.rgb)}
@@ -185,7 +218,7 @@ export class SmEditor extends LitElement {
         </div>
         <sm-color-picker
           .palette=${this.palette256}
-          .open=${s.pickerOpen}
+          .open=${s.pickerOpen && this.#isActive}
           @sm-pick-color=${(e) => {
             session.pickColor(e.detail.rgb);
             session.closePicker();
@@ -205,13 +238,13 @@ export class SmEditor extends LitElement {
   #onLive = (e) => {
     const { tile, dirty } = e.detail;
     if (this.#vm?.wasDerived && !dirty) return;
-    doc.applyTileEdit(session.get().face, tile);
+    this.ctx.doc.applyTileEdit(this.ctx.face, tile);
   };
 
   // One finished gesture's snapshot pair → an undo entry for this face.
   #onCommit = (e) => {
     const { before, after } = e.detail;
-    history.pushTile(session.get().face, before, after);
+    this.ctx.history.pushTile(this.ctx.face, before, after);
   };
 
   // Fill with BOTH "replace" and "all tiles" on: recolor across the whole
@@ -219,7 +252,7 @@ export class SmEditor extends LitElement {
   // this editor over the new pixels.
   #onReplaceAllTiles = (e) => {
     const { target, fill } = e.detail;
-    history.withAtlasSnapshot(() => doc.replaceAllTiles(target, fill));
+    this.ctx.history.withAtlasSnapshot(() => this.ctx.doc.replaceAllTiles(target, fill));
   };
 }
 

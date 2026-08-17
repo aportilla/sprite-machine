@@ -1,10 +1,12 @@
 // ---------------------------------------------------------------------------
 // Atlas loaders: every way a sheet enters the app (a built-in sample, a picked
 // or dropped file, a blank canvas) funnels through here — decode, validate,
-// then `doc.loadAtlas` on success or `build.setError` on failure. The doc's
-// change notification does the rest (rebuild, editor re-point) and resets the
-// files identity to a clean untitled; the loaders then hand that untitled doc
-// its display name via `files.adoptUntitled`.
+// then OPEN A CONTEXT (state/workspace.js) and load the sheet into its doc,
+// or `build.setError` on failure. One document = one window: a load never
+// replaces an open document — the window layer reconciles a fresh document
+// window into existence from the workspace change, and the caller activates
+// it. Validation runs BEFORE the context opens, so a malformed sheet never
+// leaves an empty window behind.
 //
 // A dropped PNG may BE an exported document (the format is one .png with
 // metadata text chunks — lib/png-chunks.js), so `loadFile` reads the bytes
@@ -17,43 +19,52 @@
 import { validateSheet } from './lib/atlas.js';
 import { isPng, readTextChunks } from './lib/png-chunks.js';
 import { urlToImageData, bytesToImageData } from './image-io.js';
-import { doc } from './state/doc.js';
+import { workspace } from './state/workspace.js';
 import { build } from './state/build.js';
-import { files } from './state/files.js';
 
-// Validate + load a decoded sheet. The single trunk under the loaders below.
-/** @param {ImageData} imageData  @param {Record<string, object>} [transforms] */
-export function loadSheet(imageData, transforms = {}) {
+// Validate + open a decoded sheet as a fresh context. The single trunk under
+// the loaders below. Returns the new context, or null (with the error
+// surfaced) on a malformed sheet.
+/** @param {ImageData} imageData
+ *  @param {{transforms?: Record<string, object>, name?: string, hooks?: object|null}} [opts] */
+export function openSheet(imageData, { transforms = {}, name, hooks = null } = {}) {
   const bad = validateSheet(imageData);
   if (bad) {
     build.setError(bad);
-    return false;
+    return null;
   }
-  doc.loadAtlas(imageData, transforms);
-  return true;
+  const ctx = workspace.open({ name, hooks });
+  ctx.doc.loadAtlas(imageData, transforms);
+  return ctx;
 }
 
-/** @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}} sample */
-export async function loadSample(sample) {
+/** @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}} sample
+ *  @param {{hooks?: object|null}} [opts]  boot-only editor dev hooks */
+export async function loadSample(sample, { hooks = null } = {}) {
   let image;
   try {
     image = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
   } catch (err) {
     build.setError(`Couldn't load sample "${sample.name}": ${err.message}`);
-    return;
+    return null;
   }
   const bad = validateSheet(image);
   if (bad) {
     build.setError(`Sample "${sample.name}" is unusable: ${bad}`);
-    return;
+    return null;
   }
-  doc.loadAtlas(image, { ...(sample.transforms || {}) });
   // A sample opens as a fresh untitled copy wearing the sample's name.
-  files.adoptUntitled(sample.name);
+  return openSheet(image, {
+    transforms: { ...(sample.transforms || {}) },
+    name: sample.name,
+    hooks,
+  });
 }
 
 // Decode a dropped/picked file, surfacing failures instead of swallowing them
 // as an unhandled promise rejection (bad/corrupt images just no-op otherwise).
+// Returns the opened context (null on failure), so the drop target can
+// surface the new document window on success only.
 /** @param {File} f */
 export async function loadFile(f) {
   try {
@@ -72,15 +83,17 @@ export async function loadFile(f) {
         transforms = {};
       }
     }
-    if (loadSheet(await bytesToImageData(bytes), transforms)) {
-      files.adoptUntitled(title ?? f.name.replace(/\.[^.]+$/, ''));
-    }
+    return openSheet(await bytesToImageData(bytes), {
+      transforms,
+      name: title ?? f.name.replace(/\.[^.]+$/, ''),
+    });
   } catch (err) {
     build.setError(`Couldn't read "${f.name}" as an image: ${err.message}`);
+    return null;
   }
 }
 
 // A fresh 3x2 sheet of empty (transparent) square 40×40 tiles to draw from
-// scratch — every face reads empty until you paint it. (The sheet bump makes
-// it a clean untitled by itself.)
-export const loadBlank = () => loadSheet(new ImageData(120, 80));
+// scratch — every face reads empty until you paint it. The name counts up
+// over the open untitleds ("untitled", "untitled 2", …).
+export const loadBlank = () => openSheet(new ImageData(120, 80));

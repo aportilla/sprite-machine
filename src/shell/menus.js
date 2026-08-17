@@ -5,11 +5,17 @@
 // storage-unavailable notice). Behavior only — the markup lives in
 // index.html, the aesthetics in the kit.
 //
-// The DIRTY CHECK has one funnel: `confirmDiscard(next)` — run `next` now if
-// the document is clean, else raise the Save / Don't Save / Cancel alert and
-// run it (after a save, or without one) only when the user chooses. Every
-// destructive path (New, Open, Close, Quit, an icon double-click) routes
-// through it via the returned `actions`.
+// MULTI-DOCUMENT GRAMMAR: File actions target the ACTIVE workspace context;
+// New / Open / a drop always open a NEW window (opening never discards
+// anything — the dirty check moved entirely to the close paths); opening an
+// already-open stored doc activates its existing window. Quit walks every
+// open document, one unsaved-changes alert per dirty one.
+//
+// The DIRTY CHECK has one funnel: `confirmDiscard(ctx, next)` — run `next`
+// now if that document is clean, else raise the Save / Don't Save / Cancel
+// alert (activating its window first, so the question points at what the
+// user sees) and run it (after a save, or without one) only when the user
+// chooses.
 //
 // Menu key equivalents are the KIT's (`shortcut` on vf-menu-item + the bar's
 // `shortcuts` grant); a shortcut lands here as an ordinary vf-menu-select.
@@ -19,12 +25,11 @@
 // ---------------------------------------------------------------------------
 
 import { session } from '../state/session.js';
-import { doc } from '../state/doc.js';
 import { prefs } from '../state/prefs.js';
 import { build } from '../state/build.js';
 import { shell } from '../state/shell.js';
 import { files, UNTITLED, docFilename } from '../state/files.js';
-import { history } from '../state/history.js';
+import { workspace, followActive } from '../state/workspace.js';
 import { TILE_MIN, TILE_MAX } from '../lib/atlas.js';
 import { SAMPLES } from '../lib/sprite-data.js';
 import { loadSample, loadBlank } from '../loaders.js';
@@ -112,60 +117,63 @@ export function initMenus(desktop, windows) {
     p?.resolve(p.value);
   });
 
-  // The unsaved-changes alert. `discardNext` holds the action the user was
-  // attempting; each button takes it before closing (vf-close only clears a
-  // leftover — the Escape path).
+  // The unsaved-changes alert. `discardPending` holds the context asked
+  // about and the action the user was attempting; each button takes it
+  // before closing (vf-close only clears a leftover — the Escape path).
   const unsavedMsg = $('#unsaved-msg');
-  let discardNext = null;
-  function confirmDiscard(next) {
-    if (!files.get().dirty) {
+  let discardPending = null; // { ctx, next }
+  function confirmDiscard(ctx, next) {
+    if (!ctx || !ctx.dirty) {
       next();
       return;
     }
-    discardNext = next;
-    unsavedMsg.textContent = `Save changes to “${files.get().currentName}” before closing?`;
+    // Point the question at what the user sees: the asked-about document's
+    // window comes forward first (the System 7 quit cascade's behavior).
+    windows.activateContext(ctx.key);
+    discardPending = { ctx, next };
+    unsavedMsg.textContent = `Save changes to “${ctx.name}” before closing?`;
     dlgUnsaved.show();
   }
   on($('#btn-unsaved-dont'), 'click', () => {
-    const next = discardNext;
-    discardNext = null;
+    const p = discardPending;
+    discardPending = null;
     dlgUnsaved.close();
-    next?.();
+    p?.next();
   });
   on($('#btn-unsaved-cancel'), 'click', () => {
-    discardNext = null;
+    discardPending = null;
     dlgUnsaved.close();
   });
   on($('#btn-unsaved-save'), 'click', () => {
-    const next = discardNext;
-    discardNext = null;
+    const p = discardPending;
+    discardPending = null;
     dlgUnsaved.close();
-    saveThen(next);
+    if (p) saveThen(p.ctx, p.next);
   });
   on(dlgUnsaved, 'vf-close', () => {
-    discardNext = null;
+    discardPending = null;
   });
 
   // --- save / open flows ------------------------------------------------------
-  // Save, then run `next`. An untitled doc prompts for its name first; a
-  // Cancel there cancels the whole chain (System 7 semantics).
-  async function saveThen(next) {
+  // Save a context, then run `next`. An untitled doc prompts for its name
+  // first; a Cancel there cancels the whole chain (System 7 semantics).
+  async function saveThen(ctx, next) {
     if (!files.get().available) {
       dlgStorage.show();
       return;
     }
     try {
-      if (files.get().currentId) {
-        await files.saveCurrent();
+      if (ctx.fileId) {
+        await workspace.save(ctx.key);
       } else {
-        const initial = files.get().currentName;
+        const initial = ctx.name;
         const name = await promptName(
           'Save',
-          initial === UNTITLED ? '' : initial,
+          initial === UNTITLED || /^untitled \d+$/.test(initial) ? '' : initial,
           'Save'
         );
         if (name == null) return;
-        await files.saveCurrent(name);
+        await workspace.save(ctx.key, name);
       }
       next?.();
     } catch (err) {
@@ -173,26 +181,62 @@ export function initMenus(desktop, windows) {
     }
   }
 
-  const openSample = (i) =>
-    confirmDiscard(async () => {
-      await loadSample(SAMPLES[i]);
-      windows.showDocument();
+  // Opening NEVER discards: a sample is always a fresh untitled window, a
+  // stored doc opens once and re-activates thereafter.
+  const openSample = async (i) => {
+    const ctx = await loadSample(SAMPLES[i]);
+    if (ctx) windows.activateContext(ctx.key);
+  };
+
+  const openDoc = async (id) => {
+    try {
+      const res = await workspace.openStored(id);
+      if (res) windows.activateContext(res.ctx.key);
+    } catch (err) {
+      build.setError(`Couldn't open the document: ${err.message}`);
+    }
+  };
+
+  const newDocument = () => {
+    const ctx = loadBlank();
+    if (ctx) windows.activateContext(ctx.key);
+  };
+
+  // Close one document (dirty-checked). The window goes with the context;
+  // closing the last one deactivates the application via the kit (no
+  // document window left to hold active).
+  const closeContext = (ctx) =>
+    confirmDiscard(ctx, () => {
+      workspace.close(ctx.key);
     });
 
-  const openDoc = (id) =>
-    confirmDiscard(async () => {
-      try {
-        if (await files.open(id)) windows.showDocument();
-      } catch (err) {
-        build.setError(`Couldn't open the document: ${err.message}`);
+  // Quit: the System 7 cascade — every open document in turn, one
+  // unsaved-changes alert per dirty one (its window brought forward as it's
+  // asked about); Cancel anywhere aborts the rest. A completed quit leaves
+  // the bare desktop, the windoid wanted flags intact.
+  const quit = () => {
+    const ctxs = workspace.get().contexts;
+    if (!ctxs.length) return;
+    const ctx = workspace.active() ?? ctxs[ctxs.length - 1];
+    confirmDiscard(ctx, () => {
+      workspace.close(ctx.key);
+      quit();
+    });
+  };
+
+  // Finder grammar for Open: with the desktop focused, Open acts on the
+  // selected icon (the gate below disables it with none selected).
+  const openSelection = () => {
+    for (const key of shell.get().iconSelection) {
+      if (key.startsWith('sample:')) {
+        const name = key.slice('sample:'.length);
+        const i = SAMPLES.findIndex((s) => s.name === name);
+        if (i >= 0) openSample(i);
+      } else if (key.startsWith('doc:')) {
+        openDoc(key.slice('doc:'.length));
       }
-    });
-
-  const closeDocument = () =>
-    confirmDiscard(() => {
-      files.close();
-      shell.setWindowVisible('document', false);
-    });
+    }
+  };
 
   // --- the Open dialog --------------------------------------------------------
   const openList = $('#open-list');
@@ -224,6 +268,8 @@ export function initMenus(desktop, windows) {
   on(openList, 'dblclick', actOnOpenPick);
 
   // --- the Properties dialog --------------------------------------------------
+  // Reads the ACTIVE document; re-syncs while open on any workspace change or
+  // structural change of the active doc (followActive re-wires the latter).
   const propsName = $('#props-name');
   const propsDims = $('#props-dims');
   const propsTile = $('#props-tile');
@@ -231,19 +277,26 @@ export function initMenus(desktop, windows) {
   propsTile.max = TILE_MAX;
   const syncProps = () => {
     if (!dlgProps.open) return;
-    const d = doc.get();
-    propsName.textContent = files.get().currentName;
-    propsDims.textContent = d.atlasImage
+    const ctx = workspace.active();
+    const d = ctx?.doc.get();
+    propsName.textContent = ctx?.name ?? '';
+    propsDims.textContent = d?.atlasImage
       ? `${d.atlasImage.width}px × ${d.atlasImage.height}px`
       : '—';
-    propsTile.value = String(d.tileW || 0);
+    propsTile.value = String(d?.tileW || 0);
   };
-  teardown.push(doc.subscribe(syncProps), files.subscribe(syncProps));
+  teardown.push(
+    workspace.subscribe(syncProps),
+    followActive(workspace, (ctx) => (ctx ? ctx.doc.subscribe(syncProps) : undefined))
+  );
   on(propsTile, 'vf-change', (e) => {
+    const ctx = workspace.active();
+    if (!ctx) return;
     const n = e.detail.valueAsNumber;
-    if (Number.isFinite(n) && n !== doc.get().tileW) {
-      // The relocated tile stepper: a square, centered, undoable resize.
-      history.withAtlasSnapshot(() => doc.resizeTiles(n, n));
+    if (Number.isFinite(n) && n !== ctx.doc.get().tileW) {
+      // The relocated tile stepper: a square, centered, undoable resize —
+      // on the active document, in its own history.
+      ctx.history.withAtlasSnapshot(() => ctx.doc.resizeTiles(n, n));
     }
   });
 
@@ -259,54 +312,69 @@ export function initMenus(desktop, windows) {
         dlgSettings.show();
         break;
       case 'quit':
-        confirmDiscard(() => {
-          files.close();
-          shell.hideAll();
-        });
+        quit();
         break;
     }
   });
 
   on($('#menu-file'), 'vf-menu-select', (e) => {
     if (modalOpen()) return;
+    const active = () => workspace.active();
     switch (menuDetail(e).value) {
       case 'new':
-        confirmDiscard(() => {
-          loadBlank();
-          windows.showDocument();
-        });
+        newDocument();
         break;
       case 'open':
-        showOpenDialog();
+        // Two grammars, one item: the application's Open… (the listing
+        // dialog) while a document is focused; the Finder's Open (act on the
+        // selected icons) while the desktop is.
+        if (shell.get().appActive) showOpenDialog();
+        else openSelection();
         break;
-      case 'close':
-        closeDocument();
+      case 'close': {
+        const ctx = active();
+        if (ctx) closeContext(ctx);
         break;
-      case 'save':
-        saveThen(null);
+      }
+      case 'save': {
+        const ctx = active();
+        if (ctx) saveThen(ctx, null);
         break;
-      case 'duplicate':
+      }
+      case 'duplicate': {
+        const ctx = active();
+        if (!ctx) break;
         if (!files.get().available) dlgStorage.show();
         else
-          files
-            .duplicate()
+          workspace
+            .duplicate(ctx.key)
+            // The copy opens in its own window, System 7's Finder-Duplicate
+            // reading — the original window stays put.
+            .then((id) => (id ? openDoc(id) : null))
             .catch((err) => build.setError(`Duplicate failed: ${err.message}`));
         break;
-      case 'rename':
-        promptName('Rename', files.get().currentName, 'Rename').then((name) => {
+      }
+      case 'rename': {
+        const ctx = active();
+        if (!ctx) break;
+        promptName('Rename', ctx.name, 'Rename').then((name) => {
           if (name != null) {
-            files
-              .rename(name)
+            workspace
+              .rename(ctx.key, name)
               .catch((err) => build.setError(`Rename failed: ${err.message}`));
           }
         });
         break;
-      case 'export':
-        files
-          .exportCurrent()
+      }
+      case 'export': {
+        const ctx = active();
+        if (!ctx) break;
+        workspace
+          .exportOf(ctx.key)
           .then(({ bytes, name }) => downloadPngBytes(bytes, docFilename(name)))
           .catch((err) => build.setError(`Export failed: ${err.message}`));
         break;
+      }
       case 'properties':
         dlgProps.show();
         syncProps();
@@ -318,10 +386,10 @@ export function initMenus(desktop, windows) {
     if (modalOpen()) return;
     switch (menuDetail(e).value) {
       case 'undo':
-        history.undo();
+        workspace.active()?.history.undo();
         break;
       case 'redo':
-        history.redo();
+        workspace.active()?.history.redo();
         break;
       case 'pick-color':
         session.openPicker();
@@ -353,17 +421,62 @@ export function initMenus(desktop, windows) {
   });
 
   // --- checkmark + enabled sync ----------------------------------------------
-  // Undo/Redo render disabled until the history has something — which also
-  // hands their key strokes back to the browser (a disabled item's shortcut
-  // deliberately never fires, so ⌘Z in a text field stays native undo).
+  // Undo/Redo render disabled until the ACTIVE document's history has
+  // something — which also hands their key strokes back to the browser (a
+  // disabled item's shortcut deliberately never fires, so ⌘Z in a text field
+  // stays native undo) — and, like every document-scoped item, while the
+  // desktop is focused. followActive re-wires the history subscription as
+  // activation moves between windows.
   const itemUndo = $('vf-menu-item[value="undo"]');
   const itemRedo = $('vf-menu-item[value="redo"]');
   const syncEdit = () => {
-    itemUndo.disabled = !history.get().canUndo;
-    itemRedo.disabled = !history.get().canRedo;
+    const appActive = shell.get().appActive;
+    const h = workspace.active()?.history.get();
+    itemUndo.disabled = !appActive || !h?.canUndo;
+    itemRedo.disabled = !appActive || !h?.canRedo;
   };
-  teardown.push(history.subscribe(syncEdit));
+  teardown.push(
+    shell.subscribe(syncEdit),
+    followActive(workspace, (ctx) => (ctx ? ctx.history.subscribe(syncEdit) : undefined)),
+    workspace.subscribe(syncEdit)
+  );
   syncEdit();
+
+  // --- focus gating ------------------------------------------------------------
+  // Two roles share one menu bar (the single-application affordance): with
+  // the desktop focused, every document-scoped item greys out. About /
+  // Settings / Quit / New stay — they're app-level — and Open switches to the
+  // Finder grammar above: enabled iff a desktop icon is selected. Disabling
+  // an item also parks its key equivalent (the kit never fires a disabled
+  // item's shortcut), so ⌘O/⌘S/⌘K/⌘G gate with their menus; the bare-letter
+  // tool keys get the same guard in src/shortcuts.js.
+  const DOC_SCOPED = [
+    'close',
+    'save',
+    'duplicate',
+    'rename',
+    'export',
+    'properties',
+    'pick-color',
+    'tool-pencil',
+    'tool-rect',
+    'tool-fill',
+    'tool-eraser',
+    'tool-eyedropper',
+    'view-tools',
+    'view-stage',
+    'view-sprite',
+    'show-grid',
+  ];
+  const docItems = DOC_SCOPED.map((v) => $(`vf-menu-item[value="${v}"]`));
+  const itemOpen = $('vf-menu-item[value="open"]');
+  const syncGate = () => {
+    const s = shell.get();
+    for (const item of docItems) item.disabled = !s.appActive;
+    itemOpen.disabled = !s.appActive && s.iconSelection.length === 0;
+  };
+  teardown.push(shell.subscribe(syncGate));
+  syncGate();
 
   const itemStage = $('vf-menu-item[value="view-stage"]');
   const itemSprite = $('vf-menu-item[value="view-sprite"]');
@@ -391,11 +504,14 @@ export function initMenus(desktop, windows) {
   teardown.push(session.subscribe(syncTools));
   syncTools();
 
-  // The document window's close box routes through the same dirty check.
-  windows.onDocumentClose = closeDocument;
+  // A document window's close box routes through the same dirty check.
+  windows.onDocumentClose = (key) => {
+    const ctx = workspace.byKey(key);
+    if (ctx) closeContext(ctx);
+  };
 
   return {
-    actions: { confirmDiscard, openSample, openDoc, closeDocument, saveThen },
+    actions: { confirmDiscard, openSample, openDoc, closeContext, saveThen },
     dispose() {
       for (const fn of teardown) fn();
     },

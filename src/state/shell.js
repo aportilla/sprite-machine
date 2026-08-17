@@ -1,23 +1,43 @@
 // ---------------------------------------------------------------------------
-// `shell` slice — the desktop chrome's shared state: which of the four
-// windows are on screen, and the Show Grid toggle. Store-driven so the menu
-// checkmarks (View, plus the Tools menu's palette toggle), the windows'
-// `hidden` attributes, and the canvas's grid overlay all read one truth (a
-// menu pick, a close box, and a boot restore are the same action).
+// `shell` slice — the desktop chrome's shared state: which of the three
+// UTILITY windows are wanted on screen, whether the APPLICATION is active
+// (vs. the desktop — "the Finder"), the desktop-icon selection, and the Show
+// Grid toggle. Store-driven so the menu checkmarks + enabled states, the
+// windows' `hidden` attributes, and the canvas's grid overlay all read one
+// truth (a menu pick, a close box, a desktop click and a boot restore are
+// the same action). Document windows live elsewhere entirely: one exists per
+// open document (the workspace), so their visibility is existence, not a
+// flag here.
+//
+// TWO TRUTHS COMPOSE for the utility windows (Tools palette, 3D View, Sprite
+// View): `windows[id]` is the WANTED flag (the View-menu toggle — intent,
+// persisted) and `appActive` gates reality — a utility window is on screen
+// iff wanted && appActive. Deactivation therefore never loses the user's
+// palette arrangement: clicking back into a document restores exactly the
+// windoids that were up. `appActive` itself is transient session state,
+// written only from the desktop's vf-activate events (shell/windows.js), so
+// it boots true and no boot path — ?hide=document included — can clear it.
 // ---------------------------------------------------------------------------
 
 import { createStore } from './store.js';
 
-/** The four desktop windows, by shell id. */
-export const WINDOW_IDS = ['document', 'tools', 'sprite', 'stage'];
+/** The utility (windoid) windows, by shell id — the whole shell-flag set;
+ *  document windows are workspace-managed. */
+export const WINDOW_IDS = ['tools', 'sprite', 'stage'];
 
 export function createShell() {
   const store = createStore({
-    // All four windows are open by default (persistent panels, not
+    // All three windoids are open by default (persistent panels, not
     // hunt-for-them popups); closing any is reversible from the menu bar
     // (View for the view windows, Tools → Tools Palette for the windoid).
     /** @type {Record<string, boolean>} */
-    windows: { document: true, tools: true, sprite: true, stage: true },
+    windows: { tools: true, sprite: true, stage: true },
+    // Whether a document window is the desktop's active window. False =
+    // desktop focus ("the Finder"): utility windows hide, the options strip
+    // blanks, and the document-scoped menu items disable.
+    appActive: true,
+    /** @type {string[]} selected desktop-icon keys ("sample:Car" / "doc:<id>") */
+    iconSelection: [],
     showGrid: false,
   });
   return {
@@ -37,11 +57,17 @@ export function createShell() {
       this.setWindowVisible(id, !store.get().windows[id]);
     },
 
-    /** Hide every window (File → Quit leaves the bare desktop). */
-    hideAll() {
-      const windows = { ...store.get().windows };
-      for (const id of WINDOW_IDS) windows[id] = false;
-      store.patch({ windows });
+    /** @param {boolean} v  Written only from the desktop's vf-activate wire. */
+    setAppActive(v) {
+      if (store.get().appActive === !!v) return;
+      store.patch({ appActive: !!v });
+    },
+
+    /** @param {string[]} keys  The icon layer reports every selection change. */
+    setIconSelection(keys) {
+      const prev = store.get().iconSelection;
+      if (prev.length === keys.length && prev.every((k, i) => k === keys[i])) return;
+      store.patch({ iconSelection: [...keys] });
     },
 
     /** @param {boolean} v */

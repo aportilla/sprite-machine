@@ -16,10 +16,15 @@
 // ---------------------------------------------------------------------------
 
 import { session } from './state/session.js';
+import { shell } from './state/shell.js';
 
 export function initShortcuts() {
   /** @param {KeyboardEvent} e */
   const onKeyDown = (e) => {
+    // Desktop focused ("the Finder"): the tool keys belong to the
+    // application, and the application isn't frontmost — same gate the menu
+    // items get, which is what keeps the two surfaces agreeing.
+    if (!shell.get().appActive) return;
     if (session.get().pickerOpen) return;
     const target = e.composedPath ? e.composedPath()[0] : e.target;
     const tag = target && /** @type {Element} */ (target).tagName;

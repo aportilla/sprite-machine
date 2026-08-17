@@ -143,8 +143,5 @@ test('picker open/close and the fill checkboxes are plain flags', () => {
   assert.equal(s.get().fillAllTiles, true);
 });
 
-test('selectFace stores the face', () => {
-  const s = createSession();
-  s.selectFace('top');
-  assert.equal(s.get().face, 'top');
-});
+// (The edited FACE is per-document-window state now — it lives on the
+// workspace context, tested in workspace.test.mjs.)

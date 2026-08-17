@@ -18,7 +18,13 @@ import { label } from './components/ui-bits.js';
 const dragHasFiles = (e) =>
   !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
 
-export function initDropTarget() {
+/**
+ * @param {{onLoaded?: (ctx: object) => void}} [opts]  onLoaded fires with
+ *   the context a drop actually opened — main.js points it at
+ *   windows.activateContext, so the new document window surfaces (and
+ *   reactivates the application) even on a drop onto the bare desktop.
+ */
+export function initDropTarget({ onLoaded } = {}) {
   const body = document.body;
 
   // The overlay never changes — render it once into a stable mount (reused
@@ -55,7 +61,9 @@ export function initDropTarget() {
     dragDepth = 0;
     body.classList.remove('app-drag');
     const f = e.dataTransfer?.files?.[0];
-    if (f) await loadFile(f);
+    if (!f) return;
+    const ctx = await loadFile(f);
+    if (ctx) onLoaded?.(ctx);
   };
   body.addEventListener('dragenter', onDragEnter);
   body.addEventListener('dragover', onDragOver);

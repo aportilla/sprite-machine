@@ -38,11 +38,15 @@ a short manual checklist: `docs/SMOKE-TEST.md`.
 
 The app is a **System 7 virtual desktop**, drawn end to end with the
 [`vintage-frames`](https://github.com/aportilla/vintage-frames) web component
-kit: a menu bar, an options strip, four movable windows — the **document
-window** (face picker + pixel canvas), a floating **Tools palette**, the
-**Full Sprite View** (the whole atlas, live), and the **3D View** — plus
-documents that live as **files on the desktop**, saved in the browser and
-reopened by double-clicking their icons. See [The desktop](#the-desktop).
+kit: a menu bar, an options strip, one movable **document window per open
+document** (face picker + pixel canvas — several documents can be open at
+once), and three floating **utility windoids** that serve whichever document
+is active — the **Tools palette**, the **Full Sprite View** (the whole
+atlas, live), and the **3D View** — plus documents that live as **files on
+the desktop**, saved in the browser and reopened by double-clicking their
+icons. Clicking the desktop is "switching to the Finder": the application
+deactivates, its windoids hide, and the menus fall back to the desktop's
+grammar. See [The desktop](#the-desktop).
 
 **Double-click a sample icon** (Car, Cube — they open as fresh untitled
 copies), pick File → Open…, or drop your own **3×2 sprite sheet** PNG
@@ -291,23 +295,73 @@ on a machine with saved docs) and `?hide=<window>[,<window>]`
 ## The desktop
 
 The shell is a full System 7 virtual desktop: `index.html` is one
-`<vf-desktop>` skeleton (menu bar, options strip, four windows, dialogs, the
-icon layer) fitted to the viewport at boot (`fitWithin` + `onScaleChange`),
+`<vf-desktop>` skeleton (menu bar, options strip, the three utility
+windoids, dialogs, the icon layer, plus a `<template>` the document windows
+clone from) fitted to the viewport at boot (`fitWithin` + `onScaleChange`),
 with the kit's page-drawn cursor (`applyCursor`) on top. The page sets
 **layout only** — every aesthetic is the kit's.
+
+### One machine, two roles
+
+On a real System 7 machine the desktop belonged to the **Finder**: clicking
+it switched applications — the app's windows lost their stripes and its
+palettes hid. Sprite Machine has exactly one application, so both roles
+share one menu bar and one boolean decides everything: **is a document
+window the desktop's active window?**
+
+- **Clicking the desktop background or a desktop icon deactivates the
+  application** — the PAGE owns the press test (the kit's position: its
+  furniture is slotted light DOM, so only the page knows which presses mean
+  "the Finder"): `shell/windows.js` routes a press on the bare dither, and
+  the icon layer its own presses, through `desktop.clearActive()`. Then
+  every document window
+  goes plain, the three windoids **hide** (their View-menu toggles are
+  remembered, not lost), the options strip blanks, the bare-letter tool keys
+  go inert, and the menus drop to the **Finder grammar** — About / Settings
+  / Quit / New stay enabled, Open… enables when a desktop icon is selected
+  (and then opens the selection instead of the listing dialog), everything
+  document-scoped greys out. A disabled item's key equivalent never fires
+  (the kit's contract), so ⌘S/⌘Z/⌘K/⌘G gate with their menus.
+- **Clicking any document window — or opening one** (File → New, an icon
+  double-click, a drop) — **reactivates**: the windoids come back exactly
+  where they were, aimed at the newly active document.
+- Closing the last document window leaves the same desktop-focused state:
+  a bare desktop whose windoid arrangement survives for the next open.
+
+### Documents are windows
+
+**One document = one window.** File → New, a sample icon, the Open flow, and
+a dropped PNG each open a **new** document window (staggered System 7
+style); nothing ever loads over an open document — the unsaved-changes
+question lives entirely on the close paths. Opening an already-open stored
+document just activates its existing window. Untitled names count up
+(`untitled`, `untitled 2`, …). Each document window carries its own
+editor, its own edited-face selection, and its own bounded undo history;
+the tool, ink, and recency stay app-level (one palette, one ink, System 7
+style). The utility windoids and the Edit menu always serve the **active**
+document: switching windows re-targets the 3D View (the camera re-frames —
+a window switch is a new subject), the Full Sprite View, the options
+strip's clamp bounds, and the Undo/Redo enablement.
 
 ### Menu bar
 
 - **Sprite Machine** — _About…_, _Settings…_ (the render prefs: smooth
-  slopes, auto rotate), _Quit_ (dirty-checked; closes every window to the
-  bare desktop).
-- **File** — _New_, _Open…_ ⌘O (saved docs + samples), _Close_, _Save_ ⌘S
-  (first save of an untitled doc prompts for a name), _Duplicate_ ⌘D,
-  _Rename…_, _Export…_ ⇧⌘E (downloads the document `.png` verbatim), and
-  _Properties…_ (name, atlas dims, the tile-size stepper).
-- **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (disabled until the history has
-  something — which also hands the key back to a focused field's native
-  undo), _Pick Color…_ ⌘K (the 256-color dialog).
+  slopes, auto rotate), _Quit_ (the System 7 cascade: every open document in
+  turn, one unsaved-changes alert per dirty one — its window brought forward
+  as it's asked about, Cancel anywhere aborting the rest — down to the bare
+  desktop, windoid arrangement intact).
+- **File** — _New_ (a new untitled window), _Open…_ ⌘O (two grammars: the
+  saved-docs + samples listing dialog while a document is focused; with the
+  desktop focused it acts on the selected icon, Finder-style), _Close_
+  (the active document, dirty-checked), _Save_ ⌘S (first save of an untitled
+  doc prompts for a name), _Duplicate_ ⌘D (the stored copy opens in its own
+  window), _Rename…_, _Export…_ ⇧⌘E (downloads the document `.png`
+  verbatim), and _Properties…_ (name, atlas dims, the tile-size stepper —
+  all of the active document).
+- **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (the ACTIVE document's history;
+  disabled until it has something — which also hands the key back to a
+  focused field's native undo), _Pick Color…_ ⌘K (the 256-color dialog, in
+  the active window).
 - **Tools** — the five sticky tool modes — _Pencil_, _Rectangle_, _Fill_,
   _Eraser_, _Eyedropper_ — with the active one checkmarked (the same session
   truth the palette's tool strip and the B/R/G/E/I keys write, so a pick from
@@ -325,20 +379,34 @@ those letters in its shortcut column without ever double-firing them.
 
 ### Windows
 
-All four open by default (persistent panels, not hunt-for-them popups);
-closing any is reversible from the menu bar (View for the view windows,
-Tools → Tools Palette for the windoid). Positions/sizes are authored
-defaults clamped to the live raster at boot, and every window is `movable`
-(the document, sprite and 3D windows also `resizable` — the canvases re-fit
-via their own ResizeObservers, so the grow box works for free). The
-**document window**'s title is the document's name and its `status` strip
-reads the tile size; the **Tools palette** is a `variant="utility"` windoid
-floating above the document tier; the **Full Sprite View** (`sm-atlas-view`)
-draws the whole atlas nearest-neighbor, scaled to fit the window as large
-as its aspect ratio allows (never clipped, never scrolled), and subscribes
-to the doc's **live channel**, so it tracks strokes at
-rAF rate (the second live subscriber ever, after the rebuilder); the **3D
-View** hosts the THREE canvas with the build readout in its status strip.
+Two tiers, two regimes:
+
+- **Document windows** (document tier): one per open document, cloned from
+  the `#tpl-document-window` template by the reconciler in
+  `shell/windows.js` — created on open (staggered defaults, or a restored
+  position for a saved doc), removed on close (existence IS visibility).
+  Each is `movable resizable`; its title is its document's name, its
+  `status` strip reads its own tile size, and its `<sm-editor>` lives
+  exactly as long as the document is open.
+- **Utility windoids** (floating tier, `variant="utility"`): the **Tools
+  palette**, the **Full Sprite View**, and the **3D View** — static markup,
+  all open by default (persistent panels, not hunt-for-them popups), each
+  reversible from the menu bar (View for the view windows, Tools → Tools
+  Palette for the palette). They float above every document window, never
+  take the active state (clicking the 3D View can't deactivate the window
+  you're drawing in), show the kit's slim 11px dot bar (no title text — the
+  heading still labels the close box for assistive tech), and hide as a set
+  whenever the application deactivates, their wanted flags intact. The
+  sprite and 3D windoids stay `resizable` — the canvases re-fit via their
+  own ResizeObservers, so the grow box works for free. The **Full Sprite
+  View** (`sm-atlas-view`) draws the whole atlas nearest-neighbor, scaled to
+  fit the window as large as its aspect ratio allows (never clipped, never
+  scrolled), following the ACTIVE document's **live channel**, so it tracks
+  strokes at rAF rate (the second live subscriber ever, after the
+  rebuilder); the **3D View** hosts the THREE canvas with the build readout
+  in its status strip.
+
+Positions/sizes are authored defaults clamped to the live raster at boot.
 
 ### Documents: a document IS a .png
 
@@ -356,23 +424,34 @@ timestamps only.
 Storage is IndexedDB (`storage/db.js`: one `docs` store; the record is the
 PNG bytes plus rebuildable listing caches — name, timestamps, icon data-URI,
 dims — where the chunk wins on any disagreement), driven by the `files`
-slice (`state/files.js`). Explicit Save is the contract (System 7 idiom);
-dirty tracking rides the doc's own channels and a `beforeunload` guard is
-the safety net. Where IndexedDB is broken (private windows), Save raises an
-explanatory dialog and everything else still works.
+slice (`state/files.js` — the pure LIBRARY layer: listing, availability,
+and the per-document storage operations, each taking an explicit doc +
+identity; which documents are open and their dirty state is the
+workspace's). Explicit Save is the contract (System 7 idiom); per-document
+dirty tracking rides each context's doc channels, and a `beforeunload`
+guard over ANY dirty open document is the safety net. Where IndexedDB is
+broken (private windows), Save raises an explanatory dialog and everything
+else still works.
 
 ### Desktop icons & state
 
 Every saved doc gets a `vf-icon` (`selectable movable editable` — Return
-renames in place, converging on the same store action as File → Rename…),
-plus a read-only cluster of sample icons; double-click opens (samples as
-fresh untitled copies), and the open doc's icon wears the kit's `open`
-ghost. Icon art is generated **from the document itself**: the FRONT tile
-drawn into 32×32 → data URI, regenerated on every save (empty front tile ⇒ a
-generic document glyph), declared `color` so selection darkens instead of
-inverting. Window/icon layout, Show Grid, and the last open doc persist in
-one versioned localStorage key (`shell/desktop-state.js`), restored at boot
-and snapshotted on change/exit; the documents themselves live in IndexedDB.
+renames in place, converging on the same workspace action as File →
+Rename…, so any open window of that document retitles along), plus a
+read-only cluster of sample icons; double-click opens (samples as fresh
+untitled copies, stored docs into their existing window if one is open),
+selecting an icon deactivates the application (a press in the icon layer is
+a press on the Finder) and arms the desktop-focused File → Open, and every
+open doc's icon wears the kit's `open` ghost. Icon art is generated **from
+the document itself**: the FRONT tile drawn into 32×32 → data URI,
+regenerated on every save (empty front tile ⇒ a generic document glyph),
+declared `color` so selection darkens instead of inverting. Windoid/icon
+layout, Show Grid, and the open SAVED documents (each window's geometry +
+edited face, and which was active) persist in one versioned localStorage
+key (`shell/desktop-state.js`, v2 — a v1 blob migrates shallowly), restored
+at boot and snapshotted on change/exit; untitled windows deliberately don't
+survive a reload (no autosave — explicit Save is the contract). The
+documents themselves live in IndexedDB.
 
 ---
 
@@ -492,9 +571,12 @@ clamp-on-resize), `test/doc.test.mjs` (the two-channel canonical document: silen
 stroke writes, rAF-coalesced blit-then-notify via an injectable scheduler, the
 drain-before-consume guard, blank-revert, the sheet generation), `test/derive.test.mjs`
 (the per-face view model: tile identity, derived faces, mirrored onion-skin),
-`test/files.test.mjs` (the saved-document layer against an in-memory storage
-stub: save/open/duplicate/rename/remove, the chunk metadata round-trip, dirty
-tracking off the doc's channels, storage degradation),
+`test/files.test.mjs` (the document LIBRARY against an in-memory storage
+stub: save/load/rename/remove/export with explicit identities, the chunk
+metadata round-trip, storage degradation), `test/workspace.test.mjs` (the
+open documents: per-context doc + history + face + identity, untitled
+naming, per-context dirty tracking off the doc's channels, the activation
+mirror, the stored flows, and `followActive`),
 `test/history.test.mjs` (undo/redo: tile-gesture and whole-atlas entries,
 snapshot copy-in/copy-out, the bound, load-boundary clearing), and
 `test/params.test.mjs` (the whole `?param` dev-hook surface, typed).
@@ -537,45 +619,65 @@ src/lib/
   diag.js         geometry watertightness self-check (dev only; ?diag=1)
 src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-tested)
   store.js            createStore(): get / patch / subscribe — values BY REFERENCE, silent no-op patches
-  store-controller.js the Lit bridge: a ReactiveController mapping store change -> host.requestUpdate()
+  store-controller.js the Lit bridges: StoreController (store change -> host.requestUpdate) and
+                      ActiveDocController (workspace + active-doc structural changes, re-wired
+                      across activation switches)
   doc.js              the canonical document (atlas + sliced views + tile geometry) with TWO channels:
                       change (structural) and live (stroke-rate, rAF-coalesced blit-then-notify);
                       owns applyTileEdit / drain / dropLive / loadAtlas / resizeTiles / replaceAllTiles
-                      / restoreTile / restoreAtlas (the undo paths)
-  session.js          editor session: face, tool, ink, MRU recency, per-tool options, picker flag —
-                      named actions carrying the old element semantics verbatim
+                      / restoreTile / restoreAtlas (the undo paths). A FACTORY — one instance per
+                      open document (no singleton)
+  workspace.js        the OPEN documents: DocContexts (own doc + history + face + fileId/name/dirty),
+                      activeKey (the kit's vf-activate mirrored in), untitled naming, per-context
+                      dirty tracking, the stored flows (openStored/save/duplicate/rename/export),
+                      and followActive() — the follow-the-active-document primitive
+  session.js          editor session (app-level): tool, ink, MRU recency, per-tool options, picker
+                      flag — one palette, one ink, however many documents are open
   prefs.js            lowpoly / autoRotate (the render toggles; Settings… writes them)
   build.js            dims / voxels / tris / warnings / error — written by the rebuilder, read by the status line
-  files.js            the saved-document layer: listing, open identity (id/name/dirty), save/open/
-                      duplicate/rename/export — browser deps (storage, PNG codec, icon art) injected
-  shell.js            window visibility + showGrid (menus, close boxes and boot restore share one truth)
-  history.js          bounded undo/redo: tile-gesture + whole-atlas snapshot entries over the doc's restores
+  files.js            the document LIBRARY: listing + availability + per-document storage ops
+                      (save/load/rename/remove/export, each taking an explicit doc + identity) —
+                      browser deps (storage, PNG codec, icon art) injected
+  shell.js            windoid wanted flags + appActive + icon selection + showGrid (menus, close
+                      boxes, the focus gating and boot restore share one truth)
+  history.js          bounded undo/redo: tile-gesture + whole-atlas snapshot entries over the doc's
+                      restores. A FACTORY — one instance per open document (no singleton)
   derive.js           pure selectors: editorViewModel(doc, face) -> { tile, mirrorBehind, guides, wasDerived }
 src/storage/
   db.js           the IndexedDB promise wrapper (one `docs` store) the files slice takes by injection
 src/scene/
   stage.js        renderer, camera + orbit controls, lights, ground, framing, on-demand render loop, resize
-  rebuilder.js    the pipeline's ONLY consumer: doc(change+live)/prefs subscriber -> buildVoxels -> mesh swap -> build stats
+  rebuilder.js    the pipeline's ONLY consumer: follows the ACTIVE document (change+live channels,
+                  re-wired per activation) + prefs -> buildVoxels -> mesh swap -> build stats;
+                  a window switch re-frames the camera (a new subject)
 src/shell/        the desktop's behavior modules (imperative wiring over the index.html skeleton)
-  windows.js      shell-slice visibility <-> the vf-windows' hidden, close-box routing, doc title, boot clamp
-  menus.js        vf-menu-select -> store/file actions; checkmark + enabled sync; every dialog flow
-                  (About / Settings / Open / name prompt / Properties / unsaved-changes / storage notice)
+  windows.js      the two window regimes: windoid visibility (wanted && appActive) <-> hidden, and
+                  the document-window reconciler (template clone per context, stagger/restore,
+                  title sync, close-box routing); the vf-activate wire into shell.appActive +
+                  workspace.activeKey; boot clamp
+  menus.js        vf-menu-select -> workspace/file actions on the ACTIVE document; the two-role
+                  focus gating + checkmark sync; every dialog flow (About / Settings / Open /
+                  name prompt / Properties / unsaved-changes / storage notice); the quit cascade
   icons.js        the icon layer: sample cluster + one vf-icon per saved doc, generated front-tile art,
-                  open/rename wiring, the open ghost
-  desktop-state.js  window/icon layout + Show Grid + last doc id in one versioned localStorage key
+                  open/rename wiring, open ghosts, the Finder wire (icon presses deactivate; the
+                  selection feeds the shell slice for the desktop-focused File → Open)
+  desktop-state.js  windoid/icon layout + Show Grid + the open saved docs (geometry, face, active)
+                  in one versioned localStorage key (v2; v1 migrates)
 src/
   main.js         the composition root: parse params -> seed stores -> fit desktop + cursor -> shell wiring
-                  -> stage + rebuilder -> editor constants -> boot document
+                  -> stage + rebuilder -> boot documents (session restore or sample)
   boot/params.js  URL-param parsing -> one typed boot object (pure, Node-tested)
-  loaders.js      every way a sheet enters (sample / file / blank): decode + validateSheet -> doc.loadAtlas
-                  | build.setError; a dropped PNG's Title/transforms chunks restore its identity
-  drop-target.js  whole-app drag & drop + overlay -> loaders
-  shortcuts.js    document-level B/R/G/I/E -> session actions (menu key equivalents are the kit's;
-                  Esc/Shift are gesture-scoped and live in the canvas)
+  loaders.js      every way a sheet enters (sample / file / blank): decode + validateSheet -> a FRESH
+                  workspace context | build.setError; a dropped PNG's Title/transforms chunks
+                  restore its identity
+  drop-target.js  whole-app drag & drop + overlay -> loaders -> the new window surfaces
+  shortcuts.js    document-level B/R/G/I/E -> session actions, gated on appActive (menu key
+                  equivalents are the kit's; Esc/Shift are gesture-scoped and live in the canvas)
   components/     all Lit, standard SHADOW DOM (mostly `:host { display: contents }`) — see "UI layer" below
-    sm-editor.js       CONNECTED container: the document window's body — face picker + artwork well +
-                       Colors dialog; memoizes the per-face view model (face / views-identity / geometry),
-                       feeds canvas gesture commits to the history
+    sm-editor.js       CONNECTED container: a document window's body, one per open document — face
+                       picker + artwork well + Colors dialog over ITS DocContext (`ctx`, assigned by
+                       the reconciler pre-append); memoizes the per-face view model (face /
+                       views-identity / geometry), feeds canvas gesture commits to ITS history
     sm-draw-canvas.js  leaf: the pixel-canvas subsystem — working buffer (+ImageData view, by reference),
                        pencil/rect/fill gestures, integer-scale layout, overlay layers, gesture-scoped keys,
                        per-gesture undo capture (sm-commit)
@@ -584,8 +686,10 @@ src/
     sm-face-picker.js, sm-tool-strip.js, sm-color-wells.js, sm-tool-options.js, sm-color-picker.js
                        presentational leaves: props down, bubbling sm-* events up, no store imports
     sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-status-line.js
-                       connected chrome: the options strip / the Tools palette body / the live
-                       full-atlas view / the windows' status readouts
+                       connected chrome: the options strip (blank while the desktop is focused;
+                       bounds from the active document) / the Tools palette body / the live
+                       full-atlas view (follows the active document) / the windows' status
+                       readouts (tile = per-window ctx; atlas = active doc; build = build slice)
     ui-bits.js         shared caption + warning-row template helpers (+ the warn row's styles,
                        a css export its consumers compose into their own `static styles`)
     base-styles.js     the shared border-box reset every component composes first (box-sizing
@@ -601,13 +705,18 @@ copy — `npm ls lit`), organized in **three layers with dependency arrows only
 pointing down**: presentation (`components/` + `scene/` + `shell/`) → app
 state (`state/`) → domain (`lib/`, with `storage/` a leaf the files slice
 takes by injection, so it stays Node-testable). The state mechanism is a
-~40-line observable store (`createStore`: get / patch / subscribe) with seven
-slices — `doc` (the canonical document), `session` (the editor's brush
-state), `prefs`, `build`, `files` (the saved-document layer), `shell` (window
-visibility + Show Grid), `history` (undo/redo) — and a `StoreController` (a
-Lit ReactiveController) that re-renders a host on any slice change.
+~40-line observable store (`createStore`: get / patch / subscribe). The
+app-level slices are `workspace` (the open documents — see below),
+`session` (the editor's brush state), `prefs`, `build`, `files` (the
+document library), and `shell` (windoid wanted flags + appActive + icon
+selection + Show Grid); `doc` (the canonical document) and `history`
+(undo/redo) are **factories, instantiated per open document** inside each
+workspace DocContext. Two Lit ReactiveControllers bridge them:
+`StoreController` (re-render on a slice change) and `ActiveDocController`
+(re-render on workspace changes AND the active document's structural
+changes, re-wired across activation switches via `followActive`).
 **Connected** components (`sm-editor` and the chrome) read slices and call
-named actions, and the `shell/` modules wire the desktop's static skeleton
+named actions, and the `shell/` modules wire the desktop's skeleton
 (menus, windows, icons — index.html markup, behavior only) to the same
 slices; the editor **leaves** are dumb — props down, bubbling `sm-*` events
 up, no store imports — so store coupling stays visible and greppable. Every
@@ -635,12 +744,13 @@ the regression surface.
 templates read; everything the canvas hot paths touch is a plain `#private`
 field in `<sm-draw-canvas>` (the pixel buffer and its `ImageData` view,
 stroke/drag state, the on-screen scale) — so a pencil drag can never schedule a
-re-render at pointer-move rate. The doc formalizes the split with **two
-channels**: `subscribe` (change — structural: load / resize / replace-all /
-undo restore, drives templates, view-model re-derivation, dirty tracking and
-menu sync) and `onLive` (stroke-rate, rAF-coalesced blit-then-notify, whose
-only subscribers are the mesh rebuilder and — same cost class, one blit per
-frame — the Full Sprite View). A live stroke lands via `applyTileEdit`,
+re-render at pointer-move rate. Each document's doc formalizes the split
+with **two channels**: `subscribe` (change — structural: load / resize /
+replace-all / undo restore, drives templates, view-model re-derivation,
+dirty tracking and menu sync) and `onLive` (stroke-rate, rAF-coalesced
+blit-then-notify, whose only subscribers are the mesh rebuilder and — same
+cost class, one blit per frame — the Full Sprite View, both following the
+ACTIVE document). A live stroke lands via `applyTileEdit`,
 which stores the canvas's working buffer **by reference** into `views[face]`
 _silently_ on the change channel — guides and onion-skin recompute only on a
 face switch or structural change, never mid-stroke — and every
@@ -651,14 +761,18 @@ template (a bound `width` would clear the buffer mid-diff); user-editable
 `vf-*` values are controlled bindings with `live()`, so a re-render can't skip
 a re-sync after typing.
 
-**One element, forever — and state that outlives it:** the single `<sm-editor>`
-lives in the document window's markup and is never destroyed — the window
-**hides**, never unmounts, so canvas identity and focus behavior survive a
-close/reopen — and the brush state lives in the session slice, so it couldn't
-die with a DOM node anyway. A face swap, tile resize, all-tiles replace or
-undo is just a store action; the editor re-derives its per-face view model
-(memoized on face / `views`-identity / tile geometry) and the canvas resets
-its working buffer only when the tile's IDENTITY actually changes.
+**One element per document, for the document's lifetime:** each document
+window's `<sm-editor>` is created with its window (the reconciler assigns
+its DocContext before the append — via `document.importNode`, so the clone
+is upgradeable and the assignment lands before `connectedCallback` wires
+the doc subscription) and lives until the document closes. The desktop's
+raise-driven DOM re-orders disconnect/reconnect it without loss (the canvas
+subsystem rebuilds its observers on reconnect), and the brush state lives
+in the app-level session slice, so it couldn't die with a DOM node anyway.
+A face swap, tile resize, all-tiles replace or undo is just a store action;
+the editor re-derives its per-face view model (memoized on face /
+`views`-identity / tile geometry) and the canvas resets its working buffer
+only when the tile's IDENTITY actually changes.
 
 ## Known limitations & next steps
 
@@ -681,9 +795,8 @@ its working buffer only when the tile's IDENTITY actually changes.
   trivially transferable — and `scene/rebuilder.js` is the pipeline's only
   caller, so making it async is a local change). For a scene of _many_ objects,
   batch identical ones with an object-level `InstancedMesh`.
-- **Multi-document** — the store slices are singletons, so one document is
-  open at a time (matching the File-menu grammar). True multi-doc means
-  doc-scoped slices — future work. Autosave is a deliberate non-goal for now:
-  explicit Save is the contract, with the `beforeunload` guard as the net.
+- **Autosave** — a deliberate non-goal: explicit Save is the contract, with
+  the `beforeunload` guard (any dirty open document) as the net; untitled
+  windows don't survive a reload for the same reason.
 - **Export** — the merged mesh is glTF-ready (`GLTFExporter`) for use in other
   engines / animation.

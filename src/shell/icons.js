@@ -17,6 +17,8 @@ import { SAMPLES } from '../lib/sprite-data.js';
 import { sliceAtlas } from '../lib/atlas.js';
 import { urlToImageData, tileToIconDataUri, genericDocIconDataUri } from '../image-io.js';
 import { files } from '../state/files.js';
+import { shell } from '../state/shell.js';
+import { workspace } from '../state/workspace.js';
 
 // The default icon lattice: one column at the left edge, below the palette.
 const COL_X = 16;
@@ -34,6 +36,30 @@ export function initIcons(desktop, { actions, savedPos = () => null, fresh = fal
   const root = desktop.querySelector('#desktop-icons');
   /** @type {(() => void)[]} */
   const teardown = [];
+
+  // --- the Finder wire ---------------------------------------------------------
+  // A press on an icon is a press on the desktop. The page owns every "this
+  // press means the Finder" decision (the kit never takes it): windows.js
+  // covers the bare dither, and this covers the icon layer — both routing
+  // through the same clearActive(). A double-click's open then reactivates
+  // through the normal activateContext path.
+  const onIconPress = () => desktop.clearActive();
+  root.addEventListener('pointerdown', onIconPress);
+  teardown.push(() => root.removeEventListener('pointerdown', onIconPress));
+
+  // Selection feeds the shell slice (File → Open's Finder grammar reads it).
+  // Read the PROPERTY, not the attribute — vf-select fires before Lit's
+  // reflection lands. vf-select bubbles, and every selection change fires it
+  // on each icon whose state moved, so re-reading the whole layer per event
+  // stays exact under shift-clicks and outside-click clears alike.
+  const readSelection = () =>
+    shell.setIconSelection(
+      [...root.querySelectorAll('vf-icon[data-key]')]
+        .filter((icon) => /** @type {any} */ (icon).selected)
+        .map((icon) => /** @type {HTMLElement} */ (icon).dataset.key)
+    );
+  root.addEventListener('vf-select', readSelection);
+  teardown.push(() => root.removeEventListener('vf-select', readSelection));
 
   function makeIcon(key, label, slot, { editable = false } = {}) {
     const icon = /** @type {any} */ (document.createElement('vf-icon'));
@@ -103,22 +129,29 @@ export function initIcons(desktop, { actions, savedPos = () => null, fresh = fal
       if (!icon) {
         icon = makeIcon(key, r.name, SAMPLES.length + i, { editable: true });
         icon.addEventListener('vf-open', () => actions.openDoc(r.id));
-        // In-place rename commits through the same store action the File
-        // menu's Rename uses — the two paths converge.
+        // In-place rename commits through the same workspace action the File
+        // menu's Rename uses — the two paths converge, and any open window
+        // of this document retitles along.
         icon.addEventListener('vf-change', (e) => {
           const detail = /** @type {CustomEvent} */ (e).detail;
-          files.renameById(r.id, detail.label).catch(() => {
+          workspace.renameStored(r.id, detail.label).catch(() => {
             icon.label = detail.previous; // storage refused — restore
           });
         });
       }
       if (icon.label !== r.name) icon.label = r.name;
       setIconArt(icon, r.icon ?? genericDocIconDataUri());
-      icon.open = state.currentId === r.id;
+      // The kit's `open` ghost marks every stored doc with a window open.
+      icon.open = !!workspace.byFileId(r.id);
     });
+    // A reconcile can remove a selected icon (a doc deleted elsewhere) —
+    // re-read so the shell's selection never names a vanished key.
+    readSelection();
   }
   if (!fresh) {
-    teardown.push(files.subscribe(syncDocIcons));
+    // The listing drives which icons exist; the workspace drives the open
+    // ghosts (windows opening and closing move them).
+    teardown.push(files.subscribe(syncDocIcons), workspace.subscribe(syncDocIcons));
     syncDocIcons();
   }
 
@@ -128,6 +161,7 @@ export function initIcons(desktop, { actions, savedPos = () => null, fresh = fal
       // Remove the rendered icons so an HMR re-init rebuilds them with fresh
       // listeners instead of stacking stale ones.
       root.replaceChildren();
+      shell.setIconSelection([]);
     },
   };
 }

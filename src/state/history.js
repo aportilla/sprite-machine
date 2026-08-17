@@ -19,7 +19,6 @@
 // ---------------------------------------------------------------------------
 
 import { createStore } from './store.js';
-import { doc } from './doc.js';
 
 export const HISTORY_LIMIT = 50;
 
@@ -141,6 +140,5 @@ export function createHistory(doc, { limit = HISTORY_LIMIT } = {}) {
   };
 }
 
-// The app-wide singleton, wired to the doc singleton (one history per
-// document; the factory stays available for Node tests with their own doc).
-export const history = createHistory(doc);
+// No singleton: every document context (state/workspace.js) wires its own
+// createHistory(doc) — one bounded undo history per open document.

@@ -1,24 +1,25 @@
 // ---------------------------------------------------------------------------
-// `files` slice — the saved-document layer: the listing of every stored doc,
-// which one is open (`currentId`; null = untitled), its display name, and the
-// dirty flag. Pure actions over `createStore`, Node-tested with injected
-// dependencies — the browser bits (IndexedDB via storage/db.js, PNG
-// encode/decode via image-io.js, icon rendering) arrive through `init()` at
-// boot, so this module imports nothing it can't run under Node.
+// `files` slice — the document LIBRARY: the listing of every stored doc,
+// storage reachability, and the per-document storage operations (save / load
+// / rename / remove / export bytes). Pure actions over `createStore`,
+// Node-tested with injected dependencies — the browser bits (IndexedDB via
+// storage/db.js, PNG encode/decode via image-io.js, icon rendering) arrive
+// through `init()` at boot, so this module imports nothing it can't run
+// under Node.
 //
 // THE DOCUMENT IS THE PNG (lib/png-chunks.js): a save encodes the drained
 // atlas, splices the metadata text chunks (Title / Creation Time / Software /
 // sprite-machine:transforms — the last only when non-identity), and stores
-// those bytes; an open reads the chunks back and hands the pixels to
-// doc.loadAtlas. The record's name/icon/dims fields are declared CACHE, never
-// truth — the chunk wins on any disagreement.
+// those bytes; a load reads the chunks back and hands pixels + transforms +
+// name to the caller. The record's name/icon/dims fields are declared CACHE,
+// never truth — the chunk wins on any disagreement.
 //
-// DIRTY TRACKING rides the doc's own channels: any live stroke or structural
-// change marks dirty; a wholesale load (the sheet generation moved) marks
-// clean — and, unless this slice itself is doing the loading (an `open()`),
-// resets the identity to untitled, which is exactly what a sample pick or a
-// dropped file should do. Loaders then call `adoptUntitled(name)` to give the
-// fresh untitled doc its display name.
+// WHAT THIS SLICE DOES NOT KNOW (the multi-document split): which documents
+// are open, which is active, their dirty state, or their identity — that is
+// the workspace's (state/workspace.js). Every per-document operation here
+// takes an explicit doc instance and identity fields; nothing reads or
+// writes "the current document", because there is no such thing at this
+// layer anymore.
 // ---------------------------------------------------------------------------
 
 import { createStore } from './store.js';
@@ -45,7 +46,6 @@ export const docFilename = (name) => {
  * @param {{
  *   storage: {list(): Promise<any[]>, get(id: string): Promise<any>,
  *             put(r: any): Promise<any>, remove(id: string): Promise<any>}|null,
- *   doc: ReturnType<typeof import('./doc.js').createDoc>,
  *   encodeAtlas: (img: object) => Promise<Uint8Array>,
  *   decodeAtlas: (bytes: Uint8Array) => Promise<object>,
  *   makeIcon?: (docState: object) => Promise<string|null>,
@@ -60,43 +60,9 @@ export function createFiles(deps = null) {
     available: false,
     /** @type {{id:string,name:string,createdAt:number,modifiedAt:number,icon:string|null,w:number,h:number}[]} */
     list: [],
-    /** @type {string|null} null = untitled (exists only in memory) */
-    currentId: null,
-    currentName: UNTITLED,
-    dirty: false,
   });
 
   let d = deps;
-  let adopting = false; // an open() drives the current loadAtlas — keep identity
-  let lastSheet = 0;
-  /** @type {(() => void)[]} */
-  let unsubs = [];
-
-  function wire() {
-    for (const u of unsubs) u();
-    unsubs = [];
-    if (!d?.doc) return;
-    lastSheet = d.doc.get().sheet;
-    unsubs.push(
-      d.doc.subscribe((s) => {
-        if (s.sheet !== lastSheet) {
-          lastSheet = s.sheet;
-          // A wholesale load: clean, and — unless we are the loader — a fresh
-          // untitled identity (sample pick, dropped file, File → New).
-          store.patch(
-            adopting
-              ? { dirty: false }
-              : { currentId: null, currentName: UNTITLED, dirty: false }
-          );
-        } else {
-          // A structural change to the SAME sheet (resize, replace-all).
-          store.patch({ dirty: true });
-        }
-      }),
-      d.doc.onLive(() => store.patch({ dirty: true }))
-    );
-  }
-  if (d) wire();
 
   const now = () => (d?.now ?? Date.now)();
   const newId = () => (d?.newId ? d.newId() : crypto.randomUUID());
@@ -113,10 +79,10 @@ export function createFiles(deps = null) {
     };
   }
 
-  // Encode the CURRENT doc (drained first) into finished document bytes.
-  async function encodeCurrent(name, createdAt) {
-    d.doc.drain();
-    const state = d.doc.get();
+  // Encode a doc (drained first) into finished document bytes.
+  async function encodeDoc(doc, name, createdAt) {
+    doc.drain();
+    const state = doc.get();
     const bytes = await d.encodeAtlas(state.atlasImage);
     return setTextChunks(bytes, metaChunks(name, createdAt, state.transforms));
   }
@@ -127,16 +93,9 @@ export function createFiles(deps = null) {
     subscribe: store.subscribe,
 
     /** Late dependency injection (the app's boot path; tests construct with
-     *  deps instead). Re-wires cleanly, so an HMR re-init can't double up. */
+     *  deps instead). */
     init(realDeps) {
       d = realDeps;
-      wire();
-    },
-
-    /** HMR teardown: drop this instance's doc subscriptions. */
-    dispose() {
-      for (const u of unsubs) u();
-      unsubs = [];
     },
 
     /** Re-read the listing from storage; resolves availability as a side
@@ -165,21 +124,49 @@ export function createFiles(deps = null) {
       }
     },
 
-    /** Name the fresh untitled doc a loader just brought in (sample name,
-     *  dropped file's Title chunk or filename). Identity stays untitled. */
-    adoptUntitled(name) {
-      store.patch({ currentName: name || UNTITLED });
+    /**
+     * Persist a document's pixels under an identity. `fileId: null` saves a
+     * NEW record (an untitled's first save, a duplicate); an existing id
+     * saves silently in place, its `createdAt` surviving. Resolves the
+     * stored `{id, name}` — the caller (the workspace) applies them to
+     * whatever identity it manages.
+     * @param {ReturnType<typeof import('./doc.js').createDoc>} doc
+     * @param {{fileId?: string|null, name?: string}} identity
+     */
+    async save(doc, { fileId = null, name } = {}) {
+      if (!doc.get().atlasImage) return null;
+      const id = fileId ?? newId();
+      const finalName = name ?? UNTITLED;
+      const prev = fileId ? await d.storage.get(id) : null;
+      const createdAt = prev?.createdAt ?? now();
+      const png = await encodeDoc(doc, finalName, createdAt);
+      const state = doc.get();
+      const icon = (await d.makeIcon?.(state)) ?? null;
+      await d.storage.put({
+        id,
+        png,
+        name: finalName,
+        createdAt,
+        modifiedAt: now(),
+        icon,
+        w: state.atlasImage.width,
+        h: state.atlasImage.height,
+      });
+      await this.refresh();
+      return { id, name: finalName };
     },
 
     /**
-     * Open a stored document: decode its pixels into the doc slice and take
-     * its identity. Resolves false when the id is gone; throws on a decode
-     * failure (the caller surfaces it).
+     * Load a stored document's content: pixels, transforms, and the name the
+     * chunk (or the record cache) carries. Resolves null when the id is
+     * gone; throws on a decode failure (the caller surfaces it). No doc is
+     * mutated here — the workspace loads the result into a context.
      * @param {string} id
+     * @returns {Promise<{image: object, transforms: object, name: string}|null>}
      */
-    async open(id) {
+    async load(id) {
       const rec = await d.storage.get(id);
-      if (!rec) return false;
+      if (!rec) return null;
       const bytes = rec.png;
       /** @type {Record<string, string>} */
       let meta = {};
@@ -198,120 +185,42 @@ export function createFiles(deps = null) {
         }
       }
       const image = await d.decodeAtlas(bytes);
-      adopting = true;
-      try {
-        d.doc.loadAtlas(image, transforms);
-      } finally {
-        adopting = false;
-      }
-      store.patch({
-        currentId: id,
-        currentName: meta.Title ?? rec.name ?? UNTITLED,
-        dirty: false,
-      });
-      return true;
+      return { image, transforms, name: meta.Title ?? rec.name ?? UNTITLED };
     },
 
-    /**
-     * Persist the current doc. An untitled doc takes `name` (the UI prompts
-     * for it first) and becomes saved; a saved doc saves silently in place.
-     * Resolves the record id.
-     * @param {string} [name]
-     */
-    async saveCurrent(name) {
-      const s = store.get();
-      if (!d.doc.get().atlasImage) return null;
-      const isNew = !s.currentId;
-      const id = s.currentId ?? newId();
-      const finalName = name ?? s.currentName ?? UNTITLED;
-      const prev = isNew ? null : await d.storage.get(id);
-      const createdAt = prev?.createdAt ?? now();
-      const png = await encodeCurrent(finalName, createdAt);
-      const state = d.doc.get();
-      const icon = (await d.makeIcon?.(state)) ?? null;
-      await d.storage.put({
-        id,
-        png,
-        name: finalName,
-        createdAt,
-        modifiedAt: now(),
-        icon,
-        w: state.atlasImage.width,
-        h: state.atlasImage.height,
-      });
-      store.patch({ currentId: id, currentName: finalName, dirty: false });
-      await this.refresh();
-      return id;
-    },
-
-    /** Save a copy as "«name» copy"; the copy becomes the open doc. */
-    async duplicate() {
-      const name = `${store.get().currentName} copy`;
-      store.patch({ currentId: null });
-      return this.saveCurrent(name);
-    },
-
-    /** Rename a stored doc BY ID (the desktop-icon path — the doc need not be
-     *  open): the Title chunk is rewritten in place (a rename is metadata, so
-     *  `modifiedAt` stands), and an open identity follows along. */
+    /** Rename a stored doc BY ID: the Title chunk is rewritten in place (a
+     *  rename is metadata, so `modifiedAt` stands). Open-context names are
+     *  the workspace's to follow. */
     async renameById(id, name) {
       const rec = await d.storage.get(id);
       if (!rec) return;
       const png = setTextChunks(rec.png, { Title: name });
       await d.storage.put({ ...rec, png, name });
-      if (store.get().currentId === id) store.patch({ currentName: name });
       await this.refresh();
     },
 
-    /** Rename the OPEN doc (the File-menu path). An untitled doc just takes
-     *  the new display name. */
-    async rename(name) {
-      const id = store.get().currentId;
-      if (!id) {
-        store.patch({ currentName: name });
-        return;
-      }
-      await this.renameById(id, name);
-    },
-
-    /** Delete a stored doc. The open doc reverts to untitled if it was the
-     *  one removed (its pixels stay open — only the stored copy is gone). */
+    /** Delete a stored doc. Open contexts that pointed at it are the
+     *  workspace's to revert. */
     async remove(id) {
       await d.storage.remove(id);
-      if (store.get().currentId === id) {
-        store.patch({ currentId: null, dirty: false });
-      }
       await this.refresh();
-    },
-
-    /** Close the document: back to an untitled, clean identity. (The shell
-     *  owns the window and the dirty-check dialog; this is just the state.) */
-    close() {
-      store.patch({ currentId: null, currentName: UNTITLED, dirty: false });
     },
 
     /**
      * The bytes File → Export downloads: the SAVED bytes verbatim for a
      * clean saved doc (an exported file IS the document); a fresh encode for
      * an untitled or dirty one.
+     * @param {ReturnType<typeof import('./doc.js').createDoc>} doc
+     * @param {{fileId?: string|null, name?: string, dirty?: boolean}} identity
      * @returns {Promise<{bytes: Uint8Array, name: string}>}
      */
-    async exportCurrent() {
-      const s = store.get();
-      if (s.currentId && !s.dirty && d.storage) {
-        const rec = await d.storage.get(s.currentId).catch(() => null);
+    async exportBytes(doc, { fileId = null, name = UNTITLED, dirty = false } = {}) {
+      if (fileId && !dirty && d.storage) {
+        const rec = await d.storage.get(fileId).catch(() => null);
         if (rec) return { bytes: rec.png, name: rec.name };
       }
-      const bytes = await encodeCurrent(s.currentName, now());
-      return { bytes, name: s.currentName };
-    },
-
-    markDirty() {
-      store.patch({ dirty: true });
-    },
-
-    markClean() {
-      store.patch({ dirty: false });
+      const bytes = await encodeDoc(doc, name, now());
+      return { bytes, name };
     },
   };
   return api;

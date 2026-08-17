@@ -12,6 +12,11 @@
          shows behind the bezel. Windows MUST be direct children of the
          desktop (its stacking manager only sees direct vf-window children).
          Everything aesthetic is the kit's; this markup is layout only. -->
+    <!-- Deactivation is the PAGE's decision (the kit's position: only the
+         page knows which presses mean "the Finder"): shell/windows.js routes
+         a press on the desktop's own dither — and shell/icons.js a press in
+         the icon layer — through desktop.clearActive(), which clears the
+         document tier. Reactivation is any press into a document window. -->
     <vf-desktop id="desktop" bezel="10">
       <!-- ============================== Menu bar ======================== -->
       <!-- `shortcuts` grants every item's `shortcut` attribute its live
@@ -69,14 +74,23 @@
            not a window). -->
       <sm-options-bar></sm-options-bar>
 
-      <!-- ========================= The four windows ===================== -->
+      <!-- ==================== The three utility windoids ================ -->
       <!-- All open by default; closing any is reversible via the View /
-           Tools menus or the document icon. Positions are authored defaults in system
-           px, clamped to the live raster at boot (shell/windows.js). The
-           document window is slotted LAST of the document tier, so it boots
-           active. -->
+           Tools menus. Positions are authored defaults in system px, clamped
+           to the live raster at boot (shell/windows.js). All three are
+           utility windoids: they float above the document tier, never take
+           the active state, and hide with the application when the desktop
+           is clicked (shell/windows.js gates their hidden on
+           wanted && appActive). A windoid bar shows no title text (the
+           kit's 11px bar has no title patch); the heading still labels the
+           close box for assistive tech. DOCUMENT windows are not here: one
+           exists per open document, cloned from #tpl-document-window by the
+           reconciler in shell/windows.js and appended as a direct child of
+           the desktop (its stacking manager only sees direct vf-window
+           children). -->
       <vf-window
         id="win-sprite"
+        variant="utility"
         heading="Full Sprite View"
         movable
         resizable
@@ -92,6 +106,7 @@
 
       <vf-window
         id="win-stage"
+        variant="utility"
         heading="3D View"
         movable
         resizable
@@ -103,21 +118,6 @@
       >
         <canvas id="viewport"></canvas>
         <sm-status-line kind="build" slot="status"></sm-status-line>
-      </vf-window>
-
-      <vf-window
-        id="win-document"
-        heading="untitled"
-        movable
-        resizable
-        flush
-        width="430"
-        height="560"
-        top="64"
-        left="110"
-      >
-        <sm-editor></sm-editor>
-        <sm-status-line kind="tile" slot="status"></sm-status-line>
       </vf-window>
 
       <!-- The floating Tools palette: utility tier — floats above the
@@ -247,6 +247,20 @@
         <vf-button id="btn-storage-ok" slot="buttons" variant="default">OK</vf-button>
       </vf-dialog>
     </vf-desktop>
+
+    <!-- ================== The document-window template ================== -->
+    <!-- One clone per open document (shell/windows.js reconciles them from
+         the workspace slice). The reconciler assigns id, heading, geometry
+         (staggered defaults or a restored position) and hands the editor +
+         tile readout their DocContext BEFORE appending the clone to the
+         desktop. Inert markup — a <template> renders nothing here. -->
+    <template id="tpl-document-window">
+      <vf-window heading="untitled" movable resizable flush>
+        <sm-editor></sm-editor>
+        <sm-status-line kind="tile" slot="status"></sm-status-line>
+      </vf-window>
+    </template>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

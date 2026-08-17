@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // URL-param parsing → one typed boot object. Pure (string in, object out), so
 // the whole dev-hook surface is Node-testable. main.js APPLIES the result:
-// most hooks are boot-time store actions (?edit → session.selectFace, ?pick →
+// most hooks are boot-time store actions (?edit → the boot context's face, ?pick →
 // session.pickColor, ?palette → session.openPicker, ?tile → doc.resizeTiles,
 // ?cursor / ?rect / ?fill's state halves → session actions); only the
 // canvas-paint halves ride as one-shot props on <sm-draw-canvas>.

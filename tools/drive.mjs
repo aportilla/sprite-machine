@@ -291,6 +291,16 @@ const DEEP = `
     return out;
   };
   const __q = (sel, root = document) => __qa(sel, root)[0] || null;
+  // The document window under test: the ACTIVE one, else the last-created
+  // (document windows are dynamic now — one per open document, id
+  // win-doc-<key>). __qd scopes an editor-internals query to it, so a probe
+  // in a two-document session reads the right canvas.
+  const __doc = () => {
+    const wins = [...document.querySelectorAll('vf-window')].filter((w) =>
+      w.id.startsWith('win-doc-'));
+    return wins.find((w) => w.hasAttribute('active')) || wins[wins.length - 1] || null;
+  };
+  const __qd = (sel) => { const d = __doc(); return d ? __q(sel, d) : null; };
 `;
 
 // --- page probes ------------------------------------------------------------
@@ -302,8 +312,12 @@ const PROBE = `(() => {${DEEP}
     tools[b.getAttribute('aria-label')] = b.classList.contains('active');
   }
   const sw = __q('.editor-selected');
-  const canvas = __q('.editor-canvas');
-  const r = canvas.getBoundingClientRect();
+  // Null-safe: with every document closed (the quit cascade's end state)
+  // there is no editor at all — the canvas-derived fields read empty.
+  const canvas = __qd('.editor-canvas');
+  const r = canvas
+    ? canvas.getBoundingClientRect()
+    : { left: 0, top: 0, width: 0, height: 0 };
   const checked = __q('vf-radio[checked]');
   // The 3D View's status line: "grid 40px · voxels 4950 · tris 1784" (or a
   // ⚠-prefixed error/warning) — parsed back into a stats map.
@@ -329,39 +343,63 @@ const PROBE = `(() => {${DEEP}
       null,
     inkColor: sw ? sw.getAttribute('color') : null,
     recent: __qa('.editor-recent vf-swatch').map((s) => s.getAttribute('color')),
-    // The options strip IS <sm-tool-options>; its shadow root holds the bare controls.
-    opts: [...__q('sm-tool-options').shadowRoot.children].map((c) =>
-      c.tagName.toLowerCase()
-    ),
+    // The options strip IS <sm-tool-options>; its shadow root holds the bare
+    // controls. Null-safe: the strip renders EMPTY while the app is
+    // deactivated (desktop focus), so the element may not exist at probe time.
+    opts: (() => {
+      const o = __q('sm-tool-options');
+      return o ? [...o.shadowRoot.children].map((c) => c.tagName.toLowerCase()) : null;
+    })(),
     // The strip's trailing readout ("N px" for the size sliders) — how the checks
     // see a slider's value without reaching into the kit's internals.
     optsReadout: (() => {
-      const ls = __q('sm-tool-options').shadowRoot.querySelectorAll('vf-label');
+      const o = __q('sm-tool-options');
+      if (!o) return null;
+      const ls = o.shadowRoot.querySelectorAll('vf-label');
       return ls.length ? ls[ls.length - 1].textContent.trim() : null;
     })(),
-    face: __q('.editor-face-picker').value,
+    face: __qd('.editor-face-picker')?.value ?? null,
     checkedRadio: checked ? checked.getAttribute('value') : null,
-    heading: __q('#win-document').heading,
+    heading: __doc() ? __doc().heading : '',
     tileStatus: (() => {
-      const el = __q('sm-status-line[kind="tile"]');
+      const el = __qd('sm-status-line[kind="tile"]');
       return el && el.shadowRoot ? el.shadowRoot.textContent.trim() : '';
     })(),
     colorsOpen: !!(colorsDialog && colorsDialog.open),
     anyModalOpen: !!__q('vf-dialog[open]') || !!(colorsDialog && colorsDialog.open),
     // The kit's page-drawn cursor claims the crosshair over the pixel canvas.
-    cursorClaim: canvas.getAttribute('data-vf-cursor'),
+    cursorClaim: canvas ? canvas.getAttribute('data-vf-cursor') : null,
     rect: { left: r.left, top: r.top, width: r.width, height: r.height },
-    tileW: canvas.width,
+    tileW: canvas ? canvas.width : 0,
     buildLine,
     stats,
     voxels: +(stats.voxels || 0),
     docIcons: __qa('vf-icon').filter((i) => (i.dataset.key || '').startsWith('doc:'))
       .length,
     windows: {
-      document: !__q('#win-document').hidden,
+      document: !!__doc() && !__doc().hidden,
       tools: !__q('#win-tools').hidden,
       sprite: !__q('#win-sprite').hidden,
       stage: !__q('#win-stage').hidden,
+    },
+    // How many document windows are open (one per open document).
+    docWindows: [...document.querySelectorAll('vf-window')].filter((w) =>
+      w.id.startsWith('win-doc-')).length,
+    // The focus model: whether a document window holds the active state
+    // (appActive's visible half), and whether the options strip is showing
+    // its blank deactivated face.
+    docActive: !!__doc() && __doc().hasAttribute('active'),
+    optionsBlank: !__q('sm-tool-options'),
+    // Enabled states for the focus-gated menu grammar (the Finder role).
+    menuEnabled: {
+      newDoc: !__q('vf-menu-item[value="new"]').disabled,
+      open: !__q('vf-menu-item[value="open"]').disabled,
+      save: !__q('vf-menu-item[value="save"]').disabled,
+      close: !__q('vf-menu-item[value="close"]').disabled,
+      pickColor: !__q('vf-menu-item[value="pick-color"]').disabled,
+      grid: !__q('vf-menu-item[value="show-grid"]').disabled,
+      toolPencil: !__q('vf-menu-item[value="tool-pencil"]').disabled,
+      viewSprite: !__q('vf-menu-item[value="view-sprite"]').disabled,
     },
     menuChecks: {
       sprite: __q('vf-menu-item[value="view-sprite"]').checked,
@@ -412,18 +450,19 @@ async function probe() {
   return s;
 }
 
-// One texel of the editor's live pixel canvas, as [r,g,b,a].
+// One texel of the ACTIVE document's live pixel canvas, as [r,g,b,a].
 const texelAt = (px, py) =>
   evaluate(`(() => {${DEEP}
-    const c = __q('.editor-canvas');
+    const c = __qd('.editor-canvas');
     const d = c.getContext('2d').getImageData(${px}, ${py}, 1, 1).data;
     return [d[0], d[1], d[2], d[3]];
   })()`);
 
-// True when every texel of a layer is fully transparent.
+// True when every texel of a layer (in the active document's editor) is
+// fully transparent.
 const layerIsEmpty = (sel) =>
   evaluate(`(() => {${DEEP}
-    const c = __q('${sel}');
+    const c = __qd('${sel}');
     const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
     for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return false;
     return true;
@@ -1046,10 +1085,10 @@ async function main() {
   section('windows');
   await freshPage();
   const posBefore = await evaluate(
-    `(() => {${DEEP} const w = __q('#win-document'); return { top: w.top, left: w.left }; })()`
+    `(() => {${DEEP} const w = __doc(); return { top: w.top, left: w.left }; })()`
   );
   const bar = await evaluate(
-    `(() => {${DEEP} const r = __q('#win-document').getBoundingClientRect();
+    `(() => {${DEEP} const r = __doc().getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + 9 }; })()`
   );
   await mouse('mousePressed', bar.x, bar.y);
@@ -1058,7 +1097,7 @@ async function main() {
   await mouse('mouseReleased', bar.x + 40, bar.y + 24, { buttons: 0 });
   await sleep(300);
   const posAfter = await evaluate(
-    `(() => {${DEEP} const w = __q('#win-document'); return { top: w.top, left: w.left }; })()`
+    `(() => {${DEEP} const w = __doc(); return { top: w.top, left: w.left }; })()`
   );
   check(
     'dragging the title bar moves the window',
@@ -1099,20 +1138,25 @@ async function main() {
   // (DOM order is kept in step with z-order), which disconnects + reconnects
   // every element inside the moved window. The canvases tear their
   // ResizeObservers down on disconnect, so they must rebuild them on
-  // reconnect — the regression left both canvases blind to the grow box
-  // after any raise. Raise the sprite window, then the document window (both
-  // nodes move), then grow each window and expect its canvas to re-fit.
+  // reconnect — the regression left the canvases blind to the grow box after
+  // any raise. With the view windows on the UTILITY tier, raises re-order
+  // within the windoid band: the sprite windoid boots below the tools
+  // palette (slot order), so raising it moves its node. The single document
+  // window's node never moves in this tier model — its grow check below is
+  // the plain re-fit contract.
   const raise = async (id) => {
     const t = await evaluate(
       `(() => {${DEEP} const r = __q('${id}').getBoundingClientRect();
-        return { x: r.left + r.width / 2, y: r.top + 9 }; })()`
+        return { x: r.left + r.width / 2, y: r.top + 6 }; })()`
     );
     await click(t.x, t.y);
     await sleep(200);
   };
+  // `grow('DOC', …)` targets the active document window (dynamic id).
   const grow = async (id, dx, dy) => {
     const g = await evaluate(
-      `(() => {${DEEP} const b = __q('${id}').shadowRoot
+      `(() => {${DEEP} const w = '${id}' === 'DOC' ? __doc() : __q('${id}');
+        const b = w.shadowRoot
           .querySelector('[part="grow-box"]').getBoundingClientRect();
         return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`
     );
@@ -1131,10 +1175,26 @@ async function main() {
     );
   const drawWidth = () =>
     evaluate(
-      `(() => {${DEEP} return __q('.editor-canvas').getBoundingClientRect().width; })()`
+      `(() => {${DEEP} return __qd('.editor-canvas').getBoundingClientRect().width; })()`
     );
+  const spriteMoved = await evaluate(
+    `(() => {${DEEP}
+      const before = [...document.querySelectorAll('vf-window')].map((w) => w.id);
+      return before.indexOf('win-sprite') < before.indexOf('win-tools');
+    })()`
+  );
   await raise('#win-sprite');
-  await raise('#win-document');
+  check(
+    'raising the sprite windoid re-orders the windoid band in the DOM',
+    spriteMoved &&
+      (await evaluate(
+        `(() => {${DEEP}
+          const ids = [...document.querySelectorAll('vf-window')].map((w) => w.id);
+          return ids.indexOf('win-sprite') > ids.indexOf('win-tools');
+        })()`
+      )),
+    'sprite did not cross tools in the light DOM'
+  );
   const atlasBefore = await atlasWidth();
   await grow('#win-sprite', 40, 60);
   const atlasAfter = await atlasWidth();
@@ -1143,13 +1203,262 @@ async function main() {
     atlasAfter > atlasBefore,
     `${atlasBefore} → ${atlasAfter}`
   );
+  // The document window was dragged +40/+24 above, which tucks its grow box
+  // under the stage windoid (the utility tier floats over the document
+  // tier). Pull it left first so the grow press lands on the box, not the
+  // windoid above it.
+  const docBar = await evaluate(
+    `(() => {${DEEP} const r = __doc().getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + 9 }; })()`
+  );
+  await mouse('mousePressed', docBar.x, docBar.y);
+  await mouse('mouseMoved', docBar.x - 80, docBar.y, { buttons: 1 });
+  await mouse('mouseReleased', docBar.x - 80, docBar.y, { buttons: 0 });
+  await sleep(300);
   const drawBefore = await drawWidth();
-  await grow('#win-document', 96, 96);
+  await grow('DOC', 96, 96);
   const drawAfter = await drawWidth();
   check(
-    'the draw canvas re-fits after a raise re-orders the DOM',
+    'the draw canvas re-fits when the grow box grows the document window',
     drawAfter > drawBefore,
     `${drawBefore} → ${drawAfter}`
+  );
+
+  // --- desktop: focus / deactivation ------------------------------------------
+  // The two-role model: clicking the desktop's own surface is "clicking the
+  // Finder" — the document window drops its active state, the utility
+  // windoids hide (their View-menu intent preserved), the options strip
+  // blanks, the bare-letter tool keys go inert, and the menus fall to the
+  // Finder grammar (New always; Open only with an icon selected, acting on
+  // it). Clicking back into the document window — or opening from an icon —
+  // undoes all of it.
+  section('focus / deactivation');
+  await freshPage();
+  s = await probe();
+  check(
+    'the app boots active: windoids up, document window active',
+    s.docActive && s.windows.tools && s.windows.sprite && s.windows.stage,
+    JSON.stringify({ docActive: s.docActive, windows: s.windows })
+  );
+  // A bare-desktop point, computed against the LIVE layout: earlier sections'
+  // window drags persist through desktop-state, so no hardcoded point is safe.
+  const bareSpot = () =>
+    evaluate(`(() => {${DEEP}
+      const boxes = [...document.querySelectorAll('vf-window, vf-icon')]
+        .filter((el) => !el.hidden)
+        .map((el) => el.getBoundingClientRect());
+      for (let y = innerHeight - 40; y > 80; y -= 37) {
+        for (let x = 40; x < innerWidth - 40; x += 37) {
+          if (!boxes.some((b) =>
+            x >= b.left - 6 && x <= b.right + 6 && y >= b.top - 6 && y <= b.bottom + 6
+          )) return { x, y };
+        }
+      }
+      return null;
+    })()`);
+  const BARE = await bareSpot();
+  check('found a bare patch of desktop to click', !!BARE, JSON.stringify(BARE));
+  await click(BARE.x, BARE.y);
+  await sleep(300);
+  s = await probe();
+  check('a desktop click deactivates the document window', s.docActive === false);
+  check(
+    '…the utility windoids hide with the application',
+    !s.windows.tools && !s.windows.sprite && !s.windows.stage && s.windows.document,
+    JSON.stringify(s.windows)
+  );
+  check('…the options strip blanks', s.optionsBlank === true);
+  check(
+    '…the View-menu checkmarks keep the intent (wanted flags survive)',
+    s.menuChecks.sprite && s.menuChecks.stage && s.menuChecks.tools,
+    JSON.stringify(s.menuChecks)
+  );
+  check(
+    '…the Finder menu grammar lands: New stays, the rest grey out',
+    s.menuEnabled.newDoc === true &&
+      s.menuEnabled.open === false &&
+      s.menuEnabled.save === false &&
+      s.menuEnabled.close === false &&
+      s.menuEnabled.pickColor === false &&
+      s.menuEnabled.grid === false &&
+      s.menuEnabled.toolPencil === false &&
+      s.menuEnabled.viewSprite === false,
+    JSON.stringify(s.menuEnabled)
+  );
+  await keyPress('r');
+  s = await probe();
+  check('…the bare-letter tool keys are inert', s.drawTool === 'pencil', s.drawTool);
+  // Selecting a desktop icon is still working in the Finder: Open comes
+  // alive, aimed at the selection.
+  const carIcon = await centreOf('vf-icon[data-key="sample:Car"]');
+  await click(carIcon.x, carIcon.y);
+  await sleep(300);
+  s = await probe();
+  check(
+    'selecting an icon enables Open (the Finder grammar)',
+    s.menuEnabled.open === true && s.docActive === false,
+    JSON.stringify({ open: s.menuEnabled.open, docActive: s.docActive })
+  );
+  // ⌘O, not a menu-bar pick: the kit's vf-icon deselects on ANY outside
+  // press, menu bar included — System 7's Finder kept the selection while a
+  // menu was pulled, so that's an open kit ask (APP-IA-PLAN.md §3.1). The
+  // key equivalent presses nothing, so the selection survives to be opened.
+  await keyPress('o', META);
+  await sleep(900);
+  s = await probe();
+  check(
+    '⌘O opens the selection and reactivates the application',
+    s.docActive === true && s.windows.tools && s.windows.sprite && s.windows.stage,
+    JSON.stringify({ docActive: s.docActive, windows: s.windows })
+  );
+  // And the pointer path back in: deactivate again, then click the document
+  // window — stripes and windoids return where they were.
+  await click(BARE.x, BARE.y);
+  await sleep(300);
+  const docBarBack = await evaluate(
+    `(() => {${DEEP} const r = __doc().getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + 9 }; })()`
+  );
+  await click(docBarBack.x, docBarBack.y);
+  await sleep(300);
+  s = await probe();
+  check(
+    'clicking the document window reactivates: stripes and windoids return',
+    s.docActive === true && s.windows.tools && s.windows.sprite && s.windows.stage,
+    JSON.stringify({ docActive: s.docActive, windows: s.windows })
+  );
+
+  // --- desktop: multiple documents ---------------------------------------------
+  // One document = one window: File → New opens a second window (staggered,
+  // active); each document carries its own undo history and drives the
+  // utility windows only while active; Close and Quit walk the dirty checks
+  // per document (the System 7 cascade).
+  section('multiple documents');
+  await freshPage(); // the Car sample, one window
+  s = await probe();
+  check(
+    'one document window at boot',
+    s.docWindows === 1 && s.heading === 'Car',
+    `${s.docWindows} windows, "${s.heading}"`
+  );
+  await pickMenu('#menu-file', 'new');
+  s = await probe();
+  check(
+    'File → New opens a SECOND window, active and untitled',
+    s.docWindows === 2 && s.docActive && s.heading === 'untitled',
+    `${s.docWindows} windows, "${s.heading}"`
+  );
+  check('…the 3D view empties for the blank untitled', s.voxels === 0, s.buildLine);
+  // Draw one texel in the untitled — ITS history, not Car's.
+  const at2 = (px, py) => texelPos(s.rect, s.tileW, px, py);
+  await keyPress('b');
+  await click(at2(3, 3).x, at2(3, 3).y);
+  await sleep(500);
+  check('a stroke lands in the untitled document', (await texelAt(3, 3))[3] === 255);
+  s = await probe();
+  check(
+    '…enables Undo for THIS document and rebuilds the stage from it',
+    // A single face on a blank sheet builds ONE voxel with an
+    // unconstrained-axis warning — and the warning replaces the stats in
+    // the readout, so the ⚠ line IS the proof this doc reached the stage.
+    s.menuChecks.undoEnabled === true && s.buildLine.includes('unconstrained'),
+    JSON.stringify({ undo: s.menuChecks.undoEnabled, buildLine: s.buildLine })
+  );
+  // Switch back to Car by clicking its (still-exposed) title bar.
+  const carBar = await evaluate(
+    `(() => {${DEEP}
+      const win = [...document.querySelectorAll('vf-window')]
+        .find((w) => w.id.startsWith('win-doc-') && w.heading === 'Car');
+      const r = win.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + 9 }; })()`
+  );
+  await click(carBar.x, carBar.y);
+  await sleep(400);
+  s = await probe();
+  check(
+    'clicking the Car window activates it: title and undo enablement follow',
+    s.heading === 'Car' && s.docWindows === 2 && s.menuChecks.undoEnabled === false,
+    JSON.stringify({ heading: s.heading, undo: s.menuChecks.undoEnabled })
+  );
+  check(
+    '…and the 3D View rebuilds the car (the stage follows the active document)',
+    s.voxels > 100,
+    s.buildLine
+  );
+  // Close the dirty untitled: activate it, File → Close, Don't Save. The
+  // staggered untitled sits mostly UNDER the just-raised Car window, and the
+  // utility windoids float over every document — so scan its whole box for
+  // a point the browser confirms belongs to this window (elementFromPoint
+  // retargets shadow parts to the host; a stray body click on a document
+  // about to be discarded is harmless) and click there to activate it.
+  const untitledBar = await evaluate(
+    `(() => {${DEEP}
+      const win = [...document.querySelectorAll('vf-window')]
+        .find((w) => w.id.startsWith('win-doc-') && w.heading === 'untitled');
+      const r = win.getBoundingClientRect();
+      for (let y = r.top + 9; y < r.bottom - 6; y += 24) {
+        for (let x = r.right - 8; x > r.left + 6; x -= 16) {
+          const el = document.elementFromPoint(x, y);
+          if (el === win || win.contains(el)) return { x, y };
+        }
+      }
+      return null; })()`
+  );
+  check('found a visible patch of the untitled window', !!untitledBar);
+  await click(untitledBar.x, untitledBar.y);
+  await sleep(300);
+  await pickMenu('#menu-file', 'close');
+  await sleep(300);
+  s = await probe();
+  check(
+    'closing the dirty untitled raises the unsaved-changes alert',
+    s.anyModalOpen === true
+  );
+  const dont = await centreOf('#btn-unsaved-dont');
+  await click(dont.x, dont.y);
+  await sleep(500);
+  s = await probe();
+  check(
+    "Don't Save closes the window; Car remains and takes the active state",
+    s.docWindows === 1 && s.heading === 'Car' && s.docActive === true,
+    JSON.stringify({ docWindows: s.docWindows, heading: s.heading })
+  );
+  // The quit cascade: a fresh dirty untitled, then Quit — Cancel aborts the
+  // whole walk; a second Quit with Don't Save closes everything (the clean
+  // Car goes silently) and leaves the bare desktop focused.
+  await pickMenu('#menu-file', 'new');
+  s = await probe();
+  const at3 = (px, py) => texelPos(s.rect, s.tileW, px, py);
+  await keyPress('b');
+  await click(at3(2, 2).x, at3(2, 2).y);
+  await sleep(400);
+  await pickMenu('#menu-app', 'quit');
+  await sleep(300);
+  s = await probe();
+  check('Quit walks into the dirty untitled: the alert is up', s.anyModalOpen === true);
+  const cancelBtn = await centreOf('#btn-unsaved-cancel');
+  await click(cancelBtn.x, cancelBtn.y);
+  await sleep(300);
+  s = await probe();
+  check(
+    'Cancel aborts the quit — both windows stay',
+    s.docWindows === 2 && s.anyModalOpen === false,
+    `${s.docWindows} windows`
+  );
+  await pickMenu('#menu-app', 'quit');
+  await sleep(300);
+  const dont2 = await centreOf('#btn-unsaved-dont');
+  await click(dont2.x, dont2.y);
+  await sleep(600);
+  s = await probe();
+  check(
+    'Quit completes: every window closes and the desktop takes focus',
+    s.docWindows === 0 &&
+      s.docActive === false &&
+      !s.windows.tools &&
+      !s.windows.sprite &&
+      !s.windows.stage,
+    JSON.stringify({ docWindows: s.docWindows, windows: s.windows })
   );
 
   // --- desktop: save / open round-trip ---------------------------------------
