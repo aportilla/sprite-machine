@@ -52,20 +52,42 @@ import { initialPlacement, pinOf, pinTo, TOP_RESERVE } from './layout.js';
 // the smart default box, System 7 style.
 const STAGGER = 24;
 
+// The 3D View windoid's size floor, in system px — the kit's own grow floor
+// is a general 80×54, under which this windoid degenerates. Applied to every
+// geometry that lands on it: boot (smart placement or a saved layout from
+// before this floor existed) and the grow box (via vf-resize below).
+// WIDTH: the controls strip across its top (sm-stage-controls — the rotate /
+// smooth checkboxes) must never be clipped: its measured content width, 159
+// (8 pad + the two checkboxes 61 + 68 + the 14 gap + 8 pad) + the frame's
+// 1px borders, rounded up a hair — if the strip's contents change,
+// re-measure and re-pin. HEIGHT: the fixed chrome (12 dot bar + 2 borders +
+// 24 strip + 15 status = 53) plus enough canvas to still read as a view.
+const STAGE_MIN_WIDTH = 164;
+const STAGE_MIN_HEIGHT = 160;
+
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
 
 /**
  * Clamp a window's authored/restored position onto the live raster, on the
  * same k-system-px lattice a drag lands on (system7web's centerWindow rule,
  * minus the centering — authored positions are kept, just pulled on-canvas).
+ * A RESIZABLE window's size clamps to the open area first: bigger than it,
+ * the grow-box corner is unreachable at ANY position (the title bar can't
+ * leave the raster upward), so a saved geometry from a larger screen shrinks
+ * to a workable box.
  */
 export function clampWindow(desktop, win) {
   const k = systemPxQuantum(win);
   const down = (v) => Math.floor(v / k) * k;
   const up = (v) => Math.ceil(v / k) * k;
+  const minTop = up(TOP_RESERVE);
+  if (win.resizable) {
+    if (Number.isFinite(win.width)) win.width = Math.min(win.width, down(desktop.width));
+    if (Number.isFinite(win.height))
+      win.height = Math.min(win.height, down(Math.max(0, desktop.height - minTop)));
+  }
   const w = win.width ?? 0;
   const h = win.height ?? 0;
-  const minTop = up(TOP_RESERVE);
   win.left = clamp(snapSys(win.left ?? 0, win), 0, Math.max(0, down(desktop.width - w)));
   win.top = clamp(
     snapSys(win.top ?? minTop, win),
@@ -123,8 +145,24 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
       if (Number.isFinite(s.width) && byId[id].resizable) byId[id].width = s.width;
       if (Number.isFinite(s.height) && byId[id].resizable) byId[id].height = s.height;
     }
+    if (id === 'stage') {
+      byId[id].width = Math.max(byId[id].width ?? 0, STAGE_MIN_WIDTH);
+      byId[id].height = Math.max(byId[id].height ?? 0, STAGE_MIN_HEIGHT);
+    }
     clampWindow(desktop, byId[id]);
   }
+  // The grow box enforces only the kit's general 80×54 floor, so a drag could
+  // shrink the 3D View under its own floor: re-floor on every vf-resize. The
+  // kit fires it after the shrunken box has been applied but the correction
+  // lands in the same microtask batch — before the next paint — so the drag
+  // simply stops at the floor.
+  const onStageResize = () => {
+    if ((byId.stage.width ?? 0) < STAGE_MIN_WIDTH) byId.stage.width = STAGE_MIN_WIDTH;
+    if ((byId.stage.height ?? 0) < STAGE_MIN_HEIGHT) byId.stage.height = STAGE_MIN_HEIGHT;
+  };
+  byId.stage.addEventListener('vf-resize', onStageResize);
+  unsubs.push(() => byId.stage.removeEventListener('vf-resize', onStageResize));
+
   const hiddenAtBoot = new Set(hide.filter((id) => id !== 'document'));
   const hideDocs = hide.includes('document');
 
@@ -263,7 +301,9 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
   // dirty-checking flow menus.js injects.
   /** Per-window relative pin across raster resizes: the unrounded fraction
    *  plus the top/left this path last applied (a mismatch there means
-   *  someone moved the window, so its pin re-derives). See onDesktopResized. */
+   *  someone moved the window, so its pin re-derives) — and, for resizable
+   *  windows, the TRUE size plus the size this path last applied, the same
+   *  discipline for the oversize shrink. See onDesktopResized. */
   const pins = new WeakMap();
 
   const api = {
@@ -295,15 +335,26 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
      *  (shell/layout.js: left as a plain fraction of the raster width, top
      *  of the open space below the options strip — the fixed chrome band
      *  is the pin's y = 0 line, so a window tucked under the strip stays
-     *  tucked under it). Deliberately NO clamp and no visibility guarantee: a clamp at the
+     *  tucked under it). Deliberately NO position clamp and no visibility
+     *  guarantee: a clamp at the
      *  small size rewrites the fraction and turns grow-back into a drift, so
      *  a window near an edge just hangs partly off a shrunk raster and
-     *  returns whole. Sizes are left alone; the bare snap keeps the chrome
-     *  on the system-px lattice.
+     *  returns whole; the bare snap keeps the chrome on the system-px
+     *  lattice.
+     *
+     *  SIZES get exactly one intervention: a resizable window BIGGER than
+     *  the open area shrinks to fit it. Hanging off is recoverable by a
+     *  drag; bigger-than-the-area is not — the title bar can't leave the
+     *  raster upward, so the grow-box corner would be unreachable at any
+     *  position. The shrink follows the pin's own reversibility discipline
+     *  (below): the TRUE size is the per-window truth, and growing the
+     *  raster back restores it exactly.
      *
      *  The UNROUNDED fraction is the per-window truth between events (the
      *  `pins` cache), re-derived only when the window has moved since this
-     *  path last placed it (a drag, a restore, a fresh window). Re-deriving
+     *  path last placed it (a drag, a restore, a fresh window) — likewise
+     *  the true size, re-derived only when the window was resized since
+     *  this path last sized it. Re-deriving
      *  it every event from the just-snapped position ratchets — the
      *  lattice's round-half-up walked windows down the screen across a long
      *  resize drag, one notch per odd landing, never back up. */
@@ -318,12 +369,35 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
         const cur = { left: win.left ?? 0, top: win.top ?? 0 };
         let rec = pins.get(win);
         if (!rec || rec.left !== cur.left || rec.top !== cur.top) {
-          rec = { pin: pinOf(cur, before) };
+          rec = { ...rec, pin: pinOf(cur, before) };
         }
         const pos = pinTo(rec.pin, after);
         win.left = snapSys(pos.left, win);
         win.top = snapSys(pos.top, win);
-        pins.set(win, { pin: rec.pin, left: win.left, top: win.top });
+        const next = { pin: rec.pin, left: win.left, top: win.top };
+        if (win.resizable) {
+          // The oversize shrink (see the doc comment): floor-snapped onto
+          // the window's lattice so the clamped edge lands on the device
+          // grid; an in-bounds size passes through untouched (no re-snap —
+          // the write below is then the value already there, a Lit no-op).
+          const k = systemPxQuantum(win);
+          const minTop = Math.ceil(TOP_RESERVE / k) * k;
+          const maxW = Math.floor(after.width / k) * k;
+          const maxH = Math.floor(Math.max(0, after.height - minTop) / k) * k;
+          const curW = win.width ?? 0;
+          const curH = win.height ?? 0;
+          const trueW = rec.appliedW === curW ? rec.trueW : curW;
+          const trueH = rec.appliedH === curH ? rec.trueH : curH;
+          win.width = Math.min(trueW, maxW);
+          win.height = Math.min(trueH, maxH);
+          Object.assign(next, {
+            trueW,
+            trueH,
+            appliedW: win.width,
+            appliedH: win.height,
+          });
+        }
+        pins.set(win, next);
       }
     },
     /** Deactivate the application programmatically (nothing calls this on

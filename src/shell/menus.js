@@ -1,9 +1,11 @@
 // ---------------------------------------------------------------------------
 // Menu + dialog wiring for the desktop shell: vf-menu-select → store/file
-// actions, checkmark + enabled sync, and every dialog flow (About, Settings,
-// Open, the shared name prompt, Properties, the unsaved-changes alert, the
+// actions, checkmark + enabled sync, and every dialog flow (About, Open, the
+// shared name prompt, Properties, the unsaved-changes alert, the
 // storage-unavailable notice). Behavior only — the markup lives in
-// index.html, the aesthetics in the kit.
+// index.html, the aesthetics in the kit. (Settings… is parked: the render
+// toggles moved to the 3D View's controls strip, and the emptied item sits
+// disabled in the markup until it has contents again.)
 //
 // MULTI-DOCUMENT GRAMMAR: File actions target the ACTIVE workspace context;
 // New / Open / a drop always open a NEW window (opening never discards
@@ -25,7 +27,6 @@
 // ---------------------------------------------------------------------------
 
 import { session } from '../state/session.js';
-import { prefs } from '../state/prefs.js';
 import { build } from '../state/build.js';
 import { shell } from '../state/shell.js';
 import { files, UNTITLED, docFilename } from '../state/files.js';
@@ -61,7 +62,6 @@ export function initMenus(desktop, windows) {
 
   // --- dialogs ----------------------------------------------------------------
   const dlgAbout = $('#dlg-about');
-  const dlgSettings = $('#dlg-settings');
   const dlgOpen = $('#dlg-open');
   const dlgName = $('#dlg-name');
   const dlgProps = $('#dlg-props');
@@ -69,21 +69,8 @@ export function initMenus(desktop, windows) {
   const dlgStorage = $('#dlg-storage');
 
   on($('#btn-about-ok'), 'click', () => dlgAbout.close());
-  on($('#btn-settings-ok'), 'click', () => dlgSettings.close());
   on($('#btn-storage-ok'), 'click', () => dlgStorage.close());
   on($('#btn-props-ok'), 'click', () => dlgProps.close());
-
-  // Settings ↔ prefs (live both ways: the dialog can stay open).
-  const setLowpoly = $('#set-lowpoly');
-  const setRotate = $('#set-rotate');
-  const syncSettings = () => {
-    setLowpoly.checked = !!prefs.get().lowpoly;
-    setRotate.checked = !!prefs.get().autoRotate;
-  };
-  on(setLowpoly, 'vf-change', (e) => prefs.setLowpoly(e.detail.checked));
-  on(setRotate, 'vf-change', (e) => prefs.setAutoRotate(e.detail.checked));
-  teardown.push(prefs.subscribe(syncSettings));
-  syncSettings();
 
   // The one name-prompt dialog, two uses (first save / rename): resolves the
   // committed name, or null on Cancel/Escape — the vf-close event is the
@@ -303,13 +290,11 @@ export function initMenus(desktop, windows) {
   // --- menus ------------------------------------------------------------------
   on($('#menu-app'), 'vf-menu-select', (e) => {
     if (modalOpen()) return;
+    // No 'settings' case: the item sits disabled in the markup (parked — see
+    // the file header), and a disabled item never fires by kit contract.
     switch (menuDetail(e).value) {
       case 'about':
         dlgAbout.show();
-        break;
-      case 'settings':
-        syncSettings();
-        dlgSettings.show();
         break;
       case 'quit':
         quit();
@@ -433,8 +418,9 @@ export function initMenus(desktop, windows) {
 
   // --- focus gating ------------------------------------------------------------
   // Two roles share one menu bar (the single-application affordance): with
-  // the desktop focused, every document-scoped item greys out. About /
-  // Settings / Quit / New stay — they're app-level — and Open switches to the
+  // the desktop focused, every document-scoped item greys out. About / Quit /
+  // New stay — they're app-level (the parked Settings… is disabled in the
+  // markup in both roles) — and Open switches to the
   // Finder grammar above: enabled iff a desktop icon is selected. Disabling
   // an item also parks its key equivalent (the kit never fires a disabled
   // item's shortcut), so ⌘O/⌘S/⌘K/⌘G gate with their menus; the bare-letter

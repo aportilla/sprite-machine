@@ -6,8 +6,8 @@
    This sheet supplies only the PAGE's share: the shared palette tokens
    (custom properties inherit into every shadow tree), the reset, the black
    ground behind the desktop bezel, the light-DOM Colors dialog's page share
-   (host display, the hover readout's color chip), the 3D viewport
-   canvas's fill rules, the desktop-icon column width, and the drop overlay
+   (host display, the hover readout's color chip), the 3D View body's
+   column + viewport fill rules, the desktop-icon column width, and the drop overlay
    drop-target.js renders into the page. If a rule here paints a border or a
    color on kit chrome, it's a bug — the kit draws everything.
    --------------------------------------------------------------------------- */
@@ -61,10 +61,18 @@ sm-color-picker {
   border: calc(var(--vf-scale, 1) * 1px) solid var(--sm-black);
 }
 
-/* The THREE canvas fills the 3D View window's (flush) body. */
-#viewport {
-  width: 100%;
+/* The 3D View window's (flush) body: the controls strip over the THREE
+   canvas (sm-stage-controls draws itself; this wrapper is layout only). */
+.stage-body {
+  display: flex;
+  flex-direction: column;
   height: 100%;
+}
+/* The THREE canvas takes what the controls strip leaves of the column. */
+#viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
   display: block;
   background: var(--sm-stage);
   /* Low-res render buffer upscaled crisply by CSS. */

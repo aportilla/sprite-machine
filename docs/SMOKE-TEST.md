@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 116 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 132 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -14,7 +14,8 @@ browser, `http://localhost:5173/`.
       Sprite View, 3D View) disappear, the options strip hides (the dither
       runs right up to the menu bar), and B/R/G/E/I do nothing.
 - [ ] **The Finder menu grammar**: while deactivated, pull each menu — only
-      About…/Settings…/Quit and File → New stay enabled; File → Open…
+      About…/Quit and File → New stay enabled (Settings… is parked disabled
+      in both roles — its contents moved to the 3D View); File → Open…
       enables the moment you select a desktop icon (and then opens that
       icon — note the kit currently drops the selection if you _click_ the
       menu bar, so use ⌘O; an open kit ask).
@@ -104,8 +105,14 @@ browser, `http://localhost:5173/`.
 
 ## Odds and ends
 
-- [ ] **Settings…**: smooth slopes / auto rotate toggle live; the 3D view
-      reacts immediately.
+- [ ] **3D View controls strip**: the rotate / smooth checkboxes across the
+      window's top toggle live — the model stops spinning / re-meshes
+      immediately (Settings… in the menu stays disabled, a parked
+      placeholder).
+- [ ] **The 3D View can't degenerate**: grow-box-shrink it as far as it
+      goes — the drag stops at the strip's width (both checkboxes stay
+      whole) and at a height that keeps a real patch of canvas under the
+      strip.
 - [ ] **Menu key equivalents off-Mac**: Ctrl stands in for ⌘.
 - [ ] **Private window**: open in an Incognito/private window where
       IndexedDB misbehaves — Save raises the "Storage Unavailable" notice

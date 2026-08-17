@@ -51,7 +51,8 @@ grammar. See [The desktop](#the-desktop).
 **Double-click a sample icon** (Car, Cube — they open as fresh untitled
 copies), pick File → Open…, or drop your own **3×2 sprite sheet** PNG
 anywhere on the window. **Smooth slopes** (low-poly additive 45° wedges) is
-on by default and toggles live in Settings; greedy meshing is always on.
+on by default and toggles live in the 3D View's controls strip ("smooth",
+beside "rotate"); greedy meshing is always on.
 Sprites are hard pixel art — every texel is fully opaque or fully
 transparent — and every face with no view of its own is mirror-filled from
 its opposite at render time. The **face picker** (six pixel-art cube icons
@@ -364,8 +365,10 @@ strip's clamp bounds, and the Undo/Redo enablement.
 
 ### Menu bar
 
-- **Sprite Machine** — _About…_, _Settings…_ (the render prefs: smooth
-  slopes, auto rotate), _Quit_ (the System 7 cascade: every open document in
+- **Sprite Machine** — _About…_, _Settings…_ (parked: the render prefs
+  moved to the 3D View's controls strip, so the emptied item sits disabled
+  as a placeholder for a future settings surface), _Quit_ (the System 7
+  cascade: every open document in
   turn, one unsaved-changes alert per dirty one — its window brought forward
   as it's asked about, Cancel anywhere aborting the rest — down to the bare
   desktop, windoid arrangement intact).
@@ -422,9 +425,17 @@ Two tiers, two regimes:
   scrolled), following the ACTIVE document's **live channel**, so it tracks
   strokes at rAF rate (the second live subscriber ever, after the
   rebuilder), its status strip reading "Sprite Atlas View"; the **3D View**
-  hosts the THREE canvas, its status strip reading "3D Model View" — a build
+  hosts a **controls strip** across its top — the two render toggles as
+  checkboxes, **rotate** (auto-spin) and **smooth** (the low-poly wedge
+  pass), writing the prefs slice live (`sm-stage-controls`; these lived in
+  Settings… before) — over the THREE canvas, its status strip reading
+  "3D Model View" — a build
   error or warning takes that line, ⚠-prefixed, and the build stats
-  (grid / voxels / tris) ride the strip's hover tooltip.
+  (grid / voxels / tris) ride the strip's hover tooltip. The 3D View alone
+  carries its own size floor (`shell/windows.js`, against the grow box and
+  any boot geometry alike): width at the controls strip's content width so
+  the checkboxes can never be clipped, height at enough canvas under the
+  strip to still read as a view.
 
 Positions/sizes come from a **smart placement** computed against the live
 raster (`shell/layout.js`, pure): the Tools palette top-left, the Full
@@ -440,17 +451,27 @@ strip** (the menu-bar + strip band is fixed-height chrome — the pin's
 y = 0 line is the strip's bottom edge, so a window tucked under the strip
 stays tucked under it instead of sliding beneath the menu bar) — live,
 per resize event (the raster itself re-fits live, so the windows track it
-in the same stroke), sizes untouched. The
+in the same stroke). The
 **unrounded fraction is the per-window truth** between events, re-derived
 only when the window has actually been moved (a drag, a restore) —
 re-reading it each event from the just-snapped position ratchets, because
 the placement lattice's round-half-up walks windows down the screen
 across a long resize drag, one notch at a time, never back up.
-Deliberately **no clamp** and no visibility guarantee on this path: a
+Deliberately **no position clamp** and no visibility guarantee on this
+path: a
 window near an edge may hang partly off a shrunk raster, and that's the
 point — the same fraction always maps back exactly, so growing back
 returns it whole (clamping at the small size rewrites the fraction and
-turns the round trip into a drift).
+turns the round trip into a drift). Sizes get exactly **one
+intervention**: a resizable window **bigger than the open area** shrinks
+to fit it — hanging off is recoverable by a drag, but bigger-than-the-area
+is not (the title bar can't leave the raster upward, so the grow-box
+corner would be unreachable at any position). The shrink keeps the pin's
+reversibility discipline: the **true size** is the per-window truth,
+re-derived only when the window was actually resized, so growing the
+raster back restores the size exactly; the same oversize clamp guards the
+boot restore (`clampWindow`), where a layout saved on a larger screen
+lands on a smaller one.
 
 ### Documents: a document IS a .png
 
@@ -632,8 +653,10 @@ snapshot copy-in/copy-out, the bound, load-boundary clearing),
 the smart placement — the 3:4 rail, the centered two-thirds document box,
 the 30% width cap, tiny rasters degrading gracefully — and the resize
 re-pin rule: plain fractions (left of the raster width, top of the open
-space below the options strip), no clamp — an edge window may hang off a
-shrunk raster so shrink-then-grow round-trips home exactly;
+space below the options strip), no position clamp — an edge window may hang
+off a shrunk raster so shrink-then-grow round-trips home exactly, though a
+window bigger than the open area shrinks to fit (and grows back the same
+way — the grow box must stay reachable);
 `tools/drive.mjs` drives the real thing over CDP, where a viewport change
 fires a true `resize`).
 
@@ -689,7 +712,7 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
                       and followActive() — the follow-the-active-document primitive
   session.js          editor session (app-level): tool, ink, per-tool options, picker
                       flag — one palette, one ink, however many documents are open
-  prefs.js            lowpoly / autoRotate (the render toggles; Settings… writes them)
+  prefs.js            lowpoly / autoRotate (the render toggles; the 3D View's controls strip writes them)
   build.js            dims / voxels / tris / warnings / error — written by the rebuilder, read by the status line
   files.js            the document LIBRARY: listing + availability + per-document storage ops
                       (save/load/rename/remove/export, each taking an explicit doc + identity) —
@@ -744,11 +767,13 @@ src/
                        rect drag preview
     sm-face-picker.js, sm-tool-strip.js, sm-tool-options.js
                        presentational leaves: props down, bubbling sm-* events up, no store imports
-    sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-status-line.js, sm-color-picker.js
+    sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-stage-controls.js, sm-status-line.js,
+    sm-color-picker.js
                        connected chrome: the options strip (a kit vfPanel band: tool name +
                        current-ink swatch + options; hidden while the desktop is focused;
                        bounds from the active document) / the Tools palette body / the live
-                       full-atlas view (follows the active document) / the windows' status
+                       full-atlas view (follows the active document) / the 3D View's controls
+                       strip (the rotate + smooth checkboxes -> prefs) / the windows' status
                        readouts (tile = the window's edited face; atlas/build = fixed view
                        names, the build stats riding the 3D strip's tooltip) /
                        the app-level Colors dialog (in index.html's dialog set, rendered into its

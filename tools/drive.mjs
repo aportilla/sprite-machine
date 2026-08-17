@@ -1692,7 +1692,14 @@ async function main() {
       const d = document.querySelector('#desktop');
       const wins = [...document.querySelectorAll('vf-window')]
         .filter((w) => !w.hidden)
-        .map((w) => ({ id: w.id, left: w.left, top: w.top, w: w.width, h: w.height }));
+        .map((w) => ({
+          id: w.id,
+          left: w.left,
+          top: w.top,
+          w: w.width,
+          h: w.height,
+          r: w.resizable,
+        }));
       return { dw: d.width, dh: d.height, wins };
     })()`);
   const metrics = (width, height) =>
@@ -1740,11 +1747,37 @@ async function main() {
       }),
     JSON.stringify({ wide: pins(wide), narrow: pins(narrow) })
   );
+  // The ONE size intervention on this path: a resizable window BIGGER than
+  // the open area shrinks to fit it (otherwise its grow-box corner is
+  // unreachable at any position — the title bar can't leave the raster
+  // upward), with the true size cached like the pin so the round trip below
+  // restores it exactly. At this viewport the boot windows exceed the open
+  // height, so the clamp must actually engage. VIEWPORT CHOICE: under
+  // emulation the OUTER window never changes, so the kit's zoom tracker
+  // can't rebase on it — a shrink whose two axis ratios land on ONE zoom
+  // ladder level reads as page zoom and re-scales the desktop for the rest
+  // of the run (780×640 → 520×430 is 1.5×/1.49×, both quantizing to the
+  // 1.5 rung, and --vf-scale stuck at 4/3). 520×360 is 1.5×/1.78× — two
+  // different rungs, so the tracker rebases instead.
+  await metrics(520, 360);
+  await sleep(300);
+  const tiny = await layoutSnap();
+  check(
+    'an oversized window shrinks to the shrunk open area (grow box reachable)',
+    tiny.wins.filter((w) => w.r).every((w) => w.w <= tiny.dw && w.h <= tiny.dh - 56) &&
+      tiny.wins.some((w) => {
+        const o = wide.wins.find((x) => x.id === w.id);
+        return o && (w.w < o.w || w.h < o.h);
+      }),
+    JSON.stringify(tiny)
+  );
   // Wiggle the height up and down a few times before coming home — the
   // ratchet regression (re-deriving the fraction from the just-snapped
   // position each event) crept windows DOWN one notch per event and never
   // back up, so a wiggle run is what catches it; the pin cache maps the
-  // same fraction every event, so home must be EXACT.
+  // same fraction every event, so home must be EXACT — position AND size
+  // (the wiggle's smaller heights re-clamp sizes mid-run; the truth cache
+  // must bring them back whole).
   for (const h of [700, 560, 760, 620, 800]) {
     await metrics(780, h);
     await sleep(150);
@@ -1753,10 +1786,10 @@ async function main() {
   await sleep(400);
   const back = await layoutSnap();
   check(
-    'a resize wiggle round-trips every window exactly home',
+    'a resize wiggle round-trips every window exactly home (position and size)',
     back.wins.every((w) => {
       const o = wide.wins.find((x) => x.id === w.id);
-      return o && w.left === o.left && w.top === o.top;
+      return o && w.left === o.left && w.top === o.top && w.w === o.w && w.h === o.h;
     }),
     JSON.stringify({ before: wide.wins, after: back.wins })
   );

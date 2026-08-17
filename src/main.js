@@ -40,6 +40,7 @@ import './components/sm-options-bar.js'; // registers <sm-options-bar>
 import './components/sm-tools-panel.js'; // registers <sm-tools-panel>
 import './components/sm-atlas-view.js'; // registers <sm-atlas-view>
 import './components/sm-status-line.js'; // registers <sm-status-line>
+import './components/sm-stage-controls.js'; // registers <sm-stage-controls>
 
 // --- boot params → store seeds ---------------------------------------------
 // Applied BEFORE any subscriber exists, so seeding can't fire phantom

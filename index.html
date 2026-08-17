@@ -26,7 +26,10 @@
       <vf-menu-bar shortcuts>
         <vf-menu id="menu-app" label="Sprite Machine">
           <vf-menu-item value="about">About Sprite Machine…</vf-menu-item>
-          <vf-menu-item value="settings">Settings…</vf-menu-item>
+          <!-- Parked: the render toggles moved to the 3D View's controls
+               strip, leaving Settings… empty. The item stays disabled as the
+               placeholder for a future settings surface. -->
+          <vf-menu-item value="settings" disabled>Settings…</vf-menu-item>
           <vf-separator></vf-separator>
           <vf-menu-item value="quit">Quit</vf-menu-item>
         </vf-menu>
@@ -105,6 +108,11 @@
         <sm-status-line kind="atlas" slot="status"></sm-status-line>
       </vf-window>
 
+      <!-- The 3D View's flush body is a page-layout column (.stage-body):
+           the controls strip (the two render toggles — rotate / smooth)
+           over the THREE canvas. shell/windows.js floors this windoid's
+           width at the strip's content width so a grow-box shrink can't
+           clip the checkboxes. -->
       <vf-window
         id="win-stage"
         variant="utility"
@@ -113,7 +121,10 @@
         resizable
         flush
       >
-        <canvas id="viewport"></canvas>
+        <div class="stage-body">
+          <sm-stage-controls></sm-stage-controls>
+          <canvas id="viewport"></canvas>
+        </div>
         <sm-status-line kind="build" slot="status"></sm-status-line>
       </vf-window>
 
@@ -168,14 +179,6 @@
           </vf-paragraph>
         </vf-stack>
         <vf-button id="btn-about-ok" slot="buttons" variant="default">OK</vf-button>
-      </vf-dialog>
-
-      <vf-dialog id="dlg-settings" heading="Settings" closable width="300" height="170">
-        <vf-stack width="250" gap="12">
-          <vf-checkbox id="set-lowpoly">smooth slopes</vf-checkbox>
-          <vf-checkbox id="set-rotate">auto rotate</vf-checkbox>
-        </vf-stack>
-        <vf-button id="btn-settings-ok" slot="buttons" variant="default">OK</vf-button>
       </vf-dialog>
 
       <vf-dialog id="dlg-open" heading="Open" closable width="360" height="330">
