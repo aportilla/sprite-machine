@@ -17,14 +17,14 @@ export class SmToolsPanel extends LitElement {
   static styles = [
     baseStyles,
     css`
-      /* Kit-scaled metrics: the windoid's declared box is system px, so the
-       padding must ride the same --vf-scale or the panel misfits at any
-       display scale other than 1. */
+      /* No inner padding: the tool cells run flush to the windoid's frame —
+       the strip's frameless grid shares the window's own black line (the
+       kit's desk-accessory composition: vf-grid[frameless] inside
+       vf-window[flush]). */
       :host {
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: calc(var(--vf-scale, 1) * 8px) calc(var(--vf-scale, 1) * 6px);
       }
     `,
   ];

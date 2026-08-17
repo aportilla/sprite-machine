@@ -115,8 +115,8 @@ export class SmOptionsBar extends LitElement {
         .brushMax=${this.#brushMax}
         .cornerRadius=${s.cornerRadius}
         .radiusMax=${this.#radiusMax}
-        .fillReplace=${s.fillReplace}
-        .fillAllTiles=${s.fillAllTiles}
+        .fillContiguous=${s.fillContiguous}
+        .fillAllFaces=${s.fillAllFaces}
         @sm-set-pencil-size=${(e) => session.setPencilSize(e.detail.n, this.#brushMax)}
         @sm-set-eraser-size=${(e) => session.setEraserSize(e.detail.n, this.#brushMax)}
         @sm-set-corner-radius=${(e) =>
@@ -146,9 +146,9 @@ export class SmOptionsBar extends LitElement {
   }
 
   #onFillOpts = (e) => {
-    const { replace, allTiles } = e.detail;
-    if (replace !== undefined) session.setFillReplace(replace);
-    if (allTiles !== undefined) session.setFillAllTiles(allTiles);
+    const { contiguous, allFaces } = e.detail;
+    if (contiguous !== undefined) session.setFillContiguous(contiguous);
+    if (allFaces !== undefined) session.setFillAllFaces(allFaces);
   };
 }
 

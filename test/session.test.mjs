@@ -115,10 +115,13 @@ test('picker open/close and the fill checkboxes are plain flags', () => {
   assert.equal(s.get().pickerOpen, true);
   s.closePicker();
   assert.equal(s.get().pickerOpen, false);
-  s.setFillReplace(true);
-  s.setFillAllTiles(true);
-  assert.equal(s.get().fillReplace, true);
-  assert.equal(s.get().fillAllTiles, true);
+  // Contiguous is the tool's resting state; on-all-faces starts off.
+  assert.equal(s.get().fillContiguous, true);
+  assert.equal(s.get().fillAllFaces, false);
+  s.setFillContiguous(false);
+  s.setFillAllFaces(true);
+  assert.equal(s.get().fillContiguous, false);
+  assert.equal(s.get().fillAllFaces, true);
 });
 
 // (The edited FACE is per-document-window state now — it lives on the

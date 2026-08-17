@@ -59,7 +59,7 @@ export function parseBootParams(search, { sampleNames = [] } = {}) {
     }
   }
 
-  /** @type {{x:number,y:number,replace:boolean,all:boolean}|null} */
+  /** @type {{x:number,y:number,contiguous:boolean,allFaces:boolean}|null} */
   let fill = null;
   const fillParam = params.get('fill');
   if (fillParam) {
@@ -68,8 +68,10 @@ export function parseBootParams(search, { sampleNames = [] } = {}) {
       fill = {
         x: p[0],
         y: p[1],
-        replace: p.length > 2 && p[2] > 0,
-        all: p.length > 3 && p[3] > 0,
+        // The checkboxes, in UI order: contiguous defaults ON (the tool's
+        // resting state), on-all-faces OFF.
+        contiguous: p.length > 2 ? p[2] > 0 : true,
+        allFaces: p.length > 3 && p[3] > 0,
       };
     }
   }

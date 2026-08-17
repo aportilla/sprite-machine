@@ -65,8 +65,8 @@ if (boot.rect) {
 }
 if (boot.fill) {
   session.setTool('fill');
-  session.setFillReplace(boot.fill.replace);
-  session.setFillAllTiles(boot.fill.all);
+  session.setFillContiguous(boot.fill.contiguous);
+  session.setFillAllFaces(boot.fill.allFaces);
 }
 // The boot context's one-shot canvas hooks (?cursor / ?rect / ?fill paint
 // halves) — created here, carried on the context so no assignment can race
@@ -218,12 +218,17 @@ if (hot) {
   } else {
     files.refresh();
   }
-  const ctx = await loadSample(SAMPLES[boot.sampleIndex], { hooks: bootHooks });
+  // ?edit seeds the context's face AT open — a post-open setFace would race
+  // the one-shot mount hooks (the mount fill commits against ctx.face, so a
+  // late switch files the old face's buffer under the new face).
+  const ctx = await loadSample(SAMPLES[boot.sampleIndex], {
+    face: boot.edit ?? undefined,
+    hooks: bootHooks,
+  });
   if (ctx) {
-    // Dev hooks that need the loaded sheet: ?edit picks the starting face,
-    // ?tile / ?tile=WxH resizes the fresh sheet once (the capture tool can't
-    // click the stepper); the editor re-derives at the new size.
-    if (boot.edit) workspace.setFace(ctx.key, boot.edit);
+    // Dev hooks that need the loaded sheet: ?tile / ?tile=WxH resizes the
+    // fresh sheet once (the capture tool can't click the stepper); the
+    // editor re-derives at the new size.
     if (boot.tile) ctx.doc.resizeTiles(boot.tile.w, boot.tile.h);
   }
 })();

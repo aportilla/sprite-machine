@@ -319,16 +319,27 @@ const PROBE = `(() => {${DEEP}
     ? canvas.getBoundingClientRect()
     : { left: 0, top: 0, width: 0, height: 0 };
   const checked = __q('vf-radio[checked]');
-  // The 3D View's status line: "grid 40px · voxels 4950 · tris 1784" (or a
-  // ⚠-prefixed error/warning) — parsed back into a stats map.
+  // The 3D View's status line: the fixed "3D Model View" label (or a
+  // ⚠-prefixed error/warning taking the line); the build stats
+  // ("grid 40px · voxels 4950 · tris 1784") ride the label's title tooltip —
+  // parsed back into a stats map from there.
   const buildLine = (() => {
     const el = __q('sm-status-line[kind="build"]');
     return el && el.shadowRoot ? el.shadowRoot.textContent.trim() : '';
   })();
+  const buildStats = (() => {
+    const el = __q('sm-status-line[kind="build"]');
+    const lb = el && el.shadowRoot ? el.shadowRoot.querySelector('vf-label') : null;
+    return (lb && lb.getAttribute('title')) || '';
+  })();
   const stats = {};
-  for (const m of buildLine.matchAll(/(grid|voxels|tris) ([^·]+)/g)) {
+  for (const m of buildStats.matchAll(/(grid|voxels|tris) ([^·]+)/g)) {
     stats[m[1]] = m[2].trim();
   }
+  const atlasStatus = (() => {
+    const el = __q('sm-status-line[kind="atlas"]');
+    return el && el.shadowRoot ? el.shadowRoot.textContent.trim() : '';
+  })();
   // The Colors dialog is light-DOM chrome like the desktop's own dialogs
   // (About, Open, …): the kit's cursor observer must see its \`open\` flip
   // to keep the page-drawn cursor above the modal.
@@ -383,6 +394,8 @@ const PROBE = `(() => {${DEEP}
     rect: { left: r.left, top: r.top, width: r.width, height: r.height },
     tileW: canvas ? canvas.width : 0,
     buildLine,
+    buildStats,
+    atlasStatus,
     stats,
     voxels: +(stats.voxels || 0),
     docIcons: __qa('vf-icon').filter((i) => (i.dataset.key || '').startsWith('doc:'))
@@ -494,8 +507,9 @@ const hex = ([r, g, b]) =>
 
 const APP_READY = `(() => {${DEEP}
   const build = __q('sm-status-line[kind="build"]');
-  return !!(__q('.editor-canvas') && build && build.shadowRoot &&
-    build.shadowRoot.textContent.includes('voxels'));
+  const lb = build && build.shadowRoot && build.shadowRoot.querySelector('vf-label');
+  return !!(__q('.editor-canvas') && lb &&
+    (lb.getAttribute('title') || '').includes('voxels'));
 })()`;
 
 async function waitForApp() {
@@ -618,16 +632,26 @@ async function main() {
   check('the checked radio follows the face', s.checkedRadio === 'front');
   check('the document window is titled for the sample', s.heading === 'Car', s.heading);
   check(
-    'the document status bar reads the tile size',
-    s.tileStatus === `${TILE}px x ${TILE}px`,
+    'the document status bar names the edited face',
+    s.tileStatus === 'Front Face',
     s.tileStatus
+  );
+  check(
+    'the 3D View status bar reads its fixed name',
+    s.buildLine === '3D Model View',
+    s.buildLine
+  );
+  check(
+    'the sprite windoid status bar reads its fixed name',
+    s.atlasStatus === 'Sprite Atlas View',
+    s.atlasStatus
   );
   check(
     'all four desktop windows are open',
     Object.values(s.windows).every(Boolean),
     JSON.stringify(s.windows)
   );
-  check('stats read out a build', s.voxels > 0, s.buildLine);
+  check('the status tooltip reads out a build', s.voxels > 0, s.buildStats);
 
   // --- keyboard tool switching ----------------------------------------------
   section('keys');
@@ -835,6 +859,7 @@ async function main() {
   s = await probe();
   check('clicking a face radio switches the edited face', s.face === 'top', s.face);
   check('the selected-face dither follows', s.checkedRadio === 'top', s.checkedRadio);
+  check('the status bar names the new face', s.tileStatus === 'Top Face', s.tileStatus);
   check('the tool survives the face swap', s.drawTool === 'fill', s.drawTool);
   check('the ink survives the face swap', s.inkColor === inkBeforeSwap);
 
@@ -868,8 +893,8 @@ async function main() {
   const steppedTile = s.tileW;
   check('the stepper resizes the tile', steppedTile > TILE, `tileW=${steppedTile}`);
   check(
-    'the document status bar follows',
-    s.tileStatus === `${steppedTile}px x ${steppedTile}px`,
+    'the status bar still names the face (it never reads the tile size)',
+    s.tileStatus === 'Front Face',
     s.tileStatus
   );
   check('the editor stays on its face', s.face === 'front', s.face);
@@ -1491,7 +1516,7 @@ async function main() {
     s.docWindows === 2 && s.docActive && s.heading === 'untitled',
     `${s.docWindows} windows, "${s.heading}"`
   );
-  check('…the 3D view empties for the blank untitled', s.voxels === 0, s.buildLine);
+  check('…the 3D view empties for the blank untitled', s.voxels === 0, s.buildStats);
   // Draw one texel in the untitled — ITS history, not Car's.
   const at2 = (px, py) => texelPos(s.rect, s.tileW, px, py);
   await keyPress('b');
@@ -1502,8 +1527,9 @@ async function main() {
   check(
     '…enables Undo for THIS document and rebuilds the stage from it',
     // A single face on a blank sheet builds ONE voxel with an
-    // unconstrained-axis warning — and the warning replaces the stats in
-    // the readout, so the ⚠ line IS the proof this doc reached the stage.
+    // unconstrained-axis warning — and the warning takes over the readout
+    // line (the fixed "3D Model View" label otherwise), so the ⚠ line IS
+    // the proof this doc reached the stage.
     s.menuChecks.undoEnabled === true && s.buildLine.includes('unconstrained'),
     JSON.stringify({ undo: s.menuChecks.undoEnabled, buildLine: s.buildLine })
   );
@@ -1526,7 +1552,7 @@ async function main() {
   check(
     '…and the 3D View rebuilds the car (the stage follows the active document)',
     s.voxels > 100,
-    s.buildLine
+    s.buildStats
   );
   // Close the dirty untitled: activate it, File → Close, Don't Save. The
   // staggered untitled sits mostly UNDER the just-raised Car window, and the

@@ -6,7 +6,7 @@
 // fill's two checkboxes. A presentational LEAF: props down (`tool`, values +
 // clamp BOUNDS — the clamping itself lives in the session actions the
 // container calls), bubbling `sm-set-pencil-size {n}` / `sm-set-eraser-size
-// {n}` / `sm-set-corner-radius {n}` / `sm-set-fill-opts {replace?|allTiles?}`
+// {n}` / `sm-set-corner-radius {n}` / `sm-set-fill-opts {contiguous?|allFaces?}`
 // events up. `live()` bindings throughout, so a re-render can't skip a re-sync
 // after typing.
 //
@@ -51,8 +51,8 @@ export class SmToolOptions extends LitElement {
     brushMax: { type: Number },
     cornerRadius: { type: Number },
     radiusMax: { type: Number },
-    fillReplace: { type: Boolean },
-    fillAllTiles: { type: Boolean },
+    fillContiguous: { type: Boolean },
+    fillAllFaces: { type: Boolean },
   };
 
   constructor() {
@@ -63,8 +63,8 @@ export class SmToolOptions extends LitElement {
     this.brushMax = 1;
     this.cornerRadius = 0;
     this.radiusMax = 0;
-    this.fillReplace = false;
-    this.fillAllTiles = false;
+    this.fillContiguous = true;
+    this.fillAllFaces = false;
   }
 
   render() {
@@ -115,24 +115,24 @@ export class SmToolOptions extends LitElement {
       `;
     }
     if (this.tool === 'fill') {
-      // "replace" upgrades the flood to a whole-tile recolor of every matching
-      // texel; "all tiles" (only meaningful with replace on) extends that across
-      // the atlas.
+      // "contiguous" (the default) keeps the click a 4-connected flood; off, it
+      // recolors every matching texel on the face — and "on all faces" (only
+      // meaningful with contiguous off) extends that recolor across the atlas.
       return html`
         <vf-checkbox
-          .checked=${live(this.fillReplace)}
-          title="recolor every matching texel on this tile (not just the contiguous region)"
+          .checked=${live(this.fillContiguous)}
+          title="fill only the connected region sharing the clicked color; off recolors every matching texel on the face"
           @vf-change=${(e) =>
-            this.#emit('sm-set-fill-opts', { replace: !!e.detail.checked })}
-          >replace</vf-checkbox
+            this.#emit('sm-set-fill-opts', { contiguous: !!e.detail.checked })}
+          >contiguous</vf-checkbox
         >
         <vf-checkbox
-          .checked=${live(this.fillAllTiles)}
-          ?disabled=${!this.fillReplace}
-          title="replace the clicked color across every tile in the atlas"
+          .checked=${live(this.fillAllFaces)}
+          ?disabled=${this.fillContiguous}
+          title="recolor the clicked color across every face in the atlas"
           @vf-change=${(e) =>
-            this.#emit('sm-set-fill-opts', { allTiles: !!e.detail.checked })}
-          >all tiles</vf-checkbox
+            this.#emit('sm-set-fill-opts', { allFaces: !!e.detail.checked })}
+          >on all faces</vf-checkbox
         >
       `;
     }

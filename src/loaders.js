@@ -24,23 +24,28 @@ import { build } from './state/build.js';
 
 // Validate + open a decoded sheet as a fresh context. The single trunk under
 // the loaders below. Returns the new context, or null (with the error
-// surfaced) on a malformed sheet.
+// surfaced) on a malformed sheet. `face` seeds the context's starting face AT
+// open (the ?edit boot hook): a post-open setFace would race the one-shot
+// mount hooks — the canvas's mount fill commits its working buffer against
+// ctx.face, so a face switched between the editor's first render and that
+// commit would file the OLD face's buffer under the NEW face.
 /** @param {ImageData} imageData
- *  @param {{transforms?: Record<string, object>, name?: string, hooks?: object|null}} [opts] */
-export function openSheet(imageData, { transforms = {}, name, hooks = null } = {}) {
+ *  @param {{transforms?: Record<string, object>, name?: string, face?: string,
+ *           hooks?: object|null}} [opts] */
+export function openSheet(imageData, { transforms = {}, name, face, hooks = null } = {}) {
   const bad = validateSheet(imageData);
   if (bad) {
     build.setError(bad);
     return null;
   }
-  const ctx = workspace.open({ name, hooks });
+  const ctx = workspace.open({ name, face, hooks });
   ctx.doc.loadAtlas(imageData, transforms);
   return ctx;
 }
 
 /** @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}} sample
- *  @param {{hooks?: object|null}} [opts]  boot-only editor dev hooks */
-export async function loadSample(sample, { hooks = null } = {}) {
+ *  @param {{face?: string, hooks?: object|null}} [opts]  boot-only editor dev hooks */
+export async function loadSample(sample, { face, hooks = null } = {}) {
   let image;
   try {
     image = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
@@ -57,6 +62,7 @@ export async function loadSample(sample, { hooks = null } = {}) {
   return openSheet(image, {
     transforms: { ...(sample.transforms || {}) },
     name: sample.name,
+    face,
     hooks,
   });
 }

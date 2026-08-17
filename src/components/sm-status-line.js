@@ -2,21 +2,23 @@
 // <sm-status-line kind="tile|atlas|build"> — the one-line readouts the
 // windows' `status` slots carry (kit chrome: the classic bottom strip). A
 // CONNECTED chrome component; `kind` picks what it reads:
-//   - tile:  a document window's "40px x 40px" — PER-WINDOW: the reconciler
-//            assigns this instance's `ctx` (its window's DocContext) before
-//            the append, and the readout follows that document alone
-//   - atlas: the Full Sprite View's "120px x 80px" — the ACTIVE document's
-//            sheet dimensions (the utility windows serve the active document)
-//   - build: the 3D View's build readout (build slice) — grid / voxels /
-//            tris on one line; an error or the first warning replaces it,
-//            ⚠-prefixed (the strip truncates with the kit's own overflow).
+//   - tile:  a document window's edited face ("Front Face") — PER-WINDOW: the
+//            reconciler assigns this instance's `ctx` (its window's
+//            DocContext) before the append, and the readout follows that
+//            window's own face selection
+//   - atlas: the Full Sprite View's fixed name, "Sprite Atlas View"
+//   - build: the 3D View's fixed name, "3D Model View" — but an error or the
+//            first warning takes the line, ⚠-prefixed (the strip truncates
+//            with the kit's own overflow); the build stats (grid / voxels /
+//            tris, from the build slice) ride the label's `title`, a hover
+//            tooltip — and the probe surface drive.mjs reads.
 // `:host { display: contents }` so the slotted element the window's slot
 // gate sees is this host, while the kit's status-bar styles lay out the
 // label inside.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
-import { css, LitElement, html } from 'lit';
+import { css, LitElement, html, nothing } from 'lit';
 import { build } from '../state/build.js';
 import { workspace } from '../state/workspace.js';
 import { StoreController, ActiveDocController } from '../state/store-controller.js';
@@ -43,36 +45,27 @@ export class SmStatusLine extends LitElement {
     new ActiveDocController(this, workspace);
   }
 
-  // The per-window doc (kind="tile"): wired by hand like sm-editor's — the
-  // context isn't known at construction, and the desktop's DOM re-orders
-  // disconnect/reconnect this element.
-  #unsubDoc = null;
-  connectedCallback() {
-    super.connectedCallback();
-    if (this.ctx) {
-      this.#unsubDoc = this.ctx.doc.subscribe(() => this.requestUpdate());
-      this.requestUpdate();
-    }
-  }
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    this.#unsubDoc?.();
-    this.#unsubDoc = null;
-  }
+  // No per-window doc subscription: the face readout reads ctx.face, and a
+  // face swap touches the workspace store — which the ActiveDocController
+  // already re-renders on.
 
   #text() {
     if (this.kind === 'tile') {
-      const d = this.ctx?.doc.get();
-      return d?.tileW ? `${d.tileW}px x ${d.tileH}px` : '';
+      const f = this.ctx?.face;
+      return f ? `${f[0].toUpperCase()}${f.slice(1)} Face` : '';
     }
-    if (this.kind === 'atlas') {
-      const img = workspace.active()?.doc.get().atlasImage;
-      return img ? `${img.width}px x ${img.height}px` : '';
-    }
+    if (this.kind === 'atlas') return 'Sprite Atlas View';
     // kind === 'build'
     const b = build.get();
     if (b.error) return `⚠ ${b.error}`;
     if (b.warnings?.length) return `⚠ ${b.warnings[0]}`;
+    return '3D Model View';
+  }
+
+  // The build stats line the readout used to show, kept as the label's
+  // tooltip (and the shadow-piercing probe surface drive.mjs parses).
+  #buildStats() {
+    const b = build.get();
     if (!b.dims) return '';
     const { nx, ny, nz } = b.dims;
     const grid = nx === ny && ny === nz ? `${nx}px` : `${nx}×${ny}×${nz}`;
@@ -80,7 +73,8 @@ export class SmStatusLine extends LitElement {
   }
 
   render() {
-    return html`<vf-label>${this.#text()}</vf-label>`;
+    const stats = this.kind === 'build' ? this.#buildStats() : '';
+    return html`<vf-label title=${stats || nothing}>${this.#text()}</vf-label>`;
   }
 }
 

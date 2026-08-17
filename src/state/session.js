@@ -33,8 +33,12 @@ export function createSession() {
     // independent of the pencil's (not a DRY slip: the two may diverge).
     eraserSize: 1,
     cornerRadius: 0, // the rect tool's corner radius, in texels (0 = sharp)
-    fillReplace: false,
-    fillAllTiles: false,
+    // The fill tool's two checkboxes: a contiguous 4-connected flood by
+    // default; contiguous OFF recolors every matching texel on the face, and
+    // "on all faces" (meaningful only with contiguous off) extends that
+    // recolor across the whole atlas.
+    fillContiguous: true,
+    fillAllFaces: false,
     pickerOpen: false,
   });
 
@@ -92,13 +96,13 @@ export function createSession() {
     },
 
     /** @param {boolean} v */
-    setFillReplace(v) {
-      store.patch({ fillReplace: !!v });
+    setFillContiguous(v) {
+      store.patch({ fillContiguous: !!v });
     },
 
     /** @param {boolean} v */
-    setFillAllTiles(v) {
-      store.patch({ fillAllTiles: !!v });
+    setFillAllFaces(v) {
+      store.patch({ fillAllFaces: !!v });
     },
 
     openPicker() {

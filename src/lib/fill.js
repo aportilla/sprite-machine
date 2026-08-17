@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Fill-tool primitives for the editor's paint-bucket. Pure typed-array geometry —
-// no DOM, no THREE — so the live editor and the atlas-wide "all tiles" path share
+// no DOM, no THREE — so the live editor and the atlas-wide "on all faces" path share
 // ONE source of truth (and it stays Node-testable), exactly like rect.js does for
 // the rect tool.
 //

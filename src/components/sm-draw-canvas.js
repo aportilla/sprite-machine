@@ -15,7 +15,8 @@
 //                    (copies), for the container's undo history
 //   - sm-pick-color  { rgb }          an eyedrop hit a painted texel
 //   - sm-pick-transparent             an eyedrop hit empty space
-//   - sm-replace-all-tiles { target, fill }  a fill click with replace+all on
+//   - sm-replace-all-tiles { target, fill }  a fill click with contiguous off
+//                    and "on all faces" on
 //
 // STATE SPLIT — the correctness core, carried over verbatim: reactive props are
 // what the template + updated() react to; everything the pointer hot paths
@@ -37,7 +38,8 @@
 //     (modeled as an active drag with no captured pointer, so ESC still
 //     demonstrates cancel).
 //   - fillOnMount {x,y}: perform a fill click at (x,y). Applied LOCALLY (this
-//     tile) even with all-tiles on — a local fill avoids a re-mount mid-mount.
+//     tile) even with "on all faces" on — a local fill avoids a re-mount
+//     mid-mount.
 // ---------------------------------------------------------------------------
 
 import { css, LitElement, html } from 'lit';
@@ -155,8 +157,8 @@ export class SmDrawCanvas extends LitElement {
     pencilSize: { type: Number },
     eraserSize: { type: Number },
     cornerRadius: { type: Number },
-    fillReplace: { type: Boolean },
-    fillAllTiles: { type: Boolean },
+    fillContiguous: { type: Boolean },
+    fillAllFaces: { type: Boolean },
     showGrid: { type: Boolean },
   };
 
@@ -172,8 +174,8 @@ export class SmDrawCanvas extends LitElement {
     this.pencilSize = 1;
     this.eraserSize = 1;
     this.cornerRadius = 0;
-    this.fillReplace = false;
-    this.fillAllTiles = false;
+    this.fillContiguous = true;
+    this.fillAllFaces = false;
     this.showGrid = false;
 
     // Dev hooks (plain: consumed once on the first update, never re-read).
@@ -802,24 +804,25 @@ export class SmDrawCanvas extends LitElement {
   }
 
   // Apply a fill to THIS tile's working buffer: a contiguous flood from (t), or —
-  // with "replace" on — a whole-tile recolor of every texel matching the clicked
+  // with contiguous OFF — a whole-tile recolor of every texel matching the clicked
   // color. Repaints + notifies like any stroke if anything changed. This is the
-  // whole op for the single-tile modes; the all-tiles mode delegates instead (below).
+  // whole op for the single-tile modes; the on-all-faces mode delegates instead
+  // (below).
   #applyLocalFill(t, rightClick) {
     const fill = this.#fillInk(rightClick);
     const i0 = (t.py * this.tileW + t.px) * 4;
-    const changed = this.fillReplace
-      ? replaceColor(this.#work, keyAt(this.#work, i0), fill)
-      : floodFill(this.#work, this.tileW, this.tileH, t.px, t.py, fill);
+    const changed = this.fillContiguous
+      ? floodFill(this.#work, this.tileW, this.tileH, t.px, t.py, fill)
+      : replaceColor(this.#work, keyAt(this.#work, i0), fill);
     if (changed) this.#commitPixels();
   }
 
-  // Route a fill click. "replace" + "all tiles" hands the whole op to the caller
-  // (it recolors the clicked color across every tile and re-points this editor);
-  // the target color is read from the clicked texel here so the caller doesn't have
-  // to. Every other mode fills this tile in place.
+  // Route a fill click. Contiguous OFF + "on all faces" hands the whole op to the
+  // caller (it recolors the clicked color across every tile and re-points this
+  // editor); the target color is read from the clicked texel here so the caller
+  // doesn't have to. Every other mode fills this tile in place.
   #doFill(t, rightClick) {
-    if (this.fillReplace && this.fillAllTiles) {
+    if (!this.fillContiguous && this.fillAllFaces) {
       const target = keyAt(this.#work, (t.py * this.tileW + t.px) * 4);
       this.#emit('sm-replace-all-tiles', { target, fill: this.#fillInk(rightClick) });
       return;
@@ -843,7 +846,7 @@ export class SmDrawCanvas extends LitElement {
     }
     if (this.tool === 'fill') {
       // Single click — no drag, no pointer capture; the whole gesture is
-      // synchronous (the all-tiles path writes nothing locally, so its
+      // synchronous (the on-all-faces path writes nothing locally, so its
       // capture drops silently — the container snapshots the atlas instead).
       this.#beginGesture();
       this.#doFill(t, e.button === 2);

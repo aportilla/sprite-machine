@@ -110,5 +110,5 @@ browser, `http://localhost:5173/`.
 - [ ] **Private window**: open in an Incognito/private window where
       IndexedDB misbehaves — Save raises the "Storage Unavailable" notice
       and everything else still works.
-- [ ] **Undo depth**: ~50 gestures; an all-tiles replace and a tile resize
+- [ ] **Undo depth**: ~50 gestures; an all-faces replace and a tile resize
       both undo as single steps.

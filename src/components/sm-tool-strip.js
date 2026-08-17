@@ -32,7 +32,9 @@ export class SmToolStrip extends LitElement {
         display: contents;
       }
       /* Tool cells inside the vf-grid strip: plain buttons that fill their cell
-       (the grid draws the lattice + frame); the selected tool inverts. */
+       (the grid draws the internal lattice; it's frameless — the flush
+       windoid's own frame is the strip's outer border); the selected tool
+       inverts. */
       .editor-toolstrip .editor-tool {
         place-self: stretch;
         display: flex;
@@ -88,6 +90,7 @@ export class SmToolStrip extends LitElement {
         columns="1"
         cell-width="28"
         cell-height="28"
+        frameless
         role="group"
         aria-label="tools"
       >

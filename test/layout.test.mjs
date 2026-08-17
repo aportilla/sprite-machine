@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 import { initialPlacement, pinOf, pinTo, TOP_RESERVE } from '../src/shell/layout.js';
 
-const TOOLS = { width: 44, height: 176 };
+const TOOLS = { width: 30, height: 158 };
 // The capture tool's raster (1000×850 CSS at DSF 1, minus the 10px bezel).
 const W = 980;
 const H = 830;

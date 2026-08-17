@@ -5,8 +5,8 @@
 // with its `ctx` (the workspace DocContext) assigned BEFORE the append, and
 // it lives until the document closes — a hide (or the desktop's DOM
 // re-orders) never unmounts it, so canvas identity and focus behavior
-// survive. What it holds: the FACE PICKER row over the black-framed artwork
-// well holding <sm-draw-canvas>. (The 168-color Colors dialog is app-level
+// survive. What it holds: the FACE PICKER row over the full-bleed grey
+// artwork well holding <sm-draw-canvas>. (The 168-color Colors dialog is app-level
 // chrome now — <sm-color-picker> in index.html's dialog set, light-DOM so
 // the kit's cursor can stack above its modal.)
 //
@@ -60,21 +60,15 @@ export class SmEditor extends LitElement {
         justify-content: center;
         padding: 8px 12px;
       }
-      /* The dotted rule between the picker and the artwork well. */
-      .editor-sep {
-        flex: none;
-        margin: 0 12px;
-        --vf-separator-color: var(--sm-black);
-        --vf-separator-style: dotted;
-      }
-      /* The artwork well: the dark box the pixel canvas centers in. */
+      /* The artwork well: the grey field the pixel canvas centers in — full
+         bleed, running edge to edge and down to the status strip (the window
+         is flush, so the grey meets the frame's own black line; no rule of
+         its own between it and the picker row above). */
       .editor-drawbox {
         flex: 1;
         min-height: 0;
-        margin: 10px 12px 12px;
         display: flex;
         flex-direction: column;
-        border: 1px solid var(--sm-black);
         background: var(--sm-artwork);
       }
     `,
@@ -188,7 +182,6 @@ export class SmEditor extends LitElement {
             @sm-select-face=${(e) => workspace.setFace(this.ctx.key, e.detail.face)}
           ></sm-face-picker>
         </div>
-        <vf-separator class="editor-sep"></vf-separator>
         <div class="editor-drawbox">
           <sm-draw-canvas
             .tile=${vm.tile}
@@ -201,8 +194,8 @@ export class SmEditor extends LitElement {
             .pencilSize=${s.pencilSize}
             .eraserSize=${s.eraserSize}
             .cornerRadius=${s.cornerRadius}
-            .fillReplace=${s.fillReplace}
-            .fillAllTiles=${s.fillAllTiles}
+            .fillContiguous=${s.fillContiguous}
+            .fillAllFaces=${s.fillAllFaces}
             .showGrid=${shell.get().showGrid}
             .previewCursor=${hooks?.previewCursor ?? false}
             .previewRect=${hooks?.previewRect ?? null}
@@ -236,7 +229,7 @@ export class SmEditor extends LitElement {
     this.ctx.history.pushTile(this.ctx.face, before, after);
   };
 
-  // Fill with BOTH "replace" and "all tiles" on: recolor across the whole
+  // Fill with contiguous OFF and "on all faces" ON: recolor across the whole
   // sheet under a whole-atlas undo snapshot; the structural change re-derives
   // this editor over the new pixels.
   #onReplaceAllTiles = (e) => {

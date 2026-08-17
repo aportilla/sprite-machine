@@ -109,18 +109,18 @@ test('?rect: box + optional radius + square-lock flag', () => {
   assert.equal(parseBootParams('?rect=3,3').rect, null);
 });
 
-test('?fill: point + replace/all flags', () => {
+test('?fill: point + contiguous/all-faces flags (contiguous defaults ON)', () => {
   assert.deepEqual(parseBootParams('?fill=5,5').fill, {
     x: 5,
     y: 5,
-    replace: false,
-    all: false,
+    contiguous: true,
+    allFaces: false,
   });
-  assert.deepEqual(parseBootParams('?fill=5,5,1,1').fill, {
+  assert.deepEqual(parseBootParams('?fill=5,5,0,1').fill, {
     x: 5,
     y: 5,
-    replace: true,
-    all: true,
+    contiguous: false,
+    allFaces: true,
   });
 });
 

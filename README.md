@@ -97,7 +97,9 @@ follow the convention.
 ## Drawing editor
 
 The **document window** holds the drawing surface — the face picker row over
-the black-framed artwork well — and the 3D View rebuilds live as you draw.
+the full-bleed grey artwork well (it runs edge to edge and down to the status
+strip, no rule between it and the picker row) — and the 3D View rebuilds live
+as you draw.
 The tools live in the floating **Tools palette**, their per-tool options in
 the **options strip** under the menu bar, and the tile-size stepper in
 File → Properties…. Every control is a `vintage-frames` System 7 web
@@ -117,7 +119,9 @@ template — see [UI layer: Lit](#ui-layer-lit).
   cells (**pencil `B`**, **rect `R`**, **fill `G`**, the **eraser `E`**, and the
   **eyedropper `I`**; the selected cell inverts) — each an icon from the
   open-source **Adobe Spectrum _workflow_** set (`draw` / `rectangle` /
-  `color-fill` / `erase` / `sampler`) in a `vf-grid` lattice. The **options
+  `color-fill` / `erase` / `sampler`) in a frameless `vf-grid` lattice run
+  flush to the windoid's edge — no inner padding, the cells sharing the
+  window frame's own black line. The **options
   strip** (a kit-drawn panel band under the menu bar — the kit's exported
   `vfPanel` recipe, so its black edge and every metric in it scale with the
   raster) names the active tool and holds the **current-ink swatch** plus the
@@ -140,17 +144,18 @@ template — see [UI layer: Lit](#ui-layer-lit).
   **right-drag** drags a rectangular **erase**. The rounded-rect rasterization is a pure, Node-tested
   primitive (`src/lib/rect.js`) shared by the preview and the commit, so what you
   see is exactly what lands. For the **fill** (paint-bucket), two **checkboxes**:
-  a plain click is a **contiguous 4-connected flood** from the clicked texel (the
-  connected region sharing its color becomes the active ink). **replace** upgrades
-  that to a **whole-tile recolor** — _every_ texel matching the clicked color on the
-  tile, contiguous or not. **all tiles** (only active while **replace** is on)
-  extends the recolor across **every tile in the atlas**, so it's a global
+  **contiguous** (on by default) keeps a click a **contiguous 4-connected
+  flood** from the clicked texel (the connected region sharing its color
+  becomes the active ink); turned **off**, the click becomes a **whole-face
+  recolor** — _every_ texel matching the clicked color on the face, contiguous
+  or not. **on all faces** (only enabled while **contiguous** is off) extends
+  the recolor across **every face in the atlas**, so it's a global
   find-and-replace of one color. Transparency is a first-class "color": clicking
   empty space targets transparent (so **replace** floods every empty texel with the
   ink), and a **right-click** fills _to_ transparent (delete a
   color). The flood + replace are pure, Node-tested primitives (`src/lib/fill.js`).
   Every edit is **undoable** (Edit → Undo ⌘Z / Redo ⇧⌘Z): a gesture — stroke,
-  rect, fill — undoes as one step, and an all-tiles replace or tile resize as
+  rect, fill — undoes as one step, and an all-faces replace or tile resize as
   one whole-sheet step (bounded history, ~50 entries, cleared on a document
   load). The **eraser** (`E`) is a formal _tool_ mode, a full sibling
   of the drawing ops in the strip — not a "transparent color" in the wells: a
@@ -292,10 +297,11 @@ on mount, `?pick=<N>` to select `PALETTE_168[N]` as the ink on mount (as if pick
 from the dialog) so a shot can show it landing as the current-ink swatch, and
 `?rect=<x0,y0,x1,y1[,r[,sq]]>` to select the rect tool and draw its live drag preview
 for that box (corner radius `r`; `sq=1` for the Shift square-lock) on mount so a shot
-can show the tool mid-drag, and `?fill=<x,y[,r[,a]]>` to select the fill tool, set its
-checkboxes (`replace=r`, `all-tiles=a`), and fill at `(x,y)` on mount (the mount fill
-is always applied to the current tile only — combine with `?pick=<N>` to fill with a
-specific palette color) so a shot can show the tool + result — the
+can show the tool mid-drag, and `?fill=<x,y[,c[,a]]>` to select the fill tool, set its
+checkboxes (`contiguous=c`, defaulting on; `on-all-faces=a`), and fill at `(x,y)` on
+mount (the mount fill is always applied to the current tile only — combine with
+`?pick=<N>` to fill with a specific palette color) so a shot can show the tool +
+result — the
 stepper, face picker, dialog, swatch pick, hover preview, rect drag, and fill click
 can't be driven headlessly. Two shell-era params round the set out:
 `?fresh=1` boots with **storage ignored** (no desktop-state restore, no
@@ -398,8 +404,8 @@ Two tiers, two regimes:
   `shell/windows.js` — created on open (staggered defaults, or a restored
   position for a saved doc), removed on close (existence IS visibility).
   Each is `movable resizable`; its title is its document's name, its
-  `status` strip reads its own tile size, and its `<sm-editor>` lives
-  exactly as long as the document is open.
+  `status` strip names the face it's editing ("Front Face"), and its
+  `<sm-editor>` lives exactly as long as the document is open.
 - **Utility windoids** (floating tier, `variant="utility"`): the **Tools
   palette**, the **Full Sprite View**, and the **3D View** — static markup,
   **permanently open**: persistent panels with no close box and no menu
@@ -415,8 +421,10 @@ Two tiers, two regimes:
   fit the window as large as its aspect ratio allows (never clipped, never
   scrolled), following the ACTIVE document's **live channel**, so it tracks
   strokes at rAF rate (the second live subscriber ever, after the
-  rebuilder); the **3D View** hosts the THREE canvas with the build readout
-  in its status strip.
+  rebuilder), its status strip reading "Sprite Atlas View"; the **3D View**
+  hosts the THREE canvas, its status strip reading "3D Model View" — a build
+  error or warning takes that line, ⚠-prefixed, and the build stats
+  (grid / voxels / tris) ride the strip's hover tooltip.
 
 Positions/sizes come from a **smart placement** computed against the live
 raster (`shell/layout.js`, pure): the Tools palette top-left, the Full
@@ -741,7 +749,8 @@ src/
                        current-ink swatch + options; hidden while the desktop is focused;
                        bounds from the active document) / the Tools palette body / the live
                        full-atlas view (follows the active document) / the windows' status
-                       readouts (tile = per-window ctx; atlas = active doc; build = build slice) /
+                       readouts (tile = the window's edited face; atlas/build = fixed view
+                       names, the build stats riding the 3D strip's tooltip) /
                        the app-level Colors dialog (in index.html's dialog set, rendered into its
                        LIGHT DOM on purpose: the kit's page-drawn cursor stays above a modal only
                        when it can observe the vf-dialog's `open` flip, and its observer sees the

@@ -120,16 +120,18 @@
       <!-- The floating Tools palette: utility tier — floats above the
            document windows and never deactivates them. Its SIZE stays
            authored (the one box layout.js takes as input): hugging the tool
-           strip, 5×(28+1)+1 grid + 8/6px panel padding + the windoid chrome
-           (1px borders, 12px bar). -->
+           strip with NO inner padding — the frameless 28px-cell grid
+           (5×28 + 4 rules = 144) sits flush against the windoid's own frame
+           (the desk-accessory composition), + the chrome (1px borders,
+           12px bar). -->
       <vf-window
         id="win-tools"
         variant="utility"
         heading="Tools"
         movable
         flush
-        width="44"
-        height="176"
+        width="30"
+        height="158"
       >
         <sm-tools-panel></sm-tools-panel>
       </vf-window>
@@ -257,7 +259,7 @@
     <!-- One clone per open document (shell/windows.js reconciles them from
          the workspace slice). The reconciler assigns id, heading, geometry
          (staggered defaults or a restored position) and hands the editor +
-         tile readout their DocContext BEFORE appending the clone to the
+         face readout their DocContext BEFORE appending the clone to the
          desktop. Inert markup — a <template> renders nothing here. -->
     <template id="tpl-document-window">
       <vf-window heading="untitled" movable resizable flush>
