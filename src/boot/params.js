@@ -9,7 +9,7 @@
 
 import { clampTile } from '../lib/atlas.js';
 import { VIEW_NAMES } from '../lib/views.js';
-import { PALETTE_256 } from '../lib/constants.js';
+import { PALETTE_168 } from '../lib/constants.js';
 
 /**
  * @param {string} search  location.search (with or without the leading '?')
@@ -39,7 +39,7 @@ export function parseBootParams(search, { sampleNames = [] } = {}) {
   const pickParam = params.get('pick');
   if (pickParam != null) {
     const n = parseInt(pickParam, 10);
-    if (n >= 0 && n < PALETTE_256.length) pick = n;
+    if (n >= 0 && n < PALETTE_168.length) pick = n;
   }
 
   /** @type {{x0:number,y0:number,x1:number,y1:number,r:number,square:boolean}|null} */

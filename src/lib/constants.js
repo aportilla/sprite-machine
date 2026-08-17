@@ -57,73 +57,235 @@ export const PENCIL_PALETTE = DB16_HEX.map((css) => {
 });
 
 // ---------------------------------------------------------------------------
-// PALETTE_256 — the full color palette shown persistently in the tile editor as
-// a 16x16 grid: 256 DISTINCT colors laid out along a space-filling Hilbert curve
-// (a locality-preserving 1-D color order poured into the grid along a 2-D Hilbert
-// curve), so similar colors cluster both across and down: grayscale in the
-// top-left, magentas/reds along the top, blues down the right, greens/cyans
-// sweeping the bottom. This is a fixed, hand-verified arrangement, so it's
-// spelled out literally below — one source row per grid row (PALETTE_256_ROWS).
+// PALETTE_168 — the full color palette shown in the tile editor's Colors dialog
+// as a 21x8 grid: 168 DISTINCT NAMED colors, laid out as value-banded hue rows.
+// Row 1 is the grayscale ramp (White and Black up front, then a 21-step
+// dark-to-light run); rows 2-8 each sweep the hue wheel red -> yellow -> green
+// -> cyan -> blue -> violet -> magenta at one value band, ordered darkest
+// ("darkest", "dark", "deep", "strong", "vivid") down to "light" and "palest" —
+// so a column reads roughly as one hue across seven values. This is a fixed,
+// hand-verified arrangement, so it's spelled out literally below — one source
+// row per grid row (PALETTE_168_ROWS). The array order is display-only: swatch
+// identity never depends on the index. Each entry is { packed, css, rgb, name }
+// — `css` is the source of truth, `packed`/`rgb` derive from it, and `name` is
+// the human color name the dialog's hover readout shows.
 //
-// It's the standard xterm-256 set, with one wrinkle: xterm-256 names 256 indexed
-// SLOTS but only 247 DISTINCT colors — 9 slots repeat a value where its system,
-// 6x6x6 cube, and grayscale ranges overlap (#000000, #ffffff, #808080 and the
-// six bright primaries/secondaries #ff0000/#00ff00/#ffff00/#0000ff/#ff00ff/
-// #00ffff each land in two slots). Rather than waste nine cells on duplicates,
-// each redundant copy is replaced by a filler INTERPOLATED from that cell's
-// orthogonal Hilbert neighbors, so every one of the 256 cells is a distinct color
-// that still sits naturally in its local cluster. The nine fillers are:
-//   r0c1 #3f3f3f  r0c3 #7b7b7b  r0c10 #bc2087  r5c2 #ffafa2  r5c4 #bc674d
-//   r5c15 #20009f r6c6 #b95151  r11c4 #75f24d  r13c13 #65e1eb
-// (test/palette.test.mjs pins the 256-distinct invariant so a slip is caught).
-// The array order is display-only: swatch identity never depends on the index.
-// Each entry is { packed, css } to match PENCIL_PALETTE.
-//
-// WEDGE-SAFETY: the previous palette was a sparse 8x8x4 grid whose swatches were
-// all >=36/channel apart, so the low-poly wedge gate (wedge-mesh.js sameMat,
-// TOL2 = 12*12 squared-L2 on RGB) could never fuse two DISTINCT swatches — the
-// artist had exact control over which corners smooth vs. stay crisp. xterm-256 is
-// denser, so some adjacent swatches DO fall within the gate. Recomputed against the
-// real PALETTE_256 with the real TOL2 there are 16 within-tolerance pairs:
-//   - 10 near-neutral grays (the grayscale ramp + the two near-neutral fillers
-//     #3f3f3f/#7b7b7b step ~5-10/channel), plus
-//   - 6 FULLY SATURATED dark primaries/secondaries, where an xterm SYSTEM color
-//     (channel 0x80=128) lands ~7-10 units from the matching 6x6x6-cube level
-//     (0x87=135) at the same hue: #800000/#870000 (maroon), #000080/#000087 (navy),
-//     #008000/#008700 (green), #800080/#870087 (purple), #808000/#878700 (olive),
-//     #008080/#008787 (teal).
+// WEDGE-SAFETY: the low-poly wedge gate (wedge-mesh.js sameMat, TOL2 = 12*12
+// squared-L2 on RGB) fuses two faces whose colors sit within ~12 Euclidean
+// units, so palette neighbors closer than that can auto-smooth a staircase the
+// author meant to keep stepped. Recomputed against the real PALETTE_168 with
+// the real TOL2 there are 8 within-tolerance pairs — all same-hue neighbors in
+// the darkest and palest rows (the grayscale ramp steps ~10-13/channel, so
+// unlike the old xterm-256 set NO gray pair merges):
+//   #625700/#625f00 (Dark Olive/Olive)    #006865/#005e67 (Deep Teal/Petrol)
+//   #009a96/#00a39c (Teal/Persian Green)  #ffc9c9/#ffd2ca (Blush/Peach)
+//   #fff2c5/#fffbc2 (Vanilla/Cream)       #bef5f9/#bdefff (Ice Blue/Pale Sky)
+//   #c8fdff/#cef6ff (Celeste/Pale Cyan)   #bce4f7/#badcf1 (Frost/Glacier)
 // So an author CAN place two of these on adjacent staircase voxels and get an
-// unintended wedge — it's NOT "only near-neutrals". Impact is narrow (near-identical
-// dark colors; a ~7-10 unit false-merge is nearly imperceptible). The 6x6x6 cube
-// LEVELS {0,95,135,175,215,255} still stay >=40 apart *within* the cube; it's the
-// system-vs-cube overlap at the low end that adds the six saturated pairs.
-// test/palette.test.mjs pins the exact within-tolerance set, so any future palette
-// edit that introduces a new near-duplicate must be consciously accepted.
+// unintended (near-imperceptible — the pairs are near-identical shades) wedge.
+// test/palette.test.mjs pins the exact within-tolerance set, so any future
+// palette edit that introduces a new near-duplicate must be consciously
+// accepted. The minimum pairwise distance overall is 8 units (Dark Olive vs
+// Olive); every other row keeps its neighbors comfortably outside the gate.
 // ---------------------------------------------------------------------------
-// prettier-ignore — one row per grid row keeps the source mirroring the layout.
-const PALETTE_256_ROWS = [
-  '000000 3f3f3f 767676 7b7b7b 808080 949494 9e9e9e a8a8a8 af5f87 af5faf bc2087 d7005f d70087 d700af ff5f87 ff87af',
-  '121212 080808 6c6c6c 626262 878787 8a8a8a b2b2b2 afafaf 875f87 ff5fff af0087 af00af ff0087 d700d7 d75f87 ff005f',
-  '1c1c1c 3a3a3a 444444 5f5f5f e4e4e4 dadada bcbcbc c0c0c0 ff5faf ff5fd7 d787af af87af ff00af 800080 5f005f af005f',
-  '262626 303030 4e4e4e 585858 eeeeee d7d7d7 d0d0d0 c6c6c6 d75fd7 d75faf d787d7 ffafff ff00d7 ff00ff 87005f 870087',
-  'ffff87 ffff5f ffd7d7 ffafaf ffffff 800000 870000 af0000 d7afff ffd7ff d7afd7 ffafd7 5f00ff 5f00d7 00005f 000080',
-  'ffffaf ffff00 ffafa2 ffaf87 bc674d 5f0000 d70000 ff0000 d787ff d75fff ff87d7 ff87ff 8700af 5f00af 5f0087 20009f',
-  'ffffd7 afaf87 ff8787 d7afaf d7875f d75f5f b95151 875f5f af5fff af87ff 875fd7 875faf 8700d7 8700ff 0000af 0000d7',
-  'd7d7af afaf5f ff875f ff5f5f ff5f00 d78787 af8787 af5f5f af5fd7 af87d7 875fff d700ff af00ff af00d7 000087 0000ff',
-  'd7af87 d7d75f d7af00 d7d700 5fffaf 87ff87 87ffaf 5faf5f 5faf87 00d700 00d75f 008000 5f5fd7 005fff 0087ff 005fd7',
-  'd7d787 d7af5f ffaf5f ffaf00 5fff87 5fff5f 5f875f 87af87 00af00 00af5f 005f00 008700 5f5faf 5f5f87 5f5fff 005faf',
-  '878700 af875f ffd700 ffd75f 00ff5f 00ff87 5fd75f 87d7af 0087d7 0087af 005f5f 005f87 5fafff 8787ff 8787d7 5f87af',
-  'af8700 87875f ffd7af ffd787 75f24d 00ff00 5fd787 87d787 5f8787 008787 00875f 008080 5f87ff 5f87d7 87afd7 8787af',
-  'afaf00 d78700 afd75f 5fd700 5fff00 87d700 d7ffd7 afd7af 87afaf 5fafaf 5fd7d7 00ffff 00ffaf 00ffd7 afd7ff d7d7ff',
-  '808000 ff8700 87d75f afd787 87ff5f 87ff00 afffd7 afffaf 00af87 5fafd7 5fd7af 87d7d7 5fd7ff 65e1eb afafff 87afff',
-  '5f5f00 d75f00 5f8700 87af00 afd700 afff87 d7ff00 d7ffaf 00afaf 00d787 00d7af afd7d7 5fffd7 87ffd7 87ffff afafd7',
-  '875f00 af5f00 87af5f 5faf00 afff00 afff5f d7ff5f d7ff87 00afd7 00afff 00d7d7 00d7ff 5fffff 87d7ff afffff d7ffff',
+// One [hex, name] entry per line, grouped into one array per grid row, keeps
+// the source mirroring the layout.
+const PALETTE_168_ROWS = [
+  [
+    // Row 1 — grayscale ramp
+    ['#ffffff', 'White'],
+    ['#000000', 'Black'],
+    ['#222222', 'Ink'],
+    ['#2b2b2b', 'Onyx'],
+    ['#353535', 'Charcoal'],
+    ['#3f3f3f', 'Graphite'],
+    ['#494949', 'Gunmetal'],
+    ['#545454', 'Slate Gray'],
+    ['#5f5f5f', 'Pewter'],
+    ['#6a6a6a', 'Iron'],
+    ['#757575', 'Steel'],
+    ['#818181', 'Nickel'],
+    ['#8c8c8c', 'Stone'],
+    ['#989898', 'Ash'],
+    ['#a4a4a4', 'Cement'],
+    ['#b1b1b1', 'Silver'],
+    ['#bdbdbd', 'Platinum'],
+    ['#cacaca', 'Fog'],
+    ['#d6d6d6', 'Dove Gray'],
+    ['#e3e3e3', 'Mist'],
+    ['#f0f0f0', 'Porcelain'],
+  ],
+  [
+    // Row 2 — darkest
+    ['#7f0004', 'Oxblood'],
+    ['#6b0002', 'Maroon'],
+    ['#5d1f00', 'Chocolate'],
+    ['#5e3f00', 'Sepia'],
+    ['#625700', 'Dark Olive'],
+    ['#625f00', 'Olive'],
+    ['#006c00', 'Forest Green'],
+    ['#005c00', 'Pine'],
+    ['#006421', 'Hunter Green'],
+    ['#006c43', 'Evergreen'],
+    ['#006865', 'Deep Teal'],
+    ['#005e67', 'Petrol'],
+    ['#004e69', 'Marine Blue'],
+    ['#003f69', 'Prussian Blue'],
+    ['#003676', 'Navy'],
+    ['#071d89', 'Midnight Blue'],
+    ['#1f0061', 'Deep Indigo'],
+    ['#490e61', 'Deep Purple'],
+    ['#770060', 'Dark Magenta'],
+    ['#770545', 'Tyrian Purple'],
+    ['#780028', 'Burgundy'],
+  ],
+  [
+    // Row 3 — dark
+    ['#bb0001', 'Brick Red'],
+    ['#a90004', 'Carmine'],
+    ['#a53400', 'Burnt Orange'],
+    ['#a06800', 'Ochre'],
+    ['#9f8800', 'Antique Gold'],
+    ['#9b9a00', 'Brass'],
+    ['#319400', 'Kelly Green'],
+    ['#007a15', 'Shamrock'],
+    ['#008038', 'Fern Green'],
+    ['#008664', 'Sea Green'],
+    ['#009a96', 'Teal'],
+    ['#008da0', 'Ocean Teal'],
+    ['#0077a4', 'Cerulean'],
+    ['#0063b3', 'Sapphire'],
+    ['#00419e', 'Cobalt'],
+    ['#0032a9', 'Ultramarine'],
+    ['#4b0082', 'Indigo'],
+    ['#5f1193', 'Grape'],
+    ['#8e1a85', 'Mardi Gras'],
+    ['#b80067', 'Cranberry'],
+    ['#bb003f', 'Ruby'],
+  ],
+  [
+    // Row 4 — deep
+    ['#e51c00', 'Crimson'],
+    ['#ff0000', 'Red'],
+    ['#e85800', 'Persimmon'],
+    ['#e89300', 'Marigold'],
+    ['#e3b500', 'Old Gold'],
+    ['#cadd00', 'Pear'],
+    ['#1cc100', 'Grass Green'],
+    ['#179c0f', 'True Green'],
+    ['#049c34', 'Clover'],
+    ['#00a176', 'Jade'],
+    ['#00a39c', 'Persian Green'],
+    ['#00a1b6', 'Peacock'],
+    ['#43a2cf', 'Azure'],
+    ['#0085d4', 'True Blue'],
+    ['#005fc3', 'Lapis'],
+    ['#0000ff', 'Blue'],
+    ['#551ab7', 'Gentian'],
+    ['#770fc8', 'French Violet'],
+    ['#a42dac', 'Byzantine'],
+    ['#e3107a', 'Rose Red'],
+    ['#ed004e', 'Cherry'],
+  ],
+  [
+    // Row 5 — strong
+    ['#f11632', 'Scarlet'],
+    ['#f43d00', 'Vermilion'],
+    ['#ff7f00', 'Orange'],
+    ['#ffba00', 'Amber'],
+    ['#ffe63f', 'Golden Yellow'],
+    ['#e3ff52', 'Chartreuse'],
+    ['#00e91d', 'Neon Green'],
+    ['#00bb34', 'Bright Green'],
+    ['#15ba4d', 'Leaf Green'],
+    ['#12bd8d', 'Jungle Green'],
+    ['#00b7aa', 'Lagoon'],
+    ['#00afca', 'Caribbean'],
+    ['#00aaec', 'Capri'],
+    ['#0a96dc', 'Pacific Blue'],
+    ['#006bc8', 'Denim'],
+    ['#0039de', 'Royal Blue'],
+    ['#5c2eee', 'Han Purple'],
+    ['#8f00ff', 'Violet'],
+    ['#bc3fd5', 'Deep Fuchsia'],
+    ['#ec25ba', 'Hot Magenta'],
+    ['#ee1565', 'Amaranth'],
+  ],
+  [
+    // Row 6 — vivid
+    ['#fb2f41', 'Poppy'],
+    ['#ff5e00', 'Tangerine'],
+    ['#ff9a00', 'Orange Peel'],
+    ['#ffd200', 'Gold'],
+    ['#f7f100', 'Lemon'],
+    ['#ffff00', 'Yellow'],
+    ['#00ff00', 'Green'],
+    ['#2ddb4b', 'Malachite'],
+    ['#53d17d', 'Emerald'],
+    ['#48d5b2', 'Spearmint'],
+    ['#00c8c0', 'Turquoise'],
+    ['#00d0de', 'Dark Turquoise'],
+    ['#00c2ea', 'Vivid Sky'],
+    ['#04b4ff', 'Deep Sky Blue'],
+    ['#009ef3', 'Dodger Blue'],
+    ['#0079dd', 'French Blue'],
+    ['#7a69ee', 'Slate Blue'],
+    ['#a36aff', 'Veronica'],
+    ['#d350ff', 'Heliotrope'],
+    ['#ff00ff', 'Magenta'],
+    ['#ff1b9a', 'Neon Pink'],
+  ],
+  [
+    // Row 7 — light
+    ['#ff868e', 'Salmon'],
+    ['#ffa489', 'Coral'],
+    ['#ffc586', 'Apricot'],
+    ['#ffe577', 'Buttercup'],
+    ['#f9fa73', 'Daffodil'],
+    ['#f1ffc1', 'Pale Lime'],
+    ['#a2ff79', 'Light Green'],
+    ['#8be583', 'Mint Green'],
+    ['#8de3a7', 'Mint'],
+    ['#79ecd1', 'Seafoam'],
+    ['#59f1ec', 'Aquamarine'],
+    ['#00ffff', 'Cyan'],
+    ['#76e9ff', 'Sky Blue'],
+    ['#4bd3fe', 'Maya Blue'],
+    ['#5dcaf8', 'Summer Sky'],
+    ['#79aff2', 'Jordy Blue'],
+    ['#9f94eb', 'Medium Purple'],
+    ['#bb9fff', 'Bright Lavender'],
+    ['#e199ff', 'Mauve'],
+    ['#f889ff', 'Fuchsia Pink'],
+    ['#ff81c4', 'Carnation'],
+  ],
+  [
+    // Row 8 — palest
+    ['#ffc9c9', 'Blush'],
+    ['#ffd2ca', 'Peach'],
+    ['#ffe5c7', 'Champagne'],
+    ['#fff2c5', 'Vanilla'],
+    ['#fffbc2', 'Cream'],
+    ['#f7ffd8', 'Parchment'],
+    ['#d9fab3', 'Celery'],
+    ['#c5ebb6', 'Tea Green'],
+    ['#c4f0cf', 'Celadon'],
+    ['#c1f3e8', 'Magic Mint'],
+    ['#bef5f9', 'Ice Blue'],
+    ['#c8fdff', 'Celeste'],
+    ['#cef6ff', 'Pale Cyan'],
+    ['#bdefff', 'Pale Sky'],
+    ['#bce4f7', 'Frost'],
+    ['#badcf1', 'Glacier'],
+    ['#c9bae4', 'Wisteria'],
+    ['#d4ceff', 'Periwinkle'],
+    ['#eed3ff', 'Pale Mauve'],
+    ['#ffccec', 'Pink Lace'],
+    ['#ffc9d7', 'Baby Pink'],
+  ],
 ];
 
-export const PALETTE_256 = PALETTE_256_ROWS.flatMap((row) =>
-  row.split(' ').map((h) => {
-    const css = `#${h}`;
-    const rgb = hexToRgb(css);
-    return { packed: packRGBA(rgb.r, rgb.g, rgb.b, 255), css, rgb };
-  })
-);
+export const PALETTE_168 = PALETTE_168_ROWS.flat().map(([css, name]) => {
+  const rgb = hexToRgb(css);
+  return { packed: packRGBA(rgb.r, rgb.g, rgb.b, 255), css, rgb, name };
+});

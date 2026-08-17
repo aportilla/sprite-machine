@@ -6,7 +6,7 @@
 // it lives until the document closes — a hide (or the desktop's DOM
 // re-orders) never unmounts it, so canvas identity and focus behavior
 // survive. What it holds: the FACE PICKER row over the black-framed artwork
-// well holding <sm-draw-canvas>. (The 256-color Colors dialog is app-level
+// well holding <sm-draw-canvas>. (The 168-color Colors dialog is app-level
 // chrome now — <sm-color-picker> in index.html's dialog set, light-DOM so
 // the kit's cursor can stack above its modal.)
 //

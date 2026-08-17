@@ -165,10 +165,8 @@ template — see [UI layer: Lit](#ui-layer-lit).
   lives in the **options strip** (a lone `vf-swatch` well wearing the kit's
   hard shadow), shown for **every tool but the eraser** — the one mode that
   paints no color — and, **clicked**, it opens the **"Colors" dialog** over
-  the **full 256-color palette**. There is no "recent colors" row: instead
-  the dialog **badges every color used in the active document** with a little
-  **white corner tag** (a black-seamed dog-ear on the cell's top-right
-  corner), rescanned from the live per-face views each time it opens. The
+  the **full 168-color named palette**. There is no "recent colors" row and no
+  used-color marking — the grid is the plain palette, every open. The
   **eyedropper** (`I`) is a sticky mode exactly like its siblings: it stays
   selected, and every canvas click samples the clicked texel — a painted texel's
   color becomes the **ink**, and **empty space hands you the eraser** (sampling
@@ -178,42 +176,43 @@ template — see [UI layer: Lit](#ui-layer-lit).
   current tool (with the same two exceptions: a color pick leaves the eraser, an
   empty sample selects it). The
   dialog is a System 7 movable modal (`vf-dialog`) laid out as a traditional
-  form: the 16×16 `vf-grid` of **256 distinct** swatches over a row holding a
-  larger **preview swatch** of the _pending_ selection (a kit shadow well)
-  beside a **hex text field** (`vf-text-field`), and a **Cancel / OK** button
-  row. Opening seeds the form from the current ink; clicking a palette swatch
+  form: the 21×8 `vf-grid` of **168 distinct named** swatches over a **hover
+  readout line** and a row holding a larger **preview swatch** of the
+  _pending_ selection (a kit shadow well) beside a **hex text field**
+  (`vf-text-field`), and a **Cancel / OK** button row. **Hovering** (or
+  keyboard-focusing) any palette cell makes the readout line show that color
+  as a **chip beside its name and hex** ("Teal `#009a96`") — the cells
+  themselves wear no hover chrome, System 7 style; at rest the line shows the
+  _pending_ selection instead,
+  named through the palette — a typed color no swatch holds reads **"Custom"**
+  — so the row always names what OK would commit. Opening seeds the form from
+  the current ink; clicking a palette swatch
   **selects** — preview and field update, the dialog stays up — and the field
   takes **manual hex entry** (3- or 6-digit, `#` optional, any case — _any_
-  color, not just the 256). Only **OK** (or **Enter** in the field) commits
+  color, not just the 168). Only **OK** (or **Enter** in the field) commits
   the ink, through the same single pick path as ever; while the field's text
   isn't a valid hex code **OK is disabled** and the preview holds the last
   valid color. **Cancel**, **Esc**, or the **close box** discards the pending
-  selection. The base is
-  the standard **xterm-256** set — but xterm-256
-  names 256 indexed _slots_ and only 247 _distinct_ colors (nine values, e.g.
-  `#808080`/`#000000`/`#ffffff`, repeat where its system, cube, and grayscale
-  ranges overlap), so the nine redundant cells are backfilled with shades
-  **interpolated from their Hilbert neighbors** — every cell is now a unique color
-  that still sits in its local cluster. The whole thing is **laid out along a
-  Hilbert curve** — a locality-preserving 1-D color order poured into the grid
-  along a 2-D Hilbert curve, so similar shades stay adjacent both across and down
-  (organic clusters, not strict bands): grayscale in the top-left, magentas/reds
-  across the top, blues down the right, greens/cyans sweeping the bottom. The
-  arrangement is a fixed, hand-verified layout spelled out in
-  `src/lib/constants.js` (`PALETTE_256`). **Wedge-safety caveat:** xterm-256 is dense
-  enough that some adjacent swatches fall _within_ the low-poly wedge merge tolerance
-  (`sameMat`, `TOL2 = 12²` squared-L2), so a staircase of two such shades can now
-  auto-smooth into a wedge. Recomputed against the real palette + gate there are **16
-  within-tolerance pairs**: ten near-neutral grays (the grayscale ramp steps ~10/channel)
-  **plus six fully _saturated_ dark primaries/secondaries** — an xterm system color
-  (`0x80`=128) lands ~7–10 units from the matching 6×6×6-cube level (`0x87`=135) at the
-  same hue (maroon, navy, green, purple, olive, teal). So it's **not only near-neutrals**:
-  an author can place two of those on adjacent staircase voxels and get an unintended (but
-  near-imperceptible) wedge. The 6×6×6 cube _levels_ still stay ≥40 apart _within_ the
-  cube; it's the system-vs-cube overlap at the low end that adds the saturated pairs (the
-  earlier sparse 8×8×4 grid kept _every_ swatch ≥36 apart, so none merged).
-  `test/palette.test.mjs` pins the exact set. Every stroke is hard-pixel: fully opaque or fully erased, never
-  anti-aliased.
+  selection. The palette is laid out as **value-banded hue rows**: row 1 is
+  the grayscale ramp (White and Black up front, then a dark-to-light run),
+  and rows 2–8 each sweep the hue wheel red → yellow → green → cyan → blue →
+  violet → magenta at one value band, ordered darkest ("darkest", "dark",
+  "deep", "strong", "vivid") down to "light" and "palest" — so a column reads
+  roughly as one hue across seven values. The arrangement is a fixed,
+  hand-verified layout spelled out in `src/lib/constants.js` (`PALETTE_168`),
+  every entry carrying the **human color name** the readout shows.
+  **Wedge-safety caveat:** a few same-hue neighbors fall _within_ the low-poly
+  wedge merge tolerance (`sameMat`, `TOL2 = 12²` squared-L2), so a staircase of
+  two such shades can auto-smooth into a wedge. Recomputed against the real
+  palette + gate there are **8 within-tolerance pairs**, all same-hue value
+  neighbors in the darkest and palest rows — Dark Olive/Olive, Deep
+  Teal/Petrol, Teal/Persian Green, Blush/Peach, Vanilla/Cream, Ice Blue/Pale
+  Sky, Celeste/Pale Cyan, Frost/Glacier — and, unlike the earlier xterm-256
+  set, **no gray pair merges** (the grayscale ramp steps ~10–13/channel, well
+  clear of the gate). An author can still place two of those eight pairs on
+  adjacent staircase voxels and get an unintended (but near-imperceptible)
+  wedge. `test/palette.test.mjs` pins the exact set. Every stroke is
+  hard-pixel: fully opaque or fully erased, never anti-aliased.
 - **Face picker** — six **cube-view icons** over a radio row (a `vf-radio-group`)
   across the document window's top switch which face you edit, laid out as mirror pairs
   (`left`/`right`, `front`/`back`, `top`/`bottom`)
@@ -287,9 +286,9 @@ step T-junctions show as _expected_ nonzero boundary/odd edges, not holes, so th
 `?tile=<N>` (or `<W>x<H>` to force an asymmetric, out-of-registration resize the
 locked-square UI can't produce) to apply one **centered** tile resize (the same
 `anchor:'center'` path the stepper drives) after the first build,
-`?palette=1` to open the 256-color "Colors" dialog on the first mount, `?cursor=<N>`
+`?palette=1` to open the 168-color "Colors" dialog on the first mount, `?cursor=<N>`
 to set the pencil size to N and draw its filled footprint preview at the tile center
-on mount, `?pick=<N>` to select `PALETTE_256[N]` as the ink on mount (as if picked
+on mount, `?pick=<N>` to select `PALETTE_168[N]` as the ink on mount (as if picked
 from the dialog) so a shot can show it landing as the current-ink swatch, and
 `?rect=<x0,y0,x1,y1[,r[,sq]]>` to select the rect tool and draw its live drag preview
 for that box (corner radius `r`; `sq=1` for the Shift square-lock) on mount so a shot
@@ -374,7 +373,7 @@ strip's clamp bounds, and the Undo/Redo enablement.
   all of the active document).
 - **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (the ACTIVE document's history;
   disabled until it has something — which also hands the key back to a
-  focused field's native undo), _Pick Color…_ ⌘K (the 256-color dialog —
+  focused field's native undo), _Pick Color…_ ⌘K (the 168-color dialog —
   app-level, like the ink it picks).
 - **Tools** — the five sticky tool modes — _Pencil_, _Rectangle_, _Fill_,
   _Eraser_, _Eyedropper_ — with the active one checkmarked (the same session
@@ -570,9 +569,11 @@ the Shift square-lock. `test/fill.test.mjs` pins the fill tool's flood + replace
 primitives (4-connectivity, contiguous vs. global scope, transparent-as-a-color,
 the no-op guards, and a full-tile flood that can't overflow the stack).
 `test/palette.test.mjs` pins the editor's
-256-color palette: 256 entries, all distinct, valid `#rrggbb`, `packed`
-derived from `css`, and the exact set of within-wedge-tolerance color pairs (the
-six saturated system-vs-cube overlaps included) so the wedge-safety note can't drift.
+168-color palette: 168 entries in a 21×8 grid, all colors AND names distinct,
+valid `#rrggbb`, `packed` derived from `css`, the layout corners (the
+grayscale ramp is row 1), and the exact set of within-wedge-tolerance color
+pairs (all same-hue neighbors — no gray pair merges) so the wedge-safety note
+can't drift.
 `test/brush.test.mjs` pins the pencil primitives (Bresenham continuity, footprint
 anchoring, the transparent-idempotence rule). `test/png-chunks.test.mjs` pins
 the document format's chunk surgery (round-trip, CRC against the published
@@ -603,17 +604,17 @@ guard), `test/colorize.test.mjs` (the mirror-fill / relaxation / dominant-body
 fallback tiers, on all three axes), `test/ingest.test.mjs`
 (`applyTransform`/`flip` + the `ingestSprite` throw path), and
 `test/t-junction.test.mjs` (multi-vertex edge splits with area + colour/normal
-preservation), and `test/color.test.mjs` (the shared `rgbKey`/`distinctColors`
-helpers — big-endian 24-bit keying, first-seen dedup, and the deliberately looser
-`alpha===0`-only skip vs. ingest's `alpha>=128`). `test/mesh.test.mjs` loads THREE to check `voxelMesh` welds
+preservation), and `test/color.test.mjs` (the shared color helpers —
+`hexToRgb`/`rgbToHex` round-trips, `normalizeHex`, and `rgbKey`'s big-endian
+24-bit keying). `test/mesh.test.mjs` loads THREE to check `voxelMesh` welds
 watertight, centres X/Z, and leaves Y as authored, plus the shared vertex-color
 linearizer cache; `test/diag.test.mjs` exercises the `?diag=1` watertightness
 self-check on closed vs. open surfaces.
 
 ```
 src/lib/
-  constants.js    default mirror (all-on) / world-size + DB16 pencil palette + Hilbert-laid xterm-256 palette (pure)
-  color.js        shared color helpers: hexToRgb, rgbKey (24-bit dedup), distinctColors (pure)
+  constants.js    default mirror (all-on) / world-size + DB16 pencil palette + named 168-color picker palette (pure)
+  color.js        shared color helpers: hexToRgb / rgbToHex, normalizeHex, rgbKey (24-bit dedup) (pure)
   views.js        6 view defs + the face vocabulary (keys/normals/index/axis) all derive from FACE_NORMAL; projections, front-edge meta
   atlas.js        slice a 3x2 sheet <-> face tiles: blitTile write-back, cellOf, validateSheet (pure)
   ingest.js       sprite -> occupancy/color arrays (full tile, no crop), place, reorient

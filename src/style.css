@@ -6,7 +6,7 @@
    This sheet supplies only the PAGE's share: the shared palette tokens
    (custom properties inherit into every shadow tree), the reset, the black
    ground behind the desktop bezel, the light-DOM Colors dialog's page share
-   (host display, cell wrappers, the used-color corner tags), the 3D viewport
+   (host display, the hover readout's color chip), the 3D viewport
    canvas's fill rules, the desktop-icon column width, and the drop overlay
    drop-target.js renders into the page. If a rule here paints a border or a
    color on kit chrome, it's a bug — the kit draws everything.
@@ -51,41 +51,14 @@ sm-color-picker {
   display: contents;
 }
 
-/* The Colors dialog's cells + used-color badges (light DOM, so the page owns
-   these rules). Each palette swatch sits in a positioned wrapper so a cell
-   used in the active document can wear its corner tag; under the grid's
-   `collapse` the wrapper is what the lattice pulls back, and it hugs the
-   swatch exactly (line-height 0 kills the inline strut). */
-.editor-picker-grid .picker-cell {
-  position: relative;
-  display: block;
-  line-height: 0;
-}
-/* The used-in-document tag: a little white dog-ear over the swatch's
-   top-right corner, seamed in black (two stacked border-drawn triangles) so
-   it reads on any fill — the palette holds pure white and pure black. All
-   metrics ride --vf-scale, like every kit length around it. */
-.editor-picker-grid .picker-used-tag {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 0 calc(var(--vf-scale, 1) * 7px) calc(var(--vf-scale, 1) * 7px) 0;
-  border-color: transparent var(--sm-black) transparent transparent;
-  pointer-events: none; /* the tag must never eat the swatch's click */
-}
-.editor-picker-grid .picker-used-tag::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 0 calc(var(--vf-scale, 1) * 5px) calc(var(--vf-scale, 1) * 5px) 0;
-  border-color: transparent var(--sm-white) transparent transparent;
+/* The readout line's color chip: a plain bordered well (not a vf-swatch — the
+   kit swatch is a button, and this line only reports). 16px square to sit on
+   vf-label's own 16px line beside it. */
+.picker-readout-chip {
+  flex: none;
+  width: calc(var(--vf-scale, 1) * 16px);
+  height: calc(var(--vf-scale, 1) * 16px);
+  border: calc(var(--vf-scale, 1) * 1px) solid var(--sm-black);
 }
 
 /* The THREE canvas fills the 3D View window's (flush) body. */

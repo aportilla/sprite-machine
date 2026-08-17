@@ -1,83 +1,79 @@
-// Node-runnable tests for the editor's 256-color palette (pure, no THREE/DOM).
+// Node-runnable tests for the editor's 168-color palette (pure, no THREE/DOM).
 // Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PALETTE_256 } from '../src/lib/constants.js';
+import { PALETTE_168 } from '../src/lib/constants.js';
 import { packRGBA } from '../src/lib/ingest.js';
 
-test('PALETTE_256 is a full 16×16 grid of well-formed entries', () => {
-  assert.equal(PALETTE_256.length, 256, '16×16 grid');
-  for (const { css, packed } of PALETTE_256) {
+const COLS = 21;
+const ROWS = 8;
+
+test('PALETTE_168 is a full 21×8 grid of well-formed named entries', () => {
+  assert.equal(PALETTE_168.length, COLS * ROWS, '21×8 grid');
+  for (const { css, packed, name } of PALETTE_168) {
     assert.match(css, /^#[0-9a-f]{6}$/, `valid hex: ${css}`);
     const r = parseInt(css.slice(1, 3), 16);
     const g = parseInt(css.slice(3, 5), 16);
     const b = parseInt(css.slice(5, 7), 16);
     assert.equal(packed, packRGBA(r, g, b, 255), `packed derived from css: ${css}`);
+    assert.equal(typeof name, 'string');
+    assert.ok(name.trim().length > 0, `named: ${css}`);
   }
 });
 
-// All 256 cells are DISTINCT. xterm-256 names 256 indexed slots but only 247
-// distinct colors (its system/cube/grayscale ranges overlap on 9 values); the 9
-// redundant cells carry Hilbert-neighbor-interpolated fillers so no swatch is
-// ever wasted on a repeat. If a future edit reintroduces a duplicate (or a filler
-// collides), this fails.
-test('PALETTE_256 has 256 distinct colors (no duplicate swatches)', () => {
-  const seen = new Map();
-  PALETTE_256.forEach(({ css }, i) => {
-    if (seen.has(css)) {
-      const j = seen.get(css);
-      assert.fail(
-        `duplicate swatch ${css} at index ${j} (r${(j / 16) | 0}c${j % 16}) and ${i} (r${(i / 16) | 0}c${i % 16})`
-      );
-    }
-    seen.set(css, i);
+// Every cell is a DISTINCT color under a DISTINCT name — the hover readout
+// shows the name as the color's identity, so a repeated name would be two
+// swatches claiming to be the same color (and a repeated hex a wasted cell).
+test('PALETTE_168 has 168 distinct colors and 168 distinct names', () => {
+  const seenCss = new Map();
+  const seenName = new Map();
+  PALETTE_168.forEach(({ css, name }, i) => {
+    const at = (j) => `index ${j} (r${(j / COLS) | 0}c${j % COLS})`;
+    if (seenCss.has(css))
+      assert.fail(`duplicate swatch ${css} at ${at(seenCss.get(css))} and ${at(i)}`);
+    if (seenName.has(name))
+      assert.fail(`duplicate name "${name}" at ${at(seenName.get(name))} and ${at(i)}`);
+    seenCss.set(css, i);
+    seenName.set(name, i);
   });
-  assert.equal(seen.size, 256, 'all 256 swatches distinct');
+  assert.equal(seenCss.size, COLS * ROWS, 'all 168 swatches distinct');
 });
 
 // The low-poly wedge gate (wedge-mesh.js sameMat) fuses two faces whose colors are
-// within TOL2 = 12*12 squared-L2 on RGB. xterm-256 is dense enough that a handful of
-// ADJACENT swatches fall inside that gate, so an author CAN place two on a staircase
-// and get an unintended wedge. Pin the EXACT within-tolerance set (recomputed here
+// within TOL2 = 12*12 squared-L2 on RGB. A handful of the palette's same-hue
+// neighbors fall inside that gate, so an author CAN place two on a staircase and
+// get an unintended wedge. Pin the EXACT within-tolerance set (recomputed here
 // against the real palette + the real gate) so the constants.js/README wedge-safety
 // note stays honest — any future palette edit that introduces a new near-duplicate
-// must update this list, i.e. be consciously accepted. Crucially it is NOT "only
-// near-neutrals": six of the pairs are fully SATURATED dark primaries/secondaries
-// (an xterm system color 0x80=128 vs the 6×6×6-cube level 0x87=135 at the same hue).
+// must update this list, i.e. be consciously accepted. Notably the grayscale ramp
+// steps ~10-13/channel, so unlike the previous xterm-256 palette NO gray pair
+// merges: every pair below is a same-hue neighbor in the darkest or palest rows.
 const WEDGE_TOL2 = 12 * 12; // must track wedge-mesh.js TOL2
-test('PALETTE_256 within-wedge-tolerance pairs match the reviewed set', () => {
+test('PALETTE_168 within-wedge-tolerance pairs match the reviewed set', () => {
   const canon = (a, b) => [a, b].sort().join('|');
   const expected = new Set([
-    // 10 near-neutral grays (grayscale ramp + the two near-neutral fillers)
-    canon('#5f5f5f', '#626262'),
-    canon('#878787', '#8a8a8a'),
-    canon('#afafaf', '#b2b2b2'),
-    canon('#d7d7d7', '#dadada'),
-    canon('#bcbcbc', '#c0c0c0'),
-    canon('#3a3a3a', '#3f3f3f'),
-    canon('#3f3f3f', '#444444'),
-    canon('#767676', '#7b7b7b'),
-    canon('#7b7b7b', '#808080'),
-    canon('#c0c0c0', '#c6c6c6'),
-    // 6 fully saturated dark primaries/secondaries (system 0x80 vs cube 0x87)
-    canon('#800000', '#870000'), // maroon
-    canon('#000080', '#000087'), // navy
-    canon('#008000', '#008700'), // green
-    canon('#800080', '#870087'), // purple
-    canon('#808000', '#878700'), // olive
-    canon('#008080', '#008787'), // teal
+    // darkest/dark rows — same-hue value neighbors
+    canon('#625700', '#625f00'), // Dark Olive / Olive
+    canon('#006865', '#005e67'), // Deep Teal / Petrol
+    canon('#009a96', '#00a39c'), // Teal / Persian Green
+    // palest row — near-white pastel neighbors
+    canon('#ffc9c9', '#ffd2ca'), // Blush / Peach
+    canon('#fff2c5', '#fffbc2'), // Vanilla / Cream
+    canon('#bef5f9', '#bdefff'), // Ice Blue / Pale Sky
+    canon('#c8fdff', '#cef6ff'), // Celeste / Pale Cyan
+    canon('#bce4f7', '#badcf1'), // Frost / Glacier
   ]);
   const actual = new Set();
-  for (let i = 0; i < PALETTE_256.length; i++) {
-    for (let j = i + 1; j < PALETTE_256.length; j++) {
-      const a = PALETTE_256[i].rgb;
-      const b = PALETTE_256[j].rgb;
+  for (let i = 0; i < PALETTE_168.length; i++) {
+    for (let j = i + 1; j < PALETTE_168.length; j++) {
+      const a = PALETTE_168[i].rgb;
+      const b = PALETTE_168[j].rgb;
       const dr = a.r - b.r;
       const dg = a.g - b.g;
       const db = a.b - b.b;
       if (dr * dr + dg * dg + db * db <= WEDGE_TOL2) {
-        actual.add(canon(PALETTE_256[i].css, PALETTE_256[j].css));
+        actual.add(canon(PALETTE_168[i].css, PALETTE_168[j].css));
       }
     }
   }
@@ -86,32 +82,35 @@ test('PALETTE_256 within-wedge-tolerance pairs match the reviewed set', () => {
     [...expected].sort(),
     'within-tolerance palette pairs drifted from the reviewed wedge-safety set'
   );
-  // Guard the corrected doc claim directly: exactly six of the merge-able pairs are
-  // fully saturated, so "only near-neutrals are wedge-mergeable" is false.
-  const chroma = ({ r, g, b }) => Math.max(r, g, b) - Math.min(r, g, b);
-  const byCss = new Map(PALETTE_256.map((p) => [p.css, p.rgb]));
-  let saturated = 0;
+  // Guard the doc claim directly: no gray-on-gray pair is wedge-mergeable —
+  // the grayscale ramp's steps all clear the gate.
+  const gray = ({ r, g, b }) => r === g && g === b;
+  const byCss = new Map(PALETTE_168.map((p) => [p.css, p.rgb]));
   for (const keyPair of actual) {
     const [ca, cb] = keyPair.split('|');
-    if (Math.min(chroma(byCss.get(ca)), chroma(byCss.get(cb))) >= 100) saturated++;
+    assert.ok(
+      !(gray(byCss.get(ca)) && gray(byCss.get(cb))),
+      `gray pair ${keyPair} is wedge-mergeable — the ramp claim drifted`
+    );
   }
-  assert.equal(
-    saturated,
-    6,
-    'six saturated dark primary/secondary pairs are wedge-mergeable'
-  );
 });
 
-// Pin the exact Hilbert layout corners so a transcription/ordering slip is caught:
-// grayscale in the top-left, the light-cyan corner at the bottom-right.
-test('PALETTE_256 keeps the intended layout orientation', () => {
-  assert.equal(PALETTE_256[0].css, '#000000', 'top-left is black (grayscale cluster)');
-  assert.equal(PALETTE_256[255].css, '#d7ffff', 'bottom-right is pale cyan');
-  // Row 0 (indices 0..15) should be neutrals ramping into warm hues — its first
-  // eight cells are all grays (r==g==b).
-  for (let i = 0; i < 8; i++) {
-    const { css } = PALETTE_256[i];
-    assert.equal(css.slice(1, 3), css.slice(3, 5), `row0 cell ${i} is gray (r==g)`);
-    assert.equal(css.slice(3, 5), css.slice(5, 7), `row0 cell ${i} is gray (g==b)`);
+// Pin the layout corners so a transcription/ordering slip is caught: the
+// grayscale ramp is row 1 (White and Black up front), the palest hue row
+// closes the grid, and each column reads as roughly one hue down the values.
+test('PALETTE_168 keeps the intended layout orientation', () => {
+  assert.equal(PALETTE_168[0].css, '#ffffff', 'top-left is White');
+  assert.equal(PALETTE_168[0].name, 'White');
+  assert.equal(PALETTE_168[1].css, '#000000', 'second cell is Black');
+  assert.equal(
+    PALETTE_168[COLS * ROWS - 1].name,
+    'Baby Pink',
+    'bottom-right closes the palest row'
+  );
+  // Row 1 (indices 0..20) is the grayscale ramp — every cell r==g==b.
+  for (let i = 0; i < COLS; i++) {
+    const { css } = PALETTE_168[i];
+    assert.equal(css.slice(1, 3), css.slice(3, 5), `row1 cell ${i} is gray (r==g)`);
+    assert.equal(css.slice(3, 5), css.slice(5, 7), `row1 cell ${i} is gray (g==b)`);
   }
 });

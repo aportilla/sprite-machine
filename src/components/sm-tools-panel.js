@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
 // <sm-tools-panel> — the floating Tools palette's body: the tool strip alone
 // (the current-ink swatch lives in the options strip now, and the "last used"
-// recency row is gone — the Colors dialog badges the document's used colors
-// instead). A CONNECTED chrome component: session drives the strip's props,
-// and its events become session actions.
+// recency row is gone — the Colors dialog is the one color surface). A
+// CONNECTED chrome component: session drives the strip's props, and its
+// events become session actions.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';

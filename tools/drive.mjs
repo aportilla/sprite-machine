@@ -928,7 +928,7 @@ async function main() {
     counts.dialogs === 1,
     `${counts.dialogs}`
   );
-  check('the picker keeps its 256 cells', counts.cells === 256, `${counts.cells}`);
+  check('the picker keeps its 168 cells', counts.cells === 168, `${counts.cells}`);
   check(
     'one pixel canvas, not one per swap',
     counts.canvases === 1,
@@ -981,7 +981,7 @@ async function main() {
     (await canvasEmpty()) && (await onionSkinShowing())
   );
 
-  // --- the 256-colour dialog ------------------------------------------------
+  // --- the 168-colour dialog ------------------------------------------------
   // A synthesized mouse-up after a native modal closes is one of the states
   // that provokes the headless reload described in the header — every section
   // after this one starts from a deliberate fresh load.
@@ -1013,20 +1013,36 @@ async function main() {
     form.hex === inkBefore && form.preview === inkBefore,
     `${form.hex} / ${form.preview} vs ${inkBefore}`
   );
-  // Pick a cell the document does NOT use yet (no used-in-document corner tag
-  // on this open) — after drawing with it, reopening must badge exactly it.
+  // Pick a cell whose color differs from the current ink, so the select and
+  // commit checks below observe a real change.
   const cell = await evaluate(
     `(() => {${DEEP} const cells = __qa('.editor-picker-grid vf-swatch');
-      const tag = (c) => !!c.closest('.picker-cell').querySelector('.picker-used-tag');
-      const c = cells.find((x) => !tag(x)); const r = c.getBoundingClientRect();
-      return { count: cells.length, tagged: cells.filter(tag).length,
+      const c = cells.find((x) => x.getAttribute('color') !== '${inkBefore}');
+      const r = c.getBoundingClientRect();
+      return { count: cells.length,
                x: r.left + r.width / 2, y: r.top + r.height / 2,
-               color: c.getAttribute('color') }; })()`
+               color: c.getAttribute('color'), name: c.getAttribute('label') }; })()`
   );
   check(
-    'the dialog holds the full 256-colour palette',
-    cell.count === 256,
+    'the dialog holds the full 168-colour palette',
+    cell.count === 168,
     `${cell.count}`
+  );
+  // Hover the cell (a real trusted mouse move, no buttons): the readout line
+  // under the grid must name the hovered color — chip aside, name and hex.
+  const pickerReadout = () =>
+    evaluate(
+      `(() => { const p = document.querySelector('sm-color-picker');
+        return { name: p.querySelector('.picker-readout-name').textContent.trim(),
+                 hex: p.querySelector('.picker-readout-hex').textContent.trim() }; })()`
+    );
+  await mouse('mouseMoved', cell.x, cell.y, { buttons: 0 });
+  await sleep(300);
+  let readout = await pickerReadout();
+  check(
+    'hovering a palette cell shows its color name and hex in the readout',
+    readout.name === cell.name && readout.hex === cell.color,
+    `${readout.name} / ${readout.hex} vs ${cell.name} / ${cell.color}`
   );
   await click(cell.x, cell.y);
   await sleep(400);
@@ -1052,34 +1068,14 @@ async function main() {
     s.inkColor === cell.color,
     `${s.inkColor}`
   );
-  // Paint one EMPTY texel with the picked ink (adds a used color, deletes
-  // none), reopen: the corner tag must appear on that exact cell, alongside
-  // every tag the document already wore.
-  await keyPress('b');
-  await click(at(1, 1).x, at(1, 1).y);
-  await sleep(300);
+  // Reopen via the menu key equivalent for the manual-entry flow below.
   await keyPress('k', META);
   await sleep(400);
   s = await probe();
   check('⌘K reopens the Colors dialog', s.colorsOpen === true);
-  const badged = await evaluate(
-    `(() => {${DEEP} const cells = __qa('.editor-picker-grid vf-swatch');
-      const tag = (c) => !!c.closest('.picker-cell').querySelector('.picker-used-tag');
-      return { picked: tag(cells.find((c) => c.getAttribute('color') === '${cell.color}')),
-               tagged: cells.filter(tag).length }; })()`
-  );
-  check(
-    'drawing with the picked color badges its cell as used in the document',
-    badged.picked === true
-  );
-  check(
-    "…without disturbing the document's existing badges",
-    badged.tagged === cell.tagged + 1,
-    `${cell.tagged} → ${badged.tagged}`
-  );
   // Manual hex entry, on the still-open dialog: an invalid string disables OK
   // (the preview holds the last valid color); a valid one re-enables it and
-  // retints the preview — any color, not just the 256 — and Enter is OK.
+  // retints the preview — any color, not just the 168 — and Enter is OK.
   // Real keystrokes into the field; select() so each entry replaces the text.
   // The entries are typed HASH-LESS (a form the field accepts) because '#' is
   // untypeable here: keyDesc's derived virtual-key code for '#' is 35 — VK_END
@@ -1109,6 +1105,14 @@ async function main() {
     'a valid hex entry re-enables OK and retints the preview (normalized to #rrggbb)',
     form.okDisabled === false && form.preview === '#123abc',
     `${form.hex} / ${form.preview}`
+  );
+  // Nothing hovered, so the readout rests on the pending selection — a typed
+  // color no palette swatch holds reads as "Custom".
+  readout = await pickerReadout();
+  check(
+    'the readout names a typed off-palette pending color "Custom"',
+    readout.name === 'Custom' && readout.hex === '#123abc',
+    `${readout.name} / ${readout.hex}`
   );
   await keyPress('Enter');
   await sleep(400);

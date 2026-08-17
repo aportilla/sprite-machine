@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { parseBootParams } from '../src/boot/params.js';
-import { PALETTE_256 } from '../src/lib/constants.js';
+import { PALETTE_168 } from '../src/lib/constants.js';
 
 test('defaults: everything off / null on an empty query', () => {
   const b = parseBootParams('');
@@ -85,7 +85,7 @@ test('?tile: square, WxH, and clamping to the tile bounds', () => {
 
 test('?pick bounds-checks the palette index', () => {
   assert.equal(parseBootParams('?pick=37').pick, 37);
-  assert.equal(parseBootParams(`?pick=${PALETTE_256.length}`).pick, null);
+  assert.equal(parseBootParams(`?pick=${PALETTE_168.length}`).pick, null);
   assert.equal(parseBootParams('?pick=-1').pick, null);
 });
 

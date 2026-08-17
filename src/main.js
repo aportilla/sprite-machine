@@ -11,7 +11,7 @@ import './style.css';
 import 'vintage-frames';
 import { applyCursor, onScaleChange } from 'vintage-frames';
 import { SAMPLES } from './lib/sprite-data.js';
-import { PALETTE_256 } from './lib/constants.js';
+import { PALETTE_168 } from './lib/constants.js';
 import { session } from './state/session.js';
 import { prefs } from './state/prefs.js';
 import { shell } from './state/shell.js';
@@ -57,7 +57,7 @@ if (boot.rotate === false) prefs.setAutoRotate(false);
 // The size/radius seeds are clamped for real against the tile geometry when
 // the editor first mounts (it re-clamps on any tile-geometry change).
 if (boot.cursor != null) session.setPencilSize(boot.cursor, Number.MAX_SAFE_INTEGER);
-if (boot.pick != null) session.pickColor(PALETTE_256[boot.pick].rgb);
+if (boot.pick != null) session.pickColor(PALETTE_168[boot.pick].rgb);
 if (boot.palette) session.openPicker();
 if (boot.rect) {
   session.setTool('rect');
