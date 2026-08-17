@@ -24,6 +24,30 @@ export function hexToRgb(css) {
 }
 
 /**
+ * Format {r,g,b} bytes as a `#rrggbb` string — hexToRgb's inverse.
+ * @param {{r:number,g:number,b:number}} c
+ * @returns {string}
+ */
+export const rgbToHex = ({ r, g, b }) =>
+  `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+
+/**
+ * Normalize a hand-typed hex color to canonical `#rrggbb`, or null if the text
+ * isn't one. Accepts an optional leading `#`, 3- or 6-digit forms, any case,
+ * and surrounding whitespace; everything else — the empty string, a bare `#`,
+ * wrong lengths, non-hex characters — is null (the Colors dialog disables OK
+ * on it).
+ * @param {string} text
+ * @returns {string|null}
+ */
+export function normalizeHex(text) {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(text.trim());
+  if (!m) return null;
+  const d = m[1].toLowerCase();
+  return d.length === 3 ? `#${d[0]}${d[0]}${d[1]}${d[1]}${d[2]}${d[2]}` : `#${d}`;
+}
+
+/**
  * A 24-bit key (0xRRGGBB) identifying an opaque color for dedup.
  * @param {{r:number,g:number,b:number}} c
  * @returns {number}

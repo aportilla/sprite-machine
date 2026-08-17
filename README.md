@@ -177,8 +177,18 @@ template — see [UI layer: Lit](#ui-layer-lit).
   crosshair). Hold **Alt** instead for a momentary sample that doesn't leave the
   current tool (with the same two exceptions: a color pick leaves the eraser, an
   empty sample selects it). The
-  dialog is a System 7 movable modal (`vf-dialog`) holding a 16×16 `vf-grid` of
-  **256 distinct** swatches (**Esc** or the **close box** closes it). The base is
+  dialog is a System 7 movable modal (`vf-dialog`) laid out as a traditional
+  form: the 16×16 `vf-grid` of **256 distinct** swatches over a row holding a
+  larger **preview swatch** of the _pending_ selection (a kit shadow well)
+  beside a **hex text field** (`vf-text-field`), and a **Cancel / OK** button
+  row. Opening seeds the form from the current ink; clicking a palette swatch
+  **selects** — preview and field update, the dialog stays up — and the field
+  takes **manual hex entry** (3- or 6-digit, `#` optional, any case — _any_
+  color, not just the 256). Only **OK** (or **Enter** in the field) commits
+  the ink, through the same single pick path as ever; while the field's text
+  isn't a valid hex code **OK is disabled** and the preview holds the last
+  valid color. **Cancel**, **Esc**, or the **close box** discards the pending
+  selection. The base is
   the standard **xterm-256** set — but xterm-256
   names 256 indexed _slots_ and only 247 _distinct_ colors (nine values, e.g.
   `#808080`/`#000000`/`#ffffff`, repeat where its system, cube, and grayscale

@@ -27,6 +27,7 @@ import 'vintage-frames';
 import { vfPanel } from 'vintage-frames';
 import { css, LitElement, html, nothing } from 'lit';
 import { maxCornerRadius } from '../lib/rect.js';
+import { rgbToHex } from '../lib/color.js';
 import { session } from '../state/session.js';
 import { shell } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
@@ -41,9 +42,6 @@ const TOOL_NAME = {
   eraser: 'Eraser Tool',
   eyedropper: 'Eyedropper Tool',
 };
-
-const toHex2 = (n) => n.toString(16).padStart(2, '0');
-const rgbHex = ({ r, g, b }) => `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
 
 export class SmOptionsBar extends LitElement {
   static styles = [
@@ -139,7 +137,7 @@ export class SmOptionsBar extends LitElement {
         width="36"
         height="20"
         shadow
-        color=${rgbHex(s.ink)}
+        color=${rgbToHex(s.ink)}
         label="selected color — open the color picker"
         title="selected color — open the color picker"
         @click=${() => session.openPicker()}

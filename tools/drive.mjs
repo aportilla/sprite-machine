@@ -987,6 +987,8 @@ async function main() {
   // after this one starts from a deliberate fresh load.
   section('palette');
   await freshPage();
+  s = await probe();
+  const inkBefore = s.inkColor;
   const swatch = await centreOf('.editor-selected');
   await click(swatch.x, swatch.y);
   await sleep(400);
@@ -995,6 +997,21 @@ async function main() {
   check(
     'the Colors dialog lives in the light DOM (the kit cursor stacks above it)',
     s.colorsDialogLightDom === true
+  );
+  // The dialog's form: the pending-selection preview swatch, the hex field,
+  // and the Cancel / OK row (all light DOM — plain queries reach them).
+  const pickerForm = () =>
+    evaluate(
+      `(() => { const p = document.querySelector('sm-color-picker');
+        return { hex: p.querySelector('.picker-hex').value,
+                 preview: p.querySelector('.picker-preview').getAttribute('color'),
+                 okDisabled: p.querySelector('.picker-ok').disabled }; })()`
+    );
+  let form = await pickerForm();
+  check(
+    'the form seeds from the current ink (hex field + preview swatch)',
+    form.hex === inkBefore && form.preview === inkBefore,
+    `${form.hex} / ${form.preview} vs ${inkBefore}`
   );
   // Pick a cell the document does NOT use yet (no used-in-document corner tag
   // on this open) — after drawing with it, reopening must badge exactly it.
@@ -1014,8 +1031,27 @@ async function main() {
   await click(cell.x, cell.y);
   await sleep(400);
   s = await probe();
-  check('picking a swatch closes the dialog', s.colorsOpen === false);
-  check('picking a swatch becomes the ink', s.inkColor === cell.color, `${s.inkColor}`);
+  form = await pickerForm();
+  check(
+    'clicking a swatch selects, not commits: the dialog stays open',
+    s.colorsOpen === true
+  );
+  check('…the ink is untouched until OK', s.inkColor === inkBefore, `${s.inkColor}`);
+  check(
+    'the selection lands in the hex field and the preview swatch',
+    form.hex === cell.color && form.preview === cell.color,
+    `${form.hex} / ${form.preview} vs ${cell.color}`
+  );
+  const okBtn = await centreOf('.picker-ok');
+  await click(okBtn.x, okBtn.y);
+  await sleep(400);
+  s = await probe();
+  check('OK closes the dialog', s.colorsOpen === false);
+  check(
+    '…and commits the selection as the ink',
+    s.inkColor === cell.color,
+    `${s.inkColor}`
+  );
   // Paint one EMPTY texel with the picked ink (adds a used color, deletes
   // none), reopen: the corner tag must appear on that exact cell, alongside
   // every tag the document already wore.
@@ -1041,10 +1077,67 @@ async function main() {
     badged.tagged === cell.tagged + 1,
     `${cell.tagged} → ${badged.tagged}`
   );
-  await evaluate(
-    `(() => {${DEEP} __q('sm-color-picker').querySelector('vf-dialog').close(); })()`
-  );
+  // Manual hex entry, on the still-open dialog: an invalid string disables OK
+  // (the preview holds the last valid color); a valid one re-enables it and
+  // retints the preview — any color, not just the 256 — and Enter is OK.
+  // Real keystrokes into the field; select() so each entry replaces the text.
+  // The entries are typed HASH-LESS (a form the field accepts) because '#' is
+  // untypeable here: keyDesc's derived virtual-key code for '#' is 35 — VK_END
+  // — so headless Chrome treats the keystroke as the End key, collapsing the
+  // selection, after which every insert is blocked by the field's maxlength.
+  const selectHexField = () =>
+    evaluate(
+      `(() => { const input = document.querySelector('sm-color-picker .picker-hex')
+        .shadowRoot.querySelector('input');
+        input.focus(); input.select(); })()`
+    );
+  await selectHexField();
+  await typeText('12z');
   await sleep(300);
+  form = await pickerForm();
+  check('an invalid hex entry disables OK', form.okDisabled === true, form.hex);
+  check(
+    '…while the preview holds the last valid color',
+    form.preview === cell.color,
+    `${form.preview}`
+  );
+  await selectHexField();
+  await typeText('123abc');
+  await sleep(300);
+  form = await pickerForm();
+  check(
+    'a valid hex entry re-enables OK and retints the preview (normalized to #rrggbb)',
+    form.okDisabled === false && form.preview === '#123abc',
+    `${form.hex} / ${form.preview}`
+  );
+  await keyPress('Enter');
+  await sleep(400);
+  s = await probe();
+  check(
+    'Enter in the field commits the typed color as the ink',
+    s.colorsOpen === false && s.inkColor === '#123abc',
+    `${s.inkColor}`
+  );
+  // Cancel discards: reopen, select a different cell, Cancel — the ink keeps.
+  await keyPress('k', META);
+  await sleep(400);
+  const other = await evaluate(
+    `(() => {${DEEP} const c = __qa('.editor-picker-grid vf-swatch')
+        .find((x) => x.getAttribute('color') !== '#123abc');
+      const r = c.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`
+  );
+  await click(other.x, other.y);
+  await sleep(300);
+  const pickerCancel = await centreOf('.picker-cancel');
+  await click(pickerCancel.x, pickerCancel.y);
+  await sleep(400);
+  s = await probe();
+  check(
+    'Cancel discards the pending selection (the ink keeps)',
+    s.colorsOpen === false && s.inkColor === '#123abc',
+    `${s.inkColor}`
+  );
 
   // --- desktop: the View menu + the permanent windoids -------------------------
   section('view menu');
