@@ -123,26 +123,18 @@ export class SmAtlasView extends LitElement {
         image-rendering: pixelated;
         image-rendering: crisp-edges;
         /* The same light transparency checker as the draw canvas, so empty
-           texels read as "no color". */
+           texels read as "no color" — and, like there, registered to the
+           TEXEL grid: one checker square per document pixel. The cell paints
+           the sheet with putImageData (which replaces alpha), so the checker
+           has to live BEHIND the canvas as a background; sizing it as a
+           fraction of the element (one 2×2-texel period = 200% / tile dim,
+           the dims fed by #syncGeometry via custom props) keeps it scaling
+           in lockstep with the art. The conic checker's second quadrant
+           color is texel (0,0) — light, the draw canvas's phase. */
         background-color: #a8a8a8;
-        background-image: linear-gradient(
-            45deg,
-            #d0d0d0 25%,
-            transparent 25%,
-            transparent 75%,
-            #d0d0d0 75%
-          ),
-          linear-gradient(
-            45deg,
-            #d0d0d0 25%,
-            transparent 25%,
-            transparent 75%,
-            #d0d0d0 75%
-          );
-        background-size: 16px 16px;
-        background-position:
-          0 0,
-          8px 8px;
+        background-image: repeating-conic-gradient(#a8a8a8 0% 25%, #d0d0d0 0% 50%);
+        background-size: calc(200% / var(--sm-tile-w, 16))
+          calc(200% / var(--sm-tile-h, 16));
       }
       /* The selection ring: the edited face's square stroked in the
          face-picker art's red, laid over the tile's own edge. Always in the
@@ -281,6 +273,10 @@ export class SmAtlasView extends LitElement {
     if (!s || !(s.tileW > 0) || !(s.tileH > 0)) return;
     this.#tileW = s.tileW;
     this.#tileH = s.tileH;
+    // Feed the cells' texel-aligned checker (see the canvas CSS): the tile
+    // dims as custom props, inherited into the shadow tree.
+    this.style.setProperty('--sm-tile-w', String(s.tileW));
+    this.style.setProperty('--sm-tile-h', String(s.tileH));
     for (const { face } of GRID_CELLS) {
       const canvas = this.#cellCanvas.get(face).value;
       if (canvas && (canvas.width !== s.tileW || canvas.height !== s.tileH)) {

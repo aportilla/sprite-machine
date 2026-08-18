@@ -59,6 +59,29 @@ import { baseStyles } from './base-styles.js';
 // MIRROR_ALPHA keeps the onion-skin a faint hint.
 const MIRROR_ALPHA = 0.22;
 
+// The classic light transparency checker (pale gray + off-white), so empty
+// texels read as "no color" against the darker gray canvas well framing them.
+const CHECKER_LIGHT = 0xd0;
+const CHECKER_DARK = 0xa8;
+
+// Fill a native-tile-res context with the transparency checker at ONE CHECKER
+// SQUARE PER PIXEL — the layer is CSS-upscaled (pixelated) in lockstep with
+// the art, so each square is exactly one document texel, registered to the
+// pixel grid by construction at any scale (a higher-res tile reads as a
+// tighter checker).
+function paintTexelChecker(g, w, h) {
+  const img = g.createImageData(w, h);
+  const d = img.data;
+  for (let y = 0, i = 0; y < h; y++) {
+    for (let x = 0; x < w; x++, i += 4) {
+      const v = (x + y) & 1 ? CHECKER_DARK : CHECKER_LIGHT;
+      d[i] = d[i + 1] = d[i + 2] = v;
+      d[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+}
+
 export class SmDrawCanvas extends LitElement {
   static styles = [
     baseStyles,
@@ -84,8 +107,9 @@ export class SmDrawCanvas extends LitElement {
         flex: 0 0 auto;
       }
       /* All four layers fill the stack (backing stores managed in JS): a background
-       (checkerboard via CSS + faded onion-skin, native tile res), the transparent pixel
-       canvas (native tile res), then the guide + cursor overlays (screen res). */
+       (per-texel checkerboard + faded onion-skin, drawn at native tile res), the
+       transparent pixel canvas (native tile res), then the guide + cursor overlays
+       (screen res). */
       .editor-canvas-stack > canvas {
         position: absolute;
         inset: 0;
@@ -107,32 +131,12 @@ export class SmDrawCanvas extends LitElement {
         cursor: var(--vf-cursor, crosshair);
         touch-action: none;
       }
-      /* Faded onion-skin (drawn) over a checkerboard (CSS), UNDER the transparent
-       pixel canvas so both show through unpainted texels. */
+      /* Faded onion-skin over the transparency checker, both DRAWN into the
+       native-res backing store (see #paintBg), UNDER the transparent pixel
+       canvas so both show through unpainted texels. */
       .editor-canvas-bg {
         z-index: 0;
         pointer-events: none;
-        /* Classic light transparency checker (pale gray + off-white), so empty texels
-         read as "no color" against the darker gray canvas well framing them. */
-        background-color: #a8a8a8;
-        background-image: linear-gradient(
-            45deg,
-            #d0d0d0 25%,
-            transparent 25%,
-            transparent 75%,
-            #d0d0d0 75%
-          ),
-          linear-gradient(
-            45deg,
-            #d0d0d0 25%,
-            transparent 25%,
-            transparent 75%,
-            #d0d0d0 75%
-          );
-        background-size: 16px 16px;
-        background-position:
-          0 0,
-          8px 8px;
       }
       /* Hairline extent rules sit ABOVE the pixel canvas; the cursor preview above them. */
       .editor-canvas-overlay {
@@ -301,7 +305,7 @@ export class SmDrawCanvas extends LitElement {
     // are reconstructed together, imperatively, never bound in the template (a
     // template-bound width/height would clear the backing store mid-diff).
     if (geom) this.#applyGeometry();
-    else if (changed.has('mirrorBehind')) this.#paintMirror();
+    else if (changed.has('mirrorBehind')) this.#paintBg();
     if (!geom && changed.has('guides')) this.#drawGuidesLayer();
 
     // The cursor overlay is canvas-drawn, so the state the template can't express
@@ -354,8 +358,8 @@ export class SmDrawCanvas extends LitElement {
     this.#laidOut = false; // force #layout() to re-fit for the new tile size
   }
 
-  // Size the native-resolution layers to the tile, restore the onion-skin the
-  // resize cleared, repaint the pixels and re-fit the stack.
+  // Size the native-resolution layers to the tile, restore the checker +
+  // onion-skin the resize cleared, repaint the pixels and re-fit the stack.
   #applyGeometry() {
     const bg = this.#bg.value;
     const canvas = this.#canvas.value;
@@ -364,18 +368,19 @@ export class SmDrawCanvas extends LitElement {
     bg.height = this.tileH;
     canvas.width = this.tileW;
     canvas.height = this.tileH;
-    this.#paintMirror();
+    this.#paintBg();
     this.#repaint();
     this.#layout();
   }
 
-  // The faded opposite-face onion-skin, drawn into the (native-res) background
-  // layer under the transparent pixel canvas.
-  #paintMirror() {
+  // The (native-res) background layer under the transparent pixel canvas: the
+  // per-texel transparency checker, then the faded opposite-face onion-skin
+  // over it.
+  #paintBg() {
     const bg = this.#bg.value;
-    if (!bg) return;
+    if (!bg || !bg.width || !bg.height) return;
     const g = bg.getContext('2d');
-    g.clearRect(0, 0, bg.width, bg.height);
+    paintTexelChecker(g, bg.width, bg.height); // covers every pixel — no clear needed
     const m = this.mirrorBehind;
     if (!m) return;
     const tmp = document.createElement('canvas');
