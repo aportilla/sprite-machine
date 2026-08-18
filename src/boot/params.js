@@ -1,6 +1,8 @@
 // ---------------------------------------------------------------------------
 // URL-param parsing → one typed boot object. Pure (string in, object out), so
-// the whole dev-hook surface is Node-testable. main.js APPLIES the result:
+// the whole dev-hook surface is Node-testable. ?file (or a bare #fragment) is
+// the one USER-FACING param — the saved document a load should open instead
+// of greeting with the New Document dialog. main.js APPLIES the result:
 // most hooks are boot-time store actions (?edit → the boot context's face, ?pick →
 // session.pickColor, ?palette → session.openPicker, ?tile → doc.resizeTiles,
 // ?cursor / ?rect / ?fill's state halves → session actions); only the
@@ -13,12 +15,28 @@ import { PALETTE_168 } from '../lib/constants.js';
 
 /**
  * @param {string} search  location.search (with or without the leading '?')
- * @param {{sampleNames?: string[]}} [opts]  the sample names, injected — the
- *   sample module itself imports a PNG asset, which only Vite can load, and
- *   this parser must stay Node-runnable.
+ * @param {{sampleNames?: string[], hash?: string}} [opts]  the sample names,
+ *   injected — the sample module itself imports a PNG asset, which only Vite
+ *   can load, and this parser must stay Node-runnable — plus location.hash
+ *   (the `#Cube` shorthand for ?file=Cube).
  */
-export function parseBootParams(search, { sampleNames = [] } = {}) {
+export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
   const params = new URLSearchParams(search);
+
+  // ?file=<name> — or a bare #<name> fragment — asks the boot to open that
+  // SAVED document instead of greeting with the New Document dialog. This
+  // just carries the requested name; main.js resolves it against the
+  // refreshed library listing (case-insensitive) and falls back to the
+  // dialog when nothing matches. ?file wins when both forms are given.
+  let file = (params.get('file') ?? '').trim();
+  if (!file && hash) {
+    const frag = hash.replace(/^#/, '');
+    try {
+      file = decodeURIComponent(frag).trim();
+    } catch {
+      file = frag.trim(); // a malformed %-escape reads literally
+    }
+  }
 
   /** @type {{w:number,h:number}|null} */
   let tile = null;
@@ -108,6 +126,8 @@ export function parseBootParams(search, { sampleNames = [] } = {}) {
     fill,
     sampleIndex,
     sampleExplicit: q != null,
+    /** @type {string|null} the ?file=/#fragment saved-doc name request */
+    file: file || null,
     // ?fresh=1: boot with storage ignored — no desktop-state restore, no
     // last-doc restore, no saved-doc icons, no state writes. Deterministic
     // captures on a machine with saved docs.

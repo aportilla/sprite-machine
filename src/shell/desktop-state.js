@@ -8,7 +8,10 @@
 // which document was active, per-icon position, and the Show Grid toggle.
 //
 // Restore happens at boot before first paint (main.js reads `saved`;
-// windows.js/icons.js apply geometry, main.js reopens the docs); writes are
+// windows.js/icons.js apply geometry). The `docs` entries are NOT reopened
+// at boot — what a load shows is the URL's call (?file=<name>, else the New
+// Document dialog; main.js) — they hand a saved doc its remembered window
+// geometry + edited face whenever it IS opened. Writes are
 // snapshot-on-exit plus a debounce on any store change or desktop gesture —
 // snapshotting is cheap and loses nothing that matters. `?fresh=1` disables
 // BOTH directions, so a capture neither reads nor clobbers a real session's

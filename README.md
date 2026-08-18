@@ -52,8 +52,19 @@ grammar. See [The desktop](#the-desktop).
 The first-ever boot **seeds two starter documents** (Car, Cube) into the
 library as perfectly ordinary saved files — edit, rename or delete them like
 anything you saved yourself; they're created once and never come back (any
-persisted state, even an emptied desktop, suppresses the seeding). The same
-built-ins live on as **templates in File → New…**, which opens the New
+persisted state, even an emptied desktop, suppresses the seeding). Every
+load **boots to the New Document dialog** — unless the URL names a saved
+document (**`?file=Cube`**, or the bare fragment **`#Cube`**;
+case-insensitive, most-recently-modified on a name collision), which opens
+that library file directly, its window landing on any remembered geometry
+and edited face. A prior session's open windows deliberately don't reopen —
+the URL, not localStorage, says what a load shows (the desktop layout
+itself still restores). And the URL keeps itself true: opening, saving or
+switching to a saved document **mirrors its name into the fragment**
+(`#Cube`, via `replaceState` — no history spam; an untitled document or the
+bare desktop clears it, and any `?file=` is canonicalized away), so a plain
+browser reload restores exactly what's on screen. The same
+built-ins live on as **templates in File → New…**, the same New
 Document dialog: an Empty Document at a chosen tile size, or a template as a
 fresh untitled copy. **Double-click a desktop icon**, pick File → Open…, or
 drop your own **3×2 sprite sheet** PNG anywhere on the window. **Smooth slopes** (low-poly additive 45° wedges) is
@@ -325,13 +336,14 @@ result — the
 stepper, face picker, dialog, swatch pick, hover preview, rect drag, and fill click
 can't be driven headlessly. Two shell-era params round the set out:
 `?fresh=1` boots with **storage ignored** (no desktop-state restore, no
-last-doc reopen, no saved-doc icons — a bare desktop now, every icon being a
-saved doc — no first-boot seeding, and no state writes — deterministic
+`?file` resolution, no saved-doc icons — a bare desktop now, every icon
+being a saved doc — no first-boot seeding, no New Document dialog, and no
+state writes — deterministic
 captures on a machine with saved docs) and `?hide=<window>[,<window>]`
 (`document|tools|sprite|stage`) hides windows a capture needs out of frame.
 `?sample` shares the storage-untouched discipline: it opens the named
-built-in as an untitled from in-memory data, skipping both the session
-restore and the seeding (the deterministic boot `drive.mjs` drives).
+built-in as an untitled from in-memory data, skipping the seeding and the
+`?file`/dialog boot alike (the deterministic path `drive.mjs` drives).
 
 ---
 
@@ -561,8 +573,10 @@ into the library at the first-ever boot** (`seedDefaultDocs` in
 `loaders.js`, through the same save path as ⌘S — real PNG bytes, chunks,
 generated icon) and are ordinary mutable documents from then on; the
 seeding runs only when NO prior state persists (no desktop-state blob AND
-an empty library — deleting or emptying later never resurrects them), and
-that virgin boot opens the stored Car as its document. Double-click opens
+an empty library — deleting or emptying later never resurrects them); the
+virgin boot then greets like any other — the New Document dialog, unless
+`?file` names a doc (the just-seeded Car and Cube are already nameable).
+Double-click opens
 (into the existing window if one is open),
 selecting an icon deactivates the application (a press in the icon layer is
 a press on the Finder) and arms the desktop-focused File → Open, and every
@@ -587,10 +601,16 @@ unrounded-fraction truth cache, the same no-clamp reversibility, so a
 shrink-then-grow round-trips every icon exactly home. Windoid/icon
 layout, Show Grid, and the open SAVED documents (each window's geometry +
 edited face, and which was active) persist in one versioned localStorage
-key (`shell/desktop-state.js`, v2 — a v1 blob migrates shallowly), restored
-at boot and snapshotted on change/exit; untitled windows deliberately don't
-survive a reload (no autosave — explicit Save is the contract). The
-documents themselves live in IndexedDB.
+key (`shell/desktop-state.js`, v2 — a v1 blob migrates shallowly),
+snapshotted on change/exit. Layout and Show Grid restore at boot; the
+per-document entries are deliberately NOT reopened then — what a load
+shows is the URL's call (`?file=<name>`, else the New Document dialog;
+and the address bar tracks the active saved document as `#<name>` —
+`shell/url-state.js` — so a plain reload restores it) —
+they hand a saved doc its remembered window geometry + edited face
+whenever it IS opened. Untitled windows don't
+survive a reload either way (no autosave — explicit Save is the contract).
+The documents themselves live in IndexedDB.
 
 ---
 
@@ -826,10 +846,12 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   selection feeds the shell slice for the desktop-focused File → Open)
   desktop-state.js  windoid/icon layout + Show Grid + the open saved docs (geometry, face, active)
                   in one versioned localStorage key (v2; v1 migrates)
+  url-state.js    the address-bar mirror: the ACTIVE saved document's name -> location.hash
+                  (#Cube, replaceState; cleared for untitled/none) so a reload restores it
 src/
   main.js         the composition root: parse params -> seed stores -> fit desktop + cursor -> shell wiring
-                  -> stage + rebuilder -> boot documents (test-path sample / session restore /
-                  the one truly-virgin seed-and-open)
+                  -> stage + rebuilder -> boot documents (test-path sample / ?file=<name> /
+                  the New Document dialog, after the one truly-virgin seeding)
   boot/params.js  URL-param parsing -> one typed boot object (pure, Node-tested)
   loaders.js      every way a sheet enters (template-or-sample / file / blank at a chosen tile size):
                   decode + validateSheet -> a FRESH workspace context | build.setError; a dropped

@@ -547,7 +547,9 @@ export function initMenus(desktop, windows) {
   };
 
   return {
-    actions: { confirmDiscard, openDoc, closeContext, saveThen },
+    // showNewDialog doubles as the boot greeting: a load with no ?file=<name>
+    // to open parks at the New Document dialog (main.js).
+    actions: { confirmDiscard, openDoc, closeContext, saveThen, showNewDialog },
     dispose() {
       for (const fn of teardown) fn();
     },

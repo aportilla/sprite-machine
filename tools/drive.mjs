@@ -65,9 +65,10 @@ const URL = `http://localhost:${APP_PORT}/?sample=car&edit=front&rotate=0`;
 // The PLAIN app url — no ?sample, so the real boot path runs. On this run's
 // brand-new profile the first load is the one TRULY VIRGIN boot: it seeds the
 // built-in defaults (Car, Cube) into IndexedDB as ordinary stored documents
-// and opens the stored Car. Every ?sample boot after it skips both the
-// seeding and the session restore (the deterministic test path), so the rest
-// of the run sees exactly the two seeded docs plus whatever it saves itself.
+// and parks at the New Document dialog (no ?file=<name> in the url, so no
+// document opens). Every ?sample boot after it skips the seeding (the
+// deterministic test path), so the rest of the run sees exactly the two
+// seeded docs plus whatever it saves itself.
 const SEED_URL = `http://localhost:${APP_PORT}/?rotate=0`;
 
 if (!existsSync(CHROME)) {
@@ -537,6 +538,22 @@ async function waitForApp() {
   await evaluate(`window.__stamp = 'S'`);
 }
 
+// The plain boot (no ?sample, no ?file) opens NO document — it parks at the
+// New Document dialog, so APP_READY (an editor canvas + build stats) never
+// comes true there. This is that boot's readiness signal.
+const DIALOG_READY = `(() => {${DEEP}
+  const d = __q('#dlg-new');
+  return !!(d && d.open);
+})()`;
+async function waitForNewDialog() {
+  for (let i = 0; i < 100; i++) {
+    if (await evaluate(DIALOG_READY).catch(() => false)) break;
+    await sleep(200);
+  }
+  await sleep(400);
+  await evaluate(`window.__stamp = 'S'`);
+}
+
 async function freshPage() {
   await send('Page.navigate', { url: URL });
   await waitForApp();
@@ -597,14 +614,18 @@ async function main() {
   });
   await send('Runtime.enable');
   await send('Page.enable');
-  await waitForApp();
+  await waitForNewDialog();
 
-  // --- virgin boot: the defaults seed as ordinary documents -------------------
+  // --- virgin boot: the defaults seed, the dialog greets ----------------------
   // The run's first load is the PLAIN url on a brand-new profile — the one
   // boot allowed to seed: Car and Cube land in the library as normal stored
-  // documents (real PNGs, generated icons, `doc:` keys like any save) and
-  // the stored Car opens. A reload then finds persisted state and must NOT
-  // seed again — the session restore brings the same two docs back.
+  // documents (real PNGs, generated icons, `doc:` keys like any save), and
+  // with no ?file=<name> in the url the boot parks at the New Document
+  // dialog, no document window open. A reload then finds persisted state and
+  // must NOT seed again — and greets with the dialog again (a prior
+  // session's open windows deliberately don't reopen; the URL says what a
+  // load shows). ?file=<name> is that URL: it opens the named stored doc,
+  // case-insensitively.
   section('virgin boot seeds the defaults');
   const seedProbe = () =>
     evaluate(`(() => {${DEEP}
@@ -617,6 +638,7 @@ async function main() {
         heading: d ? d.heading : '',
         docWindows: [...document.querySelectorAll('vf-window')].filter((w) =>
           w.id.startsWith('win-doc-')).length,
+        newDialogOpen: !!__q('#dlg-new').open,
       };
     })()`);
   let seed = await seedProbe();
@@ -631,20 +653,43 @@ async function main() {
     JSON.stringify(seed.icons)
   );
   check(
-    'the stored Car opens as the boot document (its icon wears the open ghost)',
-    seed.heading === 'Car' &&
-      seed.docWindows === 1 &&
-      seed.icons.find((i) => i.label === 'Car')?.open === true,
-    JSON.stringify(seed)
+    'the boot parks at the New Document dialog — no document window',
+    seed.newDialogOpen === true && seed.docWindows === 0,
+    JSON.stringify({ open: seed.newDialogOpen, docWindows: seed.docWindows })
   );
   await sleep(600); // let the desktop-state debounce land before navigating
   await send('Page.navigate', { url: SEED_URL });
+  await waitForNewDialog();
+  seed = await seedProbe();
+  check(
+    'a plain reload does not re-seed and greets with the dialog again',
+    seed.icons.length === 2 && seed.newDialogOpen === true && seed.docWindows === 0,
+    JSON.stringify({
+      icons: seed.icons.length,
+      open: seed.newDialogOpen,
+      docWindows: seed.docWindows,
+    })
+  );
+  await send('Page.navigate', { url: `${SEED_URL}&file=cube` });
   await waitForApp();
   seed = await seedProbe();
   check(
-    'a plain reload restores the session instead of re-seeding',
-    seed.icons.length === 2 && seed.heading === 'Car',
-    JSON.stringify({ icons: seed.icons.length, heading: seed.heading })
+    '?file=cube opens the stored Cube (case-insensitive), no dialog',
+    seed.heading === 'Cube' &&
+      seed.docWindows === 1 &&
+      seed.newDialogOpen === false &&
+      seed.icons.find((i) => i.label === 'Cube')?.open === true,
+    JSON.stringify(seed)
+  );
+  // The url mirror: the open canonicalizes the address bar to the fragment
+  // form — #Cube written (replaceState), the ?file= search param dropped —
+  // so a plain reload of whatever is on screen restores it.
+  const urlMirror = () => evaluate(`({ hash: location.hash, search: location.search })`);
+  let um = await urlMirror();
+  check(
+    'the address bar canonicalizes to #Cube (?file dropped)',
+    um.hash === '#Cube' && !/[?&]file=/.test(um.search),
+    JSON.stringify(um)
   );
 
   // The rest of the run drives the deterministic ?sample boot.
@@ -1879,9 +1924,21 @@ async function main() {
   s = await probe();
   check('the save titles the document window', s.heading === 'Test Doc', s.heading);
   check('a desktop icon appears for the saved doc', s.docIcons === 3, `${s.docIcons}`);
+  um = await urlMirror();
+  check(
+    'the first save mirrors the new identity into the address bar',
+    um.hash === '#Test%20Doc',
+    JSON.stringify(um)
+  );
   await newBlankDoc();
   s = await probe();
   check('File → New… opens a blank untitled', s.heading === 'untitled', s.heading);
+  um = await urlMirror();
+  check(
+    'an untitled active document clears the fragment (nothing to restore)',
+    um.hash === '',
+    JSON.stringify(um)
+  );
   const blankTexel = await texelAt(1, 1);
   check('…with an empty canvas', blankTexel[3] === 0, `${blankTexel}`);
   const iconPos = await evaluate(
@@ -1900,6 +1957,12 @@ async function main() {
   );
   const restored = await texelAt(1, 1);
   check('…with its pixels restored from storage', restored[3] === 255, `${restored}`);
+  um = await urlMirror();
+  check(
+    '…and the address bar follows the re-opened doc',
+    um.hash === '#Test%20Doc',
+    JSON.stringify(um)
+  );
 
   // --- desktop: browser resize re-pins the windows and icons -------------------
   // A viewport change re-fits the raster and every window keeps its RELATIVE

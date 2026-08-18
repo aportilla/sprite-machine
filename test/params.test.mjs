@@ -24,6 +24,7 @@ test('defaults: everything off / null on an empty query', () => {
       fill: b.fill,
       sampleIndex: b.sampleIndex,
       sampleExplicit: b.sampleExplicit,
+      file: b.file,
       fresh: b.fresh,
       hide: b.hide,
     },
@@ -42,10 +43,27 @@ test('defaults: everything off / null on an empty query', () => {
       fill: null,
       sampleIndex: 0,
       sampleExplicit: false,
+      file: null,
       fresh: false,
       hide: [],
     }
   );
+});
+
+test('?file / #fragment: the boot document request', () => {
+  assert.equal(parseBootParams('?file=Cube').file, 'Cube');
+  assert.equal(parseBootParams('?file=My%20Car').file, 'My Car', 'decoded');
+  assert.equal(parseBootParams('', { hash: '#Cube' }).file, 'Cube');
+  assert.equal(parseBootParams('', { hash: '#My%20Car' }).file, 'My Car');
+  assert.equal(parseBootParams('?file=A', { hash: '#B' }).file, 'A', '?file wins');
+  assert.equal(
+    parseBootParams('', { hash: '#%E0%A4%A' }).file,
+    '%E0%A4%A',
+    'a malformed escape reads literally'
+  );
+  assert.equal(parseBootParams('?file=').file, null, 'empty → null');
+  assert.equal(parseBootParams('', { hash: '#' }).file, null);
+  assert.equal(parseBootParams('').file, null);
 });
 
 test('?fresh and ?hide (the desktop-shell capture hooks)', () => {

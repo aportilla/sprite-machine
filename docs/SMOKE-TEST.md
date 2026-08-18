@@ -103,17 +103,25 @@ browser, `http://localhost:5173/`.
 ## Desktop state (localStorage)
 
 - [ ] Open two saved documents, drag their windows and an icon, resize the
-      3D View, toggle Show Grid, then reload — both
-      documents reopen in their windows (the one that was active is active
-      again, each on its edited face), and the layout comes back. An
-      untitled document deliberately does NOT survive the reload.
+      3D View, toggle Show Grid, then reload — the layout comes back and
+      the ACTIVE document reopens (the address bar mirrored it as
+      `#<name>`); the other deliberately does not (one URL, one document —
+      the URL says what a load shows).
+- [ ] **The address bar follows the active document**: open/switch between
+      saved documents — the fragment tracks the active one; an untitled
+      window or the bare desktop clears it. With it cleared, a reload
+      greets with the New Document dialog (untitleds never survive).
+- [ ] **`?file=<name>` / `#<name>`**: load with `?file=cube` (or `#Cube`)
+      in the URL — the stored Cube opens directly, no dialog, its window on
+      the geometry and edited face it last had, and the bar canonicalizes
+      to `#Cube`. An unknown name falls back to the New Document dialog.
 - [ ] `?fresh=1` boots the authored default layout regardless, and doesn't
       clobber the saved one.
 - [ ] **First-boot seeding, once only**: clear the site's data (localStorage
       and IndexedDB) and reload — Car and Cube appear as ordinary saved-doc
-      icons and the stored Car opens. Rename or delete-and-redraw one, then
-      reload — the change sticks; the defaults are never re-created while
-      any state persists.
+      icons under the New Document dialog. Rename or delete-and-redraw one,
+      then reload — the change sticks; the defaults are never re-created
+      while any state persists.
 
 ## Odds and ends
 

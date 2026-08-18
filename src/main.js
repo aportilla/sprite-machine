@@ -34,6 +34,7 @@ import { initWindows } from './shell/windows.js';
 import { initMenus } from './shell/menus.js';
 import { initIcons } from './shell/icons.js';
 import { createDesktopState } from './shell/desktop-state.js';
+import { initUrlState } from './shell/url-state.js';
 import './components/sm-editor.js'; // registers <sm-editor>
 import './components/sm-color-picker.js'; // registers <sm-color-picker>
 import './components/sm-options-bar.js'; // registers <sm-options-bar>
@@ -50,6 +51,7 @@ import './components/sm-stage-controls.js'; // registers <sm-stage-controls>
 // document's <sm-draw-canvas> on its first update). See boot/params.js.
 const boot = parseBootParams(location.search, {
   sampleNames: SAMPLES.map((s) => s.name),
+  hash: location.hash,
 });
 if (boot.lowpoly != null) prefs.setLowpoly(boot.lowpoly);
 if (boot.rotate === false) prefs.setAutoRotate(false);
@@ -140,6 +142,10 @@ const stopPersist = dstate.start({
   windows,
   iconsRoot: desktop.querySelector('#desktop-icons'),
 });
+// The address bar mirrors the active SAVED document (#<name>, replaceState),
+// so a plain reload restores what's on screen; ?fresh leaves even the URL
+// untouched (a capture boot writes nothing anywhere).
+const stopUrlState = boot.fresh ? () => {} : initUrlState();
 
 // --- scene ------------------------------------------------------------------
 const stage = createStage(
@@ -182,6 +188,7 @@ if (hot) {
     menus.dispose();
     icons.dispose();
     stopPersist();
+    stopUrlState();
     window.removeEventListener('resize', fitDesktop);
     window.removeEventListener('beforeunload', onBeforeUnload);
     offScale();
@@ -190,27 +197,33 @@ if (hot) {
 }
 
 // --- boot documents ----------------------------------------------------------
-// Four boots, in precedence order:
+// The boot is URL-DRIVEN: ?file=<name> (or a bare #<name> fragment) opens
+// that SAVED document; any other load greets with the New Document dialog.
+// Three boots, in precedence order:
 //   1. TEST (?fresh or an explicit ?sample): the named sample opens as an
 //      untitled from in-memory data, storage untouched beyond a background
 //      listing refresh — these paths must not wait on an IndexedDB
 //      round-trip (which can stall the whole boot under the capture tool's
-//      virtual-time budget), and must never seed.
-//   2. STORAGE BROKEN (a private window): the same untitled sample — the
-//      library can't hold the defaults, but the app still shows something.
-//   3. TRULY VIRGIN (no persisted desktop state AND an empty library): seed
-//      the built-in defaults as ordinary stored documents (loaders.js
-//      seedDefaultDocs — a one-shot; from then on they're normal files the
-//      user may edit, rename or delete) and open the first (Car).
-//   4. A PRIOR SESSION: reopen its open SAVED documents (their windows'
-//      geometry lands via the reconciler, the active one opened last so the
-//      kit activates it). A session that quit to the bare desktop restores
-//      to the bare desktop — nothing is conjured over a deliberate quit.
+//      virtual-time budget), and must never seed. No dialog.
+//   2. TRULY VIRGIN (storage works, no persisted desktop state AND an empty
+//      library): seed the built-in defaults as ordinary stored documents
+//      (loaders.js seedDefaultDocs — a one-shot; from then on they're normal
+//      files the user may edit, rename or delete), then resolve like any
+//      other boot — ?file can name a just-seeded default.
+//   3. RESOLVE THE URL: a ?file naming a stored doc (case-insensitive; the
+//      most recently modified wins a name collision) opens it — its window
+//      landing on any remembered geometry + edited face. No param, an
+//      unknown name, a failed load, or broken storage (a private window —
+//      there's no library to name into, and everything the dialog creates
+//      is an untitled window needing none) all fall back to the New
+//      Document dialog. A prior session's open windows are deliberately NOT
+//      reopened — the URL, not localStorage, says what a load shows (the
+//      desktop layout itself still restores).
 (async () => {
-  // ?edit seeds the sample paths' context face AT open — a post-open setFace
+  // ?edit seeds the sample path's context face AT open — a post-open setFace
   // would race the one-shot mount hooks (the mount fill commits against
   // ctx.face, so a late switch files the old face's buffer under the new
-  // face). The stored paths carry no mount hooks, so setFace after is safe.
+  // face). The stored path carries no mount hooks, so setFace after is safe.
   const openBootSample = async () => {
     const ctx = await loadSample(SAMPLES[boot.sampleIndex], {
       face: boot.edit ?? undefined,
@@ -229,36 +242,32 @@ if (hot) {
   }
 
   await files.refresh();
-  if (!files.get().available) {
-    await openBootSample();
-    return;
+  if (files.get().available && !dstate.saved && files.get().list.length === 0) {
+    await seedDefaultDocs(SAMPLES);
   }
 
-  if (!dstate.saved && files.get().list.length === 0) {
-    const id = await seedDefaultDocs(SAMPLES);
-    if (!id) {
-      await openBootSample();
-      return;
+  if (boot.file && files.get().available) {
+    const q = boot.file.toLowerCase();
+    let match = null;
+    for (const r of files.get().list) {
+      if (r.name.toLowerCase() === q && (!match || r.modifiedAt > match.modifiedAt)) {
+        match = r;
+      }
     }
-    const res = await workspace.openStored(id).catch(() => null);
-    if (res && boot.edit) workspace.setFace(res.ctx.key, boot.edit);
-    return;
+    if (match) {
+      const res = await workspace.openStored(match.id).catch(() => null);
+      if (res) {
+        // ?edit beats the remembered face; either way the pick lands after
+        // the open (the stored path has no mount hooks to race).
+        const face =
+          boot.edit ??
+          dstate.saved?.docs?.find((d) => d.fileId === match.id)?.face ??
+          null;
+        if (face) workspace.setFace(res.ctx.key, face);
+        return;
+      }
+    }
   }
 
-  // The active document opens LAST — the kit activates each newcomer, so
-  // the final open ends up holding the active state.
-  const savedDocs = dstate.saved?.docs ?? [];
-  const ordered = [...savedDocs].sort(
-    (a, b) =>
-      (a.fileId === dstate.saved?.activeFileId ? 1 : 0) -
-      (b.fileId === dstate.saved?.activeFileId ? 1 : 0)
-  );
-  for (const entry of ordered) {
-    try {
-      const res = await workspace.openStored(entry.fileId);
-      if (res && entry.face) workspace.setFace(res.ctx.key, entry.face);
-    } catch {
-      // A vanished or unreadable doc costs only its window.
-    }
-  }
+  menus.actions.showNewDialog();
 })();
