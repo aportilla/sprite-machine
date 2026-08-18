@@ -2,7 +2,10 @@
 // Menu + dialog wiring for the desktop shell: vf-menu-select → store/file
 // actions, checkmark + enabled sync, and every dialog flow (About, Open, the
 // shared name prompt, Properties, the unsaved-changes alert, the
-// storage-unavailable notice). Behavior only — the markup lives in
+// storage-unavailable notice, the two parked export configurators —
+// Export 3D Model… / Export Sprite Atlas…, dummy forms whose only live
+// control is Cancel; File → Download is the real source path meanwhile).
+// Behavior only — the markup lives in
 // index.html, the aesthetics in the kit. (Settings… is parked: the render
 // toggles moved to the 3D View's controls strip, and the emptied item sits
 // disabled in the markup until it has contents again.)
@@ -72,10 +75,16 @@ export function initMenus(desktop, windows) {
   const dlgProps = $('#dlg-props');
   const dlgUnsaved = $('#dlg-unsaved');
   const dlgStorage = $('#dlg-storage');
+  const dlgExportModel = $('#dlg-export-model');
+  const dlgExportAtlas = $('#dlg-export-atlas');
 
   on($('#btn-about-ok'), 'click', () => dlgAbout.close());
   on($('#btn-storage-ok'), 'click', () => dlgStorage.close());
   on($('#btn-props-ok'), 'click', () => dlgProps.close());
+  // The export configurators are PARKED (dummy forms, Export disabled in the
+  // markup) — Cancel is each dialog's only live control.
+  on($('#btn-export-model-cancel'), 'click', () => dlgExportModel.close());
+  on($('#btn-export-atlas-cancel'), 'click', () => dlgExportAtlas.close());
 
   // The one name-prompt dialog, two uses (first save / rename): resolves the
   // committed name, or null on Cancel/Escape — the vf-close event is the
@@ -403,15 +412,23 @@ export function initMenus(desktop, windows) {
         });
         break;
       }
-      case 'export': {
+      case 'download': {
+        // The SOURCE path: the document .png verbatim — the downloaded atlas
+        // IS the document format, so this is Download, not an export.
         const ctx = active();
         if (!ctx) break;
         workspace
           .exportOf(ctx.key)
           .then(({ bytes, name }) => downloadPngBytes(bytes, docFilename(name)))
-          .catch((err) => build.setError(`Export failed: ${err.message}`));
+          .catch((err) => build.setError(`Download failed: ${err.message}`));
         break;
       }
+      case 'export-model':
+        dlgExportModel.show();
+        break;
+      case 'export-atlas':
+        dlgExportAtlas.show();
+        break;
       case 'properties':
         dlgProps.show();
         syncProps();
@@ -482,7 +499,9 @@ export function initMenus(desktop, windows) {
     'save',
     'duplicate',
     'rename',
-    'export',
+    'download',
+    'export-model',
+    'export-atlas',
     'properties',
     'pick-color',
     'tool-pencil',

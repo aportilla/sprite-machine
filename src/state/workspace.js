@@ -276,7 +276,7 @@ export function createWorkspace(deps = {}) {
       if (moved) touch();
     },
 
-    /** The bytes File → Export downloads for a context. */
+    /** The bytes File → Download saves for a context. */
     async exportOf(key) {
       const ctx = byKey(key);
       if (!ctx) return null;

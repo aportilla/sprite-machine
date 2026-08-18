@@ -42,7 +42,13 @@
           <vf-menu-item value="duplicate" shortcut="⌘D">Duplicate</vf-menu-item>
           <vf-menu-item value="rename">Rename…</vf-menu-item>
           <vf-separator></vf-separator>
-          <vf-menu-item value="export" shortcut="⇧⌘E">Export…</vf-menu-item>
+          <!-- Download is the SOURCE path (the document .png verbatim — no
+               dialog, so no ellipsis); the two Export items derive OTHER
+               artifacts and raise their configurators (parked — see the
+               export dialogs below). -->
+          <vf-menu-item value="download" shortcut="⇧⌘E">Download</vf-menu-item>
+          <vf-menu-item value="export-model">Export 3D Model…</vf-menu-item>
+          <vf-menu-item value="export-atlas">Export Sprite Atlas…</vf-menu-item>
           <vf-separator></vf-separator>
           <vf-menu-item value="properties">Properties…</vf-menu-item>
         </vf-menu>
@@ -274,11 +280,121 @@
         <vf-stack width="332" gap="10">
           <vf-paragraph>
             Documents can’t be saved in this browser session (storage is unavailable — a
-            private window, perhaps). Everything else works; use File → Export to keep
+            private window, perhaps). Everything else works; use File → Download to keep
             your work as a .png.
           </vf-paragraph>
         </vf-stack>
         <vf-button id="btn-storage-ok" slot="buttons" variant="default">OK</vf-button>
+      </vf-dialog>
+
+      <!-- The two export configurators (PARKED): non-functional previews of
+           the future exporters — every form field disabled, the default
+           Export button inert — so the menu grammar can stand before the
+           exporters exist. Cancel (and the close box) is the only live
+           control in each. Unlike Download (the document .png verbatim —
+           the source), these will DERIVE artifacts from the built model. -->
+      <vf-dialog
+        id="dlg-export-model"
+        heading="Export 3D Model"
+        closable
+        width="360"
+        height="190"
+      >
+        <vf-stack width="312" gap="12">
+          <vf-stack fill-width direction="row" gap="8" place="start">
+            <vf-stack pad="4 0 0">
+              <vf-label width="80" for="model-format">Format:</vf-label>
+            </vf-stack>
+            <vf-select id="model-format" value="glb" disabled>
+              <vf-option value="glb" selected>glTF Binary (.glb)</vf-option>
+              <vf-option value="gltf">glTF (.gltf)</vf-option>
+              <vf-option value="obj">Wavefront (.obj)</vf-option>
+            </vf-select>
+          </vf-stack>
+          <vf-stack fill-width direction="row" gap="8" place="start">
+            <vf-stack pad="4 0 0">
+              <vf-label width="80" for="model-scale">Scale:</vf-label>
+            </vf-stack>
+            <vf-number-field
+              id="model-scale"
+              min="1"
+              max="100"
+              step="1"
+              value="1"
+              disabled
+            ></vf-number-field>
+            <vf-stack pad="4 0 0">
+              <vf-label>units per voxel</vf-label>
+            </vf-stack>
+          </vf-stack>
+        </vf-stack>
+        <vf-button id="btn-export-model-cancel" slot="buttons">Cancel</vf-button>
+        <vf-button id="btn-export-model-ok" slot="buttons" variant="default" disabled>
+          Export
+        </vf-button>
+      </vf-dialog>
+
+      <!-- Export Sprite Atlas: an atlas of orthographic renders of the 3D
+           model stepped around it — a configurable view count (the angle
+           step), the camera's elevation, and the first view's offset angle,
+           for whatever spin set a target engine wants. -->
+      <vf-dialog
+        id="dlg-export-atlas"
+        heading="Export Sprite Atlas"
+        closable
+        width="360"
+        height="230"
+      >
+        <vf-stack width="312" gap="12">
+          <vf-stack fill-width direction="row" gap="8" place="start">
+            <vf-stack pad="4 0 0">
+              <vf-label width="80" for="atlas-views">Views:</vf-label>
+            </vf-stack>
+            <vf-select id="atlas-views" value="8" disabled>
+              <vf-option value="4">4 (90° step)</vf-option>
+              <vf-option value="6">6 (60° step)</vf-option>
+              <vf-option value="8" selected>8 (45° step)</vf-option>
+              <vf-option value="12">12 (30° step)</vf-option>
+              <vf-option value="16">16 (22.5° step)</vf-option>
+            </vf-select>
+          </vf-stack>
+          <vf-stack fill-width direction="row" gap="8" place="start">
+            <vf-stack pad="4 0 0">
+              <vf-label width="80" for="atlas-elevation">Elevation:</vf-label>
+            </vf-stack>
+            <vf-number-field
+              id="atlas-elevation"
+              min="0"
+              max="90"
+              step="1"
+              value="30"
+              disabled
+            ></vf-number-field>
+            <vf-stack pad="4 0 0">
+              <vf-label>° above horizon</vf-label>
+            </vf-stack>
+          </vf-stack>
+          <vf-stack fill-width direction="row" gap="8" place="start">
+            <vf-stack pad="4 0 0">
+              <vf-label width="80" for="atlas-offset">First angle:</vf-label>
+            </vf-stack>
+            <vf-number-field
+              id="atlas-offset"
+              min="0"
+              max="359"
+              step="1"
+              value="0"
+              disabled
+            ></vf-number-field>
+            <vf-stack pad="4 0 0">
+              <vf-label>° from front</vf-label>
+            </vf-stack>
+          </vf-stack>
+        </vf-stack>
+        <vf-button id="btn-export-atlas-cancel" slot="buttons">Cancel</vf-button>
+        <vf-button id="btn-export-atlas-ok" slot="buttons" variant="default" disabled>
+          Export
+        </vf-button>
       </vf-dialog>
 
       <!-- The Colors dialog (the 168-color picker): connected chrome driven by

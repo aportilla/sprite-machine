@@ -263,7 +263,7 @@ template — see [UI layer: Lit](#ui-layer-lit).
   only once you actually change a pixel — switching away and back leaves it derived,
   and erasing it fully reverts it to derived.
 - **Live + canonical** — edits write straight back into the current sheet, so
-  File → Save persists exactly what you see, File → Export downloads it (see
+  File → Save persists exactly what you see, File → Download downloads it (see
   [Documents](#documents-a-document-is-a-png)), the **Full Sprite View**
   tracks every stroke at frame rate, and the model rebuilds (rAF-debounced)
   with no camera jump.
@@ -404,9 +404,16 @@ strip's clamp bounds, and the Undo/Redo enablement.
   desktop focused it acts on the selected icon, Finder-style), _Close_
   (the active document, dirty-checked), _Save_ ⌘S (first save of an untitled
   doc prompts for a name), _Duplicate_ ⌘D (the stored copy opens in its own
-  window), _Rename…_, _Export…_ ⇧⌘E (downloads the document `.png`
-  verbatim), and _Properties…_ (name, atlas dims, the tile-size stepper —
-  all of the active document).
+  window), _Rename…_, _Download_ ⇧⌘E (the document `.png` verbatim — the
+  downloaded atlas IS the source format, hence Download rather than Export,
+  and no ellipsis: it acts immediately), _Export 3D Model…_ and _Export
+  Sprite Atlas…_ (the two **parked export configurators** — dialogs
+  previewing the future exporters with every form field disabled and the
+  Export button inert, Cancel the only live control: a model-format form,
+  and the sprite-atlas form — view count / angle step, camera elevation,
+  first-angle offset — for rendering the 3D model into an atlas of
+  orthographic views for a target engine), and _Properties…_ (name, atlas
+  dims, the tile-size stepper — all of the active document).
 - **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (the ACTIVE document's history;
   disabled until it has something — which also hands the key back to a
   focused field's native undo), _Pick Color…_ ⌘K (the 168-color dialog —
@@ -525,9 +532,9 @@ A document is exactly one sprite `.png` — the 3×2 atlas — with all metadata
 in standard PNG text chunks (`lib/png-chunks.js`): `Title`, `Creation Time`,
 `Software`, and `sprite-machine:transforms` (written only when
 non-identity). The pixels alone are already a complete document (tile size
-derives from the dimensions), so **Save, Export and drop-import converge on
-a single format**: File → Export downloads the saved bytes verbatim,
-dropping any exported PNG back restores it losslessly (title included — the
+derives from the dimensions), so **Save, Download and drop-import converge on
+a single format**: File → Download downloads the saved bytes verbatim,
+dropping any downloaded PNG back restores it losslessly (title included — the
 drop path reads the chunks), and any foreign 3×2 sheet is a legal, if
 anonymous, document. A chunk-stripping optimizer costs the name and
 timestamps only.
@@ -979,5 +986,10 @@ only when the tile's IDENTITY actually changes.
 - **Autosave** — a deliberate non-goal: explicit Save is the contract, with
   the `beforeunload` guard (any dirty open document) as the net; untitled
   windows don't survive a reload for the same reason.
-- **Export** — the merged mesh is glTF-ready (`GLTFExporter`) for use in other
-  engines / animation.
+- **Export** — the two File → Export items (3D Model, Sprite Atlas) are
+  parked configurator dialogs, forms only: the merged mesh is glTF-ready
+  (`GLTFExporter`) for the model exporter, and the sprite-atlas exporter
+  will render the model orthographically at a stepped ring of angles (the
+  dialog's view count / elevation / first-angle offset) into one atlas
+  image for engines that consume pre-rendered rotation sets. File →
+  Download stays the source path (the document `.png` verbatim).

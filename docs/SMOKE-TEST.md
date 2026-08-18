@@ -91,9 +91,12 @@ browser, `http://localhost:5173/`.
 - [ ] **Rename…** (menu) and **in-place icon rename** (select icon, press
       Return) land the same name everywhere: icon label, window title, Open
       dialog — including a window that's open while its icon is renamed.
-- [ ] **Export round-trip**: File → Export downloads `«name».png`; drop the
-      file back onto the desktop — a NEW window opens with pixels AND title
-      restored (the metadata lives in the PNG's text chunks).
+- [ ] **Download round-trip**: File → Download downloads `«name».png`; drop
+      the file back onto the desktop — a NEW window opens with pixels AND
+      title restored (the metadata lives in the PNG's text chunks).
+- [ ] **Parked export dialogs**: File → Export 3D Model… and File → Export
+      Sprite Atlas… each raise their configurator with every form field
+      disabled and Export inert; Cancel (or the close box) dismisses.
 - [ ] **beforeunload guard**: with unsaved changes in ANY open document,
       reload the tab — the browser warns.
 

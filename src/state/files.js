@@ -207,9 +207,9 @@ export function createFiles(deps = null) {
     },
 
     /**
-     * The bytes File → Export downloads: the SAVED bytes verbatim for a
-     * clean saved doc (an exported file IS the document); a fresh encode for
-     * an untitled or dirty one.
+     * The bytes File → Download saves: the SAVED bytes verbatim for a
+     * clean saved doc (a downloaded file IS the document); a fresh encode
+     * for an untitled or dirty one.
      * @param {ReturnType<typeof import('./doc.js').createDoc>} doc
      * @param {{fileId?: string|null, name?: string, dirty?: boolean}} identity
      * @returns {Promise<{bytes: Uint8Array, name: string}>}
