@@ -62,6 +62,13 @@ const CHROME =
   process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const ROOT = '/tmp/cr-cap'; // shared with capture.sh so its `clean` reaps us too
 const URL = `http://localhost:${APP_PORT}/?sample=car&edit=front&rotate=0`;
+// The PLAIN app url — no ?sample, so the real boot path runs. On this run's
+// brand-new profile the first load is the one TRULY VIRGIN boot: it seeds the
+// built-in defaults (Car, Cube) into IndexedDB as ordinary stored documents
+// and opens the stored Car. Every ?sample boot after it skips both the
+// seeding and the session restore (the deterministic test path), so the rest
+// of the run sees exactly the two seeded docs plus whatever it saves itself.
+const SEED_URL = `http://localhost:${APP_PORT}/?rotate=0`;
 
 if (!existsSync(CHROME)) {
   console.error(`Chrome not found at: ${CHROME} (set $CHROME)`);
@@ -546,7 +553,7 @@ async function main() {
     }
   }
   const target = await fetch(
-    `http://127.0.0.1:${DBG_PORT}/json/new?${encodeURIComponent(URL)}`,
+    `http://127.0.0.1:${DBG_PORT}/json/new?${encodeURIComponent(SEED_URL)}`,
     { method: 'PUT' }
   ).then((r) => r.json());
 
@@ -592,6 +599,57 @@ async function main() {
   await send('Page.enable');
   await waitForApp();
 
+  // --- virgin boot: the defaults seed as ordinary documents -------------------
+  // The run's first load is the PLAIN url on a brand-new profile — the one
+  // boot allowed to seed: Car and Cube land in the library as normal stored
+  // documents (real PNGs, generated icons, `doc:` keys like any save) and
+  // the stored Car opens. A reload then finds persisted state and must NOT
+  // seed again — the session restore brings the same two docs back.
+  section('virgin boot seeds the defaults');
+  const seedProbe = () =>
+    evaluate(`(() => {${DEEP}
+      const icons = __qa('vf-icon[data-key]').map((i) => ({
+        key: i.dataset.key, label: i.label, open: !!i.open,
+      }));
+      const d = __doc();
+      return {
+        icons,
+        heading: d ? d.heading : '',
+        docWindows: [...document.querySelectorAll('vf-window')].filter((w) =>
+          w.id.startsWith('win-doc-')).length,
+      };
+    })()`);
+  let seed = await seedProbe();
+  check(
+    'the first-ever boot seeds Car and Cube as saved-doc icons',
+    seed.icons.length === 2 &&
+      seed.icons.every((i) => i.key.startsWith('doc:')) &&
+      seed.icons
+        .map((i) => i.label)
+        .sort()
+        .join(',') === 'Car,Cube',
+    JSON.stringify(seed.icons)
+  );
+  check(
+    'the stored Car opens as the boot document (its icon wears the open ghost)',
+    seed.heading === 'Car' &&
+      seed.docWindows === 1 &&
+      seed.icons.find((i) => i.label === 'Car')?.open === true,
+    JSON.stringify(seed)
+  );
+  await sleep(600); // let the desktop-state debounce land before navigating
+  await send('Page.navigate', { url: SEED_URL });
+  await waitForApp();
+  seed = await seedProbe();
+  check(
+    'a plain reload restores the session instead of re-seeding',
+    seed.icons.length === 2 && seed.heading === 'Car',
+    JSON.stringify({ icons: seed.icons.length, heading: seed.heading })
+  );
+
+  // The rest of the run drives the deterministic ?sample boot.
+  await freshPage();
+
   let s = await probe();
   const TILE = s.tileW;
   const at = (px, py) => texelPos(s.rect, TILE, px, py);
@@ -606,6 +664,15 @@ async function main() {
     await sleep(250);
     const it = await centreOf(`vf-menu-item[value="${itemValue}"]`);
     await click(it.x, it.y);
+    await sleep(650);
+  }
+
+  // File → New… raises the New Document dialog now; OK it at its default
+  // (Empty Document, 40px tiles) for the sections that just need a blank.
+  async function newBlankDoc() {
+    await pickMenu('#menu-file', 'new');
+    const ok = await centreOf('#btn-new-ok');
+    await click(ok.x, ok.y);
     await sleep(650);
   }
 
@@ -1505,8 +1572,13 @@ async function main() {
   s = await probe();
   check('…the bare-letter tool keys are inert', s.drawTool === 'pencil', s.drawTool);
   // Selecting a desktop icon is still working in the Finder: Open comes
-  // alive, aimed at the selection.
-  const carIcon = await centreOf('vf-icon[data-key="sample:Car"]');
+  // alive, aimed at the selection. (Every icon is a saved doc now — the
+  // seeded Car's key is a random id, so find it by label.)
+  const carIcon = await evaluate(`(() => {${DEEP}
+    const i = __qa('vf-icon[data-key]').find((el) => el.label === 'Car');
+    const r = i.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  })()`);
   await click(carIcon.x, carIcon.y);
   await sleep(300);
   s = await probe();
@@ -1565,10 +1637,10 @@ async function main() {
     s.docWindows === 1 && s.heading === 'Car',
     `${s.docWindows} windows, "${s.heading}"`
   );
-  await pickMenu('#menu-file', 'new');
+  await newBlankDoc();
   s = await probe();
   check(
-    'File → New opens a SECOND window, active and untitled',
+    'File → New… (dialog OK) opens a SECOND window, active and untitled',
     s.docWindows === 2 && s.docActive && s.heading === 'untitled',
     `${s.docWindows} windows, "${s.heading}"`
   );
@@ -1651,7 +1723,7 @@ async function main() {
   // The quit cascade: a fresh dirty untitled, then Quit — Cancel aborts the
   // whole walk; a second Quit with Don't Save closes everything (the clean
   // Car goes silently) and leaves the bare desktop focused.
-  await pickMenu('#menu-file', 'new');
+  await newBlankDoc();
   s = await probe();
   const at3 = (px, py) => texelPos(s.rect, s.tileW, px, py);
   await keyPress('b');
@@ -1686,14 +1758,109 @@ async function main() {
     JSON.stringify({ docWindows: s.docWindows, windows: s.windows })
   );
 
+  // --- desktop: the New Document dialog ---------------------------------------
+  // File → New… raises the template dialog: Empty Document plus the built-ins
+  // (the same SAMPLES that seeded the library), over a tile-size field that
+  // is live for Empty Document only — a template's art has a NATIVE tile
+  // size (a retile crops/pads rather than scales), so its row locks the
+  // field at it. Create — or double-clicking a row — opens a fresh untitled
+  // window.
+  section('the New Document dialog');
+  await freshPage();
+  await pickMenu('#menu-file', 'new');
+  const newForm = () =>
+    evaluate(`(() => {${DEEP}
+      return {
+        open: !!__q('#dlg-new').open,
+        rows: [...__q('#new-list').querySelectorAll('vf-list-item')].map((r) =>
+          r.textContent.trim()),
+        value: __q('#new-list').value,
+        tile: String(__q('#new-tile').value),
+        tileDisabled: !!__q('#new-tile').disabled,
+        dims: __q('#new-dims').textContent.trim(),
+      };
+    })()`);
+  let nf = await newForm();
+  check('File → New… raises the New Document dialog', nf.open === true);
+  check(
+    'it lists Empty Document plus the built-in templates',
+    nf.rows.join(',') === 'Empty Document,Car,Cube',
+    JSON.stringify(nf.rows)
+  );
+  check(
+    'Empty Document is preselected: 40px tiles, field live, dims 120 × 80',
+    nf.value === 'blank' &&
+      nf.tile === '40' &&
+      !nf.tileDisabled &&
+      nf.dims === 'atlas 120 × 80 px',
+    JSON.stringify(nf)
+  );
+  // Rows are found by TEXT: vf-list-item's `value` is a property (only
+  // `selected` reflects), so an attribute selector can't reach it.
+  const newRowCentre = (text) =>
+    evaluate(`(() => {${DEEP}
+      const i = [...__q('#new-list').querySelectorAll('vf-list-item')]
+        .find((r) => r.textContent.trim() === '${text}');
+      const r = i.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    })()`);
+  const cubeRow = await newRowCentre('Cube');
+  await click(cubeRow.x, cubeRow.y);
+  await sleep(250);
+  nf = await newForm();
+  check(
+    'a template row locks the tile field at its native size',
+    nf.tileDisabled && nf.tile === '8' && nf.dims === 'atlas 24 × 16 px',
+    JSON.stringify(nf)
+  );
+  const emptyRow = await newRowCentre('Empty Document');
+  await click(emptyRow.x, emptyRow.y);
+  await sleep(250);
+  nf = await newForm();
+  check('returning to Empty Document re-enables the field', !nf.tileDisabled);
+  // Type a custom size, then Create: clicking the button blurs the field,
+  // which commits the typed value (the native change) before the click lands.
+  await evaluate(
+    `(() => {${DEEP} const f = __q('#new-tile'); f.value = '';
+      f.shadowRoot.querySelector('input').focus(); })()`
+  );
+  await typeText('12');
+  const createBtn = await centreOf('#btn-new-ok');
+  await click(createBtn.x, createBtn.y);
+  await sleep(650);
+  s = await probe();
+  check(
+    'Create opens a fresh untitled at the chosen tile size',
+    s.heading === 'untitled' &&
+      s.docWindows === 2 &&
+      s.tileW === 12 &&
+      s.anyModalOpen === false,
+    JSON.stringify({ heading: s.heading, docWindows: s.docWindows, tileW: s.tileW })
+  );
+  await pickMenu('#menu-file', 'new');
+  const carRow = await newRowCentre('Car');
+  await dblclick(carRow.x, carRow.y);
+  await sleep(900);
+  s = await probe();
+  check(
+    'double-clicking the Car template opens a fresh untitled copy of it',
+    s.heading === 'Car' && s.docWindows === 3 && s.voxels > 100,
+    JSON.stringify({ heading: s.heading, docWindows: s.docWindows, voxels: s.voxels })
+  );
+
   // --- desktop: save / open round-trip ---------------------------------------
   // The full persistence loop on real input: draw → ⌘S → name it → File → New
   // → double-click the saved doc's icon → the pixels come back. (IndexedDB is
-  // fully available to headless Chrome; each run's profile starts empty.)
+  // fully available to headless Chrome; this run's profile carries exactly
+  // the two docs the virgin-boot section seeded.)
   section('save / open round-trip');
   await freshPage();
   s = await probe();
-  check('a fresh profile has no saved-doc icons', s.docIcons === 0, `${s.docIcons}`);
+  check(
+    'the library still holds only the two seeded docs',
+    s.docIcons === 2,
+    `${s.docIcons}`
+  );
   await keyPress('b');
   await click(at(1, 1).x, at(1, 1).y);
   await sleep(400);
@@ -1711,15 +1878,15 @@ async function main() {
   await sleep(900);
   s = await probe();
   check('the save titles the document window', s.heading === 'Test Doc', s.heading);
-  check('a desktop icon appears for the saved doc', s.docIcons === 1, `${s.docIcons}`);
-  await pickMenu('#menu-file', 'new');
+  check('a desktop icon appears for the saved doc', s.docIcons === 3, `${s.docIcons}`);
+  await newBlankDoc();
   s = await probe();
-  check('File → New opens a blank untitled', s.heading === 'untitled', s.heading);
+  check('File → New… opens a blank untitled', s.heading === 'untitled', s.heading);
   const blankTexel = await texelAt(1, 1);
   check('…with an empty canvas', blankTexel[3] === 0, `${blankTexel}`);
   const iconPos = await evaluate(
     `(() => {${DEEP}
-      const i = __qa('vf-icon').find((el) => (el.dataset.key || '').startsWith('doc:'));
+      const i = __qa('vf-icon').find((el) => el.label === 'Test Doc');
       const r = i.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + 20 }; })()`
   );

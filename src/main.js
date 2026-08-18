@@ -20,7 +20,7 @@ import { workspace } from './state/workspace.js';
 import { parseBootParams } from './boot/params.js';
 import { createStage } from './scene/stage.js';
 import { initRebuilder } from './scene/rebuilder.js';
-import { loadSample } from './loaders.js';
+import { loadSample, seedDefaultDocs } from './loaders.js';
 import { initDropTarget } from './drop-target.js';
 import { initShortcuts } from './shortcuts.js';
 import { createStorageIfAvailable } from './storage/db.js';
@@ -190,52 +190,75 @@ if (hot) {
 }
 
 // --- boot documents ----------------------------------------------------------
-// An explicit ?sample beats everything (the deterministic test path); else
-// the previous session's open SAVED documents restore (their windows'
-// geometry lands via the reconciler, the active one opened last so the kit
-// activates it); else the default sample as an untitled. Only the restore
-// path BLOCKS on storage — the sample path must not wait on an IndexedDB
-// round-trip (which can stall the whole boot under the capture tool's
-// virtual-time budget), so its listing refresh runs in the background.
+// Four boots, in precedence order:
+//   1. TEST (?fresh or an explicit ?sample): the named sample opens as an
+//      untitled from in-memory data, storage untouched beyond a background
+//      listing refresh — these paths must not wait on an IndexedDB
+//      round-trip (which can stall the whole boot under the capture tool's
+//      virtual-time budget), and must never seed.
+//   2. STORAGE BROKEN (a private window): the same untitled sample — the
+//      library can't hold the defaults, but the app still shows something.
+//   3. TRULY VIRGIN (no persisted desktop state AND an empty library): seed
+//      the built-in defaults as ordinary stored documents (loaders.js
+//      seedDefaultDocs — a one-shot; from then on they're normal files the
+//      user may edit, rename or delete) and open the first (Car).
+//   4. A PRIOR SESSION: reopen its open SAVED documents (their windows'
+//      geometry lands via the reconciler, the active one opened last so the
+//      kit activates it). A session that quit to the bare desktop restores
+//      to the bare desktop — nothing is conjured over a deliberate quit.
 (async () => {
-  const savedDocs = dstate.saved?.docs ?? [];
-  const wantRestore = !boot.fresh && !boot.sampleExplicit && savedDocs.length > 0;
-  if (wantRestore) {
-    await files.refresh();
-    if (files.get().available) {
-      // The active document opens LAST — the kit activates each newcomer,
-      // so the final open ends up holding the active state.
-      const ordered = [...savedDocs].sort(
-        (a, b) =>
-          (a.fileId === dstate.saved.activeFileId ? 1 : 0) -
-          (b.fileId === dstate.saved.activeFileId ? 1 : 0)
-      );
-      let opened = 0;
-      for (const entry of ordered) {
-        try {
-          const res = await workspace.openStored(entry.fileId);
-          if (res && entry.face) workspace.setFace(res.ctx.key, entry.face);
-          if (res) opened++;
-        } catch {
-          // A vanished or unreadable doc costs only its window.
-        }
-      }
-      if (opened > 0) return;
-    }
-  } else {
-    files.refresh();
-  }
-  // ?edit seeds the context's face AT open — a post-open setFace would race
-  // the one-shot mount hooks (the mount fill commits against ctx.face, so a
-  // late switch files the old face's buffer under the new face).
-  const ctx = await loadSample(SAMPLES[boot.sampleIndex], {
-    face: boot.edit ?? undefined,
-    hooks: bootHooks,
-  });
-  if (ctx) {
+  // ?edit seeds the sample paths' context face AT open — a post-open setFace
+  // would race the one-shot mount hooks (the mount fill commits against
+  // ctx.face, so a late switch files the old face's buffer under the new
+  // face). The stored paths carry no mount hooks, so setFace after is safe.
+  const openBootSample = async () => {
+    const ctx = await loadSample(SAMPLES[boot.sampleIndex], {
+      face: boot.edit ?? undefined,
+      hooks: bootHooks,
+    });
     // Dev hooks that need the loaded sheet: ?tile / ?tile=WxH resizes the
     // fresh sheet once (the capture tool can't click the stepper); the
     // editor re-derives at the new size.
-    if (boot.tile) ctx.doc.resizeTiles(boot.tile.w, boot.tile.h);
+    if (ctx && boot.tile) ctx.doc.resizeTiles(boot.tile.w, boot.tile.h);
+  };
+
+  if (boot.fresh || boot.sampleExplicit) {
+    if (!boot.fresh) files.refresh();
+    await openBootSample();
+    return;
+  }
+
+  await files.refresh();
+  if (!files.get().available) {
+    await openBootSample();
+    return;
+  }
+
+  if (!dstate.saved && files.get().list.length === 0) {
+    const id = await seedDefaultDocs(SAMPLES);
+    if (!id) {
+      await openBootSample();
+      return;
+    }
+    const res = await workspace.openStored(id).catch(() => null);
+    if (res && boot.edit) workspace.setFace(res.ctx.key, boot.edit);
+    return;
+  }
+
+  // The active document opens LAST — the kit activates each newcomer, so
+  // the final open ends up holding the active state.
+  const savedDocs = dstate.saved?.docs ?? [];
+  const ordered = [...savedDocs].sort(
+    (a, b) =>
+      (a.fileId === dstate.saved?.activeFileId ? 1 : 0) -
+      (b.fileId === dstate.saved?.activeFileId ? 1 : 0)
+  );
+  for (const entry of ordered) {
+    try {
+      const res = await workspace.openStored(entry.fileId);
+      if (res && entry.face) workspace.setFace(res.ctx.key, entry.face);
+    } catch {
+      // A vanished or unreadable doc costs only its window.
+    }
   }
 })();

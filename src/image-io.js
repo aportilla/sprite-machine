@@ -64,8 +64,9 @@ export const downloadPngBytes = (bytes, filename) =>
 // --- desktop icon art --------------------------------------------------------
 // A document's desktop icon is generated from the document itself: the FRONT
 // tile, trimmed to its content's tight bounding box, drawn nearest-neighbor
-// into a 32×32 canvas → data URI (regenerated on every save; sample icons get
-// the same treatment once at boot). The trim means the art fills the icon
+// into a 32×32 canvas → data URI (regenerated on every save — the seeded
+// defaults get theirs the same way, since seeding IS a save). The trim
+// means the art fills the icon
 // however small it sits in its tile; a fully transparent tile returns null,
 // falling through to the generic document glyph at every call site. The art
 // scales to fit exactly — its larger axis spans the full icon — with smoothing

@@ -14,12 +14,18 @@
 // `sprite-machine:transforms` chunk its per-view reorientation — the lossless
 // round-trip that makes Export ↔ drop a real save path. Non-PNG images (and
 // PNGs with no chunks) fall back to the file's own name.
+//
+// One loader writes instead of opening: `seedDefaultDocs` saves the built-in
+// samples into the library as ordinary stored documents — a truly-virgin-boot
+// one-shot (see its doc comment).
 // ---------------------------------------------------------------------------
 
-import { validateSheet } from './lib/atlas.js';
+import { validateSheet, clampTile } from './lib/atlas.js';
 import { isPng, readTextChunks } from './lib/png-chunks.js';
 import { urlToImageData, bytesToImageData } from './image-io.js';
 import { workspace } from './state/workspace.js';
+import { createDoc } from './state/doc.js';
+import { files } from './state/files.js';
 import { build } from './state/build.js';
 
 // Validate + open a decoded sheet as a fresh context. The single trunk under
@@ -99,7 +105,42 @@ export async function loadFile(f) {
   }
 }
 
-// A fresh 3x2 sheet of empty (transparent) square 40×40 tiles to draw from
+// A fresh 3x2 sheet of empty (transparent) square tiles to draw from
 // scratch — every face reads empty until you paint it. The name counts up
-// over the open untitleds ("untitled", "untitled 2", …).
-export const loadBlank = () => openSheet(new ImageData(120, 80));
+// over the open untitleds ("untitled", "untitled 2", …). `tile` is the
+// square tile size the New… dialog chose (clamped to the stepper's range).
+export const loadBlank = (tile = 40) => {
+  const t = clampTile(tile);
+  return openSheet(new ImageData(t * 3, t * 2));
+};
+
+/**
+ * Seed the document library with the built-in defaults — one ORDINARY stored
+ * document per sample, through the same files.save path a user's ⌘S takes
+ * (real PNG bytes, metadata chunks, generated icon). Run only on a truly
+ * virgin boot (main.js: no persisted desktop state AND an empty library), so
+ * the seeds are created exactly once and live as normal mutable documents
+ * from then on — edited, renamed or deleted, they never come back.
+ * Resolves the first seeded doc's id (the boot document), or null when
+ * nothing could be seeded.
+ * @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}[]} samples
+ */
+export async function seedDefaultDocs(samples) {
+  let firstId = null;
+  for (const sample of samples) {
+    try {
+      const image = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
+      if (validateSheet(image)) continue;
+      const doc = createDoc();
+      doc.loadAtlas(image, { ...(sample.transforms || {}) });
+      const res = await files.save(doc, { fileId: null, name: sample.name });
+      if (res && firstId == null) firstId = res.id;
+    } catch {
+      // A failed seed costs only that default document.
+    }
+    // createdAt is the listing's sort key; a same-millisecond pair would
+    // tie-break on random ids and shuffle the icon order between machines.
+    await new Promise((r) => setTimeout(r, 2));
+  }
+  return firstId;
+}

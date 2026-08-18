@@ -67,7 +67,9 @@ export function createDesktopState(fresh) {
     /** The restored state, or null (fresh boot / nothing stored / ?fresh). */
     saved,
 
-    /** A saved icon position by key ("sample:Car" / "doc:<id>"), or null. */
+    /** A saved icon position by key ("doc:<id>"), or null. (A stale v2
+     *  blob may still carry retired "sample:*" entries; they simply never
+     *  match an icon again.) */
     iconPos(key) {
       const p = saved?.icons?.[key];
       return Number.isFinite(p?.left) && Number.isFinite(p?.top) ? p : null;

@@ -8,10 +8,14 @@
 // disabled in the markup until it has contents again.)
 //
 // MULTI-DOCUMENT GRAMMAR: File actions target the ACTIVE workspace context;
-// New / Open / a drop always open a NEW window (opening never discards
+// New… / Open / a drop always open a NEW window (opening never discards
 // anything — the dirty check moved entirely to the close paths); opening an
 // already-open stored doc activates its existing window. Quit walks every
-// open document, one unsaved-changes alert per dirty one.
+// open document, one unsaved-changes alert per dirty one. File → New… raises
+// the New Document dialog (an empty atlas at a chosen tile size, or a
+// built-in template as a fresh untitled copy); the built-ins are otherwise
+// ordinary stored documents (seeded at the first-ever boot — loaders.js),
+// so the Open listing and the desktop icons know nothing special about them.
 //
 // The DIRTY CHECK has one funnel: `confirmDiscard(ctx, next)` — run `next`
 // now if that document is clean, else raise the Save / Don't Save / Cancel
@@ -31,7 +35,7 @@ import { build } from '../state/build.js';
 import { shell } from '../state/shell.js';
 import { files, UNTITLED, docFilename } from '../state/files.js';
 import { workspace, followActive } from '../state/workspace.js';
-import { TILE_MIN, TILE_MAX } from '../lib/atlas.js';
+import { TILE_MIN, TILE_MAX, clampTile } from '../lib/atlas.js';
 import { SAMPLES } from '../lib/sprite-data.js';
 import { loadSample, loadBlank } from '../loaders.js';
 import { downloadPngBytes } from '../image-io.js';
@@ -62,6 +66,7 @@ export function initMenus(desktop, windows) {
 
   // --- dialogs ----------------------------------------------------------------
   const dlgAbout = $('#dlg-about');
+  const dlgNew = $('#dlg-new');
   const dlgOpen = $('#dlg-open');
   const dlgName = $('#dlg-name');
   const dlgProps = $('#dlg-props');
@@ -168,13 +173,8 @@ export function initMenus(desktop, windows) {
     }
   }
 
-  // Opening NEVER discards: a sample is always a fresh untitled window, a
-  // stored doc opens once and re-activates thereafter.
-  const openSample = async (i) => {
-    const ctx = await loadSample(SAMPLES[i]);
-    if (ctx) windows.activateContext(ctx.key);
-  };
-
+  // Opening NEVER discards: a stored doc opens once and re-activates
+  // thereafter (one window per document).
   const openDoc = async (id) => {
     try {
       const res = await workspace.openStored(id);
@@ -182,11 +182,6 @@ export function initMenus(desktop, windows) {
     } catch (err) {
       build.setError(`Couldn't open the document: ${err.message}`);
     }
-  };
-
-  const newDocument = () => {
-    const ctx = loadBlank();
-    if (ctx) windows.activateContext(ctx.key);
   };
 
   // Close one document (dirty-checked). The window goes with the context;
@@ -212,30 +207,86 @@ export function initMenus(desktop, windows) {
   };
 
   // Finder grammar for Open: with the desktop focused, Open acts on the
-  // selected icon (the gate below disables it with none selected).
+  // selected icons (the gate below disables it with none selected). Every
+  // icon is a saved-doc icon now — no other key shape exists.
   const openSelection = () => {
     for (const key of shell.get().iconSelection) {
-      if (key.startsWith('sample:')) {
-        const name = key.slice('sample:'.length);
-        const i = SAMPLES.findIndex((s) => s.name === name);
-        if (i >= 0) openSample(i);
-      } else if (key.startsWith('doc:')) {
-        openDoc(key.slice('doc:'.length));
-      }
+      if (key.startsWith('doc:')) openDoc(key.slice('doc:'.length));
     }
   };
 
-  // --- the Open dialog --------------------------------------------------------
-  const openList = $('#open-list');
   const listItem = (value, text) => {
     const item = document.createElement('vf-list-item');
     item.value = value;
     item.textContent = text;
     return item;
   };
+
+  // --- the New Document dialog -------------------------------------------------
+  // Templates: Empty Document (an all-transparent atlas at a chosen tile
+  // size) or a built-in sample as a fresh untitled copy. The tile-size field
+  // is live for Empty Document only — a template's art has a NATIVE tile
+  // size, and a retile crops/pads rather than scales, so a template shows
+  // its own size disabled. Everything created here is an untitled window;
+  // explicit Save is what puts it in the library.
+  const newList = $('#new-list');
+  const newTile = $('#new-tile');
+  const newDims = $('#new-dims');
+  newTile.min = TILE_MIN;
+  newTile.max = TILE_MAX;
+  const BLANK_TILE = 40; // the classic default (a 120×80 atlas)
+  // The Empty Document size, remembered across template flips WITHIN one
+  // dialog visit (a template shows its own size in the shared field), reset
+  // per open.
+  let blankTile = BLANK_TILE;
+
+  const syncNewForm = () => {
+    const v = newList.value;
+    if (v !== 'blank') {
+      newTile.disabled = true;
+      newTile.value = String(SAMPLES[+v.slice('sample:'.length)].tile);
+    } else {
+      if (newTile.disabled) newTile.value = String(blankTile); // back from a template
+      newTile.disabled = false;
+      blankTile = clampTile(+newTile.value || BLANK_TILE);
+    }
+    const t = clampTile(+newTile.value || BLANK_TILE);
+    newDims.textContent = `atlas ${t * 3} × ${t * 2} px`;
+  };
+  function showNewDialog() {
+    const rows = [listItem('blank', 'Empty Document')];
+    SAMPLES.forEach((s, i) => rows.push(listItem(`sample:${i}`, s.name)));
+    newList.replaceChildren(...rows);
+    // Reset per open (predictable over remembered): Empty at the default.
+    newList.value = 'blank';
+    newTile.disabled = false;
+    newTile.value = String(BLANK_TILE);
+    blankTile = BLANK_TILE;
+    syncNewForm();
+    dlgNew.show();
+  }
+  async function createFromNewDialog() {
+    const v = newList.value;
+    if (!v) return;
+    dlgNew.close();
+    const ctx =
+      v === 'blank'
+        ? loadBlank(clampTile(+newTile.value || BLANK_TILE))
+        : await loadSample(SAMPLES[+v.slice('sample:'.length)]);
+    if (ctx) windows.activateContext(ctx.key);
+  }
+  on(newList, 'vf-change', syncNewForm);
+  on(newList, 'dblclick', createFromNewDialog);
+  on(newTile, 'vf-change', syncNewForm);
+  on($('#btn-new-ok'), 'click', createFromNewDialog);
+  on($('#btn-new-cancel'), 'click', () => dlgNew.close());
+
+  // --- the Open dialog --------------------------------------------------------
+  // Stored documents only — the built-ins are ordinary rows here once seeded,
+  // and a template belongs to File → New…, not Open.
+  const openList = $('#open-list');
   function showOpenDialog() {
     const rows = [];
-    SAMPLES.forEach((s, i) => rows.push(listItem(`sample:${i}`, `${s.name} (sample)`)));
     for (const r of files.get().list) {
       const when = new Date(r.modifiedAt).toLocaleDateString();
       rows.push(listItem(`doc:${r.id}`, `${r.name} — ${r.w}×${r.h}px, ${when}`));
@@ -247,8 +298,7 @@ export function initMenus(desktop, windows) {
     const v = openList.value;
     if (!v) return;
     dlgOpen.close();
-    if (v.startsWith('sample:')) openSample(+v.slice('sample:'.length));
-    else openDoc(v.slice('doc:'.length));
+    openDoc(v.slice('doc:'.length));
   }
   on($('#btn-open-ok'), 'click', actOnOpenPick);
   on($('#btn-open-cancel'), 'click', () => dlgOpen.close());
@@ -307,7 +357,9 @@ export function initMenus(desktop, windows) {
     const active = () => workspace.active();
     switch (menuDetail(e).value) {
       case 'new':
-        newDocument();
+        // App-level, like About: the dialog works from the Finder role too —
+        // creating from it opens a window, which reactivates the application.
+        showNewDialog();
         break;
       case 'open':
         // Two grammars, one item: the application's Open… (the listing
@@ -476,7 +528,7 @@ export function initMenus(desktop, windows) {
   };
 
   return {
-    actions: { confirmDiscard, openSample, openDoc, closeContext, saveThen },
+    actions: { confirmDiscard, openDoc, closeContext, saveThen },
     dispose() {
       for (const fn of teardown) fn();
     },

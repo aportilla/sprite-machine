@@ -30,7 +30,7 @@ export function createShell() {
     // desktop focus ("the Finder"): utility windows hide, the options strip
     // blanks, and the document-scoped menu items disable.
     appActive: true,
-    /** @type {string[]} selected desktop-icon keys ("sample:Car" / "doc:<id>") */
+    /** @type {string[]} selected desktop-icon keys ("doc:<id>") */
     iconSelection: [],
     showGrid: false,
   });

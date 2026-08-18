@@ -1,11 +1,12 @@
 // ---------------------------------------------------------------------------
-// The desktop icon layer: a read-only cluster of SAMPLE icons (Car, Cube, …)
-// plus one renameable icon per SAVED document, reconciled from the files
-// slice. Icon art is generated from the document itself — the FRONT tile
-// drawn into 32×32 (image-io.js) — so every icon declares the kit's `color`
-// treatment (selection darkens instead of inverting). Double-click opens
-// (dirty-checked through the shell actions); the open document's icon wears
-// the kit's `open` ghost.
+// The desktop icon layer: one renameable icon per SAVED document, reconciled
+// from the files slice — and nothing else (the built-in defaults are seeded
+// into the library at the first-ever boot, so they're ordinary rows here,
+// not a special cluster). Icon art is generated from the document itself —
+// the FRONT tile drawn into 32×32 (image-io.js) — so every icon declares the
+// kit's `color` treatment (selection darkens instead of inverting).
+// Double-click opens (dirty-checked through the shell actions); the open
+// document's icon wears the kit's `open` ghost.
 //
 // Positions are `left`/`top` properties in system px — never CSS — so a drag
 // writes back through the same declaration and desktop-state.js can persist
@@ -20,9 +21,7 @@
 // ---------------------------------------------------------------------------
 
 import { snapSys, systemPxQuantum } from 'vintage-frames';
-import { SAMPLES } from '../lib/sprite-data.js';
-import { sliceAtlas } from '../lib/atlas.js';
-import { urlToImageData, tileToIconDataUri, genericDocIconDataUri } from '../image-io.js';
+import { genericDocIconDataUri } from '../image-io.js';
 import { files } from '../state/files.js';
 import { shell } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
@@ -32,7 +31,7 @@ const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
 
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
- * @param {{ actions: {openSample(i: number): void, openDoc(id: string): void},
+ * @param {{ actions: {openDoc(id: string): void},
  *           savedPos?: (key: string) => {left:number, top:number}|null,
  *           fresh?: boolean }} opts
  */
@@ -114,27 +113,10 @@ export function initIcons(desktop, { actions, savedPos = () => null, fresh = fal
     if (img.getAttribute('src') !== dataUri) img.src = dataUri;
   }
 
-  // --- the sample cluster -----------------------------------------------------
-  SAMPLES.forEach((sample, i) => {
-    const icon = makeIcon(`sample:${sample.name}`, sample.name, i);
-    icon.addEventListener('vf-open', () => actions.openSample(i));
-    setIconArt(icon, genericDocIconDataUri());
-    // Real art arrives async (the Car sample decodes its PNG); the generic
-    // glyph stands in until then.
-    (async () => {
-      try {
-        const image = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
-        const art = tileToIconDataUri(sliceAtlas(image).views.front);
-        if (art && icon.isConnected) setIconArt(icon, art);
-      } catch {
-        // keep the generic glyph
-      }
-    })();
-  });
-
   // --- saved-document icons ---------------------------------------------------
   // Reconciled from the files listing; skipped entirely under ?fresh=1 so a
-  // capture on a machine with saved docs stays deterministic.
+  // capture on a machine with saved docs stays deterministic (a ?fresh boot
+  // therefore shows a bare desktop — no icon is anything but a saved doc).
   function syncDocIcons() {
     const state = files.get();
     const wanted = new Set(state.list.map((r) => `doc:${r.id}`));
@@ -147,7 +129,7 @@ export function initIcons(desktop, { actions, savedPos = () => null, fresh = fal
         root.querySelector(`vf-icon[data-key="${CSS.escape(key)}"]`)
       );
       if (!icon) {
-        icon = makeIcon(key, r.name, SAMPLES.length + i, { editable: true });
+        icon = makeIcon(key, r.name, i, { editable: true });
         icon.addEventListener('vf-open', () => actions.openDoc(r.id));
         // In-place rename commits through the same workspace action the File
         // menu's Rename uses — the two paths converge, and any open window

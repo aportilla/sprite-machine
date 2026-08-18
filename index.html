@@ -34,7 +34,7 @@
           <vf-menu-item value="quit">Quit</vf-menu-item>
         </vf-menu>
         <vf-menu id="menu-file" label="File">
-          <vf-menu-item value="new">New</vf-menu-item>
+          <vf-menu-item value="new">New…</vf-menu-item>
           <vf-menu-item value="open" shortcut="⌘O">Open…</vf-menu-item>
           <vf-separator></vf-separator>
           <vf-menu-item value="close">Close</vf-menu-item>
@@ -187,6 +187,29 @@
           </vf-paragraph>
         </vf-stack>
         <vf-button id="btn-about-ok" slot="buttons" variant="default">OK</vf-button>
+      </vf-dialog>
+
+      <!-- The New Document dialog: a template list (Empty Document + the
+           built-ins, rows built by shell/menus.js from SAMPLES) over the
+           tile-size field. The field is live for Empty Document only — a
+           template's art has a native tile size, and a retile crops/pads
+           rather than scales, so templates show theirs disabled. The dims
+           label reads the resulting 3×2 atlas size. -->
+      <vf-dialog id="dlg-new" heading="New Document" closable width="360" height="200">
+        <vf-stack width="312" gap="10">
+          <vf-list id="new-list" fill-width aria-label="Templates"></vf-list>
+          <vf-stack fill-width direction="row" gap="8" place="start">
+            <vf-stack pad="4 0 0">
+              <vf-label width="80" for="new-tile">Tile size:</vf-label>
+            </vf-stack>
+            <vf-number-field id="new-tile" min="1" max="64" step="1"></vf-number-field>
+            <vf-stack pad="4 0 0">
+              <vf-label id="new-dims"></vf-label>
+            </vf-stack>
+          </vf-stack>
+        </vf-stack>
+        <vf-button id="btn-new-cancel" slot="buttons">Cancel</vf-button>
+        <vf-button id="btn-new-ok" slot="buttons" variant="default">Create</vf-button>
       </vf-dialog>
 
       <vf-dialog id="dlg-open" heading="Open" closable width="360" height="330">

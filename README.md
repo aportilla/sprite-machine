@@ -49,9 +49,14 @@ double-clicking their icons. Clicking the desktop is "switching to the Finder": 
 deactivates, its windoids hide, and the menus fall back to the desktop's
 grammar. See [The desktop](#the-desktop).
 
-**Double-click a sample icon** (Car, Cube — they open as fresh untitled
-copies), pick File → Open…, or drop your own **3×2 sprite sheet** PNG
-anywhere on the window. **Smooth slopes** (low-poly additive 45° wedges) is
+The first-ever boot **seeds two starter documents** (Car, Cube) into the
+library as perfectly ordinary saved files — edit, rename or delete them like
+anything you saved yourself; they're created once and never come back (any
+persisted state, even an emptied desktop, suppresses the seeding). The same
+built-ins live on as **templates in File → New…**, which opens the New
+Document dialog: an Empty Document at a chosen tile size, or a template as a
+fresh untitled copy. **Double-click a desktop icon**, pick File → Open…, or
+drop your own **3×2 sprite sheet** PNG anywhere on the window. **Smooth slopes** (low-poly additive 45° wedges) is
 on by default and toggles live in the 3D View's controls strip ("smooth",
 beside "rotate"); greedy meshing is always on.
 Sprites are hard pixel art — every texel is fully opaque or fully
@@ -320,9 +325,13 @@ result — the
 stepper, face picker, dialog, swatch pick, hover preview, rect drag, and fill click
 can't be driven headlessly. Two shell-era params round the set out:
 `?fresh=1` boots with **storage ignored** (no desktop-state restore, no
-last-doc reopen, no saved-doc icons, no state writes — deterministic captures
-on a machine with saved docs) and `?hide=<window>[,<window>]`
+last-doc reopen, no saved-doc icons — a bare desktop now, every icon being a
+saved doc — no first-boot seeding, and no state writes — deterministic
+captures on a machine with saved docs) and `?hide=<window>[,<window>]`
 (`document|tools|sprite|stage`) hides windows a capture needs out of frame.
+`?sample` shares the storage-untouched discipline: it opens the named
+built-in as an untitled from in-memory data, skipping both the session
+restore and the seeding (the deterministic boot `drive.mjs` drives).
 
 ---
 
@@ -352,11 +361,11 @@ window the desktop's active window?**
   goes plain, the three windoids **hide** (they return with the
   application), the options strip hides with them, the bare-letter tool keys
   go inert, and the menus drop to the **Finder grammar** — About / Settings
-  / Quit / New stay enabled, Open… enables when a desktop icon is selected
+  / Quit / New… stay enabled, Open… enables when a desktop icon is selected
   (and then opens the selection instead of the listing dialog), everything
   document-scoped greys out. A disabled item's key equivalent never fires
   (the kit's contract), so ⌘S/⌘Z/⌘K/⌘G gate with their menus.
-- **Clicking any document window — or opening one** (File → New, an icon
+- **Clicking any document window — or opening one** (File → New…, an icon
   double-click, a drop) — **reactivates**: the windoids come back exactly
   where they were, aimed at the newly active document.
 - Closing the last document window leaves the same desktop-focused state:
@@ -364,8 +373,8 @@ window the desktop's active window?**
 
 ### Documents are windows
 
-**One document = one window.** File → New, a sample icon, the Open flow, and
-a dropped PNG each open a **new** document window (staggered System 7
+**One document = one window.** File → New…, the Open flow, and a dropped
+PNG each open a **new** document window (staggered System 7
 style); nothing ever loads over an open document — the unsaved-changes
 question lives entirely on the close paths. Opening an already-open stored
 document just activates its existing window. Untitled names count up
@@ -386,8 +395,12 @@ strip's clamp bounds, and the Undo/Redo enablement.
   turn, one unsaved-changes alert per dirty one — its window brought forward
   as it's asked about, Cancel anywhere aborting the rest — down to the bare
   desktop, windoid arrangement intact).
-- **File** — _New_ (a new untitled window), _Open…_ ⌘O (two grammars: the
-  saved-docs + samples listing dialog while a document is focused; with the
+- **File** — _New…_ (the New Document dialog: an Empty Document at a chosen
+  square tile size — the field is live for Empty only, since a template's
+  art has a native size and a retile crops/pads rather than scales — or a
+  built-in template (Car, Cube) as a fresh untitled copy; Create or a
+  double-clicked row opens the new window), _Open…_ ⌘O (two grammars: the
+  saved-docs listing dialog while a document is focused; with the
   desktop focused it acts on the selected icon, Finder-style), _Close_
   (the active document, dirty-checked), _Save_ ⌘S (first save of an untitled
   doc prompts for a name), _Duplicate_ ⌘D (the stored copy opens in its own
@@ -535,9 +548,15 @@ else still works.
 
 Every saved doc gets a `vf-icon` (`selectable movable editable` — Return
 renames in place, converging on the same workspace action as File →
-Rename…, so any open window of that document retitles along), plus a
-read-only cluster of sample icons; double-click opens (samples as fresh
-untitled copies, stored docs into their existing window if one is open),
+Rename…, so any open window of that document retitles along) — and saved
+docs are the ONLY icons: the built-in defaults (Car, Cube) are **seeded
+into the library at the first-ever boot** (`seedDefaultDocs` in
+`loaders.js`, through the same save path as ⌘S — real PNG bytes, chunks,
+generated icon) and are ordinary mutable documents from then on; the
+seeding runs only when NO prior state persists (no desktop-state blob AND
+an empty library — deleting or emptying later never resurrects them), and
+that virgin boot opens the stored Car as its document. Double-click opens
+(into the existing window if one is open),
 selecting an icon deactivates the application (a press in the icon layer is
 a press on the Finder) and arms the desktop-focused File → Open, and every
 open doc's icon wears the kit's `open` ghost. Icon art is generated **from
@@ -743,7 +762,7 @@ src/lib/
   mesh-util.js    shared vertex-color linearizer + mesh finishing (THREE)
   mesh.js         quads -> merged, vertex-colored THREE.Mesh    (voxel mode; THREE)
   wedge-mesh.js   voxel solid + additive 45° wedges             (low-poly mode; THREE)
-  sprite-data.js  built-in samples (as atlases) + grid->ImageData helper
+  sprite-data.js  built-in defaults (as atlases): first-boot seeds + New-dialog templates, + grid->ImageData helper
   png-chunks.js   PNG chunk surgery: parse + tEXt/iTXt read/replace, CRC32 — the document format (pure)
   diag.js         geometry watertightness self-check (dev only; ?diag=1)
 src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-tested)
@@ -791,9 +810,10 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   shell.appActive + workspace.activeKey; boot clamp + the resize re-pin; the
                   Sprite View's fixed sizing (fitSprite — boot + doc switches/tile resizes)
   menus.js        vf-menu-select -> workspace/file actions on the ACTIVE document; the two-role
-                  focus gating + checkmark sync; every dialog flow (About / Settings / Open /
-                  name prompt / Properties / unsaved-changes / storage notice); the quit cascade
-  icons.js        the icon layer: sample cluster + one vf-icon per saved doc, generated front-tile art,
+                  focus gating + checkmark sync; every dialog flow (About / Settings / New
+                  Document (templates + tile size) / Open / name prompt / Properties /
+                  unsaved-changes / storage notice); the quit cascade
+  icons.js        the icon layer: one vf-icon per saved doc (nothing else), generated front-tile art,
                   open/rename wiring, open ghosts, raster-derived placement + boot clamp + the
                   resize re-pin (below the menu bar), the Finder wire (icon presses deactivate; the
                   selection feeds the shell slice for the desktop-focused File → Open)
@@ -801,11 +821,13 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   in one versioned localStorage key (v2; v1 migrates)
 src/
   main.js         the composition root: parse params -> seed stores -> fit desktop + cursor -> shell wiring
-                  -> stage + rebuilder -> boot documents (session restore or sample)
+                  -> stage + rebuilder -> boot documents (test-path sample / session restore /
+                  the one truly-virgin seed-and-open)
   boot/params.js  URL-param parsing -> one typed boot object (pure, Node-tested)
-  loaders.js      every way a sheet enters (sample / file / blank): decode + validateSheet -> a FRESH
-                  workspace context | build.setError; a dropped PNG's Title/transforms chunks
-                  restore its identity
+  loaders.js      every way a sheet enters (template-or-sample / file / blank at a chosen tile size):
+                  decode + validateSheet -> a FRESH workspace context | build.setError; a dropped
+                  PNG's Title/transforms chunks restore its identity; + seedDefaultDocs, the
+                  virgin-boot one-shot that saves the built-ins as ordinary stored documents
   drop-target.js  whole-app drag & drop + overlay -> loaders -> the new window surfaces
   shortcuts.js    document-level B/R/G/I/E -> session actions, gated on appActive (menu key
                   equivalents are the kit's; Esc/Shift are gesture-scoped and live in the canvas)

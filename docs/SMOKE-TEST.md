@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 132 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 148 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -14,7 +14,7 @@ browser, `http://localhost:5173/`.
       Sprite View, 3D View) disappear, the options strip hides (the dither
       runs right up to the menu bar), and B/R/G/E/I do nothing.
 - [ ] **The Finder menu grammar**: while deactivated, pull each menu — only
-      About…/Quit and File → New stay enabled (Settings… is parked disabled
+      About…/Quit and File → New… stay enabled (Settings… is parked disabled
       in both roles — its contents moved to the 3D View); File → Open…
       enables the moment you select a desktop icon (and then opens that
       icon — note the kit currently drops the selection if you _click_ the
@@ -33,9 +33,13 @@ browser, `http://localhost:5173/`.
 
 ## Multiple documents
 
-- [ ] **New windows stagger**: File → New a few times — each untitled
-      (untitled, untitled 2, …) opens offset down-right, active, its 3D
-      view empty.
+- [ ] **New windows stagger**: File → New… → Create (Empty Document) a few
+      times — each untitled (untitled, untitled 2, …) opens offset
+      down-right, active, its 3D view empty.
+- [ ] **New Document templates**: in File → New…, selecting Car or Cube
+      locks the tile-size field at the template's native size; Create (or a
+      double-click on the row) opens a fresh untitled copy — editing it
+      never touches the stored Car/Cube documents.
 - [ ] **The windoids follow the active window**: with the Car and an
       untitled open, click between them — the 3D View, Sprite View, window
       title, tile-size readout, and Undo enablement all track the front
@@ -102,6 +106,11 @@ browser, `http://localhost:5173/`.
       untitled document deliberately does NOT survive the reload.
 - [ ] `?fresh=1` boots the authored default layout regardless, and doesn't
       clobber the saved one.
+- [ ] **First-boot seeding, once only**: clear the site's data (localStorage
+      and IndexedDB) and reload — Car and Cube appear as ordinary saved-doc
+      icons and the stored Car opens. Rename or delete-and-redraw one, then
+      reload — the change sticks; the defaults are never re-created while
+      any state persists.
 
 ## Odds and ends
 
