@@ -136,14 +136,15 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
 
   // --- the Full Sprite View's fixed size ---------------------------------------
   // The windoid is a fixed-size picture frame — no grow box (not `resizable`
-  // in the markup): its width is the face-picker block's (SPRITE_WIDTH) and
-  // its height is DERIVED so the atlas image exactly fills the body below
-  // the picker strip — no margins. The ratio is the ACTIVE document's own
-  // atlas (2:3 h:w for every square-tile 3×2 sheet — it only differs under
-  // the ?tile=WxH shear hook), defaulting to 2:3 before a document is open.
+  // in the markup): its width is the atlas grid block's (SPRITE_WIDTH) and
+  // its height is DERIVED so the 3×2 face-tile grid exactly fills the body
+  // below the picker strip — no margins. The ratio is the ACTIVE document's
+  // own TILE (square for every square-tile sheet — it only differs under
+  // the ?tile=WxH shear hook), defaulting to square before a document is
+  // open.
   const spriteRatio = () => {
-    const img = workspace.active()?.doc.get().atlasImage;
-    return img && img.width > 0 && img.height > 0 ? img.height / img.width : undefined;
+    const s = workspace.active()?.doc.get();
+    return s && s.tileW > 0 && s.tileH > 0 ? s.tileH / s.tileW : undefined;
   };
   const fitSprite = () => {
     byId.sprite.width = SPRITE_WIDTH;

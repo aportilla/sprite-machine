@@ -1342,9 +1342,9 @@ async function main() {
   const atlasFill = () =>
     evaluate(
       `(() => {${DEEP} const sr = __q('sm-atlas-view').shadowRoot;
-        const c = sr.querySelector('canvas').getBoundingClientRect();
+        const g = sr.querySelector('vf-grid').getBoundingClientRect();
         const b = sr.querySelector('.atlas-box').getBoundingClientRect();
-        return { cw: c.width, ch: c.height, bw: b.width, bh: b.height }; })()`
+        return { cw: g.width, ch: g.height, bw: b.width, bh: b.height }; })()`
     );
   const drawWidth = () =>
     evaluate(
@@ -1369,25 +1369,57 @@ async function main() {
     'sprite did not cross tools in the light DOM'
   );
   // The sprite windoid is FIXED-size — no grow box renders, its width is the
-  // picker block's (SPRITE_WIDTH = 212), and the atlas canvas fills the body
-  // below the picker strip exactly (the height is derived from the atlas's
-  // own ratio, so the exact fill IS the sizing contract) — checked after the
-  // raise, so a reconnect that lost the view's layout would show here.
+  // atlas grid block's (SPRITE_WIDTH = 214), and the 3×2 face-tile grid
+  // fills the body below the picker strip exactly (the height is derived
+  // from the tile's own ratio, so the exact fill IS the sizing contract) —
+  // checked after the raise, so a reconnect that lost the view's layout
+  // would show here.
   const spriteFixed = await evaluate(
     `(() => {${DEEP} const w = __q('#win-sprite');
       return { grow: !!w.shadowRoot.querySelector('[part="grow-box"]'),
         width: w.width }; })()`
   );
   check(
-    'the sprite windoid is fixed-size (no grow box, picker-block width)',
-    spriteFixed.grow === false && spriteFixed.width === 212,
+    'the sprite windoid is fixed-size (no grow box, atlas-grid width)',
+    spriteFixed.grow === false && spriteFixed.width === 214,
     JSON.stringify(spriteFixed)
   );
   const fill = await atlasFill();
   check(
-    'the atlas exactly fills the sprite windoid below the picker strip',
+    'the atlas grid exactly fills the sprite windoid below the picker strip',
     Math.abs(fill.cw - fill.bw) < 1 && Math.abs(fill.ch - fill.bh) < 1,
     JSON.stringify(fill)
+  );
+  // The atlas grid is a picking surface too: pressing a face tile selects
+  // that face — on the PRESS, like the picker radios above it (the raise
+  // re-insert swallows a windoid click) — and the selection ring strokes
+  // exactly the picked tile.
+  s = await probe();
+  const gridTarget = s.face === 'back' ? 'front' : 'back';
+  const gridCell = await centreOf(`.atlas-cell[data-face="${gridTarget}"]`);
+  await mouse('mousePressed', gridCell.x, gridCell.y);
+  await mouse('mouseReleased', gridCell.x, gridCell.y);
+  await sleep(200);
+  s = await probe();
+  check('pressing an atlas grid tile selects that face', s.face === gridTarget, s.face);
+  check(
+    'the picker radios follow the atlas pick',
+    s.checkedRadio === gridTarget,
+    s.checkedRadio
+  );
+  const ringOn = await evaluate(
+    `(() => {${DEEP}
+      return __qa('.atlas-cell')
+        .filter((c) =>
+          getComputedStyle(c.querySelector('.atlas-ring')).visibility === 'visible')
+        .map((c) => c.dataset.face)
+        .join(',');
+    })()`
+  );
+  check(
+    'the selection ring strokes exactly the picked tile',
+    ringOn === gridTarget,
+    ringOn
   );
   // The document window was dragged +40/+24 above, which tucks its grow box
   // under the stage windoid (the utility tier floats over the document

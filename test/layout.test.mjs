@@ -12,7 +12,7 @@ import {
   spriteHeightFor,
   SPRITE_CHROME,
   SPRITE_WIDTH,
-  ATLAS_RATIO,
+  ATLAS_GRID,
   TOP_RESERVE,
   MENU_BAR,
   ICON_CELL,
@@ -25,8 +25,9 @@ const H = 830;
 
 test('placement: the sprite/stage rail is right-flush, stacked, sprite fixed', () => {
   const p = initialPlacement(W, H, TOOLS);
-  // The sprite windoid is FIXED-size: the picker block's width, its height
-  // derived (the atlas exactly fills its body below the picker strip).
+  // The sprite windoid is FIXED-size: the atlas grid block's width, its
+  // height derived (the face grid exactly fills its body below the picker
+  // strip).
   assert.equal(p.sprite.width, SPRITE_WIDTH);
   assert.equal(p.sprite.height, spriteHeightFor(SPRITE_WIDTH));
   // Both right-flush behind the side inset, below the options strip, sprite
@@ -39,14 +40,27 @@ test('placement: the sprite/stage rail is right-flush, stacked, sprite fixed', (
   assert.equal(p.stage.top + p.stage.height, H - 8);
 });
 
-test('sprite sizing: height derives from width through the atlas ratio + chrome', () => {
-  // The default ratio is the square-tile 3×2 atlas (2:3 h:w).
+test('sprite sizing: height derives from width through the tile ratio + chrome', () => {
+  // The windoid width yields WHOLE grid cells: the body minus the interior
+  // rules splits evenly across the columns (the vf-grid states cell sizes
+  // in whole system px, and the exact-fill contract needs them to sum back
+  // to the body).
+  const cellW =
+    (SPRITE_WIDTH - SPRITE_CHROME.w - (ATLAS_GRID.cols - 1)) / ATLAS_GRID.cols;
+  assert.equal(cellW, ATLAS_GRID.cell);
+  assert.ok(Number.isInteger(cellW));
+  // The default ratio is the square tile: square cells, one rule between
+  // the rows.
   assert.equal(
     spriteHeightFor(SPRITE_WIDTH),
-    Math.round((SPRITE_WIDTH - SPRITE_CHROME.w) * ATLAS_RATIO) + SPRITE_CHROME.h
+    ATLAS_GRID.rows * ATLAS_GRID.cell + (ATLAS_GRID.rows - 1) + SPRITE_CHROME.h
   );
-  // A live atlas's own ratio wins (the ?tile=WxH shear hook).
-  assert.equal(spriteHeightFor(102, 1), 100 + SPRITE_CHROME.h);
+  // A live tile's own ratio wins (the ?tile=WxH shear hook): the cell
+  // height rounds through it.
+  assert.equal(
+    spriteHeightFor(SPRITE_WIDTH, 0.5),
+    ATLAS_GRID.rows * (ATLAS_GRID.cell / 2) + (ATLAS_GRID.rows - 1) + SPRITE_CHROME.h
+  );
 });
 
 test('placement: Tools sits top-left, above the rail band', () => {

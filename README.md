@@ -42,7 +42,8 @@ kit: a menu bar, an options strip, one movable **document window per open
 document** (the pixel canvas — several documents can be open at
 once), and three floating **utility windoids** that serve whichever document
 is active — the **Tools palette**, the **Full Sprite View** (the face
-picker over the whole atlas, live), and the **3D View** — plus documents
+picker over the whole atlas as a clickable face-tile grid, live), and the
+**3D View** — plus documents
 that live as **files on the desktop**, saved in the browser and reopened by
 double-clicking their icons. Clicking the desktop is "switching to the Finder": the application
 deactivates, its windoids hide, and the menus fall back to the desktop's
@@ -247,7 +248,11 @@ template — see [UI layer: Lit](#ui-layer-lit).
   the kit's **`vf-img`** — one image pixel is one system px, magnified
   nearest-neighbor on whole device pixels — and the dither is positioned with
   `vf-img`'s own `top`/`left` (system px), so it stays registered to the art's grid
-  at any display scale. A **mirror-derived** face (one with
+  at any display scale. The **atlas grid** below the strip is a picking
+  surface too: pressing any face's tile selects that face (the same
+  press-not-click rule), and the selected tile is **stroked in the face
+  art's red** (`--sm-select`, `#ff4f4f`) — see the Full Sprite View bullet
+  under [Windows](#windows). A **mirror-derived** face (one with
   no art of its own) opens with an **empty canvas** and a **faded onion-skin** of
   the mirrored opposite behind it for reference; it becomes its own independent art
   only once you actually change a pixel — switching away and back leaves it derived,
@@ -430,20 +435,27 @@ Two tiers, two regimes:
   3D windoid stays `resizable` — its canvas re-fits via its own
   ResizeObserver, so the grow box works for free. The **Full Sprite
   View** (`sm-atlas-view`) hosts the **face picker** strip across its top
-  (the six cube-view radios — see the Drawing-editor bullet) over the whole
-  atlas drawn nearest-neighbor, following the ACTIVE document's **live
-  channel**, so it tracks strokes at rAF rate (the second live subscriber
-  ever, after the rebuilder); it carries **no status strip** (its status
-  slot stays empty, so the kit draws no bottom bar — the atlas runs down
-  to the frame).
+  (the six cube-view radios — see the Drawing-editor bullet) over the
+  **atlas grid** — a formal 3×2 `vf-grid` holding one face tile per cell
+  in the sheet's own arrangement, each cell a live canvas of that face's
+  slice drawn nearest-neighbor, the grid's 1px rules the only lines
+  between (frameless — the windoid frame is its perimeter). The grid
+  follows the ACTIVE document's **live channel**, so it tracks strokes at
+  rAF rate (the second live subscriber ever, after the rebuilder), and it
+  is a **picking surface**: pressing a tile selects that face — on the
+  press, the windoid rule — with the picker radios and the edit canvas
+  following, and the selected tile **stroked in the face art's red**
+  (`--sm-select`, `#ff4f4f`, an inset ring over the tile's edge); the
+  windoid carries **no status strip** (its status slot stays empty, so
+  the kit draws no bottom bar — the grid runs down to the frame).
   The windoid is a **fixed-size picture frame** — movable but not
-  resizable, no grow box: its width is the picker block's
-  (`SPRITE_WIDTH`), and its height is derived through the active atlas's
-  own ratio plus the fixed chrome (`spriteHeightFor` in `shell/layout.js`,
-  applied by `fitSprite` in `shell/windows.js`), so the atlas exactly
-  fills the body below the strip — no margins — at boot and across
-  document switches and tile resizes; the view's own scale-to-fit stays
-  underneath as the degenerate-case safety net; the **3D View**
+  resizable, no grow box: its width is the atlas grid block's
+  (`SPRITE_WIDTH` = 3 cells + rules + borders, the narrower picker block
+  centering in the strip), and its height is derived through the active
+  tile's own ratio plus the fixed chrome (`spriteHeightFor` in
+  `shell/layout.js`, applied by `fitSprite` in `shell/windows.js`), so
+  the grid exactly fills the body below the strip — no margins — at boot
+  and across document switches and tile resizes; the **3D View**
   hosts a **controls strip** across its top — the two render toggles as
   checkboxes, **rotate** (auto-spin) and **smooth** (the low-poly wedge
   pass), writing the prefs slice live (`sm-stage-controls`; these lived in
@@ -815,8 +827,10 @@ src/
                        connected chrome: the options strip (a kit vfPanel band: tool name +
                        current-ink swatch + options; hidden while the desktop is focused;
                        bounds from the active document) / the Tools palette body / the
-                       Sprite View body (the face-picker strip -> workspace.setFace on the
-                       ACTIVE key, over the live full-atlas canvas following the active
+                       Sprite View body (the face-picker strip over the clickable 3×2
+                       face-tile vf-grid, both -> workspace.setFace on the ACTIVE key —
+                       tile picks fire on the press, the selected tile ringed in
+                       --sm-select red — the cells live canvases following the active
                        document) / the 3D View's controls
                        strip (the rotate + smooth checkboxes -> prefs) / the windows' status
                        readouts (tile = the window's edited face; build = the 3D View's fixed

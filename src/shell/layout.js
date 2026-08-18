@@ -13,11 +13,11 @@
 //   layout always wins (position only, for the fixed-size Sprite View).
 //
 //   spriteHeightFor() is the Sprite View windoid's sizing rule: the windoid
-//   is a fixed-size picture frame — no grow box — its width the face-picker
-//   block's and its height derived through the atlas's own ratio plus the
-//   fixed chrome, so the atlas exactly fills the body below the picker
-//   strip (windows.js re-derives the height on document switches and
-//   structural changes).
+//   is a fixed-size picture frame — no grow box — its width the atlas
+//   grid's (ATLAS_GRID: the 3×2 lattice of face tiles) and its height
+//   derived through the tile's own ratio plus the fixed chrome, so the
+//   grid exactly fills the body below the picker strip (windows.js
+//   re-derives the height on document switches and structural changes).
 //
 //   iconDefault() is the icons' half of the same idea: the classic
 //   left-edge column below the Tools band, derived from the raster instead
@@ -65,26 +65,38 @@ const RAIL_MAX_W = 0.3; // …capped so a squat raster can't grow the rail past 
 const DOC_FILL = 2 / 3; // the document window's share of the vacant middle
 
 // --- the Full Sprite View windoid's fixed size --------------------------------
-// The windoid is a fixed-size picture frame — no grow box: the face-picker
-// block sets its width, and its height is DERIVED so the atlas image
-// exactly fills the body below the picker strip. All system px, measured at
-// scale 1 — if the picker strip or the window chrome changes, re-measure:
+// The windoid is a fixed-size picture frame — no grow box: the ATLAS GRID
+// block sets its width, and its height is DERIVED so the grid exactly fills
+// the body below the picker strip. All system px, measured at scale 1 — if
+// the atlas grid, the picker strip or the window chrome changes, re-measure:
 //   width chrome: the frame's two 1px side borders;
 //   height chrome: 12 dot bar + 2 borders + 62 picker strip (26 icon + ~19
 //   radio + 2×8 pad + 1 rule) = 76 — no status strip (the slot is empty,
 //   so the kit draws no bottom bar).
 export const SPRITE_CHROME = { w: 2, h: 76 };
-// The windoid's width — the face-picker block (six 21px cells + five 12px
-// gaps = 186) + the strip's 2×12 side padding + the 2 side borders, so the
-// strip hugs the picker exactly.
-export const SPRITE_WIDTH = 212;
-// The square-tile 3×2 atlas's height : width — the ratio the sizing rule
-// defaults to before a document is open (a live document's real atlas wins).
-export const ATLAS_RATIO = 2 / 3;
+// The atlas grid — sm-atlas-view's frameless 3×2 vf-grid of face tiles
+// (the sheet's own arrangement), `cell` system px wide per cell with 1px
+// rules between and the windoid frame as its perimeter. The cell WIDTH is
+// the fixed constant (the view imports it); the cell height rides the
+// active tile's own ratio — square cells for the square-tile default.
+export const ATLAS_GRID = { cols: 3, rows: 2, cell: 70 };
+// The windoid's width — the grid block (three 70px cells + two 1px interior
+// rules = 212) + the 2 side borders, so the grid fills the body edge to
+// edge (the 210px face-picker block centers in the strip above with a
+// pixel of slack each side).
+export const SPRITE_WIDTH = 214;
+// A square tile's height : width — the ratio the sizing rule defaults to
+// before a document is open (a live document's real tile wins; only the
+// ?tile=WxH shear hook produces a non-square one).
+export const TILE_RATIO = 1;
 
-/** The Sprite View windoid's derived height for a window width. */
-export function spriteHeightFor(width, ratio = ATLAS_RATIO) {
-  return Math.round(Math.max(0, width - SPRITE_CHROME.w) * ratio) + SPRITE_CHROME.h;
+/** The Sprite View windoid's derived height for a window width and a tile
+ *  height:width ratio. At SPRITE_WIDTH the per-column split is exactly
+ *  ATLAS_GRID.cell — whole system px, the vf-grid's contract. */
+export function spriteHeightFor(width, ratio = TILE_RATIO) {
+  const { cols, rows } = ATLAS_GRID;
+  const cellW = Math.max(0, width - SPRITE_CHROME.w - (cols - 1)) / cols;
+  return rows * Math.round(cellW * ratio) + (rows - 1) + SPRITE_CHROME.h;
 }
 
 // The default icon lattice: columns from the left edge, below the Tools
