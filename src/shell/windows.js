@@ -45,8 +45,15 @@
 
 import { snapSys, systemPxQuantum, VfWindow } from 'vintage-frames';
 import { shell, WINDOW_IDS } from '../state/shell.js';
-import { workspace } from '../state/workspace.js';
-import { initialPlacement, pinOf, pinTo, TOP_RESERVE } from './layout.js';
+import { workspace, followActive } from '../state/workspace.js';
+import {
+  initialPlacement,
+  pinOf,
+  pinTo,
+  spriteHeightFor,
+  SPRITE_WIDTH,
+  TOP_RESERVE,
+} from './layout.js';
 
 // Each additional open document window offsets down-right by one step from
 // the smart default box, System 7 style.
@@ -126,6 +133,22 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
       height: byId.tools.height ?? 0,
     });
   const smart = smartLayout();
+
+  // --- the Full Sprite View's fixed size ---------------------------------------
+  // The windoid is a fixed-size picture frame — no grow box (not `resizable`
+  // in the markup): its width is the face-picker block's (SPRITE_WIDTH) and
+  // its height is DERIVED so the atlas image exactly fills the body below
+  // the picker strip — no margins. The ratio is the ACTIVE document's own
+  // atlas (2:3 h:w for every square-tile 3×2 sheet — it only differs under
+  // the ?tile=WxH shear hook), defaulting to 2:3 before a document is open.
+  const spriteRatio = () => {
+    const img = workspace.active()?.doc.get().atlasImage;
+    return img && img.width > 0 && img.height > 0 ? img.height / img.width : undefined;
+  };
+  const fitSprite = () => {
+    byId.sprite.width = SPRITE_WIDTH;
+    byId.sprite.height = spriteHeightFor(SPRITE_WIDTH, spriteRatio());
+  };
   for (const id of WINDOW_IDS) {
     // Non-closeable by design: the windoids are permanent chrome, on screen
     // whenever the application is. `closable` defaults true and markup can't
@@ -149,6 +172,10 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
       byId[id].width = Math.max(byId[id].width ?? 0, STAGE_MIN_WIDTH);
       byId[id].height = Math.max(byId[id].height ?? 0, STAGE_MIN_HEIGHT);
     }
+    // The sprite windoid's size is never authored/restored truth — it is
+    // always the fixed derivation (a saved size can't land on it anyway:
+    // the restore above guards on `resizable`).
+    if (id === 'sprite') fitSprite();
     clampWindow(desktop, byId[id]);
   }
   // The grow box enforces only the kit's general 80×54 floor, so a drag could
@@ -162,6 +189,23 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
   };
   byId.stage.addEventListener('vf-resize', onStageResize);
   unsubs.push(() => byId.stage.removeEventListener('vf-resize', onStageResize));
+
+  // A document switch or a structural doc change (a tile resize, a load) can
+  // change the atlas ratio: re-derive the sprite windoid's height. Guarded on
+  // the computed size so the steady state (every square-tile atlas shares
+  // 2:3) writes nothing.
+  unsubs.push(
+    followActive(workspace, (ctx) => {
+      if (!ctx) return;
+      const refit = () => {
+        if ((byId.sprite.height ?? 0) !== spriteHeightFor(SPRITE_WIDTH, spriteRatio()))
+          fitSprite();
+      };
+      const un = ctx.doc.subscribe(refit);
+      refit();
+      return un;
+    })
+  );
 
   const hiddenAtBoot = new Set(hide.filter((id) => id !== 'document'));
   const hideDocs = hide.includes('document');
@@ -348,7 +392,8 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
      *  raster upward, so the grow-box corner would be unreachable at any
      *  position. The shrink follows the pin's own reversibility discipline
      *  (below): the TRUE size is the per-window truth, and growing the
-     *  raster back restores it exactly.
+     *  raster back restores it exactly. (The fixed-size Sprite View is not
+     *  resizable, so it only re-pins.)
      *
      *  The UNROUNDED fraction is the per-window truth between events (the
      *  `pins` cache), re-derived only when the window has moved since this

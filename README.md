@@ -39,12 +39,12 @@ a short manual checklist: `docs/SMOKE-TEST.md`.
 The app is a **System 7 virtual desktop**, drawn end to end with the
 [`vintage-frames`](https://github.com/aportilla/vintage-frames) web component
 kit: a menu bar, an options strip, one movable **document window per open
-document** (face picker + pixel canvas — several documents can be open at
+document** (the pixel canvas — several documents can be open at
 once), and three floating **utility windoids** that serve whichever document
-is active — the **Tools palette**, the **Full Sprite View** (the whole
-atlas, live), and the **3D View** — plus documents that live as **files on
-the desktop**, saved in the browser and reopened by double-clicking their
-icons. Clicking the desktop is "switching to the Finder": the application
+is active — the **Tools palette**, the **Full Sprite View** (the face
+picker over the whole atlas, live), and the **3D View** — plus documents
+that live as **files on the desktop**, saved in the browser and reopened by
+double-clicking their icons. Clicking the desktop is "switching to the Finder": the application
 deactivates, its windoids hide, and the menus fall back to the desktop's
 grammar. See [The desktop](#the-desktop).
 
@@ -56,7 +56,8 @@ beside "rotate"); greedy meshing is always on.
 Sprites are hard pixel art — every texel is fully opaque or fully
 transparent — and every face with no view of its own is mirror-filled from
 its opposite at render time. The **face picker** (six pixel-art cube icons
-over radio buttons) switches which of the six you're editing (a
+over radio buttons, the strip across the Full Sprite View windoid's top)
+switches which of the six you're editing (a
 mirror-derived face reads empty — an honest view of the sheet) — see
 [Drawing editor](#drawing-editor).
 
@@ -89,7 +90,7 @@ draw each tile this way for a zero-transform ingest:
 | TOP          | plan view, width horizontal                             | top edge     | width × depth  |
 | BOTTOM       | plan from below (car rolled sideways, not end-over-end) | top edge     | width × depth  |
 
-The editor's **face picker** switches which tile you're editing; check each tile's
+The **face picker** switches which tile you're editing; check each tile's
 orientation against this table's **Front points** column, using the faded
 onion-skin of the mirrored opposite and the alignment guides behind the canvas.
 Per-tile `rot`/`flip` transforms exist in the pipeline for sheets that don't
@@ -97,10 +98,10 @@ follow the convention.
 
 ## Drawing editor
 
-The **document window** holds the drawing surface — the face picker row over
-the full-bleed grey artwork well (it runs edge to edge and down to the status
-strip, no rule between it and the picker row) — and the 3D View rebuilds live
-as you draw.
+The **document window** holds the drawing surface — the full-bleed grey
+artwork well (it runs edge to edge, title bar to status strip) — and the 3D
+View rebuilds live as you draw; the **face picker** rides the Full Sprite
+View windoid (see its bullet below).
 The tools live in the floating **Tools palette**, their per-tool options in
 the **options strip** under the menu bar, and the tile-size stepper in
 File → Properties…. Every control is a `vintage-frames` System 7 web
@@ -220,9 +221,17 @@ template — see [UI layer: Lit](#ui-layer-lit).
   wedge. `test/palette.test.mjs` pins the exact set. Every stroke is
   hard-pixel: fully opaque or fully erased, never anti-aliased.
 - **Face picker** — six **cube-view icons** over a radio row (a `vf-radio-group`)
-  across the document window's top switch which face you edit, laid out as mirror pairs
+  in the strip across the **Full Sprite View windoid's** top switch which face
+  the **active document's** window edits (each document keeps its own
+  selection — the picker, like every utility windoid, shows the active
+  one's), laid out as mirror pairs
   (`left`/`right`, `front`/`back`, `top`/`bottom`)
-  so you can flip between a pair for reference. Each icon is a **21×26 pixel-art**
+  so you can flip between a pair for reference. A pick fires on the
+  **press**, not the click — the System 7 palette feel, and a hard
+  requirement in a windoid: raising one re-inserts its node at the end of
+  the press (the desktop keeps DOM order in step with z-order), which
+  cancels that press's click, so a click-driven pick would swallow the
+  first pick after any other windoid was raised. Each icon is a **21×26 pixel-art**
   isometric cube (`src/assets/faces/`, wired up inside `sm-face-picker.js` — the one
   component that renders and styles them): the three
   quads the view shows (`front`, `left`, `top`) fill **solid red**, and their hidden
@@ -418,20 +427,30 @@ Two tiers, two regimes:
   you're drawing in), show the kit's slim 11px dot bar (no title text, no
   close box — the heading still names the window for assistive tech), and
   hide as a set whenever the application deactivates, returning with it. The
-  sprite and 3D windoids stay `resizable` — the canvases re-fit via their
-  own ResizeObservers, so the grow box works for free. The **Full Sprite
-  View** (`sm-atlas-view`) draws the whole atlas nearest-neighbor, scaled to
-  fit the window as large as its aspect ratio allows (never clipped, never
-  scrolled), following the ACTIVE document's **live channel**, so it tracks
-  strokes at rAF rate (the second live subscriber ever, after the
-  rebuilder), its status strip reading "Sprite Atlas View"; the **3D View**
+  3D windoid stays `resizable` — its canvas re-fits via its own
+  ResizeObserver, so the grow box works for free. The **Full Sprite
+  View** (`sm-atlas-view`) hosts the **face picker** strip across its top
+  (the six cube-view radios — see the Drawing-editor bullet) over the whole
+  atlas drawn nearest-neighbor, following the ACTIVE document's **live
+  channel**, so it tracks strokes at rAF rate (the second live subscriber
+  ever, after the rebuilder); it carries **no status strip** (its status
+  slot stays empty, so the kit draws no bottom bar — the atlas runs down
+  to the frame).
+  The windoid is a **fixed-size picture frame** — movable but not
+  resizable, no grow box: its width is the picker block's
+  (`SPRITE_WIDTH`), and its height is derived through the active atlas's
+  own ratio plus the fixed chrome (`spriteHeightFor` in `shell/layout.js`,
+  applied by `fitSprite` in `shell/windows.js`), so the atlas exactly
+  fills the body below the strip — no margins — at boot and across
+  document switches and tile resizes; the view's own scale-to-fit stays
+  underneath as the degenerate-case safety net; the **3D View**
   hosts a **controls strip** across its top — the two render toggles as
   checkboxes, **rotate** (auto-spin) and **smooth** (the low-poly wedge
   pass), writing the prefs slice live (`sm-stage-controls`; these lived in
   Settings… before) — over the THREE canvas, its status strip reading
   "3D Model View" — a build
   error or warning takes that line, ⚠-prefixed, and the build stats
-  (grid / voxels / tris) ride the strip's hover tooltip. The 3D View alone
+  (grid / voxels / tris) ride the strip's hover tooltip. The 3D View
   carries its own size floor (`shell/windows.js`, against the grow box and
   any boot geometry alike): width at the controls strip's content width so
   the checkboxes can never be clipped, height at enough canvas under the
@@ -439,11 +458,13 @@ Two tiers, two regimes:
 
 Positions/sizes come from a **smart placement** computed against the live
 raster (`shell/layout.js`, pure): the Tools palette top-left, the Full
-Sprite View over the 3D View as a right-hand rail of 3:4 (w:h) windoids
-splitting the height below the options strip, and each newly opened
-document window filling about two thirds of the vacant middle between
-them, centered (then staggered per additional open). Saved geometry always
-wins over the defaults, and everything clamps onto the raster's lattice.
+Sprite View over the 3D View as a right-hand rail splitting the height
+below the options strip — both right-flush, the sprite windoid at its
+fixed size, the 3D View (aiming for 3:4 w:h) absorbing the rest — and
+each newly opened document window filling about two thirds of the vacant
+middle between them, centered (then staggered per additional open). Saved
+geometry always wins over the defaults (position only, for the fixed-size
+sprite windoid), and everything clamps onto the raster's lattice.
 When the **browser window resizes**, the raster re-fits and every window
 keeps its **relative pin**: its left as a plain fraction of the raster's
 width, its top as a plain fraction of the **open space below the options
@@ -663,7 +684,9 @@ mirror, the stored flows, and `followActive`),
 snapshot copy-in/copy-out, the bound, load-boundary clearing),
 `test/params.test.mjs` (the whole `?param` dev-hook surface, typed), and
 `test/layout.test.mjs` (the desktop's window + icon arithmetic, `shell/layout.js`:
-the smart placement — the 3:4 rail, the centered two-thirds document box,
+the smart placement — the rail (the sprite windoid's fixed `SPRITE_WIDTH` ×
+`spriteHeightFor` size and the stage absorbing the rest),
+the centered two-thirds document box,
 the 30% width cap, tiny rasters degrading gracefully — the raster-derived
 icon lattice (the column wrap), and the resize re-pin rule: plain fractions
 (left of the raster width, top of the open space below the reserved chrome
@@ -746,13 +769,15 @@ src/scene/
                   a window switch re-frames the camera (a new subject)
 src/shell/        the desktop's behavior modules (imperative wiring over the index.html skeleton)
   layout.js       the window + icon arithmetic (pure, Node-tested): initialPlacement (the smart
-                  boot/open arrangement from the raster) + iconDefault (the raster-derived icon
-                  lattice) + pinOf/pinTo (the relative pin across raster resizes, framed per tier:
-                  windows below the options strip, icons below the menu bar)
+                  boot/open arrangement from the raster) + spriteHeightFor (the fixed-size
+                  Sprite View windoid: picker-block width, atlas-ratio height) + iconDefault
+                  (the raster-derived icon lattice) + pinOf/pinTo (the relative pin across raster
+                  resizes, framed per tier: windows below the options strip, icons below the menu bar)
   windows.js      the two window regimes: windoid visibility (appActive <-> hidden; non-closeable), and
                   the document-window reconciler (template clone per context, smart default/
                   stagger/restore, title sync, close-box routing); the vf-activate wire into
-                  shell.appActive + workspace.activeKey; boot clamp + the resize re-pin
+                  shell.appActive + workspace.activeKey; boot clamp + the resize re-pin; the
+                  Sprite View's fixed sizing (fitSprite — boot + doc switches/tile resizes)
   menus.js        vf-menu-select -> workspace/file actions on the ACTIVE document; the two-role
                   focus gating + checkmark sync; every dialog flow (About / Settings / Open /
                   name prompt / Properties / unsaved-changes / storage notice); the quit cascade
@@ -774,8 +799,8 @@ src/
                   equivalents are the kit's; Esc/Shift are gesture-scoped and live in the canvas)
   components/     all Lit, standard SHADOW DOM (mostly `:host { display: contents }`; the one
                   exception is sm-color-picker — light DOM, see its entry) — see "UI layer" below
-    sm-editor.js       CONNECTED container: a document window's body, one per open document — face
-                       picker + artwork well over ITS DocContext (`ctx`, assigned by
+    sm-editor.js       CONNECTED container: a document window's body, one per open document — the
+                       artwork well over ITS DocContext (`ctx`, assigned by
                        the reconciler pre-append); memoizes the per-face view model (face /
                        views-identity / geometry), feeds canvas gesture commits to ITS history
     sm-draw-canvas.js  leaf: the pixel-canvas subsystem — working buffer (+ImageData view, by reference),
@@ -789,11 +814,13 @@ src/
     sm-color-picker.js
                        connected chrome: the options strip (a kit vfPanel band: tool name +
                        current-ink swatch + options; hidden while the desktop is focused;
-                       bounds from the active document) / the Tools palette body / the live
-                       full-atlas view (follows the active document) / the 3D View's controls
+                       bounds from the active document) / the Tools palette body / the
+                       Sprite View body (the face-picker strip -> workspace.setFace on the
+                       ACTIVE key, over the live full-atlas canvas following the active
+                       document) / the 3D View's controls
                        strip (the rotate + smooth checkboxes -> prefs) / the windows' status
-                       readouts (tile = the window's edited face; atlas/build = fixed view
-                       names, the build stats riding the 3D strip's tooltip) /
+                       readouts (tile = the window's edited face; build = the 3D View's fixed
+                       name, the build stats riding its tooltip; the Sprite View carries none) /
                        the app-level Colors dialog (in index.html's dialog set, rendered into its
                        LIGHT DOM on purpose: the kit's page-drawn cursor stays above a modal only
                        when it can observe the vf-dialog's `open` flip, and its observer sees the

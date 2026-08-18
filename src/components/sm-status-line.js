@@ -1,12 +1,12 @@
 // ---------------------------------------------------------------------------
-// <sm-status-line kind="tile|atlas|build"> — the one-line readouts the
-// windows' `status` slots carry (kit chrome: the classic bottom strip). A
+// <sm-status-line kind="tile|build"> — the one-line readouts the
+// windows' `status` slots carry (kit chrome: the classic bottom strip; the
+// Full Sprite View carries none — its status slot stays empty). A
 // CONNECTED chrome component; `kind` picks what it reads:
 //   - tile:  a document window's edited face ("Front Face") — PER-WINDOW: the
 //            reconciler assigns this instance's `ctx` (its window's
 //            DocContext) before the append, and the readout follows that
 //            window's own face selection
-//   - atlas: the Full Sprite View's fixed name, "Sprite Atlas View"
 //   - build: the 3D View's fixed name, "3D Model View" — but an error or the
 //            first warning takes the line, ⚠-prefixed (the strip truncates
 //            with the kit's own overflow); the build stats (grid / voxels /
@@ -54,7 +54,6 @@ export class SmStatusLine extends LitElement {
       const f = this.ctx?.face;
       return f ? `${f[0].toUpperCase()}${f.slice(1)} Face` : '';
     }
-    if (this.kind === 'atlas') return 'Sprite Atlas View';
     // kind === 'build'
     const b = build.get();
     if (b.error) return `⚠ ${b.error}`;

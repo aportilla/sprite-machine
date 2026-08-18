@@ -83,8 +83,8 @@
            markup can't express a boolean attribute's off state) and no menu
            toggle. Geometry is NOT authored here: shell/windows.js computes
            the smart arrangement from the live raster at boot (the Tools
-           palette top-left, the sprite/stage rail of 3:4 windoids right —
-           shell/layout.js), lets any saved layout override it, and clamps;
+           palette top-left, the sprite/stage rail right — shell/layout.js),
+           lets any saved layout override it, and clamps;
            a browser resize re-pins every window proportionally. All three
            are utility windoids: they float above the document tier, never
            take the active state, and hide with the application when the
@@ -96,16 +96,24 @@
            reconciler in shell/windows.js and appended as a direct child of
            the desktop (its stacking manager only sees direct vf-window
            children). -->
+      <!-- The Full Sprite View's flush body (sm-atlas-view) holds the FACE
+           PICKER strip across its top (the six cube-view radios, serving
+           the ACTIVE document) over the live whole-atlas canvas. The
+           windoid is FIXED-size — movable but not resizable (no grow box):
+           shell/windows.js sizes it to the picker block's width and derives
+           its height from the active atlas's ratio, so the atlas exactly
+           fills the body below the strip (fitSprite — SPRITE_WIDTH /
+           SPRITE_CHROME in shell/layout.js). -->
       <vf-window
         id="win-sprite"
         variant="utility"
         heading="Full Sprite View"
         movable
-        resizable
         flush
       >
+        <!-- No status strip: an empty status slot draws no bottom bar (the
+             kit's .status.empty), so the atlas runs down to the frame. -->
         <sm-atlas-view></sm-atlas-view>
-        <sm-status-line kind="atlas" slot="status"></sm-status-line>
       </vf-window>
 
       <!-- The 3D View's flush body is a page-layout column (.stage-body):

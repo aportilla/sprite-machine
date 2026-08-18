@@ -9,6 +9,10 @@ import {
   iconDefault,
   pinOf,
   pinTo,
+  spriteHeightFor,
+  SPRITE_CHROME,
+  SPRITE_WIDTH,
+  ATLAS_RATIO,
   TOP_RESERVE,
   MENU_BAR,
   ICON_CELL,
@@ -19,20 +23,30 @@ const TOOLS = { width: 30, height: 158 };
 const W = 980;
 const H = 830;
 
-test('placement: the sprite/stage rail is right-flush, stacked, 3:4', () => {
+test('placement: the sprite/stage rail is right-flush, stacked, sprite fixed', () => {
   const p = initialPlacement(W, H, TOOLS);
-  // Both rail windoids share one box shape and column.
-  assert.equal(p.sprite.left, p.stage.left);
-  assert.equal(p.sprite.width, p.stage.width);
-  assert.equal(p.sprite.height, p.stage.height);
-  // 3:4 (w:h), to the rounding of the width.
-  assert.equal(p.sprite.width, Math.round(p.sprite.height * (3 / 4)));
-  // Right-flush behind the side inset, below the options strip, sprite on
-  // top, stage under it with a gap, bottoming out inside the raster.
+  // The sprite windoid is FIXED-size: the picker block's width, its height
+  // derived (the atlas exactly fills its body below the picker strip).
+  assert.equal(p.sprite.width, SPRITE_WIDTH);
+  assert.equal(p.sprite.height, spriteHeightFor(SPRITE_WIDTH));
+  // Both right-flush behind the side inset, below the options strip, sprite
+  // on top, stage under it with a gap, absorbing the rest of the height
+  // down to the bottom gap.
   assert.equal(p.sprite.left + p.sprite.width, W - 14);
+  assert.equal(p.stage.left + p.stage.width, W - 14);
   assert.ok(p.sprite.top > TOP_RESERVE);
-  assert.ok(p.stage.top > p.sprite.top + p.sprite.height);
-  assert.ok(p.stage.top + p.stage.height <= H);
+  assert.equal(p.stage.top, p.sprite.top + p.sprite.height + 8);
+  assert.equal(p.stage.top + p.stage.height, H - 8);
+});
+
+test('sprite sizing: height derives from width through the atlas ratio + chrome', () => {
+  // The default ratio is the square-tile 3×2 atlas (2:3 h:w).
+  assert.equal(
+    spriteHeightFor(SPRITE_WIDTH),
+    Math.round((SPRITE_WIDTH - SPRITE_CHROME.w) * ATLAS_RATIO) + SPRITE_CHROME.h
+  );
+  // A live atlas's own ratio wins (the ?tile=WxH shear hook).
+  assert.equal(spriteHeightFor(102, 1), 100 + SPRITE_CHROME.h);
 });
 
 test('placement: Tools sits top-left, above the rail band', () => {
@@ -45,7 +59,7 @@ test('placement: Tools sits top-left, above the rail band', () => {
 test('placement: the document box fills ~2/3 of the vacant middle, centered', () => {
   const p = initialPlacement(W, H, TOOLS);
   const x0 = 14 + TOOLS.width + 14; // the vacant middle's left edge
-  const x1 = p.sprite.left - 14; // …and its right edge
+  const x1 = Math.min(p.sprite.left, p.stage.left) - 14; // …and its right edge
   const vacantW = x1 - x0;
   const vacantH = H - 8 - (TOP_RESERVE + 8);
   assert.equal(p.doc.width, Math.round(vacantW * (2 / 3)));
@@ -59,12 +73,14 @@ test('placement: the document box fills ~2/3 of the vacant middle, centered', ()
   assert.ok(p.doc.top > TOP_RESERVE && p.doc.top + p.doc.height <= H);
 });
 
-test('placement: a narrow raster caps the rail width at 30%, aspect kept', () => {
-  // Tall and narrow: the height-derived width (~720) would swallow the
-  // raster; the cap holds it to 30% and re-derives the height from it.
+test('placement: a narrow raster caps the stage width at 30%, sprite stays fixed', () => {
+  // Tall and narrow: the stage's height-derived width (~1270) would swallow
+  // the raster; the cap holds it to 30%. The sprite windoid's fixed size is
+  // untouched by the raster, and the stage still bottoms out at the gap.
   const p = initialPlacement(400, 2000, TOOLS);
-  assert.equal(p.sprite.width, Math.floor(400 * 0.3));
-  assert.equal(p.sprite.height, Math.round(p.sprite.width / (3 / 4)));
+  assert.equal(p.sprite.width, SPRITE_WIDTH);
+  assert.equal(p.stage.width, Math.floor(400 * 0.3));
+  assert.equal(p.stage.top + p.stage.height, 2000 - 8);
 });
 
 test('placement: a tiny raster still yields finite, usable boxes', () => {

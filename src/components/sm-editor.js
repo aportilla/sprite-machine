@@ -5,10 +5,11 @@
 // with its `ctx` (the workspace DocContext) assigned BEFORE the append, and
 // it lives until the document closes — a hide (or the desktop's DOM
 // re-orders) never unmounts it, so canvas identity and focus behavior
-// survive. What it holds: the FACE PICKER row over the full-bleed grey
-// artwork well holding <sm-draw-canvas>. (The 168-color Colors dialog is app-level
-// chrome now — <sm-color-picker> in index.html's dialog set, light-DOM so
-// the kit's cursor can stack above its modal.)
+// survive. What it holds: the full-bleed grey artwork well holding
+// <sm-draw-canvas>. (The face picker is app-level chrome now — the strip
+// across the Full Sprite View windoid, serving the ACTIVE document; the
+// 168-color Colors dialog likewise — <sm-color-picker> in index.html's
+// dialog set, light-DOM so the kit's cursor can stack above its modal.)
 //
 // Store wiring (the editor's share of it): StoreControllers re-render on any
 // session (brush state), shell (Show Grid), or workspace (face, activation)
@@ -30,13 +31,8 @@ import { shell } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
 import { editorViewModel } from '../state/derive.js';
 import { StoreController } from '../state/store-controller.js';
-import './sm-face-picker.js'; // registers <sm-face-picker>
 import './sm-draw-canvas.js'; // registers <sm-draw-canvas>
 import { baseStyles } from './base-styles.js';
-
-// The face-picker row order: mirror pairs, so flipping between a pair for
-// reference is one step.
-const FACES = ['left', 'right', 'front', 'back', 'top', 'bottom'];
 
 export class SmEditor extends LitElement {
   static styles = [
@@ -52,18 +48,10 @@ export class SmEditor extends LitElement {
         flex-direction: column;
         background: var(--sm-white);
       }
-      /* Settings row: the six-face cube picker, centered (the mockup's row
-         under the title bar). */
-      .editor-settings {
-        flex: none;
-        display: flex;
-        justify-content: center;
-        padding: 8px 12px;
-      }
       /* The artwork well: the grey field the pixel canvas centers in — full
-         bleed, running edge to edge and down to the status strip (the window
-         is flush, so the grey meets the frame's own black line; no rule of
-         its own between it and the picker row above). */
+         bleed, running edge to edge from the title bar down to the status
+         strip (the window is flush, so the grey meets the frame's own black
+         line). */
       .editor-drawbox {
         flex: 1;
         min-height: 0;
@@ -175,13 +163,6 @@ export class SmEditor extends LitElement {
     const hooks = this.ctx.hooks;
     return html`
       <div class="editor">
-        <div class="editor-settings">
-          <sm-face-picker
-            .faces=${FACES}
-            .selected=${this.ctx.face}
-            @sm-select-face=${(e) => workspace.setFace(this.ctx.key, e.detail.face)}
-          ></sm-face-picker>
-        </div>
         <div class="editor-drawbox">
           <sm-draw-canvas
             .tile=${vm.tile}

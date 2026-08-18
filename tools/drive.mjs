@@ -336,9 +336,15 @@ const PROBE = `(() => {${DEEP}
   for (const m of buildStats.matchAll(/(grid|voxels|tris) ([^·]+)/g)) {
     stats[m[1]] = m[2].trim();
   }
+  // The sprite windoid carries NO status line — its status slot is empty, so
+  // the kit draws no bottom bar (.status.empty): null when the strip is
+  // absent or empty, its text if one ever comes back.
   const atlasStatus = (() => {
-    const el = __q('sm-status-line[kind="atlas"]');
-    return el && el.shadowRoot ? el.shadowRoot.textContent.trim() : '';
+    const w = __q('#win-sprite');
+    const bar =
+      w && w.shadowRoot ? w.shadowRoot.querySelector('[part="status-bar"]') : null;
+    if (!bar || bar.classList.contains('empty')) return null;
+    return bar.textContent.trim();
   })();
   // The Colors dialog is light-DOM chrome like the desktop's own dialogs
   // (About, Open, …): the kit's cursor observer must see its \`open\` flip
@@ -371,7 +377,10 @@ const PROBE = `(() => {${DEEP}
       const ls = o.shadowRoot.querySelectorAll('vf-label');
       return ls.length ? ls[ls.length - 1].textContent.trim() : null;
     })(),
-    face: __qd('.editor-face-picker')?.value ?? null,
+    // The face picker is app-level chrome now: the strip across the Full
+    // Sprite View windoid, serving the ACTIVE document (one picker, so the
+    // global deep query is exact).
+    face: __q('.editor-face-picker')?.value ?? null,
     checkedRadio: checked ? checked.getAttribute('value') : null,
     heading: __doc() ? __doc().heading : '',
     tileStatus: (() => {
@@ -642,9 +651,9 @@ async function main() {
     s.buildLine
   );
   check(
-    'the sprite windoid status bar reads its fixed name',
-    s.atlasStatus === 'Sprite Atlas View',
-    s.atlasStatus
+    'the sprite windoid draws no status strip (empty status slot)',
+    s.atlasStatus === null,
+    String(s.atlasStatus)
   );
   check(
     'all four desktop windows are open',
@@ -1330,10 +1339,12 @@ async function main() {
     await mouse('mouseReleased', g.x + dx, g.y + dy, { buttons: 0 });
     await sleep(300);
   };
-  const atlasWidth = () =>
+  const atlasFill = () =>
     evaluate(
-      `(() => {${DEEP} return __q('sm-atlas-view').shadowRoot
-          .querySelector('canvas').getBoundingClientRect().width; })()`
+      `(() => {${DEEP} const sr = __q('sm-atlas-view').shadowRoot;
+        const c = sr.querySelector('canvas').getBoundingClientRect();
+        const b = sr.querySelector('.atlas-box').getBoundingClientRect();
+        return { cw: c.width, ch: c.height, bw: b.width, bh: b.height }; })()`
     );
   const drawWidth = () =>
     evaluate(
@@ -1357,13 +1368,26 @@ async function main() {
       )),
     'sprite did not cross tools in the light DOM'
   );
-  const atlasBefore = await atlasWidth();
-  await grow('#win-sprite', 40, 60);
-  const atlasAfter = await atlasWidth();
+  // The sprite windoid is FIXED-size — no grow box renders, its width is the
+  // picker block's (SPRITE_WIDTH = 212), and the atlas canvas fills the body
+  // below the picker strip exactly (the height is derived from the atlas's
+  // own ratio, so the exact fill IS the sizing contract) — checked after the
+  // raise, so a reconnect that lost the view's layout would show here.
+  const spriteFixed = await evaluate(
+    `(() => {${DEEP} const w = __q('#win-sprite');
+      return { grow: !!w.shadowRoot.querySelector('[part="grow-box"]'),
+        width: w.width }; })()`
+  );
   check(
-    'the sprite view re-fits after a raise re-orders the DOM',
-    atlasAfter > atlasBefore,
-    `${atlasBefore} → ${atlasAfter}`
+    'the sprite windoid is fixed-size (no grow box, picker-block width)',
+    spriteFixed.grow === false && spriteFixed.width === 212,
+    JSON.stringify(spriteFixed)
+  );
+  const fill = await atlasFill();
+  check(
+    'the atlas exactly fills the sprite windoid below the picker strip',
+    Math.abs(fill.cw - fill.bw) < 1 && Math.abs(fill.ch - fill.bh) < 1,
+    JSON.stringify(fill)
   );
   // The document window was dragged +40/+24 above, which tucks its grow box
   // under the stage windoid (the utility tier floats over the document

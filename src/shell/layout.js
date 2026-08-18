@@ -4,11 +4,20 @@
 //
 //   initialPlacement() is the authored arrangement computed from the live
 //   raster instead of hard-coded markup: the Tools palette top-left, the
-//   Full Sprite View over the 3D View as a right-hand RAIL of 3:4 (w:h)
-//   windoids splitting the height below the options strip, and a new
-//   document window filling about two thirds of the vacant middle between
-//   them, centered. windows.js applies these first, then any saved
-//   geometry, then the clamp — a restored layout always wins.
+//   Full Sprite View over the 3D View as a right-hand RAIL below the
+//   options strip, both right-flush — the Sprite View at its FIXED size
+//   (SPRITE_WIDTH wide, height via spriteHeightFor) and the 3D View taking
+//   what's left of the height — and a new document window filling about two
+//   thirds of the vacant middle between them, centered. windows.js applies
+//   these first, then any saved geometry, then the clamp — a restored
+//   layout always wins (position only, for the fixed-size Sprite View).
+//
+//   spriteHeightFor() is the Sprite View windoid's sizing rule: the windoid
+//   is a fixed-size picture frame — no grow box — its width the face-picker
+//   block's and its height derived through the atlas's own ratio plus the
+//   fixed chrome, so the atlas exactly fills the body below the picker
+//   strip (windows.js re-derives the height on document switches and
+//   structural changes).
 //
 //   iconDefault() is the icons' half of the same idea: the classic
 //   left-edge column below the Tools band, derived from the raster instead
@@ -51,9 +60,32 @@ export const MENU_BAR = 20;
 const EDGE = 14; // side inset — the Tools palette's classic left
 const GAP = 8; // vertical breathing room: below the strip, between / below the rail
 
-const RAIL_ASPECT = 3 / 4; // the rail windoids' width : height
-const RAIL_MAX_W = 0.3; // …capped so a squat raster can't grow them past 30% wide
+const RAIL_ASPECT = 3 / 4; // the 3D View windoid's width : height (uncapped case)
+const RAIL_MAX_W = 0.3; // …capped so a squat raster can't grow the rail past 30% wide
 const DOC_FILL = 2 / 3; // the document window's share of the vacant middle
+
+// --- the Full Sprite View windoid's fixed size --------------------------------
+// The windoid is a fixed-size picture frame — no grow box: the face-picker
+// block sets its width, and its height is DERIVED so the atlas image
+// exactly fills the body below the picker strip. All system px, measured at
+// scale 1 — if the picker strip or the window chrome changes, re-measure:
+//   width chrome: the frame's two 1px side borders;
+//   height chrome: 12 dot bar + 2 borders + 62 picker strip (26 icon + ~19
+//   radio + 2×8 pad + 1 rule) = 76 — no status strip (the slot is empty,
+//   so the kit draws no bottom bar).
+export const SPRITE_CHROME = { w: 2, h: 76 };
+// The windoid's width — the face-picker block (six 21px cells + five 12px
+// gaps = 186) + the strip's 2×12 side padding + the 2 side borders, so the
+// strip hugs the picker exactly.
+export const SPRITE_WIDTH = 212;
+// The square-tile 3×2 atlas's height : width — the ratio the sizing rule
+// defaults to before a document is open (a live document's real atlas wins).
+export const ATLAS_RATIO = 2 / 3;
+
+/** The Sprite View windoid's derived height for a window width. */
+export function spriteHeightFor(width, ratio = ATLAS_RATIO) {
+  return Math.round(Math.max(0, width - SPRITE_CHROME.w) * ratio) + SPRITE_CHROME.h;
+}
 
 // The default icon lattice: columns from the left edge, below the Tools
 // palette's classic band.
@@ -83,20 +115,32 @@ export const ICON_CELL = 64;
 export function initialPlacement(desktopW, desktopH, tools) {
   const top = TOP_RESERVE + GAP;
 
-  // The right-hand rail: Full Sprite View over 3D View, each 3:4 (w:h),
-  // splitting the height below the strip, right-flush behind a side inset.
-  let railH = Math.floor((desktopH - TOP_RESERVE - 3 * GAP) / 2);
-  let railW = Math.round(railH * RAIL_ASPECT);
+  // The right-hand rail: Full Sprite View over 3D View, both right-flush
+  // behind a side inset, splitting the height below the strip. The sprite
+  // windoid is FIXED-size (SPRITE_WIDTH wide, height derived —
+  // spriteHeightFor); the stage takes the rest of the height, its width
+  // aiming for 3:4 (w:h) of that, capped and floored.
+  const span = desktopH - top - GAP; // the rail's vertical run
+  const spriteH = spriteHeightFor(SPRITE_WIDTH);
+  const stageH = Math.max(100, span - spriteH - GAP);
+  let stageW = Math.round(stageH * RAIL_ASPECT);
   const maxW = Math.floor(desktopW * RAIL_MAX_W);
-  if (railW > maxW) {
-    railW = maxW;
-    railH = Math.round(railW / RAIL_ASPECT);
-  }
-  railH = Math.max(100, railH); // an unusable raster still gets usable windows
-  railW = Math.max(75, railW);
-  const railLeft = Math.max(0, desktopW - EDGE - railW);
-  const sprite = { left: railLeft, top, width: railW, height: railH };
-  const stage = { left: railLeft, top: top + railH + GAP, width: railW, height: railH };
+  if (stageW > maxW) stageW = maxW;
+  stageW = Math.max(75, stageW); // an unusable raster still gets usable windows
+  const sprite = {
+    left: Math.max(0, desktopW - EDGE - SPRITE_WIDTH),
+    top,
+    width: SPRITE_WIDTH,
+    height: spriteH,
+  };
+  const stage = {
+    left: Math.max(0, desktopW - EDGE - stageW),
+    top: top + spriteH + GAP,
+    width: stageW,
+    height: stageH,
+  };
+  // The vacant middle's right bound: the leftmost rail edge.
+  const railLeft = Math.min(sprite.left, stage.left);
 
   // The vacant middle: between the Tools palette and the rail, below the
   // strip — the document window takes about two thirds of it, centered.
