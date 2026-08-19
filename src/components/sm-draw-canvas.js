@@ -137,6 +137,7 @@ export class SmDrawCanvas extends LitElement {
       .editor-canvas-bg {
         z-index: 0;
         pointer-events: none;
+        opacity: 0.2;
       }
       /* Hairline extent rules sit ABOVE the pixel canvas; the cursor preview above them. */
       .editor-canvas-overlay {

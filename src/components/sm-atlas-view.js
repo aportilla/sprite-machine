@@ -67,7 +67,6 @@ export class SmAtlasView extends LitElement {
         display: flex;
         flex-direction: column;
         height: 100%;
-        background: var(--sm-artwork);
       }
       /* The picker strip: the status strip's grammar upside down (a white
          band over a 1px black rule), like the 3D View's controls strip.
@@ -106,7 +105,7 @@ export class SmAtlasView extends LitElement {
         margin: 0;
         padding: 0;
         border: 0;
-        background: none;
+        background: #FFF;
         /* Reads the kit's cursor token first: applyCursor's blanket can't
            pierce this shadow root, and a bare \`cursor: pointer\` would put
            the native hand back alongside the kit's drawn arrow. */
@@ -122,19 +121,6 @@ export class SmAtlasView extends LitElement {
         height: 100%;
         image-rendering: pixelated;
         image-rendering: crisp-edges;
-        /* The same light transparency checker as the draw canvas, so empty
-           texels read as "no color" — and, like there, registered to the
-           TEXEL grid: one checker square per document pixel. The cell paints
-           the sheet with putImageData (which replaces alpha), so the checker
-           has to live BEHIND the canvas as a background; sizing it as a
-           fraction of the element (one 2×2-texel period = 200% / tile dim,
-           the dims fed by #syncGeometry via custom props) keeps it scaling
-           in lockstep with the art. The conic checker's second quadrant
-           color is texel (0,0) — light, the draw canvas's phase. */
-        background-color: #a8a8a8;
-        background-image: repeating-conic-gradient(#a8a8a8 0% 25%, #d0d0d0 0% 50%);
-        background-size: calc(200% / var(--sm-tile-w, 16))
-          calc(200% / var(--sm-tile-h, 16));
       }
       /* The selection ring: the edited face's square stroked in the
          face-picker art's red, laid over the tile's own edge. Always in the
