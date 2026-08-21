@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 148 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 167 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -102,21 +102,50 @@ browser, `http://localhost:5173/`.
 
 ## Desktop state (localStorage)
 
-- [ ] Open two saved documents, drag their windows and an icon, resize the
-      3D View, toggle Show Grid, then reload — the layout comes back and
-      the ACTIVE document reopens (the address bar mirrored it as
-      `#<name>`); the other deliberately does not (one URL, one document —
-      the URL says what a load shows).
+- [ ] Open two saved documents, drag an icon, toggle Show Grid, then reload
+      — the icon and Show Grid come back and the ACTIVE document reopens
+      (the address bar mirrored it as `#<name>`); the other deliberately
+      does not (one URL, one document — the URL says what a load shows).
+- [ ] **Windows never remember**: drag all three windoids and the document
+      window somewhere odd, grow-box the 3D View, then reload — every
+      window is back at the authored arrangement for THIS viewport (Tools
+      top-left, the document top-aligned beside it, the Sprite View over
+      the 3D View as one right-hand column of equal width). Now resize the
+      browser window (or move it to another monitor) and reload — the
+      arrangement re-derives for the new viewport; nothing hangs off-screen.
+- [ ] **A resize is an Arrange for untouched windows**: boot to the New
+      Document dialog, squish the browser window, then Create — the
+      windoids and the document land exactly where Arrange Windows puts
+      them on that viewport (not a scaled-down copy of the old layout).
+      With a document open and nothing moved, resize the browser — the
+      rail stays right-flush and full-height and the document re-fits.
+      Now drag the Tools palette and resize again — only Tools keeps a
+      proportional position; the rest still follow the placement.
+- [ ] **View → Arrange Windows**: with three documents open, drag every
+      window somewhere odd and grow-box the 3D View and a document; pick
+      Arrange Windows — the windoids snap back to the rail at their placed
+      sizes and the documents stack as a fresh cascade, bottom-most window
+      on the first slot, the active one on top; nothing changes focus.
+      Shrink the browser window, pick it again — the arrangement re-derives
+      for the smaller raster. From the Finder role (click the desktop) the
+      item stays enabled and re-rails the hidden windoids for the next open.
+- [ ] **New windows cascade into free slots**: File → New… four more
+      times — every window the same size, each a step down-right, the
+      fifth flush with the rail's inset and the bottom margin, none under
+      the rail; a sixth wraps onto the first. Close the FIRST window — the
+      next File → New… lands back on the vacated first slot, not further
+      down the cascade.
 - [ ] **The address bar follows the active document**: open/switch between
       saved documents — the fragment tracks the active one; an untitled
       window or the bare desktop clears it. With it cleared, a reload
       greets with the New Document dialog (untitleds never survive).
 - [ ] **`?file=<name>` / `#<name>`**: load with `?file=cube` (or `#Cube`)
-      in the URL — the stored Cube opens directly, no dialog, its window on
-      the geometry and edited face it last had, and the bar canonicalizes
-      to `#Cube`. An unknown name falls back to the New Document dialog.
-- [ ] `?fresh=1` boots the authored default layout regardless, and doesn't
-      clobber the saved one.
+      in the URL — the stored Cube opens directly, no dialog, on the edited
+      face it last had (its window at the default box), and the bar
+      canonicalizes to `#Cube`. An unknown name falls back to the New
+      Document dialog.
+- [ ] `?fresh=1` boots a bare desktop regardless (no icons, Show Grid off),
+      and doesn't clobber the saved state.
 - [ ] **First-boot seeding, once only**: clear the site's data (localStorage
       and IndexedDB) and reload — Car and Cube appear as ordinary saved-doc
       icons under the New Document dialog. Rename or delete-and-redraw one,

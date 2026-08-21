@@ -113,7 +113,8 @@ const removeCursor = applyCursor();
 
 // --- persistence wiring ------------------------------------------------------
 // The files slice gets its browser dependencies here (it stays Node-testable
-// with stubs); desktop layout rides localStorage, both disabled by ?fresh=1.
+// with stubs); desktop state (icons, Show Grid, edited faces — never window
+// geometry) rides localStorage, both disabled by ?fresh=1.
 files.init({
   storage: createStorageIfAvailable(),
   encodeAtlas: imageDataToPngBytes,
@@ -125,7 +126,9 @@ const dstate = createDesktopState(boot.fresh);
 if (dstate.saved?.showGrid) shell.setShowGrid(true);
 
 // --- shell ------------------------------------------------------------------
-const windows = initWindows(desktop, { saved: dstate.saved, hide: boot.hide });
+// The windows take no saved state: their geometry is placed fresh from the
+// live raster at every boot and every open (shell/windows.js header).
+const windows = initWindows(desktop, { hide: boot.hide });
 const menus = initMenus(desktop, windows);
 const icons = initIcons(desktop, {
   actions: menus.actions,
@@ -139,7 +142,6 @@ repinDesktop = (before) => {
   icons.onDesktopResized(before);
 };
 const stopPersist = dstate.start({
-  windows,
   iconsRoot: desktop.querySelector('#desktop-icons'),
 });
 // The address bar mirrors the active SAVED document (#<name>, replaceState),
@@ -211,14 +213,15 @@ if (hot) {
 //      files the user may edit, rename or delete), then resolve like any
 //      other boot — ?file can name a just-seeded default.
 //   3. RESOLVE THE URL: a ?file naming a stored doc (case-insensitive; the
-//      most recently modified wins a name collision) opens it — its window
-//      landing on any remembered geometry + edited face. No param, an
-//      unknown name, a failed load, or broken storage (a private window —
-//      there's no library to name into, and everything the dialog creates
-//      is an untitled window needing none) all fall back to the New
-//      Document dialog. A prior session's open windows are deliberately NOT
-//      reopened — the URL, not localStorage, says what a load shows (the
-//      desktop layout itself still restores).
+//      most recently modified wins a name collision) opens it — on its
+//      remembered edited face, its window placed fresh from the live raster
+//      (window geometry is never restored). No param, an unknown name, a
+//      failed load, or broken storage (a private window — there's no
+//      library to name into, and everything the dialog creates is an
+//      untitled window needing none) all fall back to the New Document
+//      dialog. A prior session's open windows are deliberately NOT reopened
+//      — the URL, not localStorage, says what a load shows (the icons and
+//      Show Grid still restore).
 (async () => {
   // ?edit seeds the sample path's context face AT open — a post-open setFace
   // would race the one-shot mount hooks (the mount fill commits against

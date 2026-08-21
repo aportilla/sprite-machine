@@ -1,11 +1,16 @@
 // Node-runnable tests for the desktop's window + icon arithmetic
-// (shell/layout.js): the smart initial placement, the icons' default
-// lattice, and the resize re-pin rule in both frames. Run: node --test
+// (shell/layout.js): the smart initial placement, the document-window
+// cascade, the icons' default lattice, and the resize re-pin rule in both
+// frames. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
   initialPlacement,
+  cascadeFrom,
+  cascadeSlot,
+  CASCADE_STEP,
+  CASCADE_SLOTS,
   iconDefault,
   pinOf,
   pinTo,
@@ -23,18 +28,19 @@ const TOOLS = { width: 30, height: 158 };
 const W = 980;
 const H = 830;
 
-test('placement: the sprite/stage rail is right-flush, stacked, sprite fixed', () => {
+test('placement: the sprite/stage rail is one right-flush column, sprite fixed', () => {
   const p = initialPlacement(W, H, TOOLS);
   // The sprite windoid is FIXED-size: the atlas grid block's width, its
   // height derived (the face grid exactly fills its body below the picker
   // strip).
   assert.equal(p.sprite.width, SPRITE_WIDTH);
   assert.equal(p.sprite.height, spriteHeightFor(SPRITE_WIDTH));
-  // Both right-flush behind the side inset, below the options strip, sprite
-  // on top, stage under it with a gap, absorbing the rest of the height
-  // down to the bottom gap.
+  // Both right-flush behind the side inset at the SAME width, below the
+  // options strip, sprite on top, stage under it with a gap, absorbing the
+  // rest of the height down to the bottom gap.
   assert.equal(p.sprite.left + p.sprite.width, W - 14);
-  assert.equal(p.stage.left + p.stage.width, W - 14);
+  assert.equal(p.stage.width, SPRITE_WIDTH);
+  assert.equal(p.stage.left, p.sprite.left);
   assert.ok(p.sprite.top > TOP_RESERVE);
   assert.equal(p.stage.top, p.sprite.top + p.sprite.height + 8);
   assert.equal(p.stage.top + p.stage.height, H - 8);
@@ -70,31 +76,45 @@ test('placement: Tools sits top-left, above the rail band', () => {
   assert.ok(p.tools.left + TOOLS.width < p.doc.left);
 });
 
-test('placement: the document box fills ~2/3 of the vacant middle, centered', () => {
+test('placement: the document box sits top-left beside Tools, leaving the cascade room', () => {
   const p = initialPlacement(W, H, TOOLS);
   const x0 = 14 + TOOLS.width + 14; // the vacant middle's left edge
-  const x1 = Math.min(p.sprite.left, p.stage.left) - 14; // …and its right edge
-  const vacantW = x1 - x0;
-  const vacantH = H - 8 - (TOP_RESERVE + 8);
-  assert.equal(p.doc.width, Math.round(vacantW * (2 / 3)));
-  assert.equal(p.doc.height, Math.round(vacantH * (2 / 3)));
-  // Centered: equal margins each side, to a rounding pixel.
-  const leftMargin = p.doc.left - x0;
-  const rightMargin = x1 - (p.doc.left + p.doc.width);
-  assert.ok(Math.abs(leftMargin - rightMargin) <= 1, `${leftMargin} vs ${rightMargin}`);
-  // Entirely inside the vacancy.
-  assert.ok(p.doc.left >= x0 && p.doc.left + p.doc.width <= x1);
-  assert.ok(p.doc.top > TOP_RESERVE && p.doc.top + p.doc.height <= H);
+  const x1 = p.sprite.left - 14; // …and its right edge (the rail's inset)
+  const y1 = H - 8; // …and its bottom
+  // Top-left aligned with the Tools palette: its top, a side inset right of it.
+  assert.equal(p.doc.left, x0);
+  assert.equal(p.doc.top, p.tools.top);
+  // The room left at the right and bottom is exactly the cascade's: the
+  // LAST slot lands flush with the vacancy's edges, every earlier one inside.
+  const room = (CASCADE_SLOTS - 1) * CASCADE_STEP;
+  assert.equal(p.doc.left + p.doc.width, x1 - room);
+  assert.equal(p.doc.top + p.doc.height, y1 - room);
+  let occupied = [];
+  for (let i = 0; i < CASCADE_SLOTS; i++) {
+    const s = cascadeFrom(p.doc, occupied);
+    assert.ok(s.left + p.doc.width <= x1, `slot ${i} runs into the rail`);
+    assert.ok(s.top + p.doc.height <= y1, `slot ${i} runs off the bottom`);
+    occupied = [...occupied, s];
+  }
+  const last = occupied[CASCADE_SLOTS - 1];
+  assert.equal(last.left + p.doc.width, x1);
+  assert.equal(last.top + p.doc.height, y1);
 });
 
-test('placement: a narrow raster caps the stage width at 30%, sprite stays fixed', () => {
-  // Tall and narrow: the stage's height-derived width (~1270) would swallow
-  // the raster; the cap holds it to 30%. The sprite windoid's fixed size is
-  // untouched by the raster, and the stage still bottoms out at the gap.
-  const p = initialPlacement(400, 2000, TOOLS);
-  assert.equal(p.sprite.width, SPRITE_WIDTH);
-  assert.equal(p.stage.width, Math.floor(400 * 0.3));
-  assert.equal(p.stage.top + p.stage.height, 2000 - 8);
+test('placement: the rail is one column — the stage takes the sprite width on any raster', () => {
+  // Tall and narrow, or squat and wide: the stage never derives a width of
+  // its own. The sprite windoid's fixed size is untouched by the raster,
+  // and the stage still bottoms out at the gap.
+  for (const [w, h] of [
+    [400, 2000],
+    [2400, 500],
+  ]) {
+    const p = initialPlacement(w, h, TOOLS);
+    assert.equal(p.sprite.width, SPRITE_WIDTH);
+    assert.equal(p.stage.width, SPRITE_WIDTH);
+    assert.equal(p.stage.left, p.sprite.left);
+    assert.equal(p.stage.top + p.stage.height, h - 8);
+  }
 });
 
 test('placement: a tiny raster still yields finite, usable boxes', () => {
@@ -104,6 +124,81 @@ test('placement: a tiny raster still yields finite, usable boxes', () => {
     assert.ok(box.width > 0 && box.height > 0);
     assert.ok(box.left >= 0 && box.top >= TOP_RESERVE);
   }
+});
+
+test('cascade: the first open takes the doc box, each further one steps down-right', () => {
+  const base = { left: 100, top: 100 };
+  assert.deepEqual(cascadeFrom(base, []), { left: 100, top: 100, slot: 0 });
+  const one = [{ left: 100, top: 100 }];
+  assert.deepEqual(cascadeFrom(base, one), {
+    left: 100 + CASCADE_STEP,
+    top: 100 + CASCADE_STEP,
+    slot: 1,
+  });
+  const two = [...one, { left: 100 + CASCADE_STEP, top: 100 + CASCADE_STEP }];
+  assert.deepEqual(cascadeFrom(base, two), {
+    left: 100 + 2 * CASCADE_STEP,
+    top: 100 + 2 * CASCADE_STEP,
+    slot: 2,
+  });
+});
+
+test('cascade: a freed slot is reused — a closed or dragged-away window gives it back', () => {
+  const base = { left: 100, top: 100 };
+  // Slot 0's window was dragged elsewhere, slot 1 is held: the next open
+  // lands back on slot 0 (a closed window simply isn't in the list).
+  assert.deepEqual(
+    cascadeFrom(base, [
+      { left: 400, top: 300 },
+      { left: 100 + CASCADE_STEP, top: 100 + CASCADE_STEP },
+    ]),
+    { left: 100, top: 100, slot: 0 }
+  );
+  // A landing a pixel or two off its slot (a lattice snap, an edge clamp)
+  // still holds it.
+  assert.deepEqual(cascadeFrom(base, [{ left: 102, top: 99 }]), {
+    left: 100 + CASCADE_STEP,
+    top: 100 + CASCADE_STEP,
+    slot: 1,
+  });
+  // …but a window half a step away does not.
+  assert.deepEqual(cascadeFrom(base, [{ left: 100 + CASCADE_STEP / 2, top: 100 }]), {
+    left: 100,
+    top: 100,
+    slot: 0,
+  });
+});
+
+test('cascade: every slot held wraps instead of walking off the raster', () => {
+  const base = { left: 100, top: 100 };
+  const all = Array.from({ length: CASCADE_SLOTS }, (_, i) => ({
+    left: 100 + CASCADE_STEP * i,
+    top: 100 + CASCADE_STEP * i,
+  }));
+  assert.deepEqual(cascadeFrom(base, all), { left: 100, top: 100, slot: 0 });
+  assert.deepEqual(cascadeFrom(base, [...all, { left: 100, top: 100 }]), {
+    left: 100 + CASCADE_STEP,
+    top: 100 + CASCADE_STEP,
+    slot: 1,
+  });
+});
+
+test('cascade: a slot re-expresses on any doc box — the same step of a new raster', () => {
+  // A window that opened on slot 2 of one raster's doc box lands on slot 2
+  // of another's (the resize rule for an untouched window), wrapping past
+  // the slot count the way an open would.
+  const a = { left: 100, top: 100 };
+  const b = { left: 58, top: 64 };
+  assert.deepEqual(
+    cascadeSlot(a, 2),
+    cascadeFrom(a, [cascadeSlot(a, 0), cascadeSlot(a, 1)])
+  );
+  assert.deepEqual(cascadeSlot(b, 2), {
+    left: 58 + 2 * CASCADE_STEP,
+    top: 64 + 2 * CASCADE_STEP,
+    slot: 2,
+  });
+  assert.deepEqual(cascadeSlot(b, CASCADE_SLOTS + 1), cascadeSlot(b, 1));
 });
 
 test('pin: left is a fraction of the raster, top of the space below the strip', () => {

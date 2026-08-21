@@ -5,12 +5,26 @@
 //   initialPlacement() is the authored arrangement computed from the live
 //   raster instead of hard-coded markup: the Tools palette top-left, the
 //   Full Sprite View over the 3D View as a right-hand RAIL below the
-//   options strip, both right-flush — the Sprite View at its FIXED size
-//   (SPRITE_WIDTH wide, height via spriteHeightFor) and the 3D View taking
-//   what's left of the height — and a new document window filling about two
-//   thirds of the vacant middle between them, centered. windows.js applies
-//   these first, then any saved geometry, then the clamp — a restored
-//   layout always wins (position only, for the fixed-size Sprite View).
+//   options strip, both right-flush at ONE width — the Sprite View at its
+//   FIXED size (SPRITE_WIDTH wide, height via spriteHeightFor) and the 3D
+//   View under it, as wide, taking what's left of the height — and the
+//   document window TOP-LEFT ALIGNED beside the Tools palette (same top, a
+//   side inset right of it), filling the vacant middle but for the CASCADE
+//   ROOM it leaves at the right and bottom, so every further window opens
+//   at the same size, stepped down-right, without running into the rail
+//   or off the bottom. This is the ONLY
+//   source of window geometry: nothing is restored from a prior session — a
+//   browser is resized and reopened on another monitor all the time, so a
+//   remembered top/left is no truth worth re-asserting over a raster that
+//   may be nothing like the one it was dragged on. windows.js applies the
+//   placement at every boot (the windoids) and every document open (the
+//   doc box), then the clamp.
+//
+//   cascadeFrom() is the document windows' half of that rule: each open
+//   takes the doc box cascaded down-right by CASCADE_STEP into the first
+//   slot no open document window holds — a closed or dragged-away window
+//   gives its slot back, and a full cascade wraps instead of walking off
+//   the raster.
 //
 //   spriteHeightFor() is the Sprite View windoid's sizing rule: the windoid
 //   is a fixed-size picture frame — no grow box — its width the atlas
@@ -24,7 +38,9 @@
 //   of a fixed stack — it folds into further columns when the next cell
 //   would run off a short raster's bottom.
 //
-//   pinOf() / pinTo() are the resize rule, and it is DELIBERATELY dumb:
+//   pinOf() / pinTo() are the resize rule for a window the user has MOVED
+//   or resized (an untouched one simply follows the placement above onto
+//   the new raster — windows.js), and it is DELIBERATELY dumb:
 //   left as a plain fraction of the raster width, top as a plain fraction
 //   of the open space below a fixed-height RESERVE band of chrome — so a
 //   box riding the band's bottom edge stays riding it instead of sliding
@@ -57,12 +73,19 @@ export const TOP_RESERVE = 56;
 // and clamp frame is the whole desktop below it (see the header).
 export const MENU_BAR = 20;
 
-const EDGE = 14; // side inset — the Tools palette's classic left
+const EDGE = 14; // side inset — the Tools palette's classic left, the doc's gap from it
 const GAP = 8; // vertical breathing room: below the strip, between / below the rail
 
-const RAIL_ASPECT = 3 / 4; // the 3D View windoid's width : height (uncapped case)
-const RAIL_MAX_W = 0.3; // …capped so a squat raster can't grow the rail past 30% wide
-const DOC_FILL = 2 / 3; // the document window's share of the vacant middle
+// The document-window cascade: each further open steps down-right from the
+// doc box, System 7 style — into the first free slot (cascadeFrom), wrapping
+// after CASCADE_SLOTS. The doc box leaves exactly the cascade's room at the
+// vacant middle's right and bottom (CASCADE_ROOM), so every slot lands
+// inside the vacancy — the last one flush with its edges — before the
+// cascade wraps onto the first.
+export const CASCADE_STEP = 24;
+export const CASCADE_SLOTS = 5;
+const CASCADE_ROOM = (CASCADE_SLOTS - 1) * CASCADE_STEP;
+const DOC_MIN = 220; // the doc box's floor on a raster too small for the room
 
 // --- the Full Sprite View windoid's fixed size --------------------------------
 // The windoid is a fixed-size picture frame — no grow box: the ATLAS GRID
@@ -127,48 +150,82 @@ export const ICON_CELL = 64;
 export function initialPlacement(desktopW, desktopH, tools) {
   const top = TOP_RESERVE + GAP;
 
-  // The right-hand rail: Full Sprite View over 3D View, both right-flush
-  // behind a side inset, splitting the height below the strip. The sprite
-  // windoid is FIXED-size (SPRITE_WIDTH wide, height derived —
-  // spriteHeightFor); the stage takes the rest of the height, its width
-  // aiming for 3:4 (w:h) of that, capped and floored.
+  // The right-hand rail: Full Sprite View over 3D View, one column — both
+  // right-flush behind a side inset at the SAME width, splitting the height
+  // below the strip. The sprite windoid is FIXED-size (SPRITE_WIDTH wide,
+  // height derived — spriteHeightFor); the stage, as wide, takes the rest
+  // of the height.
   const span = desktopH - top - GAP; // the rail's vertical run
   const spriteH = spriteHeightFor(SPRITE_WIDTH);
-  const stageH = Math.max(100, span - spriteH - GAP);
-  let stageW = Math.round(stageH * RAIL_ASPECT);
-  const maxW = Math.floor(desktopW * RAIL_MAX_W);
-  if (stageW > maxW) stageW = maxW;
-  stageW = Math.max(75, stageW); // an unusable raster still gets usable windows
-  const sprite = {
-    left: Math.max(0, desktopW - EDGE - SPRITE_WIDTH),
-    top,
-    width: SPRITE_WIDTH,
-    height: spriteH,
-  };
+  const railLeft = Math.max(0, desktopW - EDGE - SPRITE_WIDTH);
+  const sprite = { left: railLeft, top, width: SPRITE_WIDTH, height: spriteH };
   const stage = {
-    left: Math.max(0, desktopW - EDGE - stageW),
+    left: railLeft,
     top: top + spriteH + GAP,
-    width: stageW,
-    height: stageH,
+    width: SPRITE_WIDTH,
+    height: Math.max(100, span - spriteH - GAP), // a squat raster still gets a view
   };
-  // The vacant middle's right bound: the leftmost rail edge.
-  const railLeft = Math.min(sprite.left, stage.left);
 
   // The vacant middle: between the Tools palette and the rail, below the
-  // strip — the document window takes about two thirds of it, centered.
+  // strip. The document window sits top-left aligned beside the palette —
+  // its top, a side inset to its right — and fills the vacancy but for the
+  // cascade room at the right and bottom, so each further window opens at
+  // this same size, stepped down-right, inside the vacancy.
   const x0 = EDGE + tools.width + EDGE;
   const vacantW = Math.max(0, railLeft - EDGE - x0);
   const vacantH = Math.max(0, desktopH - GAP - top);
-  const docW = Math.max(220, Math.round(vacantW * DOC_FILL));
-  const docH = Math.max(220, Math.round(vacantH * DOC_FILL));
   const doc = {
-    left: Math.max(0, x0 + Math.round((vacantW - docW) / 2)),
-    top: Math.max(top, top + Math.round((vacantH - docH) / 2)),
-    width: docW,
-    height: docH,
+    left: x0,
+    top,
+    width: Math.max(DOC_MIN, vacantW - CASCADE_ROOM),
+    height: Math.max(DOC_MIN, vacantH - CASCADE_ROOM),
   };
 
   return { tools: { left: EDGE, top }, sprite, stage, doc };
+}
+
+/**
+ * Where the next document window opens: the doc box `base` (its top-left;
+ * the size rides along unchanged), cascaded down-right by CASCADE_STEP into
+ * the first slot no open document window holds — `occupied` is the open
+ * windows' top-lefts. A slot counts as held when a window's top-left sits
+ * within half a step of it (a lattice snap or an edge clamp can shift a
+ * landing by a pixel or two), so a window dragged clear of its slot frees
+ * it, as does closing one. With every slot held the cascade wraps to slot
+ * `occupied.length % CASCADE_SLOTS` rather than walking off the raster.
+ * The slot index rides along so the window can be re-placed onto the same
+ * step of a later raster's doc box (cascadeSlot).
+ *
+ * @param {{left: number, top: number}} base
+ * @param {{left: number, top: number}[]} occupied
+ * @returns {{left: number, top: number, slot: number}}
+ */
+export function cascadeFrom(base, occupied) {
+  const near = CASCADE_STEP / 2;
+  for (let i = 0; i < CASCADE_SLOTS; i++) {
+    const s = cascadeSlot(base, i);
+    const held = occupied.some(
+      (o) => Math.abs(o.left - s.left) < near && Math.abs(o.top - s.top) < near
+    );
+    if (!held) return s;
+  }
+  return cascadeSlot(base, occupied.length % CASCADE_SLOTS);
+}
+
+/**
+ * Cascade slot `i` of the doc box `base` (wrapping past CASCADE_SLOTS).
+ *
+ * @param {{left: number, top: number}} base
+ * @param {number} i
+ * @returns {{left: number, top: number, slot: number}}
+ */
+export function cascadeSlot(base, i) {
+  const slot = i % CASCADE_SLOTS;
+  return {
+    left: base.left + CASCADE_STEP * slot,
+    top: base.top + CASCADE_STEP * slot,
+    slot,
+  };
 }
 
 /**

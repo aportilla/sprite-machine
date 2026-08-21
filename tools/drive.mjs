@@ -695,11 +695,11 @@ async function main() {
       docWindows: seed.docWindows,
     })
   );
-  // The reload restores the persisted layout — a different boot path from
-  // the virgin greet — and must land desktop-focused all the same.
+  // The reload finds persisted state (icons, Show Grid) — a different boot
+  // path from the virgin greet — and must land desktop-focused all the same.
   const greet2 = await probe();
   check(
-    'the restored-layout greet is desktop-focused too: windoids stay hidden',
+    'the persisted-state greet is desktop-focused too: windoids stay hidden',
     !greet2.windows.tools && !greet2.windows.sprite && !greet2.windows.stage,
     JSON.stringify(greet2.windows)
   );
@@ -754,6 +754,61 @@ async function main() {
     'the address bar canonicalizes to #Cube (?file dropped)',
     um.hash === '#Cube' && !/[?&]file=/.test(um.search),
     JSON.stringify(um)
+  );
+
+  // Window geometry is NEVER persisted (shell/desktop-state.js): a browser
+  // is resized and reopened on another monitor all the time, so a prior
+  // session's top/left is no truth worth re-asserting. Drag the Tools
+  // palette and the Cube window off their placed positions, grow the 3D
+  // View, let the desktop-state debounce land, reload the same URL — and
+  // every window is back at the placement derived from the live raster,
+  // not where it was left. (The icons DO restore — the Finder's furniture.)
+  const windowGeom = () =>
+    evaluate(`(() => {${DEEP}
+      const pick = (w) => ({ left: w.left, top: w.top, width: w.width, height: w.height });
+      return { tools: pick(__q('#win-tools')), stage: pick(__q('#win-stage')),
+               doc: pick(__doc()) };
+    })()`);
+  const dragBar = async (expr, dy) => {
+    const b = await evaluate(
+      `(() => {${DEEP} const r = (${expr}).getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + ${dy} }; })()`
+    );
+    await mouse('mousePressed', b.x, b.y);
+    await mouse('mouseMoved', b.x + 30, b.y + 20, { buttons: 1 });
+    await mouse('mouseMoved', b.x + 60, b.y + 40, { buttons: 1 });
+    await mouse('mouseReleased', b.x + 60, b.y + 40, { buttons: 0 });
+    await sleep(300);
+  };
+  const placed = await windowGeom();
+  await dragBar(`__doc()`, 9); // the document window's title bar
+  await dragBar(`__q('#win-tools')`, 6); // the windoid's slim dot bar
+  const stageGrow = await evaluate(
+    `(() => {${DEEP} const g = __q('#win-stage').shadowRoot
+        .querySelector('[part="grow-box"]').getBoundingClientRect();
+      return { x: g.left + g.width / 2, y: g.top + g.height / 2 }; })()`
+  );
+  await mouse('mousePressed', stageGrow.x, stageGrow.y);
+  await mouse('mouseMoved', stageGrow.x - 15, stageGrow.y - 10, { buttons: 1 });
+  await mouse('mouseMoved', stageGrow.x - 30, stageGrow.y - 20, { buttons: 1 });
+  await mouse('mouseReleased', stageGrow.x - 30, stageGrow.y - 20, { buttons: 0 });
+  await sleep(300);
+  const left = await windowGeom();
+  check(
+    'drags + a grow move the Cube window, the Tools palette and the 3D View',
+    left.doc.left !== placed.doc.left &&
+      left.tools.left !== placed.tools.left &&
+      left.stage.width !== placed.stage.width,
+    JSON.stringify({ placed, left })
+  );
+  await sleep(600); // let the desktop-state debounce land before navigating
+  await send('Page.navigate', { url: `${SEED_URL}&file=cube` });
+  await waitForApp();
+  const again = await windowGeom();
+  check(
+    'a reload places every window fresh — nothing about a window persists',
+    JSON.stringify(again) === JSON.stringify(placed),
+    JSON.stringify({ placed, again })
   );
 
   // The rest of the run drives the deterministic ?sample boot.
@@ -1480,6 +1535,22 @@ async function main() {
     sizeAfter.cw > sizeBefore.cw,
     `${sizeBefore.cw} → ${sizeAfter.cw}`
   );
+  // View → Arrange Windows: the boot placement re-run on the current raster
+  // — the dragged document window and the grown 3D View both land back
+  // exactly where the boot put them (same raster, same arithmetic).
+  await pickMenu('#menu-view', 'arrange');
+  const arranged = await evaluate(
+    `(() => {${DEEP} const d = __doc(); const st = __q('#win-stage');
+      return { doc: { top: d.top, left: d.left }, stage: { w: st.width, h: st.height } }; })()`
+  );
+  check(
+    'View → Arrange Windows puts the moved window and the grown 3D View back',
+    arranged.doc.left === posBefore.left &&
+      arranged.doc.top === posBefore.top &&
+      arranged.stage.w === sizeBefore.w &&
+      arranged.stage.h === sizeBefore.h,
+    JSON.stringify({ posBefore, sizeBefore, arranged })
+  );
 
   // A raise makes vf-desktop re-order the slotted windows in the light DOM
   // (DOM order is kept in step with z-order), which disconnects + reconnects
@@ -1791,6 +1862,35 @@ async function main() {
     s.voxels > 100,
     s.buildStats
   );
+  // View → Arrange Windows cascades in STACKING order: Car, just raised to
+  // the front, takes the second slot and the untitled drops to the first —
+  // the two swap places (both at the doc box size).
+  const docSlots = () =>
+    evaluate(
+      `(() => {${DEEP}
+        const out = {};
+        for (const w of document.querySelectorAll('vf-window')) {
+          if (w.id.startsWith('win-doc-')) out[w.heading] = { left: w.left, top: w.top };
+        }
+        return out; })()`
+    );
+  const slotsBefore = await docSlots();
+  await pickMenu('#menu-view', 'arrange');
+  const slotsAfter = await docSlots();
+  check(
+    'Arrange Windows cascades in stacking order: the raised Car tops the cascade',
+    slotsAfter.Car.left === slotsBefore.untitled.left &&
+      slotsAfter.Car.top === slotsBefore.untitled.top &&
+      slotsAfter.untitled.left === slotsBefore.Car.left &&
+      slotsAfter.untitled.top === slotsBefore.Car.top,
+    JSON.stringify({ slotsBefore, slotsAfter })
+  );
+  s = await probe();
+  check(
+    '…and changes no focus: Car stays the active document',
+    s.heading === 'Car' && s.docActive === true,
+    JSON.stringify({ heading: s.heading, active: s.docActive })
+  );
   // Close the dirty untitled: activate it, File → Close, Don't Save. The
   // staggered untitled sits mostly UNDER the just-raised Car window, and the
   // utility windoids float over every document — so scan its whole box for
@@ -2028,15 +2128,18 @@ async function main() {
     JSON.stringify(um)
   );
 
-  // --- desktop: browser resize re-pins the windows and icons -------------------
-  // A viewport change re-fits the raster and every window keeps its RELATIVE
-  // top/left pin (shell/layout.js pinOf/pinTo: left as a fraction of the
-  // raster width, top of the space below the options strip), un-clamped, so
-  // growing back round-trips home exactly — and every desktop icon keeps the
-  // same kind of pin in ITS frame (the desktop below the 20px menu bar; the
-  // options strip is application chrome, no part of the Finder's furniture).
-  // Emulation.setDeviceMetricsOverride changes the layout viewport and fires
-  // a real `resize` — the same path a user's window drag takes.
+  // --- desktop: browser resize — placement for the untouched, pins for the rest
+  // A viewport change re-fits the raster. A window still sitting where the
+  // placement put it FOLLOWS THE PLACEMENT onto the new raster (a resize is
+  // an Arrange for it); a window the user has moved or resized keeps its
+  // RELATIVE top/left pin (shell/layout.js pinOf/pinTo: left as a fraction
+  // of the raster width, top of the space below the options strip),
+  // un-clamped, so growing back round-trips home exactly — and every
+  // desktop icon keeps the same kind of pin in ITS frame (the desktop below
+  // the 20px menu bar; the options strip is application chrome, no part of
+  // the Finder's furniture). Emulation.setDeviceMetricsOverride changes the
+  // layout viewport and fires a real `resize` — the same path a user's
+  // window drag takes.
   section('browser resize');
   await freshPage();
   const layoutSnap = () =>
@@ -2071,15 +2174,68 @@ async function main() {
   // windows' correct relative re-pin as drift.
   await metrics(1000, 850);
   await sleep(400);
-  const wide = await layoutSnap();
+  const placedWide = await layoutSnap();
   await metrics(780, 640);
   await sleep(400);
-  const narrow = await layoutSnap();
+  const placedNarrow = await layoutSnap();
   check(
     'the raster re-fits to the smaller viewport',
-    narrow.dw < wide.dw && narrow.dh < wide.dh,
-    JSON.stringify({ before: [wide.dw, wide.dh], after: [narrow.dw, narrow.dh] })
+    placedNarrow.dw < placedWide.dw && placedNarrow.dh < placedWide.dh,
+    JSON.stringify({
+      before: [placedWide.dw, placedWide.dh],
+      after: [placedNarrow.dw, placedNarrow.dh],
+    })
   );
+  // UNTOUCHED windows — every one still exactly where the boot placement
+  // put it — FOLLOW THE PLACEMENT across the resize: a resize is an Arrange
+  // for them, so Arrange Windows afterwards changes nothing, and the rail
+  // is right-flush and full-height on the NEW raster (a proportional pin
+  // would have scaled the inset and left the stage short).
+  await pickMenu('#menu-view', 'arrange');
+  const arrangedNarrow = await layoutSnap();
+  check(
+    'untouched windows follow the placement on a resize (Arrange then changes nothing)',
+    placedNarrow.wins.length === placedWide.wins.length &&
+      JSON.stringify(placedNarrow.wins) === JSON.stringify(arrangedNarrow.wins),
+    JSON.stringify({ resized: placedNarrow.wins, arranged: arrangedNarrow.wins })
+  );
+  const railN = placedNarrow.wins.find((w) => w.id === 'win-sprite');
+  const stageN = placedNarrow.wins.find((w) => w.id === 'win-stage');
+  check(
+    '…the rail is right-flush and full-height on the new raster',
+    railN.left + railN.w === placedNarrow.dw - 14 &&
+      stageN.w === railN.w &&
+      stageN.top + stageN.h === placedNarrow.dh - 8,
+    JSON.stringify({ dw: placedNarrow.dw, dh: placedNarrow.dh, railN, stageN })
+  );
+  // TOUCHED windows keep their RELATIVE pin. Drag every window a step off
+  // its placement (title bar / dot bars): from here on `home` is this
+  // dragged arrangement at 780×640, and the contracts below are the pin's.
+  await dragBar(`__doc()`, 9);
+  await dragBar(`__q('#win-tools')`, 6);
+  // The stage BEFORE the sprite: dragged down-right first, the sprite
+  // windoid would sit over the stage's dot bar and take its press.
+  await dragBar(`__q('#win-stage')`, 6);
+  await dragBar(`__q('#win-sprite')`, 6);
+  const home = await layoutSnap();
+  check(
+    'every window dragged off its placement (touched)',
+    home.wins.every((w) => {
+      const o = placedNarrow.wins.find((x) => x.id === w.id);
+      return o && (w.left !== o.left || w.top !== o.top);
+    }),
+    JSON.stringify({ placed: placedNarrow.wins, home: home.wins })
+  );
+  // VIEWPORT CHOICE for the shrink: under emulation the OUTER window never
+  // changes, so the kit's zoom tracker can't rebase on it — a shrink whose
+  // two axis ratios land on ONE zoom ladder level reads as page zoom and
+  // re-scales the desktop for the rest of the run (780×640 → 520×430 is
+  // 1.5×/1.49×, both quantizing to the 1.5 rung, and --vf-scale stuck at
+  // 4/3). 520×360 is 1.5×/1.78× — two different rungs, so the tracker
+  // rebases instead.
+  await metrics(520, 360);
+  await sleep(300);
+  const tiny = await layoutSnap();
   // The relative pin: left as a plain fraction of the raster width, top of
   // the open space below the options strip (the 56px menu-bar + strip band
   // is fixed chrome — shell/layout.js TOP_RESERVE), preserved across the
@@ -2094,13 +2250,13 @@ async function main() {
       y: (w.top - 56) / Math.max(1, snap.dh - 56),
     }));
   check(
-    'every window keeps its relative pin on the shrunk raster',
-    narrow.wins.length === wide.wins.length &&
-      pins(narrow).every((p) => {
-        const o = pins(wide).find((q) => q.id === p.id);
+    'every touched window keeps its relative pin on the shrunk raster',
+    tiny.wins.length === home.wins.length &&
+      pins(tiny).every((p) => {
+        const o = pins(home).find((q) => q.id === p.id);
         return o && Math.abs(p.x - o.x) < 0.01 && Math.abs(p.y - o.y) < 0.01;
       }),
-    JSON.stringify({ wide: pins(wide), narrow: pins(narrow) })
+    JSON.stringify({ home: pins(home), tiny: pins(tiny) })
   );
   // The icons' pin frame is the whole desktop below the MENU BAR alone
   // (shell/layout.js MENU_BAR = 20) — deliberately not TOP_RESERVE.
@@ -2112,34 +2268,25 @@ async function main() {
     }));
   check(
     'every desktop icon keeps its relative pin (below the menu bar) too',
-    narrow.icons.length > 0 &&
-      narrow.icons.length === wide.icons.length &&
-      iconPins(narrow).every((p) => {
-        const o = iconPins(wide).find((q) => q.id === p.id);
+    tiny.icons.length > 0 &&
+      tiny.icons.length === home.icons.length &&
+      iconPins(tiny).every((p) => {
+        const o = iconPins(home).find((q) => q.id === p.id);
         return o && Math.abs(p.x - o.x) < 0.01 && Math.abs(p.y - o.y) < 0.01;
       }),
-    JSON.stringify({ wide: iconPins(wide), narrow: iconPins(narrow) })
+    JSON.stringify({ home: iconPins(home), tiny: iconPins(tiny) })
   );
-  // The ONE size intervention on this path: a resizable window BIGGER than
-  // the open area shrinks to fit it (otherwise its grow-box corner is
+  // The ONE size intervention on the pin path: a resizable window BIGGER
+  // than the open area shrinks to fit it (otherwise its grow-box corner is
   // unreachable at any position — the title bar can't leave the raster
   // upward), with the true size cached like the pin so the round trip below
-  // restores it exactly. At this viewport the boot windows exceed the open
-  // height, so the clamp must actually engage. VIEWPORT CHOICE: under
-  // emulation the OUTER window never changes, so the kit's zoom tracker
-  // can't rebase on it — a shrink whose two axis ratios land on ONE zoom
-  // ladder level reads as page zoom and re-scales the desktop for the rest
-  // of the run (780×640 → 520×430 is 1.5×/1.49×, both quantizing to the
-  // 1.5 rung, and --vf-scale stuck at 4/3). 520×360 is 1.5×/1.78× — two
-  // different rungs, so the tracker rebases instead.
-  await metrics(520, 360);
-  await sleep(300);
-  const tiny = await layoutSnap();
+  // restores it exactly. At this viewport the 780×640 doc box exceeds the
+  // open height, so the clamp must actually engage.
   check(
     'an oversized window shrinks to the shrunk open area (grow box reachable)',
     tiny.wins.filter((w) => w.r).every((w) => w.w <= tiny.dw && w.h <= tiny.dh - 56) &&
       tiny.wins.some((w) => {
-        const o = wide.wins.find((x) => x.id === w.id);
+        const o = home.wins.find((x) => x.id === w.id);
         return o && (w.w < o.w || w.h < o.h);
       }),
     JSON.stringify(tiny)
@@ -2155,16 +2302,16 @@ async function main() {
     await metrics(780, h);
     await sleep(150);
   }
-  await metrics(1000, 850); // back to the wide baseline
+  await metrics(780, 640); // back home
   await sleep(400);
   const back = await layoutSnap();
   check(
     'a resize wiggle round-trips every window exactly home (position and size)',
     back.wins.every((w) => {
-      const o = wide.wins.find((x) => x.id === w.id);
+      const o = home.wins.find((x) => x.id === w.id);
       return o && w.left === o.left && w.top === o.top && w.w === o.w && w.h === o.h;
     }),
-    JSON.stringify({ before: wide.wins, after: back.wins })
+    JSON.stringify({ before: home.wins, after: back.wins })
   );
   // The icons ride the same truth cache (icons.js `pins`), so home must be
   // exact for them too — the ratchet regression would show here first (an
@@ -2172,10 +2319,48 @@ async function main() {
   check(
     '…and every desktop icon exactly home',
     back.icons.every((i) => {
-      const o = wide.icons.find((x) => x.id === i.id);
+      const o = home.icons.find((x) => x.id === i.id);
       return o && i.left === o.left && i.top === o.top;
     }),
-    JSON.stringify({ before: wide.icons, after: back.icons })
+    JSON.stringify({ before: home.icons, after: back.icons })
+  );
+
+  // The reported case: the browser is resized WHILE the New Document dialog
+  // is up (a dialog-greeted boot — windoids hidden, nothing open), then
+  // Create. The hidden windoids are untouched, so the resize re-placed
+  // them; the new window places on the live raster — so everything lands
+  // exactly where Arrange Windows would put it on the squished raster, not
+  // on a scaled-down copy of the boot layout. (A one-axis squish: the
+  // kit's zoom tracker can't read it as page zoom.)
+  await send('Page.navigate', { url: SEED_URL });
+  await waitForNewDialog();
+  await metrics(780, 500);
+  await sleep(400);
+  let made = null;
+  for (let attempt = 0; attempt < 3 && made?.docWindows !== 1; attempt++) {
+    await waitForNewDialog();
+    const ok = await centreOf('#btn-new-ok');
+    await click(ok.x, ok.y);
+    await sleep(650);
+    made = await probe();
+  }
+  const afterCreate = await layoutSnap();
+  await pickMenu('#menu-view', 'arrange');
+  const afterArrange = await layoutSnap();
+  check(
+    'a resize behind the New Document dialog: Create lands every window where Arrange would',
+    made?.docWindows === 1 &&
+      afterCreate.wins.length === 4 &&
+      JSON.stringify(afterCreate.wins) === JSON.stringify(afterArrange.wins),
+    JSON.stringify({ created: afterCreate.wins, arranged: afterArrange.wins })
+  );
+  const railD = afterCreate.wins.find((w) => w.id === 'win-sprite');
+  const stageD = afterCreate.wins.find((w) => w.id === 'win-stage');
+  check(
+    '…with the rail right-flush and full-height on the squished raster',
+    railD.left + railD.w === afterCreate.dw - 14 &&
+      stageD.top + stageD.h === afterCreate.dh - 8,
+    JSON.stringify({ dw: afterCreate.dw, dh: afterCreate.dh, railD, stageD })
   );
   await send('Emulation.clearDeviceMetricsOverride');
 

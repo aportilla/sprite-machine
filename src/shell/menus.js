@@ -460,7 +460,16 @@ export function initMenus(desktop, windows) {
 
   on($('#menu-view'), 'vf-menu-select', (e) => {
     if (modalOpen()) return;
-    if (menuDetail(e).value === 'show-grid') shell.setShowGrid(!shell.get().showGrid);
+    switch (menuDetail(e).value) {
+      case 'show-grid':
+        shell.setShowGrid(!shell.get().showGrid);
+        break;
+      case 'arrange':
+        // App-level, like New…: the boot placement re-run on the current
+        // raster — windoids and every open document window (windows.js).
+        windows.arrange();
+        break;
+    }
   });
 
   // --- checkmark + enabled sync ----------------------------------------------
@@ -488,8 +497,8 @@ export function initMenus(desktop, windows) {
   // --- focus gating ------------------------------------------------------------
   // Two roles share one menu bar (the single-application affordance): with
   // the desktop focused, every document-scoped item greys out. About / Quit /
-  // New stay — they're app-level (the parked Settings… is disabled in the
-  // markup in both roles) — and Open switches to the
+  // New / Arrange Windows stay — they're app-level (the parked Settings… is
+  // disabled in the markup in both roles) — and Open switches to the
   // Finder grammar above: enabled iff a desktop icon is selected. Disabling
   // an item also parks its key equivalent (the kit never fires a disabled
   // item's shortcut), so ⌘O/⌘S/⌘K/⌘G gate with their menus; the bare-letter

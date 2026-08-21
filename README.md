@@ -56,10 +56,13 @@ persisted state, even an emptied desktop, suppresses the seeding). Every
 load **boots to the New Document dialog** — unless the URL names a saved
 document (**`?file=Cube`**, or the bare fragment **`#Cube`**;
 case-insensitive, most-recently-modified on a name collision), which opens
-that library file directly, its window landing on any remembered geometry
-and edited face. A prior session's open windows deliberately don't reopen —
-the URL, not localStorage, says what a load shows (the desktop layout
-itself still restores). And the URL keeps itself true: opening, saving or
+that library file directly, on its remembered edited face. A prior
+session's open windows deliberately don't reopen — the URL, not
+localStorage, says what a load shows — and **no window's geometry comes
+back either**: every session places the windoids, and every open places
+its document window, fresh from the live raster (see
+[Windows](#windows)); only the desktop icons and Show Grid restore. And
+the URL keeps itself true: opening, saving or
 switching to a saved document **mirrors its name into the fragment**
 (`#Cube`, via `replaceState` — no history spam; an untitled document or the
 bare desktop clears it, and any `?file=` is canonicalized away), so a plain
@@ -438,8 +441,15 @@ strip's clamp bounds, and the Undo/Redo enablement.
   _Eraser_, _Eyedropper_ — with the active one checkmarked (the same session
   truth the palette's tool strip and the B/R/G/E/I keys write, so a pick from
   any of the three moves all three).
-- **View** — _Show Grid_ ⌘G (checkmarked). The windoids need no toggles:
-  they're permanent, up whenever a document window is active.
+- **View** — _Show Grid_ ⌘G (checkmarked), _Arrange Windows_ (the boot
+  placement re-run on the **current** raster: the windoids back to the
+  rail at their placed sizes, every open document window onto the doc box
+  at its size, cascaded in stacking order so the front window tops the
+  cascade — the one way to get the arrangement back after moving things
+  around or resizing the browser; app-level, never greyed, so from the
+  Finder role it re-rails the hidden windoids for the next open). The
+  windoids need no toggles: they're permanent, up whenever a document
+  window is active.
 
 Key equivalents are the kit's own (`shortcut` on `vf-menu-item`; Ctrl stands
 in for ⌘ off-Mac). ⌘N/⌘W stay unassigned on purpose — the browser owns them
@@ -454,8 +464,9 @@ Two tiers, two regimes:
 
 - **Document windows** (document tier): one per open document, cloned from
   the `#tpl-document-window` template by the reconciler in
-  `shell/windows.js` — created on open (staggered defaults, or a restored
-  position for a saved doc), removed on close (existence IS visibility).
+  `shell/windows.js` — created on open (the doc box, cascaded into the
+  first free slot — never a remembered position), removed on close
+  (existence IS visibility).
   Each is `movable resizable`; its title is its document's name, its
   `status` strip names the face it's editing ("Front Face"), and its
   `<sm-editor>` lives exactly as long as the document is open.
@@ -505,16 +516,42 @@ Two tiers, two regimes:
   strip to still read as a view.
 
 Positions/sizes come from a **smart placement** computed against the live
-raster (`shell/layout.js`, pure): the Tools palette top-left, the Full
-Sprite View over the 3D View as a right-hand rail splitting the height
-below the options strip — both right-flush, the sprite windoid at its
-fixed size, the 3D View (aiming for 3:4 w:h) absorbing the rest — and
-each newly opened document window filling about two thirds of the vacant
-middle between them, centered (then staggered per additional open). Saved
-geometry always wins over the defaults (position only, for the fixed-size
-sprite windoid), and everything clamps onto the raster's lattice.
-When the **browser window resizes**, the raster re-fits and every window
-keeps its **relative pin**: its left as a plain fraction of the raster's
+raster (`shell/layout.js`, pure): the Tools palette top-left; the Full
+Sprite View over the 3D View as a right-hand rail — **one column**, both
+right-flush at the **same width** (the sprite windoid's fixed one), the
+3D View absorbing the rest of the height below the options strip; and
+the document window **top-left aligned beside the Tools palette** (its
+top, a side inset to its right), filling the vacant middle but for the
+**cascade room** it leaves at the right and bottom — so each further
+document window opens at the **same size**, **cascaded** down-right into
+the first slot no open document window holds (`cascadeFrom`: five slots,
+the last landing flush with the vacancy's edges; a closed or dragged-away
+window gives its slot back, and a full cascade wraps onto the first
+rather than running into the rail or off the bottom). That placement is the **only** source of
+window geometry — **nothing about a window persists across sessions**,
+not the windoids' arrangement and not a document window's box. A browser
+is resized and reopened on another monitor all the time, so a prior
+session's top/left is no truth worth re-asserting over a raster that may
+be nothing like the one it was dragged on: every session start places the
+windoids for the raster it actually has, and every open — a saved
+document or an untitled — lands on the cascade. Within a session, what
+you drag is yours: the windoids keep their arrangement across
+deactivation and across closing to zero, until the page reloads — or
+until **View → Arrange Windows** re-runs the placement on the raster as
+it is now, every window included. (Desktop
+icons are the exception — the Finder's furniture, arranged by hand; see
+[Desktop icons & state](#desktop-icons--state).) Everything clamps onto
+the raster's lattice.
+When the **browser window resizes**, the raster re-fits and each window
+goes one of two ways. A window **still sitting where the placement put
+it** — never moved or resized since — **follows the placement** onto the
+new raster, exactly where Arrange Windows would put it: the rail stays
+right-flush and full-height, a document window re-fits onto its own
+cascade slot of the re-derived doc box. That's a pure function of the
+raster, so it's reversible by construction — and it's what makes a
+resize **behind the boot dialog** (windoids hidden, nothing open) come up
+right when the first document opens. A window you've **touched** keeps
+its **relative pin**: its left as a plain fraction of the raster's
 width, its top as a plain fraction of the **open space below the options
 strip** (the menu-bar + strip band is fixed-height chrome — the pin's
 y = 0 line is the strip's bottom edge, so a window tucked under the strip
@@ -538,9 +575,9 @@ is not (the title bar can't leave the raster upward, so the grow-box
 corner would be unreachable at any position). The shrink keeps the pin's
 reversibility discipline: the **true size** is the per-window truth,
 re-derived only when the window was actually resized, so growing the
-raster back restores the size exactly; the same oversize clamp guards the
-boot restore (`clampWindow`), where a layout saved on a larger screen
-lands on a smaller one.
+raster back restores the size exactly; the same oversize clamp guards
+every placement (`clampWindow`) — the smart placement's size floors on a
+tiny raster, a cascaded document window near the raster's edge.
 
 ### Documents: a document IS a .png
 
@@ -602,19 +639,21 @@ icon has nothing to grab, so it would be unreachable — the windows'
 boot-clamp discipline), and on a **browser resize** every icon keeps its
 **relative pin** in the same stroke as the windows: the same
 unrounded-fraction truth cache, the same no-clamp reversibility, so a
-shrink-then-grow round-trips every icon exactly home. Windoid/icon
-layout, Show Grid, and the open SAVED documents (each window's geometry +
-edited face, and which was active) persist in one versioned localStorage
-key (`shell/desktop-state.js`, v2 — a v1 blob migrates shallowly),
-snapshotted on change/exit. Layout and Show Grid restore at boot; the
-per-document entries are deliberately NOT reopened then — what a load
-shows is the URL's call (`?file=<name>`, else the New Document dialog;
-and the address bar tracks the active saved document as `#<name>` —
-`shell/url-state.js` — so a plain reload restores it) —
-they hand a saved doc its remembered window geometry + edited face
-whenever it IS opened. Untitled windows don't
-survive a reload either way (no autosave — explicit Save is the contract).
-The documents themselves live in IndexedDB.
+shrink-then-grow round-trips every icon exactly home. Icon layout, Show
+Grid, and the open SAVED documents' edited faces (and which was active)
+persist in one versioned localStorage key (`shell/desktop-state.js`, v3 —
+a v1 or v2 blob migrates shallowly, the window geometry those versions
+persisted simply dropped), snapshotted on change/exit. **No window
+geometry is in it**: the windoids and the document windows place fresh
+from the live raster every session (see [Windows](#windows)) — the
+persistence layer never sees a window. Icons and Show Grid restore at
+boot; the per-document entries are deliberately NOT reopened then — what
+a load shows is the URL's call (`?file=<name>`, else the New Document
+dialog; and the address bar tracks the active saved document as `#<name>`
+— `shell/url-state.js` — so a plain reload restores it) — they hand a
+saved doc its remembered edited face whenever it IS opened. Untitled
+windows don't survive a reload either way (no autosave — explicit Save is
+the contract). The documents themselves live in IndexedDB.
 
 ---
 
@@ -746,11 +785,16 @@ mirror, the stored flows, and `followActive`),
 snapshot copy-in/copy-out, the bound, load-boundary clearing),
 `test/params.test.mjs` (the whole `?param` dev-hook surface, typed), and
 `test/layout.test.mjs` (the desktop's window + icon arithmetic, `shell/layout.js`:
-the smart placement — the rail (the sprite windoid's fixed `SPRITE_WIDTH` ×
-`spriteHeightFor` size and the stage absorbing the rest),
-the centered two-thirds document box,
-the 30% width cap, tiny rasters degrading gracefully — the raster-derived
-icon lattice (the column wrap), and the resize re-pin rule: plain fractions
+the smart placement — the one-column rail (the sprite windoid's fixed
+`SPRITE_WIDTH` × `spriteHeightFor` size, the stage as wide, absorbing the
+rest of the height on any raster), the document box top-left beside Tools
+with exactly the cascade's room at its right and bottom (every slot inside
+the vacancy, the last flush with its edges), tiny rasters degrading
+gracefully — the document-window cascade (first free slot, a freed slot
+reused, a full cascade wrapping) — the raster-derived
+icon lattice (the column wrap), the slot re-expression an untouched
+document window re-places by (`cascadeSlot`), and the resize re-pin rule
+for touched windows: plain fractions
 (left of the raster width, top of the open space below the reserved chrome
 band — the options strip for windows, the bare menu bar for icons), no
 position clamp — an edge window may hang
@@ -831,14 +875,18 @@ src/scene/
                   a window switch re-frames the camera (a new subject)
 src/shell/        the desktop's behavior modules (imperative wiring over the index.html skeleton)
   layout.js       the window + icon arithmetic (pure, Node-tested): initialPlacement (the smart
-                  boot/open arrangement from the raster) + spriteHeightFor (the fixed-size
+                  boot/open arrangement from the raster — the ONLY source of window geometry;
+                  none persists) + cascadeFrom (the document windows' first-free-slot
+                  cascade) + spriteHeightFor (the fixed-size
                   Sprite View windoid: picker-block width, atlas-ratio height) + iconDefault
                   (the raster-derived icon lattice) + pinOf/pinTo (the relative pin across raster
                   resizes, framed per tier: windows below the options strip, icons below the menu bar)
   windows.js      the two window regimes: windoid visibility (appActive <-> hidden; non-closeable), and
-                  the document-window reconciler (template clone per context, smart default/
-                  stagger/restore, title sync, close-box routing); the vf-activate wire into
-                  shell.appActive + workspace.activeKey; boot clamp + the resize re-pin; the
+                  the document-window reconciler (template clone per context, the doc box
+                  cascaded — never a restored geometry, title sync, close-box routing); the vf-activate wire into
+                  shell.appActive + workspace.activeKey; boot clamp + the resize rule (an untouched
+                  window follows the placement, a touched one re-pins); arrange()
+                  (View → Arrange Windows: the placement re-run over every window); the
                   Sprite View's fixed sizing (fitSprite — boot + doc switches/tile resizes)
   menus.js        vf-menu-select -> workspace/file actions on the ACTIVE document; the two-role
                   focus gating + checkmark sync; every dialog flow (About / Settings / New
@@ -848,8 +896,9 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   open/rename wiring, open ghosts, raster-derived placement + boot clamp + the
                   resize re-pin (below the menu bar), the Finder wire (icon presses deactivate; the
                   selection feeds the shell slice for the desktop-focused File → Open)
-  desktop-state.js  windoid/icon layout + Show Grid + the open saved docs (geometry, face, active)
-                  in one versioned localStorage key (v2; v1 migrates)
+  desktop-state.js  icon layout + Show Grid + the open saved docs' edited faces (+ active) in one
+                  versioned localStorage key (v3; v1/v2 migrate, their window geometry dropped)
+                  — window geometry never persists; this module never sees a window
   url-state.js    the address-bar mirror: the ACTIVE saved document's name -> location.hash
                   (#Cube, replaceState; cleared for untitled/none) so a reload restores it
 src/

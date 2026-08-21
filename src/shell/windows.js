@@ -10,22 +10,35 @@
 //   DOCUMENT WINDOWS: one per open document, reconciled from the workspace
 //   slice (the syncDocIcons pattern lifted to windows): a context appearing
 //   clones the #tpl-document-window template — its <sm-editor> and tile
-//   status line take the context BEFORE the append — staggers/restores its
-//   position, and appends it as a DIRECT CHILD of the desktop (the stacking
-//   manager only sees direct vf-window children; appending is also what
-//   makes the kit activate it — opening a window brings the application
+//   status line take the context BEFORE the append — places it (the doc
+//   box, cascaded), and appends it as a DIRECT CHILD of the desktop (the
+//   stacking manager only sees direct vf-window children; appending is also
+//   what makes the kit activate it — opening a window brings the application
 //   forward). A context closing removes its window outright: a document
 //   window's visibility IS its existence.
 //
-// PLACEMENT comes from shell/layout.js (pure): the smart arrangement is
-// computed from the live raster at boot (windoids) and per document open
-// (the default box, staggered) — saved geometry always wins over it, and
-// everything clamps onto the raster's lattice. When the raster RESIZES
-// (main.js re-fits it per browser-resize event and calls onDesktopResized),
-// every window keeps its relative top/left pin — left a plain fraction of
-// the raster width, top of the open space below the options strip — live
-// and un-debounced, deliberately WITHOUT the boot clamp: reversibility
-// over visibility (see onDesktopResized).
+// PLACEMENT comes from shell/layout.js (pure), and ONLY from there: the
+// smart arrangement is computed from the live raster at boot (windoids) and
+// per document open (the doc box, cascaded into the first free slot), then
+// clamped onto the raster's lattice. Nothing is restored from a prior
+// session — window geometry is never persisted (desktop-state.js doesn't
+// even see the windows): a browser is resized and reopened on another
+// monitor all the time, so a remembered top/left is no truth worth
+// re-asserting over a raster that may be nothing like the one it was
+// dragged on. Within a session, what you drag is yours: the windoids keep
+// their arrangement across deactivation and across close-to-zero — and
+// View → Arrange Windows (arrange(), below) re-runs the whole placement on
+// the current raster whenever you want it back. When the
+// raster RESIZES (main.js re-fits it per browser-resize event and calls
+// onDesktopResized) there are two regimes: a window still sitting where
+// the placement put it — never moved or resized since — FOLLOWS THE
+// PLACEMENT onto the new raster (a resize is an Arrange for it: the rail
+// stays flush and full-height, the doc box re-fits, and the hidden
+// windoids behind a boot dialog come up right when the first document
+// opens); a window you've touched keeps its relative top/left pin — left
+// a plain fraction of the raster width, top of the open space below the
+// options strip — live and un-debounced, deliberately WITHOUT the boot
+// clamp: reversibility over visibility (see onDesktopResized).
 //
 // APP ACTIVATION has one writer: the desktop's vf-activate event (the kit
 // fires it on every change of active document-tier window, null included)
@@ -50,6 +63,8 @@ import { snapSys, systemPxQuantum, VfWindow } from 'vintage-frames';
 import { shell, WINDOW_IDS } from '../state/shell.js';
 import { workspace, followActive } from '../state/workspace.js';
 import {
+  cascadeFrom,
+  cascadeSlot,
   initialPlacement,
   pinOf,
   pinTo,
@@ -58,14 +73,10 @@ import {
   TOP_RESERVE,
 } from './layout.js';
 
-// Each additional open document window offsets down-right by one step from
-// the smart default box, System 7 style.
-const STAGGER = 24;
-
 // The 3D View windoid's size floor, in system px — the kit's own grow floor
 // is a general 80×54, under which this windoid degenerates. Applied to every
-// geometry that lands on it: boot (smart placement or a saved layout from
-// before this floor existed) and the grow box (via vf-resize below).
+// geometry that lands on it: boot (the smart placement on a tiny raster)
+// and the grow box (via vf-resize below).
 // WIDTH: the controls strip across its top (sm-stage-controls — the rotate /
 // smooth checkboxes) must never be clipped: its measured content width, 159
 // (8 pad + the two checkboxes 61 + 68 + the 14 gap + 8 pad) + the frame's
@@ -78,13 +89,14 @@ const STAGE_MIN_HEIGHT = 160;
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
 
 /**
- * Clamp a window's authored/restored position onto the live raster, on the
- * same k-system-px lattice a drag lands on (system7web's centerWindow rule,
- * minus the centering — authored positions are kept, just pulled on-canvas).
- * A RESIZABLE window's size clamps to the open area first: bigger than it,
- * the grow-box corner is unreachable at ANY position (the title bar can't
- * leave the raster upward), so a saved geometry from a larger screen shrinks
- * to a workable box.
+ * Clamp a window's placed position onto the live raster, on the same
+ * k-system-px lattice a drag lands on (system7web's centerWindow rule, minus
+ * the centering — placed positions are kept, just pulled on-canvas: a
+ * cascaded document window near the raster's edge, or the smart placement's
+ * size floors on a tiny raster). A RESIZABLE window's size clamps to the
+ * open area first: bigger than it, the grow-box corner is unreachable at
+ * ANY position (the title bar can't leave the raster upward), so an
+ * oversize box shrinks to a workable one.
  */
 export function clampWindow(desktop, win) {
   const k = systemPxQuantum(win);
@@ -108,20 +120,18 @@ export function clampWindow(desktop, win) {
 
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
- * @param {{saved?: object|null, hide?: string[]}} [opts]
- *   saved: the restored desktop state (utility geometry applied before the
- *   clamp; per-fileId document geometry applied as those docs open); hide:
- *   window ids to hide at boot (?hide= dev hook — 'document' hides the
+ * @param {{hide?: string[]}} [opts]
+ *   hide: window ids to hide at boot (?hide= dev hook — 'document' hides the
  *   document windows, which stay ACTIVE, so the utility windows survive for
  *   captures that need them alone; a windoid id keeps that windoid out of
  *   frame for the whole session — the only way to hide one, there being no
  *   runtime toggle).
  */
-export function initWindows(desktop, { saved = null, hide = [] } = {}) {
+export function initWindows(desktop, { hide = [] } = {}) {
   /** @type {(() => void)[]} */
   const unsubs = [];
 
-  // --- utility windoids: smart placement -> boot restore -> clamp -------------
+  // --- utility windoids: smart placement -> floors -> clamp --------------------
   /** @type {Record<string, VfWindow>} shell id -> element */
   const byId = {};
   for (const id of WINDOW_IDS) {
@@ -135,7 +145,6 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
       width: byId.tools.width ?? 0,
       height: byId.tools.height ?? 0,
     });
-  const smart = smartLayout();
 
   // --- the Full Sprite View's fixed size ---------------------------------------
   // The windoid is a fixed-size picture frame — no grow box (not `resizable`
@@ -153,11 +162,32 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
     byId.sprite.width = SPRITE_WIDTH;
     byId.sprite.height = spriteHeightFor(SPRITE_WIDTH, spriteRatio());
   };
-  for (const id of WINDOW_IDS) {
-    // Non-closeable by design: the windoids are permanent chrome, on screen
-    // whenever the application is. `closable` defaults true and markup can't
-    // express the off state (a boolean attribute), so it's set here.
-    byId[id].closable = false;
+  /** What the placement last wrote to each window (post-clamp) — plus a
+   *  document window's cascade slot. A window whose geometry still equals
+   *  its record is UNTOUCHED (the user hasn't moved or resized it since),
+   *  and a raster resize re-places it instead of pinning it (see
+   *  onDesktopResized). A non-resizable window compares position only: the
+   *  Sprite View's height is the fixed derivation, re-fit on document
+   *  switches, never the user's doing. */
+  const placed = new WeakMap();
+  const recordPlaced = (win, extra = {}) =>
+    placed.set(win, {
+      left: win.left,
+      top: win.top,
+      width: win.width,
+      height: win.height,
+      ...extra,
+    });
+  const untouched = (win) => {
+    const p = placed.get(win);
+    if (!p || p.left !== win.left || p.top !== win.top) return false;
+    return !win.resizable || (p.width === win.width && p.height === win.height);
+  };
+
+  // The placement is the geometry — no prior session's is consulted (see
+  // the header): a windoid lands where THIS raster puts it. Run for all
+  // three at boot and by arrange(), and per untouched windoid on a resize.
+  const placeWindoid = (id, smart) => {
     const sm = smart[id];
     byId[id].left = sm.left;
     byId[id].top = sm.top;
@@ -165,23 +195,39 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
       byId[id].width = sm.width;
       byId[id].height = sm.height;
     }
-    const s = saved?.utility?.[id];
-    if (s) {
-      if (Number.isFinite(s.left)) byId[id].left = s.left;
-      if (Number.isFinite(s.top)) byId[id].top = s.top;
-      if (Number.isFinite(s.width) && byId[id].resizable) byId[id].width = s.width;
-      if (Number.isFinite(s.height) && byId[id].resizable) byId[id].height = s.height;
-    }
     if (id === 'stage') {
       byId[id].width = Math.max(byId[id].width ?? 0, STAGE_MIN_WIDTH);
       byId[id].height = Math.max(byId[id].height ?? 0, STAGE_MIN_HEIGHT);
     }
-    // The sprite windoid's size is never authored/restored truth — it is
-    // always the fixed derivation (a saved size can't land on it anyway:
-    // the restore above guards on `resizable`).
+    // The sprite windoid's size is never authored truth — it is always
+    // the fixed derivation.
     if (id === 'sprite') fitSprite();
     clampWindow(desktop, byId[id]);
+    recordPlaced(byId[id]);
+  };
+  const placeUtility = () => {
+    const smart = smartLayout();
+    for (const id of WINDOW_IDS) placeWindoid(id, smart);
+  };
+  // A document window onto cascade slot `slot` of the CURRENT raster's doc
+  // box, at the box's size: arrange() and the untouched-window resize.
+  const placeDoc = (win, slot) => {
+    const d = smartLayout().doc;
+    const pos = cascadeSlot(d, slot);
+    win.left = pos.left;
+    win.top = pos.top;
+    win.width = d.width;
+    win.height = d.height;
+    clampWindow(desktop, win);
+    recordPlaced(win, { slot: pos.slot });
+  };
+  for (const id of WINDOW_IDS) {
+    // Non-closeable by design: the windoids are permanent chrome, on screen
+    // whenever the application is. `closable` defaults true and markup can't
+    // express the off state (a boolean attribute), so it's set here.
+    byId[id].closable = false;
   }
+  placeUtility();
   // The grow box enforces only the kit's general 80×54 floor, so a drag could
   // shrink the 3D View under its own floor: re-floor on every vf-resize. The
   // kit fires it after the shrunken box has been applied but the correction
@@ -230,11 +276,6 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
   );
   /** @type {Map<string, {win: VfWindow, editor: HTMLElement}>} ctx key -> parts */
   const byKey = new Map();
-  /** Saved per-document geometry from a previous session, by fileId. */
-  const savedDocGeom = new Map(
-    (saved?.docs ?? []).filter((d) => d && d.fileId).map((d) => [d.fileId, d])
-  );
-  let staggerSlot = 0; // counts creations, so reopening cascades on
 
   function createDocWindow(ctx) {
     // importNode, NOT cloneNode: template content lives in an inert
@@ -250,17 +291,17 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
     );
     win.id = `win-doc-${ctx.key}`;
     win.setAttribute('heading', ctx.name);
-    // The default box is the smart placement's vacant-middle fill, computed
-    // against the CURRENT raster (the desktop may have resized since boot),
-    // staggered per creation.
+    // The box is the smart placement's vacant-middle fill, computed against
+    // the CURRENT raster (the desktop may have resized since boot), cascaded
+    // into the first slot no open document window holds — never a
+    // remembered geometry (see the header). Saved and untitled documents
+    // place alike.
     const d = smartLayout().doc;
-    const g = savedDocGeom.get(ctx.fileId ?? '') ?? {
-      left: d.left + STAGGER * staggerSlot,
-      top: d.top + STAGGER * staggerSlot,
-      width: d.width,
-      height: d.height,
-    };
-    staggerSlot = (staggerSlot + 1) % 8; // wrap before a cascade walks off-raster
+    const occupied = [...byKey.values()].map(({ win }) => ({
+      left: win.left ?? 0,
+      top: win.top ?? 0,
+    }));
+    const g = { ...cascadeFrom(d, occupied), width: d.width, height: d.height };
     for (const k of ['left', 'top', 'width', 'height']) {
       if (Number.isFinite(g[k])) win.setAttribute(k, String(g[k]));
     }
@@ -280,6 +321,7 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
     if (hideDocs) win.hidden = true;
     desktop.append(win); // upgrades + slots in; the kit activates the newcomer
     clampWindow(desktop, win);
+    recordPlaced(win, { slot: g.slot });
     byKey.set(ctx.key, { win, editor });
     // Settle the light-DOM order NOW (no pointer gesture is in flight at a
     // programmatic open): a document window appended after the static
@@ -353,12 +395,49 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
   // have a non-window target and pass through). Only document windows carry
   // one — the windoids are non-closeable — and it routes through the
   // dirty-checking flow menus.js injects.
-  /** Per-window relative pin across raster resizes: the unrounded fraction
-   *  plus the top/left this path last applied (a mismatch there means
-   *  someone moved the window, so its pin re-derives) — and, for resizable
-   *  windows, the TRUE size plus the size this path last applied, the same
-   *  discipline for the oversize shrink. See onDesktopResized. */
+  /** Per-window relative pin across raster resizes (TOUCHED windows only):
+   *  the unrounded fraction plus the top/left this path last applied (a
+   *  mismatch there means someone moved the window, so its pin re-derives)
+   *  — and, for resizable windows, the TRUE size plus the size this path
+   *  last applied, the same discipline for the oversize shrink. See
+   *  onDesktopResized. */
   const pins = new WeakMap();
+  /** The pin re-expressed on the new raster — the touched-window half of
+   *  onDesktopResized (its doc comment is the contract). */
+  const repin = (win, before, after) => {
+    const cur = { left: win.left ?? 0, top: win.top ?? 0 };
+    let rec = pins.get(win);
+    if (!rec || rec.left !== cur.left || rec.top !== cur.top) {
+      rec = { ...rec, pin: pinOf(cur, before) };
+    }
+    const pos = pinTo(rec.pin, after);
+    win.left = snapSys(pos.left, win);
+    win.top = snapSys(pos.top, win);
+    const next = { pin: rec.pin, left: win.left, top: win.top };
+    if (win.resizable) {
+      // The oversize shrink (see the doc comment): floor-snapped onto the
+      // window's lattice so the clamped edge lands on the device grid; an
+      // in-bounds size passes through untouched (no re-snap — the write
+      // below is then the value already there, a Lit no-op).
+      const k = systemPxQuantum(win);
+      const minTop = Math.ceil(TOP_RESERVE / k) * k;
+      const maxW = Math.floor(after.width / k) * k;
+      const maxH = Math.floor(Math.max(0, after.height - minTop) / k) * k;
+      const curW = win.width ?? 0;
+      const curH = win.height ?? 0;
+      const trueW = rec.appliedW === curW ? rec.trueW : curW;
+      const trueH = rec.appliedH === curH ? rec.trueH : curH;
+      win.width = Math.min(trueW, maxW);
+      win.height = Math.min(trueH, maxH);
+      Object.assign(next, {
+        trueW,
+        trueH,
+        appliedW: win.width,
+        appliedH: win.height,
+      });
+    }
+    pins.set(win, next);
+  };
 
   const api = {
     byId,
@@ -372,8 +451,7 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
       rec.win.hidden = false;
       desktop.bringToFront(rec.win);
     },
-    /** The window element a context lives in (persistence reads geometry off
-     *  it), or null. */
+    /** The window element a context lives in, or null. */
     winFor(key) {
       return byKey.get(key)?.win ?? null;
     },
@@ -382,10 +460,40 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
     editorFor(key) {
       return byKey.get(key)?.editor ?? null;
     },
+    /** View → Arrange Windows: the boot placement, re-run on the CURRENT
+     *  raster over every window — the windoids back to the rail at their
+     *  placed sizes, every open document window onto the doc box at its
+     *  size, cascaded in STACKING order (the desktop keeps DOM order in
+     *  step with z-order: bottom-most first, so the front window tops the
+     *  cascade; a sixth and beyond wrap, as an open would). The one way to
+     *  get the arrangement back after moving things around or resizing the
+     *  browser — app-level, so it also re-rails the hidden windoids from the
+     *  Finder role, ready for the next open. Positions only: nothing
+     *  activates or re-stacks. */
+    arrange() {
+      placeUtility();
+      let slot = 0;
+      for (const el of desktop.querySelectorAll(':scope > vf-window')) {
+        const win = /** @type {VfWindow} */ (el);
+        if (keyOf(win) != null) placeDoc(win, slot++);
+      }
+    },
     /** The raster changed size (a browser resize / zoom re-fit — main.js
      *  calls this right after fitWithin, per event, un-debounced: the raster
-     *  re-fits live, so the windows track it in the same stroke). Every
-     *  window — windoid and document alike — keeps its relative pin
+     *  re-fits live, so the windows track it in the same stroke). Two
+     *  regimes, decided per window:
+     *
+     *  UNTOUCHED — still exactly where the placement last put it (never
+     *  moved or resized since; `placed`): it FOLLOWS THE PLACEMENT onto the
+     *  new raster, exactly as Arrange Windows would put it — a windoid back
+     *  to the rail, a document window onto its own cascade slot of the
+     *  re-derived doc box. The placement is a pure function of the raster,
+     *  so this is reversible by construction, and it is what makes a
+     *  resize behind the boot dialog (windoids hidden, nothing open) come
+     *  up right when the first document opens. Its pin record is dropped —
+     *  the first drag after this re-derives one from where it lands.
+     *
+     *  TOUCHED — the user moved or resized it: it keeps its relative pin
      *  (shell/layout.js: left as a plain fraction of the raster width, top
      *  of the open space below the options strip — the fixed chrome band
      *  is the pin's y = 0 line, so a window tucked under the strip stays
@@ -407,7 +515,7 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
      *
      *  The UNROUNDED fraction is the per-window truth between events (the
      *  `pins` cache), re-derived only when the window has moved since this
-     *  path last placed it (a drag, a restore, a fresh window) — likewise
+     *  path last placed it (a drag, a fresh window) — likewise
      *  the true size, re-derived only when the window was resized since
      *  this path last sized it. Re-deriving
      *  it every event from the just-snapped position ratchets — the
@@ -416,43 +524,19 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
     onDesktopResized(before) {
       const after = { width: desktop.width, height: desktop.height };
       if (before.width === after.width && before.height === after.height) return;
-      const wins = [
-        ...WINDOW_IDS.map((id) => byId[id]),
-        ...[...byKey.values()].map((rec) => rec.win),
-      ];
-      for (const win of wins) {
-        const cur = { left: win.left ?? 0, top: win.top ?? 0 };
-        let rec = pins.get(win);
-        if (!rec || rec.left !== cur.left || rec.top !== cur.top) {
-          rec = { ...rec, pin: pinOf(cur, before) };
-        }
-        const pos = pinTo(rec.pin, after);
-        win.left = snapSys(pos.left, win);
-        win.top = snapSys(pos.top, win);
-        const next = { pin: rec.pin, left: win.left, top: win.top };
-        if (win.resizable) {
-          // The oversize shrink (see the doc comment): floor-snapped onto
-          // the window's lattice so the clamped edge lands on the device
-          // grid; an in-bounds size passes through untouched (no re-snap —
-          // the write below is then the value already there, a Lit no-op).
-          const k = systemPxQuantum(win);
-          const minTop = Math.ceil(TOP_RESERVE / k) * k;
-          const maxW = Math.floor(after.width / k) * k;
-          const maxH = Math.floor(Math.max(0, after.height - minTop) / k) * k;
-          const curW = win.width ?? 0;
-          const curH = win.height ?? 0;
-          const trueW = rec.appliedW === curW ? rec.trueW : curW;
-          const trueH = rec.appliedH === curH ? rec.trueH : curH;
-          win.width = Math.min(trueW, maxW);
-          win.height = Math.min(trueH, maxH);
-          Object.assign(next, {
-            trueW,
-            trueH,
-            appliedW: win.width,
-            appliedH: win.height,
-          });
-        }
-        pins.set(win, next);
+      const smart = smartLayout();
+      for (const id of WINDOW_IDS) {
+        const win = byId[id];
+        if (untouched(win)) {
+          placeWindoid(id, smart);
+          pins.delete(win);
+        } else repin(win, before, after);
+      }
+      for (const { win } of byKey.values()) {
+        if (untouched(win)) {
+          placeDoc(win, placed.get(win).slot);
+          pins.delete(win);
+        } else repin(win, before, after);
       }
     },
     /** Deactivate the application programmatically (nothing calls this on
