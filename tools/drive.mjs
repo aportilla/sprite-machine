@@ -657,6 +657,31 @@ async function main() {
     seed.newDialogOpen === true && seed.docWindows === 0,
     JSON.stringify({ open: seed.newDialogOpen, docWindows: seed.docWindows })
   );
+  // The dialog greet is DESKTOP-FOCUSED: no document window has opened, so
+  // the application never activated (the mirror reads the desktop's own
+  // boot truth — nothing active yet). The windoids stay hidden, the options
+  // strip stays blank, and the menus greet in the Finder grammar — the same
+  // state closing the last window leaves; the dialog just floats over it.
+  const greet = await probe();
+  check(
+    'the dialog greet is desktop-focused: windoids hidden, options strip blank',
+    !greet.windows.tools &&
+      !greet.windows.sprite &&
+      !greet.windows.stage &&
+      greet.optionsStrip === false,
+    JSON.stringify({ windows: greet.windows, strip: greet.optionsStrip })
+  );
+  check(
+    '…and the Finder menu grammar greets: New stays, doc-scoped items grey out',
+    greet.menuEnabled.newDoc === true &&
+      greet.menuEnabled.open === false &&
+      greet.menuEnabled.save === false &&
+      greet.menuEnabled.close === false &&
+      greet.menuEnabled.pickColor === false &&
+      greet.menuEnabled.grid === false &&
+      greet.menuEnabled.toolPencil === false,
+    JSON.stringify(greet.menuEnabled)
+  );
   await sleep(600); // let the desktop-state debounce land before navigating
   await send('Page.navigate', { url: SEED_URL });
   await waitForNewDialog();
@@ -668,6 +693,45 @@ async function main() {
       icons: seed.icons.length,
       open: seed.newDialogOpen,
       docWindows: seed.docWindows,
+    })
+  );
+  // The reload restores the persisted layout — a different boot path from
+  // the virgin greet — and must land desktop-focused all the same.
+  const greet2 = await probe();
+  check(
+    'the restored-layout greet is desktop-focused too: windoids stay hidden',
+    !greet2.windows.tools && !greet2.windows.sprite && !greet2.windows.stage,
+    JSON.stringify(greet2.windows)
+  );
+  // Creating from the greeting dialog opens the FIRST document window, and
+  // that is what activates the application: the windoids and the options
+  // strip appear BECAUSE a document window opened, never before. (A fresh
+  // Empty Document is born clean — the load's sheet bump marks it — so
+  // navigating away below can't trip the beforeunload guard.) A headless
+  // artifact reload can land mid-gesture and boot back to the dialog,
+  // dropping the untitled window (they never survive a reload — by design),
+  // so the gesture retries: the run's standing tolerance for that artifact.
+  let created = null;
+  for (let attempt = 0; attempt < 3 && created?.docWindows !== 1; attempt++) {
+    await waitForNewDialog();
+    const newOk = await centreOf('#btn-new-ok');
+    await click(newOk.x, newOk.y);
+    await sleep(650);
+    created = await probe();
+  }
+  check(
+    "the dialog's Create opens a window and ACTIVATES: windoids + strip up",
+    created.docWindows === 1 &&
+      created.docActive === true &&
+      created.windows.tools &&
+      created.windows.sprite &&
+      created.windows.stage &&
+      created.optionsStrip === true,
+    JSON.stringify({
+      docWindows: created.docWindows,
+      docActive: created.docActive,
+      windows: created.windows,
+      strip: created.optionsStrip,
     })
   );
   await send('Page.navigate', { url: `${SEED_URL}&file=cube` });

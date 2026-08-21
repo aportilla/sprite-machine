@@ -35,8 +35,11 @@
 // kit's 0.4.0 position: only the page knows which presses mean "the
 // Finder"): a press on the desktop's bare dither — wired here — or in the
 // icon layer (shell/icons.js) routes through desktop.clearActive(); the
-// kit adds its own null when the last document window leaves. Boot always
-// comes up active and ?hide=document captures keep their utility windows.
+// kit adds its own null when the last document window leaves. The mirrors
+// initialize by READING the kit's truth (desktop.activeWindow — null on a
+// fresh boot, so a dialog-greeted boot is desktop-focused), never from a
+// constant; opening any document window activates through the kit (hidden
+// windows included — ?hide=document captures keep their windoids that way).
 //
 // Close boxes never hide windows directly: the windoids have no close box
 // at all, and a document window's close routes through the injected
@@ -307,20 +310,26 @@ export function initWindows(desktop, { saved = null, hide = [] } = {}) {
   syncDocs(); // HMR: rebuild windows for contexts that survived the reload
 
   // --- app activation: desktop -> the two mirrors -------------------------------
-  // The kit's vf-activate is the single writer of both appActive (the
-  // boolean) and workspace.activeKey (which document). detail.window is a
-  // document-tier window or null.
+  // This wire is the single writer of both appActive (the boolean) and
+  // workspace.activeKey (which document): desktop.activeWindow read once at
+  // wire-up, then vf-activate (a document-tier window, or null) per change.
   const keyOf = (win) => {
     for (const [key, rec] of byKey) if (rec.win === win) return key;
     return null;
   };
-  const onActivate = (e) => {
-    const win = /** @type {CustomEvent} */ (e).detail.window;
+  const applyActive = (win) => {
     workspace.setActive(win ? keyOf(win) : null);
     shell.setAppActive(!!win);
   };
+  const onActivate = (e) => applyActive(/** @type {CustomEvent} */ (e).detail.window);
   desktop.addEventListener('vf-activate', onActivate);
   unsubs.push(() => desktop.removeEventListener('vf-activate', onActivate));
+  // A mirror initializes by reading its source, never from a constant:
+  // whatever the desktop already holds active — null on a fresh boot
+  // (desktop-focused until a document window opens), or the window the
+  // syncDocs rebuild above activated before this listener attached (an HMR
+  // re-init) — lands through the same funnel the events use.
+  applyActive(desktop.activeWindow);
 
   // --- deactivation: the page's press test --------------------------------------
   // The kit deliberately never decides which presses mean "the Finder" (its

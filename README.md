@@ -381,7 +381,11 @@ window the desktop's active window?**
   double-click, a drop) — **reactivates**: the windoids come back exactly
   where they were, aimed at the newly active document.
 - Closing the last document window leaves the same desktop-focused state:
-  a bare desktop whose windoid arrangement survives for the next open.
+  a bare desktop whose windoid arrangement survives for the next open. And
+  **boot begins in this state too**: until the first document window opens
+  (a `?file` load, the New dialog's Create, a drop), nothing has activated —
+  a dialog-greeted load shows the Finder grammar with the windoids hidden.
+  A windoid is on screen _because_ a document window is, never before.
 
 ### Documents are windows
 
