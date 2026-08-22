@@ -105,7 +105,7 @@ export class SmAtlasView extends LitElement {
         margin: 0;
         padding: 0;
         border: 0;
-        background: #FFF;
+        background: #fff;
         /* Reads the kit's cursor token first: applyCursor's blanket can't
            pierce this shadow root, and a bare \`cursor: pointer\` would put
            the native hand back alongside the kit's drawn arrow. */
