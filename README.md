@@ -552,42 +552,54 @@ it is now, every window included. (Desktop
 icons are the exception — the Finder's furniture, arranged by hand; see
 [Desktop icons & state](#desktop-icons--state).) Everything clamps onto
 the raster's lattice.
-When the **browser window resizes**, the raster re-fits and each window
-goes one of two ways. A window **still sitting where the placement put
-it** — never moved or resized since — **follows the placement** onto the
-new raster, exactly where Arrange Windows would put it: the rail stays
-right-flush and full-height, a document window re-fits onto its own
-cascade slot of the re-derived doc box. That's a pure function of the
-raster, so it's reversible by construction — and it's what makes a
-resize **behind the boot dialog** (windoids hidden, nothing open) come up
-right when the first document opens. A window you've **touched** keeps
-its **relative pin**: its left as a plain fraction of the raster's
-width, its top as a plain fraction of the **open space below the options
-strip** (the menu-bar + strip band is fixed-height chrome — the pin's
-y = 0 line is the strip's bottom edge, so a window tucked under the strip
-stays tucked under it instead of sliding beneath the menu bar) — live,
-per resize event (the raster itself re-fits live, so the windows track it
-in the same stroke). The
-**unrounded fraction is the per-window truth** between events, re-derived
-only when the window has actually been moved (a drag, a restore) —
-re-reading it each event from the just-snapped position ratchets, because
-the placement lattice's round-half-up walks windows down the screen
-across a long resize drag, one notch at a time, never back up.
-Deliberately **no position clamp** and no visibility guarantee on this
-path: a
-window near an edge may hang partly off a shrunk raster, and that's the
-point — the same fraction always maps back exactly, so growing back
-returns it whole (clamping at the small size rewrites the fraction and
-turns the round trip into a drift). Sizes get exactly **one
-intervention**: a resizable window **bigger than the open area** shrinks
-to fit it — hanging off is recoverable by a drag, but bigger-than-the-area
-is not (the title bar can't leave the raster upward, so the grow-box
-corner would be unreachable at any position). The shrink keeps the pin's
-reversibility discipline: the **true size** is the per-window truth,
-re-derived only when the window was actually resized, so growing the
-raster back restores the size exactly; the same oversize clamp guards
-every placement (`clampWindow`) — the smart placement's size floors on a
-tiny raster, a cascaded document window near the raster's edge.
+When the **browser window resizes**, the raster re-fits and **one rule
+moves every window**, placed or dragged alike — the **nine-slice pin**
+(`pinOf`/`pinTo` in `shell/layout.js`). The **open space below the options
+strip** (the menu-bar + strip band is fixed-height chrome — the frame's
+y = 0 line is the strip's bottom edge) is cut by a **ring of outer
+bands** — 100 system px at the left and bottom, and at the top and right
+widened to hold the rail: the top band runs through the 3D View's top
+edge, the right band is the rail column — around a **middle that grows
+and shrinks**. Each window edge keeps its place in its slice: an edge in
+a band is a **strut** (its offset from that raster edge holds), an edge
+in the middle a **spring** (its fraction of the middle holds). So a
+window tucked against the right edge stays tucked, a window wholly
+inside a corner never moves, a window spanning the middle **breathes**
+with it, and a window left hanging off an edge keeps hanging by the same
+amount. Because the bands hold the furniture, every **placed windoid is
+all struts** and the placement is a **fixed point** of the rule: a resize
+lands the rail exactly where Arrange Windows would — right-flush,
+full-height — with nothing remembering whether a window was ever touched,
+which is also what makes a resize **behind the boot dialog** (windoids
+hidden, nothing open) come up right when the first document opens. A
+document window is content, not furniture: its top-left (the cascade
+slot) is a strut pair, its right and bottom edges spring with the
+vacancy, so it keeps filling the middle proportionally (Arrange
+re-applies the absolute cascade room). A **fixed-size** window (the
+Tools palette, the Sprite View) resolves its edges through an **anchor
+rule** — a lone strut holds, opposite struts keep the near edge (the
+title bar is the handle), two springs keep the center — and a resizable
+one floors its size the same way. All of it runs live, per resize event
+(the raster itself re-fits live, so the windows track it in the same
+stroke). The **unrounded pin is the per-window truth** between events,
+re-derived only when the window has actually been moved or resized by
+something else (a drag, a grow, a placement) — re-reading it each event
+from the just-snapped geometry ratchets, because the placement lattice's
+round-half-up walks windows down the screen across a long resize drag,
+one notch at a time, never back up. Deliberately **no position clamp**
+and no visibility guarantee on this path: a window near an edge may hang
+partly off a shrunk raster, and that's the point — the same pin always
+maps back exactly, so growing back returns it whole (clamping at the
+small size rewrites the pin and turns the round trip into a drift). Sizes
+get exactly **one intervention** past the pin: a resizable window
+**bigger than the open area** shrinks to fit it — hanging off is
+recoverable by a drag, but bigger-than-the-area is not (the title bar
+can't leave the raster upward, so the grow-box corner would be
+unreachable at any position); the shrink never touches the pin, so
+growing the raster back restores the size exactly. The same oversize
+clamp guards every placement (`clampWindow`) — the smart placement's
+size floors on a tiny raster, a cascaded document window near the
+raster's edge.
 
 ### Documents: a document IS a .png
 
@@ -648,9 +660,15 @@ folding into further columns when a cell would run off a short raster's
 bottom), a saved position wins, pulled on-raster at boot (an off-raster
 icon has nothing to grab, so it would be unreachable — the windows'
 boot-clamp discipline), and on a **browser resize** every icon keeps its
-**relative pin** in the same stroke as the windows: the same
-unrounded-fraction truth cache, the same no-clamp reversibility, so a
-shrink-then-grow round-trips every icon exactly home. Icon layout, Show
+**nine-slice pin** in the same stroke as the windows, in the icons' own
+frame (`ICON_FRAME`: the desktop below the menu bar, uniform 100px
+bands — no application furniture lives in the Finder's frame — and the
+64px cell a fixed size, so an icon resolves through the anchor rule):
+the classic left-edge column is a strut that stays at its 16px, its rows
+spring with the middle, an icon dragged into a corner stays in that
+corner — the same unrounded truth cache, the same no-clamp
+reversibility, so a shrink-then-grow round-trips every icon exactly
+home. Icon layout, Show
 Grid, and the open SAVED documents' edited faces (and which was active)
 persist in one versioned localStorage key (`shell/desktop-state.js`, v3 —
 a v1 or v2 blob migrates shallowly, the window geometry those versions
@@ -803,17 +821,20 @@ with exactly the cascade's room at its right and bottom (every slot inside
 the vacancy, the last flush with its edges), tiny rasters degrading
 gracefully — the document-window cascade (first free slot, a freed slot
 reused, a full cascade wrapping) — the raster-derived
-icon lattice (the column wrap), the slot re-expression an untouched
-document window re-places by (`cascadeSlot`), and the resize re-pin rule
-for touched windows: plain fractions
-(left of the raster width, top of the open space below the reserved chrome
-band — the options strip for windows, the bare menu bar for icons), no
-position clamp — an edge window may hang
-off a shrunk raster so shrink-then-grow round-trips home exactly, though a
-window bigger than the open area shrinks to fit (and grows back the same
-way — the grow box must stay reachable);
-`tools/drive.mjs` drives the real thing over CDP, where a viewport change
-fires a true `resize`).
+icon lattice (the column wrap), the slot re-expression Arrange Windows
+cascades by (`cascadeSlot`), and the nine-slice resize rule: struts keep
+their offsets, springs their fraction of the middle, continuity across
+every seam, edges outside the raster, a rigid corner widget, near + far
+stretching and spring + spring scaling, the fixed-size anchor rule, the
+resizable floor, the degenerate span, the frames (the windows' below the
+options strip with the rail-sized top/right bands, the icons' below the
+bare menu bar, uniform), no ratchet across a wiggle — and the test that
+licenses one rule for everything: **the placement is a fixed point**, every
+placed windoid re-pinning onto any other raster exactly where
+`initialPlacement` puts it there, with the rail's edges still struts
+after a 2px lattice snap; `tools/drive.mjs` drives the real thing over
+CDP, where a viewport change fires a true `resize`, and imports the pure
+module as its oracle for the exact expected geometry).
 
 Beyond that pipeline integration, the pure modules also have direct unit suites:
 `test/carve.test.mjs` (vox/unvox round-trip, `extractSurface` masks + counts,
@@ -890,13 +911,15 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   none persists) + cascadeFrom (the document windows' first-free-slot
                   cascade) + spriteHeightFor (the fixed-size
                   Sprite View windoid: picker-block width, atlas-ratio height) + iconDefault
-                  (the raster-derived icon lattice) + pinOf/pinTo (the relative pin across raster
-                  resizes, framed per tier: windows below the options strip, icons below the menu bar)
+                  (the raster-derived icon lattice) + pinOf/pinTo (the nine-slice pin across raster
+                  resizes — struts in the outer bands, springs in the middle — framed per tier:
+                  WINDOW_FRAME below the options strip with the rail-sized top/right bands,
+                  ICON_FRAME below the menu bar, uniform)
   windows.js      the two window regimes: windoid visibility (appActive <-> hidden; non-closeable), and
                   the document-window reconciler (template clone per context, the doc box
                   cascaded — never a restored geometry, title sync, close-box routing); the vf-activate wire into
-                  shell.appActive + workspace.activeKey; boot clamp + the resize rule (an untouched
-                  window follows the placement, a touched one re-pins); arrange()
+                  shell.appActive + workspace.activeKey; boot clamp + the resize rule (every window
+                  re-pins by the nine-slice pin — the placement being a fixed point of it); arrange()
                   (View → Arrange Windows: the placement re-run over every window); the
                   Sprite View's fixed sizing (fitSprite — boot + doc switches/tile resizes)
   menus.js        vf-menu-select -> workspace/file actions on the ACTIVE document; the two-role

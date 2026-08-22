@@ -16,8 +16,8 @@
 // it reserves nothing above an icon): the default column derives from the
 // live raster (shell/layout.js iconDefault — it wraps on a short raster), a
 // saved position (a previous session's drag) wins, clamped on-raster at
-// boot, and a browser resize re-pins every icon relatively
-// (onDesktopResized below).
+// boot, and a browser resize re-pins every icon by the same nine-slice
+// rule as the windows, in the icons' own frame (onDesktopResized below).
 // ---------------------------------------------------------------------------
 
 import { snapSys, systemPxQuantum } from 'vintage-frames';
@@ -25,7 +25,7 @@ import { genericDocIconDataUri } from '../image-io.js';
 import { files } from '../state/files.js';
 import { shell } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
-import { iconDefault, pinOf, pinTo, ICON_CELL, MENU_BAR } from './layout.js';
+import { iconDefault, pinOf, pinTo, ICON_CELL, ICON_FRAME, MENU_BAR } from './layout.js';
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
 
@@ -198,35 +198,38 @@ export function initIcons(desktop, { actions, savedPos = () => null, fresh = fal
     syncDocIcons();
   }
 
-  /** Per-icon relative pin across raster resizes: the unrounded fraction
-   *  plus the top/left this path last applied (a mismatch there means
-   *  someone dragged the icon — or it is new — so its pin re-derives). The
-   *  same truth-cache discipline as the windows' (windows.js
-   *  onDesktopResized), for the same reason: re-deriving the fraction each
-   *  event from the just-snapped position ratchets. */
+  /** Per-icon nine-slice pin across raster resizes: the unrounded pin plus
+   *  the top/left this path last applied (a mismatch there means someone
+   *  dragged the icon — or it is new — so its pin re-derives). The same
+   *  truth-cache discipline as the windows' (windows.js onDesktopResized),
+   *  for the same reason: re-deriving the pin each event from the
+   *  just-snapped position ratchets. */
   const pins = new WeakMap();
+  const CELL = { width: ICON_CELL, height: ICON_CELL };
 
   return {
     /** The raster changed size (main.js calls this in the same stroke as
      *  the windows' re-pin, per resize event, un-debounced). Every icon
-     *  keeps its relative pin — left as a plain fraction of the raster
-     *  width, top of the space below the MENU BAR (the icons' frame; the
-     *  options strip is no chrome of theirs). Deliberately NO clamp, like
-     *  the windows: the same fraction always maps back exactly, so growing
-     *  back returns every icon whole — and unlike a window an icon's left
-     *  edge stays a fraction INSIDE the raster, so at worst a sliver of its
-     *  plate hangs off the right, still grabbable. */
+     *  keeps its nine-slice pin (shell/layout.js pinOf/pinTo) in the
+     *  ICON_FRAME: the desktop below the MENU BAR (the options strip is no
+     *  chrome of theirs), uniform bands — no application furniture lives
+     *  in the Finder's frame. The classic left-edge column is a strut (it
+     *  stays at its 16px), its rows spring with the middle; an icon
+     *  dragged into a corner stays in that corner. A fixed-size box — the
+     *  64px cell — so its edges resolve through the anchor rule.
+     *  Deliberately NO clamp, like the windows: the same pin always maps
+     *  back exactly, so growing back returns every icon whole. */
     onDesktopResized(before) {
       const after = { width: desktop.width, height: desktop.height };
       if (before.width === after.width && before.height === after.height) return;
       for (const el of root.querySelectorAll('vf-icon[data-key]')) {
         const icon = /** @type {any} */ (el);
-        const cur = { left: icon.left ?? 0, top: icon.top ?? 0 };
+        const cur = { left: icon.left ?? 0, top: icon.top ?? 0, ...CELL };
         let rec = pins.get(icon);
         if (!rec || rec.left !== cur.left || rec.top !== cur.top) {
-          rec = { pin: pinOf(cur, before, MENU_BAR) };
+          rec = { pin: pinOf(cur, before, ICON_FRAME) };
         }
-        const pos = pinTo(rec.pin, after, MENU_BAR);
+        const pos = pinTo(rec.pin, after, ICON_FRAME, { size: CELL });
         icon.left = snapSys(pos.left, icon);
         icon.top = snapSys(pos.top, icon);
         pins.set(icon, { pin: rec.pin, left: icon.left, top: icon.top });

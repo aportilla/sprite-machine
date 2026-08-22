@@ -54,6 +54,16 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+// The desktop's pure resize arithmetic — dependency-free ESM, so the browser
+// resize section computes its exact expectations from the same function the
+// shell applies (shell/layout.js is Node-tested; here it is the oracle).
+import {
+  pinOf,
+  pinTo,
+  WINDOW_FRAME,
+  ICON_FRAME,
+  ICON_CELL,
+} from '../src/shell/layout.js';
 
 const APP_PORT = process.argv[2] || '5173';
 const DBG_PORT = +(process.env.DRIVE_DEBUG_PORT || 9333);
@@ -2206,19 +2216,62 @@ async function main() {
     JSON.stringify(um)
   );
 
-  // --- desktop: browser resize — placement for the untouched, pins for the rest
-  // A viewport change re-fits the raster. A window still sitting where the
-  // placement put it FOLLOWS THE PLACEMENT onto the new raster (a resize is
-  // an Arrange for it); a window the user has moved or resized keeps its
-  // RELATIVE top/left pin (shell/layout.js pinOf/pinTo: left as a fraction
-  // of the raster width, top of the space below the options strip),
-  // un-clamped, so growing back round-trips home exactly — and every
-  // desktop icon keeps the same kind of pin in ITS frame (the desktop below
-  // the 20px menu bar; the options strip is application chrome, no part of
-  // the Finder's furniture). Emulation.setDeviceMetricsOverride changes the
-  // layout viewport and fires a real `resize` — the same path a user's
-  // window drag takes.
+  // --- desktop: browser resize — the nine-slice pin, one rule for every box
+  // A viewport change re-fits the raster, and ONE rule moves every window
+  // and icon, placed or dragged alike (shell/layout.js pinOf/pinTo — its
+  // header is the design): the open area is cut by a ring of
+  // outer bands around a middle that grows and shrinks, and each edge keeps
+  // its place in its slice — a strut in a band (its offset from that raster
+  // edge holds), a spring in the middle (its fraction holds). The window
+  // frame's top and right bands are sized to the rail, so the placed
+  // windoids are all struts and a resize lands them exactly where Arrange
+  // would; a document window's right and bottom edges spring with the
+  // vacancy. Nothing clamps, so growing back round-trips home exactly. The
+  // desktop icons ride the same rule in THEIR frame (the desktop below the
+  // 20px menu bar, uniform bands; the options strip is application chrome,
+  // no part of the Finder's furniture). Emulation.setDeviceMetricsOverride
+  // changes the layout viewport and fires a real `resize` — the same path a
+  // user's window drag takes. The expectations below come from the pure
+  // module itself: at DSF 1 the placement lattice is 1 system px, so the
+  // shell's snap is the rounding pinTo already does, and the only thing
+  // layered over it is the oversize intervention (a resizable window never
+  // wider or taller than the open area).
   section('browser resize');
+  const STAGE_MIN = { width: 164, height: 160 }; // windows.js STAGE_MIN_*
+  const KIT_MIN = { width: 80, height: 54 }; // vf-window's own grow floor
+  const raster = (snap) => ({ width: snap.dw, height: snap.dh });
+  const expectWin = (w, from, to) => {
+    const pin = pinOf(
+      { left: w.left, top: w.top, width: w.w, height: w.h },
+      from,
+      WINDOW_FRAME
+    );
+    const g = pinTo(
+      pin,
+      to,
+      WINDOW_FRAME,
+      w.r
+        ? { min: w.id === 'win-stage' ? STAGE_MIN : KIT_MIN }
+        : { size: { width: w.w, height: w.h } }
+    );
+    if (w.r) {
+      g.width = Math.min(g.width, to.width);
+      g.height = Math.min(g.height, Math.max(0, to.height - 56));
+    }
+    return { id: w.id, left: g.left, top: g.top, w: g.width, h: g.height, r: w.r };
+  };
+  const expectIcon = (i, from, to) => {
+    const cell = { width: ICON_CELL, height: ICON_CELL };
+    const g = pinTo(
+      pinOf({ left: i.left, top: i.top, ...cell }, from, ICON_FRAME),
+      to,
+      ICON_FRAME,
+      {
+        size: cell,
+      }
+    );
+    return { id: i.id, left: g.left, top: g.top };
+  };
   await freshPage();
   const layoutSnap = () =>
     evaluate(`(() => {
@@ -2252,6 +2305,11 @@ async function main() {
   // windows' correct relative re-pin as drift.
   await metrics(1000, 850);
   await sleep(400);
+  // Arrange at the wide raster: the boot happened on the native viewport,
+  // so the override above was itself a resize and the document window's
+  // pin was read THERE. Arrange drops every record, so the shrink below
+  // reads each pin on the wide raster — exactly where the oracle reads it.
+  await pickMenu('#menu-view', 'arrange');
   const placedWide = await layoutSnap();
   await metrics(780, 640);
   await sleep(400);
@@ -2264,18 +2322,21 @@ async function main() {
       after: [placedNarrow.dw, placedNarrow.dh],
     })
   );
-  // UNTOUCHED windows — every one still exactly where the boot placement
-  // put it — FOLLOW THE PLACEMENT across the resize: a resize is an Arrange
-  // for them, so Arrange Windows afterwards changes nothing, and the rail
-  // is right-flush and full-height on the NEW raster (a proportional pin
-  // would have scaled the inset and left the stage short).
+  // THE PLACEMENT IS A FIXED POINT of the rule for the windoids: all struts,
+  // so the resize lands them exactly where Arrange Windows puts them on the
+  // new raster, and the rail is right-flush and full-height there (a
+  // proportional pin would have scaled the inset and left the stage short).
   await pickMenu('#menu-view', 'arrange');
   const arrangedNarrow = await layoutSnap();
+  const windoids = (snap) => snap.wins.filter((w) => !w.id.startsWith('win-doc-'));
   check(
-    'untouched windows follow the placement on a resize (Arrange then changes nothing)',
-    placedNarrow.wins.length === placedWide.wins.length &&
-      JSON.stringify(placedNarrow.wins) === JSON.stringify(arrangedNarrow.wins),
-    JSON.stringify({ resized: placedNarrow.wins, arranged: arrangedNarrow.wins })
+    'a resize lands the windoids where Arrange would (the placement is a fixed point)',
+    windoids(placedNarrow).length === 3 &&
+      JSON.stringify(windoids(placedNarrow)) === JSON.stringify(windoids(arrangedNarrow)),
+    JSON.stringify({
+      resized: windoids(placedNarrow),
+      arranged: windoids(arrangedNarrow),
+    })
   );
   const railN = placedNarrow.wins.find((w) => w.id === 'win-sprite');
   const stageN = placedNarrow.wins.find((w) => w.id === 'win-stage');
@@ -2286,9 +2347,28 @@ async function main() {
       stageN.top + stageN.h === placedNarrow.dh - 8,
     JSON.stringify({ dw: placedNarrow.dw, dh: placedNarrow.dh, railN, stageN })
   );
-  // TOUCHED windows keep their RELATIVE pin. Drag every window a step off
-  // its placement (title bar / dot bars): from here on `home` is this
-  // dragged arrangement at 780×640, and the contracts below are the pin's.
+  // The document window is content, not furniture: its top-left (the
+  // cascade slot, struts in the left and top bands) is a fixed point too,
+  // while its right and bottom edges SPRING with the vacancy — it keeps
+  // filling the middle proportionally rather than keeping Arrange's
+  // absolute cascade room. The oracle says exactly what it gets.
+  const docOf = (snap) => snap.wins.find((w) => w.id.startsWith('win-doc-'));
+  const docWant = expectWin(docOf(placedWide), raster(placedWide), raster(placedNarrow));
+  check(
+    'the document window keeps its cascade slot and springs with the middle',
+    docOf(placedNarrow).left === docOf(arrangedNarrow).left &&
+      docOf(placedNarrow).top === docOf(arrangedNarrow).top &&
+      JSON.stringify(docOf(placedNarrow)) === JSON.stringify(docWant),
+    JSON.stringify({
+      resized: docOf(placedNarrow),
+      want: docWant,
+      arranged: docOf(arrangedNarrow),
+    })
+  );
+  // Drag every window a step off its placement (title bar / dot bars):
+  // from here on `home` is this dragged arrangement at 780×640, every pin
+  // re-read from where the drag left it, and the contracts below are the
+  // rule's for boxes that sit anywhere at all.
   await dragBar(`__doc()`, 9);
   await dragBar(`__q('#win-tools')`, 6);
   // The stage BEFORE the sprite: dragged down-right first, the sprite
@@ -2297,7 +2377,7 @@ async function main() {
   await dragBar(`__q('#win-sprite')`, 6);
   const home = await layoutSnap();
   check(
-    'every window dragged off its placement (touched)',
+    'every window dragged off its placement',
     home.wins.every((w) => {
       const o = placedNarrow.wins.find((x) => x.id === w.id);
       return o && (w.left !== o.left || w.top !== o.top);
@@ -2310,71 +2390,51 @@ async function main() {
   // re-scales the desktop for the rest of the run (780×640 → 520×430 is
   // 1.5×/1.49×, both quantizing to the 1.5 rung, and --vf-scale stuck at
   // 4/3). 520×360 is 1.5×/1.78× — two different rungs, so the tracker
-  // rebases instead.
+  // rebases instead. (Its 284px open area is shorter than the window
+  // frame's top + bottom bands — a degenerate span, where the middle
+  // collapses to a seam; the oracle covers that case like any other.)
   await metrics(520, 360);
   await sleep(300);
   const tiny = await layoutSnap();
-  // The relative pin: left as a plain fraction of the raster width, top of
-  // the open space below the options strip (the 56px menu-bar + strip band
-  // is fixed chrome — shell/layout.js TOP_RESERVE), preserved across the
-  // re-fit for every window (to the snap lattice's rounding). Deliberately
-  // NO on-raster assertion: the re-pin doesn't clamp — a window near an
-  // edge may hang partly off the shrunk raster so the round trip below can
-  // be exact.
-  const pins = (snap) =>
-    snap.wins.map((w) => ({
-      id: w.id,
-      x: w.left / Math.max(1, snap.dw),
-      y: (w.top - 56) / Math.max(1, snap.dh - 56),
-    }));
+  // Every window lands exactly where the nine-slice pin read at `home`
+  // puts it on the tiny raster — struts holding their offsets, springs
+  // their fractions, fixed-size windoids through the anchor rule, the
+  // resizable ones floored and capped at the open area. Deliberately NO
+  // on-raster assertion beyond that: the re-pin doesn't clamp — a window
+  // near an edge may hang partly off the shrunk raster so the round trip
+  // below can be exact.
+  const wantTiny = home.wins.map((w) => expectWin(w, raster(home), raster(tiny)));
   check(
-    'every touched window keeps its relative pin on the shrunk raster',
+    'every window lands exactly on its nine-slice pin on the shrunk raster',
     tiny.wins.length === home.wins.length &&
-      pins(tiny).every((p) => {
-        const o = pins(home).find((q) => q.id === p.id);
-        return o && Math.abs(p.x - o.x) < 0.01 && Math.abs(p.y - o.y) < 0.01;
-      }),
-    JSON.stringify({ home: pins(home), tiny: pins(tiny) })
+      JSON.stringify(tiny.wins) === JSON.stringify(wantTiny),
+    JSON.stringify({ home: home.wins, tiny: tiny.wins, want: wantTiny })
   );
-  // The icons' pin frame is the whole desktop below the MENU BAR alone
-  // (shell/layout.js MENU_BAR = 20) — deliberately not TOP_RESERVE.
-  const iconPins = (snap) =>
-    snap.icons.map((i) => ({
-      id: i.id,
-      x: i.left / Math.max(1, snap.dw),
-      y: (i.top - 20) / Math.max(1, snap.dh - 20),
-    }));
+  // The icons' frame is the whole desktop below the MENU BAR alone
+  // (shell/layout.js ICON_FRAME — uniform bands, the 64px cell a fixed
+  // size) — deliberately not the windows'.
+  const wantIcons = home.icons.map((i) => expectIcon(i, raster(home), raster(tiny)));
   check(
-    'every desktop icon keeps its relative pin (below the menu bar) too',
-    tiny.icons.length > 0 &&
-      tiny.icons.length === home.icons.length &&
-      iconPins(tiny).every((p) => {
-        const o = iconPins(home).find((q) => q.id === p.id);
-        return o && Math.abs(p.x - o.x) < 0.01 && Math.abs(p.y - o.y) < 0.01;
-      }),
-    JSON.stringify({ home: iconPins(home), tiny: iconPins(tiny) })
+    'every desktop icon lands exactly on its nine-slice pin (below the menu bar) too',
+    tiny.icons.length > 0 && JSON.stringify(tiny.icons) === JSON.stringify(wantIcons),
+    JSON.stringify({ home: home.icons, tiny: tiny.icons, want: wantIcons })
   );
-  // The ONE size intervention on the pin path: a resizable window BIGGER
-  // than the open area shrinks to fit it (otherwise its grow-box corner is
+  // The ONE size intervention past the pin: a resizable window BIGGER than
+  // the open area shrinks to fit it (otherwise its grow-box corner is
   // unreachable at any position — the title bar can't leave the raster
-  // upward), with the true size cached like the pin so the round trip below
-  // restores it exactly. At this viewport the 780×640 doc box exceeds the
-  // open height, so the clamp must actually engage.
+  // upward); the pin itself is untouched, so the round trip below restores
+  // the size exactly.
   check(
-    'an oversized window shrinks to the shrunk open area (grow box reachable)',
-    tiny.wins.filter((w) => w.r).every((w) => w.w <= tiny.dw && w.h <= tiny.dh - 56) &&
-      tiny.wins.some((w) => {
-        const o = home.wins.find((x) => x.id === w.id);
-        return o && (w.w < o.w || w.h < o.h);
-      }),
+    'every resizable window fits the shrunk open area (grow box reachable)',
+    tiny.wins.filter((w) => w.r).every((w) => w.w <= tiny.dw && w.h <= tiny.dh - 56),
     JSON.stringify(tiny)
   );
   // Wiggle the height up and down a few times before coming home — the
-  // ratchet regression (re-deriving the fraction from the just-snapped
-  // position each event) crept windows DOWN one notch per event and never
-  // back up, so a wiggle run is what catches it; the pin cache maps the
-  // same fraction every event, so home must be EXACT — position AND size
-  // (the wiggle's smaller heights re-clamp sizes mid-run; the truth cache
+  // ratchet regression (re-deriving the pin from the just-snapped geometry
+  // each event) crept windows DOWN one notch per event and never back up,
+  // so a wiggle run is what catches it; the pin cache maps the same pin
+  // every event, so home must be EXACT — position AND size (the wiggle's
+  // smaller heights re-map and re-clamp sizes mid-run; the truth cache
   // must bring them back whole).
   for (const h of [700, 560, 760, 620, 800]) {
     await metrics(780, h);
@@ -2401,6 +2461,55 @@ async function main() {
       return o && i.left === o.left && i.top === o.top;
     }),
     JSON.stringify({ before: home.icons, after: back.icons })
+  );
+  // A CORNER WIDGET IS RIGID — the rule's win over the old proportional
+  // pin, which slid an edge-hugging window inward on every shrink. Drag
+  // the fixed-size Sprite View 10px inside the bottom-right corner (both
+  // its edges per axis in the far bands), shrink: its offsets from the
+  // corner hold to the pixel; grow back: exactly home.
+  const spriteHome = home.wins.find((w) => w.id === 'win-sprite');
+  const cornerTarget = {
+    left: home.dw - spriteHome.w - 10,
+    top: home.dh - spriteHome.h - 10,
+  };
+  const spriteBar = await evaluate(
+    `(() => {${DEEP} const r = __q('#win-sprite').getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + 6 }; })()`
+  );
+  const dx = cornerTarget.left - spriteHome.left;
+  const dy = cornerTarget.top - spriteHome.top;
+  await mouse('mousePressed', spriteBar.x, spriteBar.y);
+  await mouse('mouseMoved', spriteBar.x + dx / 2, spriteBar.y + dy / 2, { buttons: 1 });
+  await mouse('mouseMoved', spriteBar.x + dx, spriteBar.y + dy, { buttons: 1 });
+  await mouse('mouseReleased', spriteBar.x + dx, spriteBar.y + dy, { buttons: 0 });
+  await sleep(300);
+  const cornered = await layoutSnap();
+  const spriteC = cornered.wins.find((w) => w.id === 'win-sprite');
+  check(
+    'the Sprite View dragged 10px inside the bottom-right corner',
+    spriteC.left === cornerTarget.left && spriteC.top === cornerTarget.top,
+    JSON.stringify({ cornerTarget, spriteC })
+  );
+  // 780×640 → 600×440: 1.3×/1.45×, two different zoom rungs (see above).
+  await metrics(600, 440);
+  await sleep(300);
+  const shrunk = await layoutSnap();
+  const spriteS = shrunk.wins.find((w) => w.id === 'win-sprite');
+  check(
+    'a corner widget is rigid: the same 10px offsets from the corner on the shrunk raster',
+    shrunk.dw - (spriteS.left + spriteS.w) === 10 &&
+      shrunk.dh - (spriteS.top + spriteS.h) === 10 &&
+      spriteS.w === spriteC.w &&
+      spriteS.h === spriteC.h,
+    JSON.stringify({ dw: shrunk.dw, dh: shrunk.dh, spriteS })
+  );
+  await metrics(780, 640);
+  await sleep(300);
+  const cornerBack = await layoutSnap();
+  check(
+    '…and exactly home again on the way back',
+    JSON.stringify(cornerBack.wins) === JSON.stringify(cornered.wins),
+    JSON.stringify({ before: cornered.wins, after: cornerBack.wins })
   );
 
   // The reported case: the browser is resized WHILE the New Document dialog

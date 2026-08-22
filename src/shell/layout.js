@@ -38,29 +38,43 @@
 //   of a fixed stack — it folds into further columns when the next cell
 //   would run off a short raster's bottom.
 //
-//   pinOf() / pinTo() are the resize rule for a window the user has MOVED
-//   or resized (an untouched one simply follows the placement above onto
-//   the new raster — windows.js), and it is DELIBERATELY dumb:
-//   left as a plain fraction of the raster width, top as a plain fraction
-//   of the open space below a fixed-height RESERVE band of chrome — so a
-//   box riding the band's bottom edge stays riding it instead of sliding
-//   up beneath the chrome on a shrink. The reserve names the frame:
-//   TOP_RESERVE (the default) for windows — the menu bar plus the options
-//   strip — and MENU_BAR for icons, which are the FINDER's furniture: the
-//   options strip belongs to the application (it hides whenever the desktop
-//   takes focus), so it reserves nothing above an icon. The pin is read
-//   once (pinOf) and re-expressed on any later raster (pinTo). No
-//   travel-range cleverness, no clamping, no visibility guarantee — a
-//   window near an edge may hang partly off a shrunk raster, and that is
-//   fine: the same fraction always maps back exactly, so growing back
-//   returns it whole (a clamp would rewrite the fraction at the small size
-//   and turn the round trip into a drift — tried, rejected). The split into
-//   two functions matters: the callers keep the UNROUNDED fraction as the
-//   per-box truth between resize events, because re-deriving it each event
-//   from the just-rounded, just-snapped position ratchets: the placement
-//   lattice's quantum is 2 or 4 system px at fractional display scales, and
-//   rounding onto it breaks ties toward +∞ — a long resize drag walked
-//   every window down the screen, one notch per odd landing, never back up.
+//   pinOf() / pinTo() are the browser-resize rule — ONE rule for every
+//   window and icon, placed or dragged alike (the springs-and-struts model,
+//   the strut/spring choice made by position): the open area is
+//   NINE-SLICED, and each box keeps its
+//   corners at the same relative position inside whichever slice they sit
+//   in. A FRAME names the open area — the raster below a fixed-height
+//   reserve band of chrome (TOP_RESERVE for windows: the menu bar plus the
+//   options strip; MENU_BAR for icons, the FINDER's furniture — the strip
+//   belongs to the application and reserves nothing above an icon) — and
+//   four BANDS cut it into the nine slices. An edge in an outer band is a
+//   STRUT (it keeps its offset from that raster edge); an edge in the
+//   middle is a SPRING (it keeps its fraction of the middle's extent). So a
+//   window tucked against the right edge stays tucked, a widget inside a
+//   corner never moves, a window spanning the middle breathes with it, and
+//   a box left hanging off an edge keeps hanging by the same amount. The
+//   window frame's top and right bands are sized to the placement's
+//   furniture — the rail head and the rail column — so every placed windoid
+//   is ALL STRUTS and the placement is a fixed point of the rule: a resize
+//   lands the rail exactly where initialPlacement would, with nothing
+//   remembering whether a window was "touched" (the document window is
+//   content, not furniture: its right and bottom edges spring with the
+//   vacancy). A fixed-size box (a windoid without a grow box, every icon)
+//   resolves its two edges through an ANCHOR rule — a lone strut holds,
+//   opposite struts keep the near edge (the title bar is the handle), two
+//   springs keep the center — and a resizable one floors its size the same
+//   way. The pin is read once (pinOf) and re-expressed on any later raster
+//   (pinTo). No clamping, no visibility guarantee — a window near an edge
+//   may hang partly off a shrunk raster, and that is fine: the same pin
+//   always maps back exactly, so growing back returns it whole (a clamp
+//   would rewrite the pin at the small size and turn the round trip into a
+//   drift — tried, rejected). The split into two functions matters: the
+//   callers keep the UNROUNDED pin as the per-box truth between resize
+//   events, because re-deriving it each event from the just-rounded,
+//   just-snapped geometry ratchets: the placement lattice's quantum is 2 or
+//   4 system px at fractional display scales, and rounding onto it breaks
+//   ties toward +∞ — a long resize drag walked every window down the
+//   screen, one notch per odd landing, never back up.
 // ---------------------------------------------------------------------------
 
 // The raster band reserved above windows: the 20px menu bar plus the options
@@ -251,36 +265,167 @@ export function iconDefault(slot, desktopH) {
   };
 }
 
+// --- the nine-slice resize rule (see the header) -------------------------------
+// The band every side gets at least: the outer slices are BAND system px
+// thick, the middle is the remainder.
+export const BAND = 100;
+
 /**
- * A box's relative pin: left as a plain (unrounded) fraction of the raster
- * width, top of the open space below `reserve` — the fixed chrome band of
- * the caller's frame (TOP_RESERVE for windows, MENU_BAR for icons; see the
- * header). The caller keeps this as the truth between resize events.
- *
- * @param {{left: number, top: number}} box
- * @param {{width: number, height: number}} raster
- * @param {number} [reserve]
- * @returns {{fx: number, fy: number}}
+ * @typedef {{reserve: number, bands: {left: number, top: number, right: number, bottom: number}}} Frame
+ *   reserve: the fixed chrome band above the frame's open area (the pin's
+ *   y = 0 line); bands: the outer slices' thickness per side, in system px.
  */
-export function pinOf(box, raster, reserve = TOP_RESERVE) {
+
+/** The windows' frame: below the options strip, the top and right bands
+ *  widened past BAND to hold the placement's furniture — the TOP band runs
+ *  through the rail head (the Sprite View's fixed height plus the gaps
+ *  around it, so the 3D View's TOP edge is a strut — with a GAP of slack,
+ *  since a lattice snap can move a placed edge a pixel or two and a band
+ *  boundary is no place to park one), the RIGHT band is the rail column
+ *  plus its inset gutter (so the rail's LEFT edges are struts, with the
+ *  inset as slack). The square-tile sprite height is the constant here —
+ *  the ?tile=WxH shear hook can push the stage's top past the band, where
+ *  it springs (dev-only, accepted). Every placed windoid is then all
+ *  struts; see the header.
+ *  @type {Frame} */
+export const WINDOW_FRAME = {
+  reserve: TOP_RESERVE,
+  bands: {
+    left: BAND,
+    top: GAP + spriteHeightFor(SPRITE_WIDTH) + GAP + GAP,
+    right: EDGE + SPRITE_WIDTH + EDGE,
+    bottom: BAND,
+  },
+};
+
+/** The icons' frame: the whole desktop below the menu bar, uniform bands —
+ *  no application furniture lives in the Finder's frame.
+ *  @type {Frame} */
+export const ICON_FRAME = {
+  reserve: MENU_BAR,
+  bands: { left: BAND, top: BAND, right: BAND, bottom: BAND },
+};
+
+/**
+ * @typedef {{kind: 'near'|'far'|'spring', v: number}} EdgePin
+ *   near: v is the offset from the span's start; far: from its end;
+ *   spring: the unrounded fraction of the middle.
+ * @typedef {{x: [EdgePin, EdgePin], y: [EdgePin, EdgePin]}} Pin
+ *   per axis, the near edge (left / top) then the far edge (right / bottom).
+ */
+
+/** One edge classified on a span `s` with near band `n` and far band `f`.
+ *  Near is tested first, so on a degenerate span (s < n + f, the bands
+ *  overlapping) an edge in both reads near; an edge OUTSIDE the span is a
+ *  strut with a negative offset. A spring never reads on a degenerate span
+ *  (no v satisfies n ≤ v < s − f there), so its fraction is always in
+ *  [0, 1).
+ *  @param {number} v
+ *  @param {number} s
+ *  @param {number} n
+ *  @param {number} f
+ *  @returns {EdgePin} */
+function edgePin(v, s, n, f) {
+  if (v < n) return { kind: 'near', v };
+  if (v >= s - f) return { kind: 'far', v: s - v };
+  return { kind: 'spring', v: (v - n) / Math.max(1, s - n - f) };
+}
+
+/** The edge re-expressed on a span `s`. Continuous across both seams (at
+ *  v = n the near strut and the spring agree, at v = s − f the spring and
+ *  the far strut); on a degenerate span the middle collapses to the seam
+ *  at n and every spring lands there. */
+function edgeTo(pin, s, n, f) {
+  if (pin.kind === 'near') return pin.v;
+  if (pin.kind === 'far') return s - pin.v;
+  return n + pin.v * Math.max(0, s - n - f);
+}
+
+/**
+ * One axis resolved: both edges mapped, then — for a fixed `size`, or a
+ * resizable box whose mapped size falls under `min` — the ANCHOR rule: a
+ * lone strut holds; two struts of one kind never conflict (the mapped
+ * edges are already `size` apart) and two of opposite kinds keep the near
+ * edge; two springs keep the mapped center.
+ *
+ * @param {[EdgePin, EdgePin]} pins
+ * @param {number} s
+ * @param {number} n
+ * @param {number} f
+ * @param {{size?: number, min?: number}} policy
+ * @returns {{a: number, size: number}}
+ */
+function resolveAxis(pins, s, n, f, { size, min = 0 }) {
+  const a = edgeTo(pins[0], s, n, f);
+  const b = edgeTo(pins[1], s, n, f);
+  if (size == null) {
+    if (b - a >= min) return { a, size: b - a };
+    size = min;
+  }
+  const strutA = pins[0].kind !== 'spring';
+  const strutB = pins[1].kind !== 'spring';
+  if (strutA) return { a, size };
+  if (strutB) return { a: b - size, size };
+  return { a: (a + b) / 2 - size / 2, size };
+}
+
+/**
+ * A box's nine-slice pin on `raster` in `frame` (see the header): each of
+ * its four edges classified as a strut or a spring by the slice it sits
+ * in, with its offset or fraction. The caller keeps this as the truth
+ * between resize events. A fixed-size box passes its live size.
+ *
+ * @param {{left: number, top: number, width: number, height: number}} box
+ * @param {{width: number, height: number}} raster
+ * @param {Frame} [frame]
+ * @returns {Pin}
+ */
+export function pinOf(box, raster, frame = WINDOW_FRAME) {
+  const { reserve, bands } = frame;
+  const sw = raster.width;
+  const sh = raster.height - reserve;
+  const top = box.top - reserve;
   return {
-    fx: box.left / Math.max(1, raster.width),
-    fy: (box.top - reserve) / Math.max(1, raster.height - reserve),
+    x: [
+      edgePin(box.left, sw, bands.left, bands.right),
+      edgePin(box.left + box.width, sw, bands.left, bands.right),
+    ],
+    y: [
+      edgePin(top, sh, bands.top, bands.bottom),
+      edgePin(top + box.height, sh, bands.top, bands.bottom),
+    ],
   };
 }
 
 /**
- * The pin re-expressed on a raster as a concrete top/left, in the same
- * `reserve` frame it was read in. Nothing clamps — see the header.
+ * The pin re-expressed on `raster` as a concrete box, in the same frame it
+ * was read in. `size` is a fixed-size box's LIVE size (its edges resolve
+ * through the anchor rule — the Sprite View's height changes under it on a
+ * document switch, and that is no move); `min` is a resizable box's floor.
+ * Whole system px, otherwise raw: the caller snaps onto its element's
+ * lattice and applies the oversize intervention. Nothing clamps — see the
+ * header.
  *
- * @param {{fx: number, fy: number}} pin
+ * @param {Pin} pin
  * @param {{width: number, height: number}} raster
- * @param {number} [reserve]
- * @returns {{left: number, top: number}}
+ * @param {Frame} [frame]
+ * @param {{size?: {width: number, height: number}, min?: {width: number, height: number}}} [policy]
+ * @returns {{left: number, top: number, width: number, height: number}}
  */
-export function pinTo(pin, raster, reserve = TOP_RESERVE) {
+export function pinTo(pin, raster, frame = WINDOW_FRAME, { size, min } = {}) {
+  const { reserve, bands } = frame;
+  const x = resolveAxis(pin.x, raster.width, bands.left, bands.right, {
+    size: size?.width,
+    min: min?.width,
+  });
+  const y = resolveAxis(pin.y, raster.height - reserve, bands.top, bands.bottom, {
+    size: size?.height,
+    min: min?.height,
+  });
   return {
-    left: Math.round(pin.fx * raster.width),
-    top: Math.round(reserve + pin.fy * Math.max(1, raster.height - reserve)),
+    left: Math.round(x.a),
+    top: Math.round(reserve + y.a),
+    width: Math.round(x.size),
+    height: Math.round(y.size),
   };
 }

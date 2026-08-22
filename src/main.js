@@ -87,7 +87,7 @@ const bootHooks =
 // The page owns the viewport: measure it, let fitWithin() derive the largest
 // whole raster that fits, re-derive on resize and scale change (zoom, a
 // monitor swap). Every re-fit re-pins the windows AND the desktop icons
-// (windows.js / icons.js each keep their relative top/left across the size
+// (windows.js / icons.js each keep their nine-slice pin across the size
 // change, in their own frames) — live in the same handler, un-debounced:
 // the raster itself re-fits per resize event, so a debounce would leave the
 // windows hanging off a shrunk raster mid-drag and then jump. The kit's

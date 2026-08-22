@@ -117,14 +117,19 @@ browser, `http://localhost:5173/`.
       the 3D View as one right-hand column of equal width). Now resize the
       browser window (or move it to another monitor) and reload — the
       arrangement re-derives for the new viewport; nothing hangs off-screen.
-- [ ] **A resize is an Arrange for untouched windows**: boot to the New
-      Document dialog, squish the browser window, then Create — the
-      windoids and the document land exactly where Arrange Windows puts
-      them on that viewport (not a scaled-down copy of the old layout).
-      With a document open and nothing moved, resize the browser — the
-      rail stays right-flush and full-height and the document re-fits.
-      Now drag the Tools palette and resize again — only Tools keeps a
-      proportional position; the rest still follow the placement.
+- [ ] **A resize is an Arrange for the windoids, a proportional re-fit for
+      documents** (the nine-slice pin): boot to the New Document dialog,
+      squish the browser window, then Create — the windoids and the
+      document land exactly where Arrange Windows puts them on that
+      viewport (not a scaled-down copy of the old layout). With a document
+      open, resize the browser — the rail stays right-flush and
+      full-height, the document keeps its top-left and breathes with the
+      middle. Drag the Tools palette into the middle of the screen and
+      resize — it keeps its place proportionally (its center); drag it
+      against the right edge and resize — it stays flush against the
+      edge; drag the Sprite View into the bottom-right corner and resize
+      — it never moves relative to that corner. Grow the browser back
+      after any of these — every window is exactly where it was.
 - [ ] **View → Arrange Windows**: with three documents open, drag every
       window somewhere odd and grow-box the 3D View and a document; pick
       Arrange Windows — the windoids snap back to the rail at their placed
