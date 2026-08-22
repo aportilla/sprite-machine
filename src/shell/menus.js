@@ -215,9 +215,14 @@ export function initMenus(desktop, windows) {
     });
   };
 
-  // Finder grammar for Open: with the desktop focused, Open acts on the
-  // selected icons (the gate below disables it with none selected). Every
+  // Finder grammar for Open: with the desktop focused and an icon selected,
+  // the item reads "Open" and acts on the selection (the sync below relabels
+  // it; with nothing selected it stays "Open…", the listing dialog). Every
   // icon is a saved-doc icon now — no other key shape exists.
+  const finderSelection = () => {
+    const s = shell.get();
+    return !s.appActive && s.iconSelection.length > 0;
+  };
   const openSelection = () => {
     for (const key of shell.get().iconSelection) {
       if (key.startsWith('doc:')) openDoc(key.slice('doc:'.length));
@@ -371,11 +376,12 @@ export function initMenus(desktop, windows) {
         showNewDialog();
         break;
       case 'open':
-        // Two grammars, one item: the application's Open… (the listing
-        // dialog) while a document is focused; the Finder's Open (act on the
-        // selected icons) while the desktop is.
-        if (shell.get().appActive) showOpenDialog();
-        else openSelection();
+        // Two grammars, one item: the Finder's "Open" (act on the selected
+        // icons) with the desktop focused and a selection; otherwise "Open…",
+        // the listing dialog — the application's, or the Finder's browse
+        // when nothing on the desktop is selected.
+        if (finderSelection()) openSelection();
+        else showOpenDialog();
         break;
       case 'close': {
         const ctx = active();
@@ -497,12 +503,13 @@ export function initMenus(desktop, windows) {
   // --- focus gating ------------------------------------------------------------
   // Two roles share one menu bar (the single-application affordance): with
   // the desktop focused, every document-scoped item greys out. About / Quit /
-  // New / Arrange Windows stay — they're app-level (the parked Settings… is
-  // disabled in the markup in both roles) — and Open switches to the
-  // Finder grammar above: enabled iff a desktop icon is selected. Disabling
-  // an item also parks its key equivalent (the kit never fires a disabled
-  // item's shortcut), so ⌘O/⌘S/⌘K/⌘G gate with their menus; the bare-letter
-  // tool keys get the same guard in src/shortcuts.js.
+  // New / Open / Arrange Windows stay — they're app-level (the parked
+  // Settings… is disabled in the markup in both roles) — and Open wears the
+  // Finder grammar above: its label follows the selection ("Open" on a
+  // selected icon, "Open…" for the listing dialog otherwise), never greyed.
+  // Disabling an item also parks its key equivalent (the kit never fires a
+  // disabled item's shortcut), so ⌘S/⌘K/⌘G gate with their menus; the
+  // bare-letter tool keys get the same guard in src/shortcuts.js.
   const DOC_SCOPED = [
     'close',
     'save',
@@ -525,7 +532,11 @@ export function initMenus(desktop, windows) {
   const syncGate = () => {
     const s = shell.get();
     for (const item of docItems) item.disabled = !s.appActive;
-    itemOpen.disabled = !s.appActive && s.iconSelection.length === 0;
+    // The ellipsis is the System 7 promise of a dialog: "Open" acts at once
+    // on the selection, "Open…" asks (the listing) — so the label is the
+    // grammar's own readout. The item is the markup's default-slot text.
+    const label = finderSelection() ? 'Open' : 'Open…';
+    if (itemOpen.textContent !== label) itemOpen.textContent = label;
   };
   teardown.push(shell.subscribe(syncGate));
   syncGate();

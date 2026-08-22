@@ -4,10 +4,14 @@
 > [The desktop](README.md#the-desktop) section absorbed this spec; the
 > "Multi-document" known-limitation bullet is gone. Deviations chosen in
 > implementation: **Quit is the cascade from day one** (Phase 2's interim
-> single-doc Quit never shipped separately); the pointer-driven
-> desktop-focused File → Open is **⌘O only** for now — kit ask #5 below
-> (vf-icon deselects on a menu-bar press) blocks the mouse path, and the
-> icon double-click remains primary; the window reconciler clones its
+> single-doc Quit never shipped separately); the desktop-focused File →
+> Open works by pointer AND ⌘O, and the item's label is its grammar (a
+> bare **Open** on a selected icon, **Open…** — the listing dialog — with
+> nothing selected, never greyed) — kit ask #5 below (vf-icon deselects on
+> a menu-bar press) is **bridged on the page's side** (`shell/icons.js`
+> re-selects the icons across a press on the menu bar, a dropped menu or a
+> modal dialog; the kit ask stays open for the root fix, at which point the
+> bridge goes); the window reconciler clones its
 > template via `document.importNode` + `customElements.upgrade` (a bare
 > clone lives in the template's inert document, where an assigned `ctx`
 > misses `connectedCallback`); and each freshly created document window is
@@ -259,9 +263,18 @@ utility tier. Three genuinely new primitives, one audit:
    press outside the icon, the menu bar included, so a pointer-driven
    File → Open can never act on a selection (the selection dies on the way
    to the menu). System 7's Finder kept the selection while a menu was
-   pulled. Until the kit exempts `vf-menu-bar` presses (and arguably open
-   `vf-dialog`s), the ⌘O key equivalent is the working pointer-free path
-   and the icon double-click the primary one.
+   pulled. **Bridged app-side meanwhile** (`shell/icons.js`): a
+   document-capture listener registered at wire-up (so it precedes the
+   icons' own outside listeners, which attach on selection) snapshots the
+   selected icons when the press's composed path crosses `vf-menu-bar`,
+   `vf-menu` or `vf-dialog`, and a desktop-capture listener — later in the
+   same dispatch — sets `selected` back, so the selection and the Open
+   gate are restored before the menu bar's handler drops the panel. The
+   kit fix this stands in for: `vf-icon`'s `#onOutsidePointerDown` returns
+   early when the event's composed path includes any of its own transient
+   chrome (`vf-menu-bar`, `vf-menu`, an open `vf-dialog`) — the Finder's
+   rule that a press on a menu or a dialog says nothing about the
+   selection. Ship that, and the app-side bridge deletes.
 
 ### 3.2 The workspace: per-document contexts
 

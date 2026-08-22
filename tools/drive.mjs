@@ -436,6 +436,9 @@ const PROBE = `(() => {${DEEP}
     menuEnabled: {
       newDoc: !__q('vf-menu-item[value="new"]').disabled,
       open: !__q('vf-menu-item[value="open"]').disabled,
+      // Open's label IS its grammar: "Open" acts on the Finder selection,
+      // "Open…" raises the listing dialog.
+      openLabel: __q('vf-menu-item[value="open"]').textContent.trim(),
       save: !__q('vf-menu-item[value="save"]').disabled,
       close: !__q('vf-menu-item[value="close"]').disabled,
       pickColor: !__q('vf-menu-item[value="pick-color"]').disabled,
@@ -672,9 +675,10 @@ async function main() {
     JSON.stringify({ windows: greet.windows, strip: greet.optionsStrip })
   );
   check(
-    '…and the Finder menu grammar greets: New stays, doc-scoped items grey out',
+    '…and the Finder menu grammar greets: New and Open… stay, doc-scoped items grey out',
     greet.menuEnabled.newDoc === true &&
-      greet.menuEnabled.open === false &&
+      greet.menuEnabled.open === true &&
+      greet.menuEnabled.openLabel === 'Open…' &&
       greet.menuEnabled.save === false &&
       greet.menuEnabled.close === false &&
       greet.menuEnabled.pickColor === false &&
@@ -1738,9 +1742,10 @@ async function main() {
   );
   check('…the options strip hides with the application', s.optionsStrip === false);
   check(
-    '…the Finder menu grammar lands: New stays, the rest grey out',
+    '…the Finder menu grammar lands: New and Open… stay, the rest grey out',
     s.menuEnabled.newDoc === true &&
-      s.menuEnabled.open === false &&
+      s.menuEnabled.open === true &&
+      s.menuEnabled.openLabel === 'Open…' &&
       s.menuEnabled.save === false &&
       s.menuEnabled.close === false &&
       s.menuEnabled.pickColor === false &&
@@ -1751,9 +1756,10 @@ async function main() {
   await keyPress('r');
   s = await probe();
   check('…the bare-letter tool keys are inert', s.drawTool === 'pencil', s.drawTool);
-  // Selecting a desktop icon is still working in the Finder: Open comes
-  // alive, aimed at the selection. (Every icon is a saved doc now — the
-  // seeded Car's key is a random id, so find it by label.)
+  // Selecting a desktop icon is still working in the Finder: the item
+  // relabels to a bare "Open" (no ellipsis — no dialog), aimed at the
+  // selection. (Every icon is a saved doc now — the seeded Car's key is a
+  // random id, so find it by label.)
   const carIcon = await evaluate(`(() => {${DEEP}
     const i = __qa('vf-icon[data-key]').find((el) => el.label === 'Car');
     const r = i.getBoundingClientRect();
@@ -1763,25 +1769,97 @@ async function main() {
   await sleep(300);
   s = await probe();
   check(
-    'selecting an icon enables Open (the Finder grammar)',
-    s.menuEnabled.open === true && s.docActive === false,
-    JSON.stringify({ open: s.menuEnabled.open, docActive: s.docActive })
+    'selecting an icon relabels Open… to "Open" (the Finder grammar)',
+    s.menuEnabled.open === true &&
+      s.menuEnabled.openLabel === 'Open' &&
+      s.docActive === false,
+    JSON.stringify({ open: s.menuEnabled, docActive: s.docActive })
   );
-  // ⌘O, not a menu-bar pick: the kit's vf-icon deselects on ANY outside
-  // press, menu bar included — System 7's Finder kept the selection while a
-  // menu was pulled, so that's an open kit ask (APP-IA-PLAN.md §3.1). The
-  // key equivalent presses nothing, so the selection survives to be opened.
+  // The pointer path: pulling the File menu is a press on the application's
+  // chrome, and the selection survives it (the kit's vf-icon deselects on
+  // ANY outside press — kit ask #5, APP-IA-PLAN.md §3.1 — so shell/icons.js
+  // re-selects across the press), leaving Open… enabled in the dropped
+  // panel, aimed at the selection. A tap on the title leaves the panel
+  // open (the kit's press gesture), which is the moment to probe.
+  const selectedIcons = () =>
+    evaluate(`(() => {${DEEP}
+      return __qa('vf-icon[data-key]').filter((i) => i.selected).map((i) => i.label);
+    })()`);
+  const fileTitle = await centreOf('#menu-file');
+  await click(fileTitle.x, fileTitle.y);
+  await sleep(250);
+  s = await probe();
+  check(
+    'pulling the File menu keeps the icon selected and the item reading "Open"',
+    (await selectedIcons()).join(',') === 'Car' && s.menuEnabled.openLabel === 'Open',
+    JSON.stringify({ selected: await selectedIcons(), open: s.menuEnabled })
+  );
+  const openItem = await centreOf('vf-menu-item[value="open"]');
+  await click(openItem.x, openItem.y);
+  await sleep(900);
+  s = await probe();
+  check(
+    'File → Open opens the selected icon and reactivates the application',
+    s.docActive === true &&
+      s.docWindows === 2 &&
+      s.windows.tools &&
+      s.windows.sprite &&
+      s.windows.stage &&
+      s.optionsStrip,
+    JSON.stringify({
+      docActive: s.docActive,
+      docWindows: s.docWindows,
+      windows: s.windows,
+      strip: s.optionsStrip,
+    })
+  );
+  // The key path: select again from the Finder, then ⌘O — the already-open
+  // Car activates its existing window (one window per document).
+  await click(BARE.x, BARE.y);
+  await sleep(300);
+  await click(carIcon.x, carIcon.y);
+  await sleep(300);
   await keyPress('o', META);
   await sleep(900);
   s = await probe();
   check(
     '⌘O opens the selection and reactivates the application',
     s.docActive === true &&
+      s.docWindows === 2 &&
       s.windows.tools &&
       s.windows.sprite &&
       s.windows.stage &&
       s.optionsStrip,
     JSON.stringify({ docActive: s.docActive, windows: s.windows, strip: s.optionsStrip })
+  );
+  // With the desktop focused and NOTHING selected, Open… is the Finder's
+  // browse: the same listing dialog the application's Open… raises.
+  await click(BARE.x, BARE.y);
+  await sleep(300);
+  s = await probe();
+  check(
+    'a bare-desktop click clears the selection: the item reads "Open…" again',
+    (await selectedIcons()).length === 0 && s.menuEnabled.openLabel === 'Open…',
+    JSON.stringify({ selected: await selectedIcons(), open: s.menuEnabled })
+  );
+  await pickMenu('#menu-file', 'open');
+  const openDlgUp = () => evaluate(`document.querySelector('#dlg-open').open`);
+  check(
+    'File → Open… from the Finder raises the listing dialog',
+    (await openDlgUp()) === true
+  );
+  const openCancel = await centreOf('#btn-open-cancel');
+  await click(openCancel.x, openCancel.y);
+  await sleep(300);
+  s = await probe();
+  check(
+    'Cancel leaves the desktop focused (nothing opened)',
+    (await openDlgUp()) === false && s.docActive === false && s.docWindows === 2,
+    JSON.stringify({
+      dialog: await openDlgUp(),
+      docActive: s.docActive,
+      docs: s.docWindows,
+    })
   );
   // And the pointer path back in: deactivate again, then click the document
   // window — stripes and windoids return where they were.

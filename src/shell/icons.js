@@ -64,6 +64,47 @@ export function initIcons(desktop, { actions, savedPos = () => null, fresh = fal
   root.addEventListener('vf-select', readSelection);
   teardown.push(() => root.removeEventListener('vf-select', readSelection));
 
+  // A press on the APPLICATION'S CHROME keeps the Finder selection. The
+  // kit's vf-icon clears itself on ANY outside pointerdown — the menu bar
+  // included — so a pointer-driven File → Open would lose its selection on
+  // the way to the menu and grey out as the panel dropped (kit ask #5,
+  // APP-IA-PLAN.md §3.1; ⌘O was the only working path). System 7's Finder
+  // kept the selection while a menu was pulled: the menu bar, a dropped
+  // menu and a modal dialog are the application's surfaces, not the
+  // desktop's, so a press on them says nothing about what's selected. The
+  // page bridges it with two capture listeners AROUND the kit's own: one on
+  // the document — registered here at wire-up, so it precedes every icon's
+  // outside listener (those attach on selection, and same-target listeners
+  // fire in registration order) — snapshots the icons the press is about to
+  // clear; one on the desktop (later in the same dispatch — the icons' have
+  // run by then, the chrome is slotted in the desktop) re-selects them, so
+  // the selection and the Open gate are back before the menu bar's own
+  // handler even drops the panel. Setting `selected` is the kit's documented
+  // programmatic route; it re-arms the icon's outside listener. Remove this
+  // bridge once the kit exempts its own chrome.
+  const CHROME = 'vf-menu-bar, vf-menu, vf-dialog';
+  /** @type {any[]} the icons a chrome press is clearing mid-dispatch */
+  let held = [];
+  const onChromePress = (e) => {
+    held = e.composedPath().some((n) => n instanceof Element && n.matches(CHROME))
+      ? [...root.querySelectorAll('vf-icon[data-key]')].filter(
+          (icon) => /** @type {any} */ (icon).selected
+        )
+      : [];
+  };
+  const restoreSelection = () => {
+    if (!held.length) return;
+    for (const icon of held) icon.selected = true;
+    held = [];
+    readSelection();
+  };
+  document.addEventListener('pointerdown', onChromePress, true);
+  desktop.addEventListener('pointerdown', restoreSelection, true);
+  teardown.push(
+    () => document.removeEventListener('pointerdown', onChromePress, true),
+    () => desktop.removeEventListener('pointerdown', restoreSelection, true)
+  );
+
   function makeIcon(key, label, slot, { editable = false } = {}) {
     const icon = /** @type {any} */ (document.createElement('vf-icon'));
     icon.dataset.key = key;

@@ -376,10 +376,17 @@ window the desktop's active window?**
   goes plain, the three windoids **hide** (they return with the
   application), the options strip hides with them, the bare-letter tool keys
   go inert, and the menus drop to the **Finder grammar** — About / Settings
-  / Quit / New… stay enabled, Open… enables when a desktop icon is selected
-  (and then opens the selection instead of the listing dialog), everything
-  document-scoped greys out. A disabled item's key equivalent never fires
-  (the kit's contract), so ⌘S/⌘Z/⌘K/⌘G gate with their menus.
+  / Quit / New… / Open stay enabled, and Open reads the selection: with
+  nothing selected it is **Open…**, the listing dialog (the Finder's
+  browse); with a desktop icon selected it becomes a bare **Open** — no
+  ellipsis, no dialog — and opens that icon directly, by pointer or ⌘O
+  (the selection **survives the trip to the menu bar**, since a press on
+  the application's chrome — the menu bar, a dropped menu, a modal dialog
+  — is no press on the desktop; the kit's `vf-icon` would clear on it, so
+  `shell/icons.js` re-selects across that press, a page-side bridge until
+  the kit exempts its own chrome). Everything document-scoped greys out. A
+  disabled item's key equivalent never fires (the kit's contract), so
+  ⌘S/⌘Z/⌘K/⌘G gate with their menus.
 - **Clicking any document window — or opening one** (File → New…, an icon
   double-click, a drop) — **reactivates**: the windoids come back exactly
   where they were, aimed at the newly active document.
@@ -418,9 +425,12 @@ strip's clamp bounds, and the Undo/Redo enablement.
   square tile size — the field is live for Empty only, since a template's
   art has a native size and a retile crops/pads rather than scales — or a
   built-in template (Car, Cube) as a fresh untitled copy; Create or a
-  double-clicked row opens the new window), _Open…_ ⌘O (two grammars: the
-  saved-docs listing dialog while a document is focused; with the
-  desktop focused it acts on the selected icon, Finder-style), _Close_
+  double-clicked row opens the new window), _Open…_ ⌘O (two grammars, one
+  item, the label its readout: _Open…_ raises the saved-docs listing
+  dialog — the application's while a document is focused, the Finder's
+  browse with the desktop focused and nothing selected; with a desktop
+  icon selected it relabels to a bare _Open_ and opens that icon at once,
+  Finder-style — the ellipsis being System 7's promise of a dialog), _Close_
   (the active document, dirty-checked), _Save_ ⌘S (first save of an untitled
   doc prompts for a name), _Duplicate_ ⌘D (the stored copy opens in its own
   window), _Rename…_, _Download_ ⇧⌘E (the document `.png` verbatim — the
@@ -620,8 +630,9 @@ virgin boot then greets like any other — the New Document dialog, unless
 Double-click opens
 (into the existing window if one is open),
 selecting an icon deactivates the application (a press in the icon layer is
-a press on the Finder) and arms the desktop-focused File → Open, and every
-open doc's icon wears the kit's `open` ghost. Icon art is generated **from
+a press on the Finder) and turns File → Open… into a bare File → Open
+aimed at the selection — which holds through the menu-bar press that picks
+it — and every open doc's icon wears the kit's `open` ghost. Icon art is generated **from
 the document itself**: the FRONT tile, **trimmed to its content's bounding
 box** (`contentBounds` — the art fills the icon however small it sits in its
 tile), drawn into 32×32 → data URI, regenerated on every save (empty front
@@ -895,7 +906,9 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
   icons.js        the icon layer: one vf-icon per saved doc (nothing else), generated front-tile art,
                   open/rename wiring, open ghosts, raster-derived placement + boot clamp + the
                   resize re-pin (below the menu bar), the Finder wire (icon presses deactivate; the
-                  selection feeds the shell slice for the desktop-focused File → Open)
+                  selection feeds the shell slice for the desktop-focused File → Open, and is
+                  re-selected across a press on the app's chrome — menu bar / menu / dialog —
+                  which the kit's vf-icon would otherwise clear: kit ask #5's page-side bridge)
   desktop-state.js  icon layout + Show Grid + the open saved docs' edited faces (+ active) in one
                   versioned localStorage key (v3; v1/v2 migrate, their window geometry dropped)
                   — window geometry never persists; this module never sees a window

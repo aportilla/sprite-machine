@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 167 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 172 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -14,11 +14,15 @@ browser, `http://localhost:5173/`.
       Sprite View, 3D View) disappear, the options strip hides (the dither
       runs right up to the menu bar), and B/R/G/E/I do nothing.
 - [ ] **The Finder menu grammar**: while deactivated, pull each menu — only
-      About…/Quit and File → New… stay enabled (Settings… is parked disabled
-      in both roles — its contents moved to the 3D View); File → Open…
-      enables the moment you select a desktop icon (and then opens that
-      icon — note the kit currently drops the selection if you _click_ the
-      menu bar, so use ⌘O; an open kit ask).
+      About…/Quit, File → New… and File → Open… stay enabled (Settings… is
+      parked disabled in both roles — its contents moved to the 3D View).
+      With nothing selected, Open… raises the saved-docs listing dialog.
+      Select a desktop icon: the item relabels to a bare **Open** (no
+      ellipsis), the icon stays highlighted while you pull the File menu (a
+      press on the menu bar doesn't clear the Finder selection), and
+      picking Open — or ⌘O — opens that icon directly and the app comes
+      back. Click the bare desktop: the selection clears and the item reads
+      Open… again.
 - [ ] **Reactivation restores the arrangement**: drag the Tools palette
       somewhere odd, click the desktop (all three windoids hide), then click
       the document window — all three come back, Tools where you put it.
