@@ -1979,7 +1979,7 @@ async function main() {
     s.heading === 'Car' && s.docActive === true,
     JSON.stringify({ heading: s.heading, active: s.docActive })
   );
-  // Close the dirty untitled: activate it, File → Close, Don't Save. The
+  // Close the dirty untitled: activate it, File → Close, No (don't save). The
   // staggered untitled sits mostly UNDER the just-raised Car window, and the
   // utility windoids float over every document — so scan its whole box for
   // a point the browser confirms belongs to this window (elementFromPoint
@@ -2013,12 +2013,12 @@ async function main() {
   await sleep(500);
   s = await probe();
   check(
-    "Don't Save closes the window; Car remains and takes the active state",
+    'No (don’t save) closes the window; Car remains and takes the active state',
     s.docWindows === 1 && s.heading === 'Car' && s.docActive === true,
     JSON.stringify({ docWindows: s.docWindows, heading: s.heading })
   );
   // The quit cascade: a fresh dirty untitled, then Quit — Cancel aborts the
-  // whole walk; a second Quit with Don't Save closes everything (the clean
+  // whole walk; a second Quit answered No closes everything (the clean
   // Car goes silently) and leaves the bare desktop focused.
   await newBlankDoc();
   s = await probe();

@@ -21,8 +21,8 @@
 // so the Open listing and the desktop icons know nothing special about them.
 //
 // The DIRTY CHECK has one funnel: `confirmDiscard(ctx, next)` — run `next`
-// now if that document is clean, else raise the Save / Don't Save / Cancel
-// alert (activating its window first, so the question points at what the
+// now if that document is clean, else raise the "Save changes before
+// closing?" Yes / No / Cancel box (activating its window first, so the question points at what the
 // user sees) and run it (after a save, or without one) only when the user
 // chooses.
 //
@@ -88,29 +88,59 @@ export function initMenus(desktop, windows) {
 
   // The one name-prompt dialog, two uses (first save / rename): resolves the
   // committed name, or null on Cancel/Escape — the vf-close event is the
-  // single resolution point, so no path can resolve twice.
+  // single resolution point, so no path can resolve twice. The default
+  // button is DISABLED while the field holds no name (an empty name is
+  // refused, like the icon rename — the classic Save As greyed its Save the
+  // same way): re-read on every keystroke and on open, so a first save
+  // opens with Save grey over an empty field and a rename opens live over
+  // the current name. The dialog is a plain-frame box (no bar), so the
+  // per-use text is the caption over the field plus the accessible label —
+  // never `heading`, which a plain frame would draw as a body-top title.
   const nameField = $('#name-field');
+  const nameCaption = $('#name-caption');
   const btnNameOk = $('#btn-name-ok');
+  const NAME_PROMPTS = {
+    save: { label: 'Save', caption: 'Save document as:', ok: 'Save' },
+    rename: { label: 'Rename', caption: 'Rename document to:', ok: 'Rename' },
+  };
+  const nameValid = () => String(nameField.value ?? '').trim() !== '';
+  const syncNameOk = () => {
+    btnNameOk.disabled = !nameValid();
+  };
   let namePending = null; // { resolve, value } while the dialog is up
-  function promptName(heading, initial, okLabel) {
-    dlgName.heading = heading;
+  /** @param {'save'|'rename'} use  @param {string} initial */
+  function promptName(use, initial) {
+    const p = NAME_PROMPTS[use];
+    dlgName.label = p.label;
+    nameCaption.textContent = p.caption;
+    btnNameOk.textContent = p.ok;
     nameField.value = initial;
-    btnNameOk.textContent = okLabel;
+    syncNameOk();
     dlgName.show();
     nameField.focus();
     return new Promise((resolve) => {
       namePending = { resolve, value: null };
     });
   }
+  on(nameField, 'vf-input', syncNameOk);
   on(btnNameOk, 'click', () => {
-    const v = String(nameField.value ?? '').trim();
-    if (!v) return; // an empty name is refused, like the icon rename
-    if (namePending) namePending.value = v;
+    if (!nameValid()) return;
+    if (namePending) namePending.value = String(nameField.value).trim();
     dlgName.close();
   });
   on($('#btn-name-cancel'), 'click', () => dlgName.close());
   on(nameField, 'keydown', (e) => {
-    if (e.key === 'Enter') btnNameOk.click();
+    // Enter commits only what Save would accept — the button's own gate.
+    if (e.key !== 'Enter' || !nameValid()) return;
+    // Cancel the key: the click closes the prompt DURING this keydown, and
+    // the native <dialog> then hands focus back to whatever opened it —
+    // after a close-box → Save changes? → Yes chain that is the window's
+    // close-box BUTTON — and the same key's keypress would activate it:
+    // a second Close on a document whose save is still in flight (hence
+    // still dirty), which re-raised the Save-changes box over the save
+    // (Aug 2026). A cancelled keydown has no keypress.
+    e.preventDefault();
+    btnNameOk.click();
   });
   on(dlgName, 'vf-close', () => {
     const p = namePending;
@@ -123,11 +153,18 @@ export function initMenus(desktop, windows) {
   // before closing (vf-close only clears a leftover — the Escape path).
   const unsavedMsg = $('#unsaved-msg');
   let discardPending = null; // { ctx, next }
+  // Contexts whose save-then-continue is in flight (saveThen): a document
+  // asked about and answered Yes stays dirty until its async save lands, and
+  // a second close request in that window (a stray key activation, a double
+  // click on the close box) must not ask again — the first chain is already
+  // doing what the second would.
+  const saving = new Set();
   function confirmDiscard(ctx, next) {
     if (!ctx || !ctx.dirty) {
       next();
       return;
     }
+    if (saving.has(ctx.key) || dlgUnsaved.open) return;
     // Point the question at what the user sees: the asked-about document's
     // window comes forward first (the System 7 quit cascade's behavior).
     windows.activateContext(ctx.key);
@@ -163,15 +200,15 @@ export function initMenus(desktop, windows) {
       dlgStorage.show();
       return;
     }
+    saving.add(ctx.key);
     try {
       if (ctx.fileId) {
         await workspace.save(ctx.key);
       } else {
         const initial = ctx.name;
         const name = await promptName(
-          'Save',
-          initial === UNTITLED || /^untitled \d+$/.test(initial) ? '' : initial,
-          'Save'
+          'save',
+          initial === UNTITLED || /^untitled \d+$/.test(initial) ? '' : initial
         );
         if (name == null) return;
         await workspace.save(ctx.key, name);
@@ -179,6 +216,8 @@ export function initMenus(desktop, windows) {
       next?.();
     } catch (err) {
       build.setError(`Save failed: ${err.message}`);
+    } finally {
+      saving.delete(ctx.key);
     }
   }
 
@@ -409,7 +448,7 @@ export function initMenus(desktop, windows) {
       case 'rename': {
         const ctx = active();
         if (!ctx) break;
-        promptName('Rename', ctx.name, 'Rename').then((name) => {
+        promptName('rename', ctx.name).then((name) => {
           if (name != null) {
             workspace
               .rename(ctx.key, name)

@@ -244,17 +244,30 @@
         <vf-button id="btn-open-ok" slot="buttons" variant="default">Open</vf-button>
       </vf-dialog>
 
-      <!-- One name-prompt dialog, two uses (first save / rename); menus.js
-           swaps the heading + default-button label per use. -->
-      <vf-dialog id="dlg-name" heading="Save" closable width="340" height="140">
-        <vf-stack width="292" gap="10">
-          <vf-stack fill-width direction="row" gap="8">
-            <vf-label for="name-field">Name:</vf-label>
-            <vf-text-field fill-width id="name-field" value=""></vf-text-field>
-          </vf-stack>
-        </vf-stack>
-        <vf-button id="btn-name-cancel" slot="buttons">Cancel</vf-button>
-        <vf-button id="btn-name-ok" slot="buttons" variant="default">Save</vf-button>
+      <!-- One name-prompt dialog, two uses (first save / rename): the
+           name-and-buttons corner of the classic Save As box (MacPaint's —
+           no volume list, no format radios), on the same plain dBoxProc
+           frame as the Save-changes box: the caption over the field at the
+           left, Save (the default) over Cancel as a vertical group at the
+           right; Save stays DISABLED until the field holds a name
+           (shell/menus.js keeps it in step with the text, and swaps the
+           caption, the accessible label and the default button's text per
+           use). Escape reads as Cancel; no bar, no close box. -->
+      <vf-dialog id="dlg-name" frame="plain" label="Save" width="340" height="96">
+        <vf-label id="name-caption" for="name-field" left="0" top="0"
+          >Save document as:</vf-label
+        >
+        <vf-text-field
+          id="name-field"
+          value=""
+          left="0"
+          top="22"
+          style="--vf-field-width: 200px"
+        ></vf-text-field>
+        <vf-button-group vertical left="216" top="0" style="--vf-button-group-gap: 7px">
+          <vf-button id="btn-name-ok" variant="default" disabled>Save</vf-button>
+          <vf-button id="btn-name-cancel">Cancel</vf-button>
+        </vf-button-group>
       </vf-dialog>
 
       <vf-dialog id="dlg-props" heading="Properties" closable width="340" height="220">
@@ -277,15 +290,34 @@
         <vf-button id="btn-props-ok" slot="buttons" variant="default">OK</vf-button>
       </vf-dialog>
 
-      <!-- The unsaved-changes alert: no close box — a choice is required
-           (Escape reads as Cancel). -->
-      <vf-dialog id="dlg-unsaved" label="Unsaved Changes" width="400" height="150">
-        <vf-stack width="352" gap="10">
-          <vf-paragraph face="display" id="unsaved-msg"></vf-paragraph>
-        </vf-stack>
-        <vf-button id="btn-unsaved-dont" slot="buttons">Don’t Save</vf-button>
-        <vf-button id="btn-unsaved-cancel" slot="buttons">Cancel</vf-button>
-        <vf-button id="btn-unsaved-save" slot="buttons" variant="default">Save</vf-button>
+      <!-- The unsaved-changes alert: the classic "Save changes before
+           closing?" modal dialog box, laid out from a System 7 capture the
+           way a DITL stated its items — the kit's own reference composition
+           (vintage-frames index.html, ex-dialog-save): the plain dBoxProc
+           frame (no bar, immovable, no close box — a choice is required;
+           Escape reads as Cancel), the question wrapping across the top,
+           Yes (the default) over No as a vertical button group at the left,
+           Cancel alone at the bottom right. Every item placed by top/left
+           in the content area; the ids are the wiring (shell/menus.js). -->
+      <vf-dialog
+        id="dlg-unsaved"
+        frame="plain"
+        label="Save changes"
+        width="296"
+        height="140"
+      >
+        <vf-paragraph
+          face="display"
+          id="unsaved-msg"
+          width="240"
+          left="3"
+          top="0"
+        ></vf-paragraph>
+        <vf-button-group vertical left="1" top="54" style="--vf-button-group-gap: 7px">
+          <vf-button id="btn-unsaved-save" variant="default">Yes</vf-button>
+          <vf-button id="btn-unsaved-dont">No</vf-button>
+        </vf-button-group>
+        <vf-button id="btn-unsaved-cancel" left="186" top="85">Cancel</vf-button>
       </vf-dialog>
 
       <vf-dialog

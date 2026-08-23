@@ -58,7 +58,7 @@ browser, `http://localhost:5173/`.
       original window is untouched.
 - [ ] **The quit cascade**: with one clean and two dirty documents open,
       Sprite Machine → Quit — each dirty document's window comes forward
-      with its own Save / Don't Save / Cancel; Cancel mid-walk keeps the
+      with its own Yes / No / Cancel; Cancel mid-walk keeps the
       remaining windows; a completed quit leaves the bare desktop and the
       next open restores the windoid arrangement.
 - [ ] **Close to zero**: File → Close on the last document — desktop focus,
@@ -90,8 +90,9 @@ browser, `http://localhost:5173/`.
 - [ ] **Save prompt Cancel**: File → Save on an untitled doc, then Cancel —
       nothing saved, still untitled.
 - [ ] **Unsaved-changes alert, all three ways**: draw a stroke, File →
-      Close: _Cancel_ keeps everything; _Don't Save_ closes the window;
-      _Save_ prompts (untitled) then closes.
+      Close (the plain-frame "Save changes to … before closing?" box — Yes
+      over No at the left, Cancel bottom right): _Cancel_ keeps everything;
+      _No_ closes the window; _Yes_ prompts (untitled) then closes.
 - [ ] **Rename…** (menu) and **in-place icon rename** (select icon, press
       Return) land the same name everywhere: icon label, window title, Open
       dialog — including a window that's open while its icon is renamed.

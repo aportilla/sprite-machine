@@ -206,7 +206,14 @@ export class SmColorPicker extends LitElement {
               .value=${live(this.#hexText)}
               @vf-input=${(e) => this.#onHexInput(e)}
               @keydown=${(e) => {
-                if (e.key === 'Enter' && valid) this.#commit();
+                if (e.key !== 'Enter' || !valid) return;
+                // Cancel the key: the commit closes the dialog during this
+                // keydown and focus returns to the opener (the ink swatch,
+                // a button) — an uncancelled Enter's keypress would click
+                // it and reopen the dialog (shell/menus.js, the name
+                // prompt's Enter, has the same note).
+                e.preventDefault();
+                this.#commit();
               }}
             ></vf-text-field>
           </vf-stack>
