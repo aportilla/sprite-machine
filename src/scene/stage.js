@@ -25,16 +25,20 @@ const CAM_DIRS = {
  * @param {{cam?: string|null}} [opts]  camera preset name (?cam= dev hook)
  */
 export function createStage(canvas, { cam = null } = {}) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+  // An alpha context with a fully transparent clear: the scene paints NO
+  // backdrop of its own, so the model (and the ground's shadow, a
+  // ShadowMaterial — shadow-only, transparent) composites over whatever the
+  // page puts behind the canvas — the 3D View's kit pattern well
+  // (index.html's #stage-well, a vf-container with a 1-bit pattern).
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true });
   renderer.setPixelRatio(1);
+  renderer.setClearColor(0x000000, 0);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-  // Stage backdrop: the System 7 mid gray, matching the vintage-frames UI
-  // chrome around it.
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x808080);
+  scene.background = null;
 
   const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
   camera.position.set(5, 4.2, 5);

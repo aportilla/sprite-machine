@@ -124,15 +124,25 @@
         flush
       >
         <!-- No status strip: an empty status slot draws no bottom bar (the
-             kit's .status.empty), so the atlas runs down to the frame. -->
-        <sm-atlas-view></sm-atlas-view>
+             kit's .status.empty), so the atlas runs down to the frame.
+             `pattern` paints a kit 1-bit pattern behind each face tile (a
+             library name or sixteen hex digits — vintage-frames
+             docs/PATTERNS.md), so a tile's transparent texels read against
+             paper; drop the attribute for plain white cells. -->
+        <sm-atlas-view pattern="gray-25"></sm-atlas-view>
       </vf-window>
 
       <!-- The 3D View's flush body is a page-layout column (.stage-body):
            the controls strip (the two render toggles — rotate / smooth)
            over the THREE canvas. shell/windows.js floors this windoid's
            width at the strip's content width so a grow-box shrink can't
-           clip the checkboxes. -->
+           clip the checkboxes. The canvas sits in a kit vf-container that
+           takes the column's slack (style.css) and paints a 1-bit pattern
+           as its background: the THREE scene renders with a TRANSPARENT
+           clear (scene/stage.js), so the model — and its shadow — composite
+           over the kit's pattern, not a flat gray. `pattern` is the kit
+           grammar (a library name or sixteen hex digits); drop it for a
+           bare white well. -->
       <vf-window
         id="win-stage"
         variant="utility"
@@ -143,7 +153,9 @@
       >
         <div class="stage-body">
           <sm-stage-controls></sm-stage-controls>
-          <canvas id="viewport"></canvas>
+          <vf-container id="stage-well" fill-width pattern="gray-25">
+            <canvas id="viewport"></canvas>
+          </vf-container>
         </div>
         <sm-status-line kind="build" slot="status"></sm-status-line>
       </vf-window>

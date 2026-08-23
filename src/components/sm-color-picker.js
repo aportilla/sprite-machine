@@ -132,8 +132,8 @@ export class SmColorPicker extends LitElement {
       <vf-dialog
         heading="Colors"
         closable
-        width="309"
-        height="268"
+        width="317"
+        height="273"
         .open=${open}
         @vf-close=${() => session.closePicker()}
       >
@@ -141,7 +141,13 @@ export class SmColorPicker extends LitElement {
              closing border) is what lets the form row's fill-width field
              resolve — unstated, the stack sizes to content and overflows the
              dialog's clipped content region, shearing off the field's right
-             border. The bottom pad keeps the preview swatch's hard shadow and
+             border. The dialog's box is sized to hold it: the kit's modal
+             frame (vintage-frames ≥ 0.5.0, the dBoxProc double frame) takes
+             5px per side and the title bar 20px from the top, and the body
+             pads 16px — so content width = width − 42, and 317 leaves the
+             274px stack its 1px of slack (309 fit the 0.4.0 1px frame; under
+             the double frame it clipped the grid and raised the kit's scroll
+             rail). The bottom pad keeps the preview swatch's hard shadow and
              the field's focus rule (both painted OUTSIDE their boxes) inside
              that same clip — the row is the region's last line. -->
         <vf-stack width="274" gap="10" pad="0 0 4">

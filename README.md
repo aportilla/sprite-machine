@@ -496,7 +496,12 @@ Two tiers, two regimes:
   **atlas grid** — a formal 3×2 `vf-grid` holding one face tile per cell
   in the sheet's own arrangement, each cell a live canvas of that face's
   slice drawn nearest-neighbor, the grid's 1px rules the only lines
-  between (frameless — the windoid frame is its perimeter). The grid
+  between (frameless — the windoid frame is its perimeter), every cell
+  on a **1-bit kit pattern** (`pattern` on `<sm-atlas-view>`, `gray-25`
+  — any of the kit's 38 MacPaint patterns by name, or sixteen hex digits;
+  painted per cell by the kit's own `PatternFillController` at the cell's
+  declared size, so a tile's transparent texels read against paper, and
+  dropping the attribute gives plain white cells back). The grid
   follows the ACTIVE document's **live channel**, so it tracks strokes at
   rAF rate (the second live subscriber ever, after the rebuilder), and it
   is a **picking surface**: pressing a tile selects that face — on the
@@ -516,7 +521,12 @@ Two tiers, two regimes:
   hosts a **controls strip** across its top — the two render toggles as
   checkboxes, **rotate** (auto-spin) and **smooth** (the low-poly wedge
   pass), writing the prefs slice live (`sm-stage-controls`; these lived in
-  Settings… before) — over the THREE canvas, its status strip reading
+  Settings… before) — over the THREE canvas in a **kit pattern well**
+  (`#stage-well`, a `vf-container pattern="gray-25"` taking the column's
+  slack): the renderer clears **transparent** (`alpha: true`, no scene
+  background), so the model and its shadow composite over the 1-bit
+  pattern rather than a flat gray — the same pattern the Sprite View's
+  cells wear, both the kit's own fill; its status strip reading
   "3D Model View" — a build
   error or warning takes that line, ⚠-prefixed, and the build stats
   (grid / voxels / tris) ride the strip's hover tooltip. The 3D View

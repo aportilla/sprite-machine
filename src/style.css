@@ -15,7 +15,6 @@
 :root {
   --sm-black: #000;
   --sm-white: #fff;
-  --sm-stage: #808080; /* System 7 desktop mid gray (matches the 3D scene bg) */
   --sm-artwork: #000000; /* panel behind the pixel canvas */
   --sm-select: #ff4f4f; /* the face-picker art's red — selection strokes */
   /* Clear the 20px menu bar (+4px reserve) for the kit's clipped popup panels. */
@@ -62,21 +61,31 @@ sm-color-picker {
   border: calc(var(--vf-scale, 1) * 1px) solid var(--sm-black);
 }
 
-/* The 3D View window's (flush) body: the controls strip over the THREE
-   canvas (sm-stage-controls draws itself; this wrapper is layout only). */
+/* The 3D View window's (flush) body: the controls strip over the pattern
+   well holding the THREE canvas (sm-stage-controls draws itself; this
+   wrapper is layout only). */
 .stage-body {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
-/* The THREE canvas takes what the controls strip leaves of the column. */
-#viewport {
+/* The pattern well (a kit vf-container, its `pattern` the backdrop) takes
+   what the controls strip leaves of the column — the one size the kit
+   can't state for it, since the windoid's grow box sets it. The kit
+   measures the undeclared height for its raster. */
+#stage-well {
   flex: 1 1 auto;
   min-height: 0;
+}
+/* The THREE canvas fills the well. No background of its own: the renderer
+   clears transparent (scene/stage.js), so the well's pattern shows through
+   behind the model. */
+#viewport {
   width: 100%;
+  height: 100%;
   display: block;
-  background: var(--sm-stage);
-  /* Low-res render buffer upscaled crisply by CSS. */
+  /* Low-res render buffer upscaled crisply by CSS (the kit's pattern fill
+     hands `auto` back to slotted content; this declaration wins). */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }

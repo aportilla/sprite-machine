@@ -36,9 +36,20 @@
 // application is inactive, so nothing stale ever shows. Each cell canvas
 // keeps a native tile-resolution backing store (CSS scales it crisp to the
 // fixed cell).
+//
+// THE CELLS WEAR A PATTERN: `pattern` (a kit library name — gray-25, dots,
+// bricks, … — or sixteen hex digits, the kit's own attribute grammar) paints
+// a 1-bit MacPaint pattern as each cell's background, behind the face
+// canvas, so a tile's TRANSPARENT texels read as "nothing here" against the
+// paper the way they do on a System 7 desktop. It is the kit's own fill —
+// `PatternFillController` + the `vfPatternFill` recipe, exactly what
+// `vf-container pattern="…"` does — one controller per cell, sized from the
+// cell's DECLARED geometry (ATLAS_GRID.cell × the derived cell height, the
+// same numbers the vf-grid lays out), so nothing is measured and the raster
+// is exact at every density. Unset, the cells stay plain white.
 // ---------------------------------------------------------------------------
 
-import 'vintage-frames';
+import { PatternFillController, vfPatternFill, parsePattern } from 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { createRef, ref } from 'lit/directives/ref.js';
@@ -60,8 +71,15 @@ const GRID_CELLS = DEFAULT_ATLAS_LAYOUT.flatMap((row, r) =>
 );
 
 export class SmAtlasView extends LitElement {
+  static properties = {
+    /** The cells' background pattern: a kit library name or 16 hex digits
+     *  (docs/PATTERNS.md in vintage-frames). Unset ⇒ plain white cells. */
+    pattern: { type: String },
+  };
+
   static styles = [
     baseStyles,
+    vfPatternFill,
     css`
       :host {
         display: flex;
@@ -97,7 +115,10 @@ export class SmAtlasView extends LitElement {
       }
       /* A grid cell IS its face tile: a bare button filling the well edge to
          edge (the grid's 1px rules are the only lines between tiles — it's
-         frameless, the windoid frame its perimeter). */
+         frameless, the windoid frame its perimeter). background-COLOR, not
+         the shorthand: the kit's vfPatternFill paints the pattern as this
+         box's background-image (the .vf-pattern-fill rules), and a shorthand
+         here would reset it. */
       .atlas-cell {
         place-self: stretch;
         position: relative;
@@ -105,7 +126,7 @@ export class SmAtlasView extends LitElement {
         margin: 0;
         padding: 0;
         border: 0;
-        background: #fff;
+        background-color: var(--vf-white, #fff);
         /* Reads the kit's cursor token first: applyCursor's blanket can't
            pierce this shadow root, and a bare \`cursor: pointer\` would put
            the native hand back alongside the kit's drawn arrow. */
@@ -141,17 +162,48 @@ export class SmAtlasView extends LitElement {
 
   /** @type {Map<string, import('lit/directives/ref.js').Ref<HTMLCanvasElement>>} */
   #cellCanvas = new Map(GRID_CELLS.map(({ face }) => [face, createRef()]));
+  /** @type {Map<string, import('lit/directives/ref.js').Ref<HTMLButtonElement>>} */
+  #cellBox = new Map(GRID_CELLS.map(({ face }) => [face, createRef()]));
   #stopFollow = null;
   #tileW = 0;
   #tileH = 0;
   #cellH = ATLAS_GRID.cell; // square until a live tile says otherwise
+  /** `pattern`, resolved through the kit's grammar; null paints nothing. */
+  #pattern = null;
+  #warnedPattern = false;
 
   constructor() {
     super();
+    /** @type {string|null} the `pattern` attribute, verbatim (see willUpdate) */
+    this.pattern = null;
     // The picker's and the ring's share: re-render on any workspace change (a
     // face switch, an activation) — the pixels themselves ride the doc
     // channels below.
     new StoreController(this, workspace.store);
+    // One kit pattern fill per cell, on the cell's own box (the button), at
+    // the cell's DECLARED size — the grid lays the cells out from these same
+    // numbers, so the raster is exact and nothing is measured. The controller
+    // re-applies after every update, which is how a cell-height change
+    // (#syncGeometry's requestUpdate) re-sizes the raster.
+    for (const { face } of GRID_CELLS) {
+      new PatternFillController(this, {
+        getBox: () => this.#cellBox.get(face).value,
+        getPattern: () => this.#pattern,
+        getSize: () => ({ width: ATLAS_GRID.cell, height: this.#cellH }),
+      });
+    }
+  }
+
+  willUpdate(changed) {
+    if (!changed.has('pattern')) return;
+    this.#pattern = parsePattern(this.pattern);
+    if (this.#pattern === null && this.pattern?.trim() && !this.#warnedPattern) {
+      this.#warnedPattern = true; // the kit's posture: say it once, paint nothing
+      console.warn(
+        `sm-atlas-view: unknown pattern "${this.pattern}" — a vintage-frames ` +
+          'library name (docs/PATTERNS.md) or sixteen hex digits. Painting nothing.'
+      );
+    }
   }
 
   connectedCallback() {
@@ -209,8 +261,13 @@ export class SmAtlasView extends LitElement {
           ${GRID_CELLS.map(
             ({ face: f }) => html`
               <button
+                ${ref(this.#cellBox.get(f))}
                 type="button"
-                class="atlas-cell"
+                class=${classMap({
+                  'atlas-cell': true,
+                  'vf-pattern-fill': true,
+                  'vf-patterned': !!this.#pattern,
+                })}
                 data-face=${f}
                 title=${f}
                 aria-label=${`${f} face`}
@@ -259,10 +316,6 @@ export class SmAtlasView extends LitElement {
     if (!s || !(s.tileW > 0) || !(s.tileH > 0)) return;
     this.#tileW = s.tileW;
     this.#tileH = s.tileH;
-    // Feed the cells' texel-aligned checker (see the canvas CSS): the tile
-    // dims as custom props, inherited into the shadow tree.
-    this.style.setProperty('--sm-tile-w', String(s.tileW));
-    this.style.setProperty('--sm-tile-h', String(s.tileH));
     for (const { face } of GRID_CELLS) {
       const canvas = this.#cellCanvas.get(face).value;
       if (canvas && (canvas.width !== s.tileW || canvas.height !== s.tileH)) {
