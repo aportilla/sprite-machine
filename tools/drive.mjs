@@ -1682,6 +1682,41 @@ async function main() {
     ringOn === gridTarget,
     ringOn
   );
+  // The Tools palette's cells pick on the PRESS too — System 7's palettes
+  // act on mouse-down, and the same windoid rule demands it. The sprite
+  // windoid was just raised over the palette, so this press is exactly the
+  // swallowed case: it raises the palette (its node re-inserted at the end
+  // of the press, the click cancelled). Probed BETWEEN the press and the
+  // release, so the switch is provably the press's; again after the
+  // release, so any click that does survive is provably a no-op (no second
+  // dispatch, nothing toggling back); and the DOM order after, so the run
+  // proves it exercised the raise and not a palette already frontmost.
+  s = await probe();
+  const pressTool = s.drawTool === 'fill' ? 'pencil' : 'fill';
+  const toolCell = await centreOf(`.editor-tool[aria-label="${pressTool}"]`);
+  await mouse('mousePressed', toolCell.x, toolCell.y);
+  await sleep(100);
+  s = await probe();
+  check(
+    'pressing a tool cell selects that tool on the press, the palette not frontmost',
+    s.drawTool === pressTool && s.menuChecks.tool === pressTool,
+    JSON.stringify({ strip: s.drawTool, menu: s.menuChecks.tool })
+  );
+  await mouse('mouseReleased', toolCell.x, toolCell.y, { buttons: 0 });
+  await sleep(100);
+  s = await probe();
+  check('…and the release leaves it selected', s.drawTool === pressTool, s.drawTool);
+  const toolsRaised = await evaluate(
+    `(() => {${DEEP}
+      const ids = [...document.querySelectorAll('vf-window')].map((w) => w.id);
+      return ids.indexOf('win-tools') > ids.indexOf('win-sprite');
+    })()`
+  );
+  check(
+    '…the press also raised the Tools palette over the sprite windoid',
+    toolsRaised === true,
+    'tools did not cross sprite in the light DOM'
+  );
   // The document window was dragged +40/+24 above, which tucks its grow box
   // under the stage windoid (the utility tier floats over the document
   // tier). Pull it left first so the grow press lands on the box, not the

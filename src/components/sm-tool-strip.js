@@ -5,6 +5,17 @@
 // `sm-pick-tool {tool}` events up. All five cells are sibling sticky modes —
 // the eraser and eyedropper select like any other tool.
 //
+// A cell picks on the PRESS, not the click — System 7's tool palettes act on
+// mouse-down (the cell inverts the instant the button goes down, and the
+// tool is live before it comes back up), and the windoid rule demands it:
+// the desktop raises a pressed windoid by re-inserting its node at the end
+// of the press, which cancels that press's click, so a click-driven pick
+// would swallow the first pick whenever another windoid had been raised
+// over the palette. The button's @click stays as the keyboard path
+// (Enter/Space) and is a no-op right after a press — every path guards on
+// the tool actually changing. The same rule as sm-face-picker / the atlas
+// tiles in sm-atlas-view.
+//
 // Shadow DOM; `:host { display: contents }`, so the strip sits in the rail
 // directly.
 // ---------------------------------------------------------------------------
@@ -73,13 +84,15 @@ export class SmToolStrip extends LitElement {
   }
 
   render() {
-    const cell = (name, glyph, title, active, onClick) => html`
+    const cell = (name, glyph, title, active, tool) => html`
       <button
         type="button"
         class=${classMap({ 'editor-tool': true, active })}
         title=${title}
         aria-label=${name}
-        @click=${onClick}
+        aria-pressed=${active ? 'true' : 'false'}
+        @pointerdown=${(e) => this.#onCellPress(e, tool)}
+        @click=${() => this.#pickTool(tool)}
       >
         ${glyph}
       </button>
@@ -94,42 +107,57 @@ export class SmToolStrip extends LitElement {
         role="group"
         aria-label="tools"
       >
-        ${cell('pencil', ICON_DRAW, 'pencil — draw (B)', this.tool === 'pencil', () =>
-          this.#pickTool('pencil')
+        ${cell(
+          'pencil',
+          ICON_DRAW,
+          'pencil — draw (B)',
+          this.tool === 'pencil',
+          'pencil'
         )}
         ${cell(
           'rectangle',
           ICON_RECT,
           'rectangle — drag a box (R)',
           this.tool === 'rect',
-          () => this.#pickTool('rect')
+          'rect'
         )}
         ${cell(
           'fill',
           ICON_FILL,
           'fill — flood a region, or replace a color (G)',
           this.tool === 'fill',
-          () => this.#pickTool('fill')
+          'fill'
         )}
         ${cell(
           'eraser',
           ICON_ERASE,
           'eraser — draw transparency (E; right-click erases with any tool)',
           this.tool === 'eraser',
-          () => this.#pickTool('eraser')
+          'eraser'
         )}
         ${cell(
           'eyedropper',
           ICON_SAMPLER,
           'eyedropper — click the sprite to sample (I, or hold Alt while drawing)',
           this.tool === 'eyedropper',
-          () => this.#pickTool('eyedropper')
+          'eyedropper'
         )}
       </vf-grid>
     `;
   }
 
+  // The press path (see the header): the primary button only — a right
+  // button is no pick, and the kit's windoid drag never starts from a cell.
+  #onCellPress(e, tool) {
+    if (e.button !== 0) return;
+    this.#pickTool(tool);
+  }
+
+  // Idempotent, so the click that follows a press (when the desktop doesn't
+  // cancel it — the palette already frontmost) is a no-op rather than a
+  // second dispatch; the keyboard's click is the one that lands here live.
   #pickTool(tool) {
+    if (tool === this.tool) return;
     this.dispatchEvent(
       new CustomEvent('sm-pick-tool', { detail: { tool }, bubbles: true })
     );

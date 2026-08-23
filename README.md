@@ -143,7 +143,13 @@ template — see [UI layer: Lit](#ui-layer-lit).
   open-source **Adobe Spectrum _workflow_** set (`draw` / `rectangle` /
   `color-fill` / `erase` / `sampler`) in a frameless `vf-grid` lattice run
   flush to the windoid's edge — no inner padding, the cells sharing the
-  window frame's own black line. The **options
+  window frame's own black line. A cell **picks on the press**, not the
+  click — System 7's tool palettes act on mouse-down (the cell inverts the
+  instant the button goes down and the tool is live before it comes back
+  up), and the windoid rule the face picker states below demands it: the
+  desktop raises a pressed windoid by re-inserting its node, which cancels
+  that press's click, so a click-driven cell would swallow the first pick
+  after any other windoid was raised over the palette. The **options
   strip** (a kit-drawn panel band under the menu bar — the kit's exported
   `vfPanel` recipe, so its black edge and every metric in it scale with the
   raster) names the active tool and holds the **current-ink swatch** plus the
