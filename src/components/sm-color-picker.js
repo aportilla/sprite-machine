@@ -131,7 +131,6 @@ export class SmColorPicker extends LitElement {
     return html`
       <vf-dialog
         heading="Colors"
-        closable
         width="317"
         height="273"
         .open=${open}
