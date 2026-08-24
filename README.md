@@ -150,9 +150,11 @@ template — see [UI layer: Lit](#ui-layer-lit).
   desktop raises a pressed windoid by re-inserting its node, which cancels
   that press's click, so a click-driven cell would swallow the first pick
   after any other windoid was raised over the palette. The **options
-  strip** (a kit-drawn panel band under the menu bar — the kit's exported
-  `vfPanel` recipe, so its black edge and every metric in it scale with the
-  raster) names the active tool and holds the **current-ink swatch** plus the
+  strip** (a kit-drawn band under the menu bar — a `vf-container` in the
+  kit's own grammar, `pattern="white" rule="bottom"`: white paper over one
+  row of ink, the menu bar's anatomy, no drop shadow — so its rule and every
+  metric in it scale with the raster) names the active tool and holds the
+  **current-ink swatch** plus the
   tool's options. For the **pencil**, a **tip-size slider** (with an
   `N px` readout) that stamps an
   **N×N** square footprint and **previews it filled with the active ink** on the
@@ -980,7 +982,7 @@ src/
                        presentational leaves: props down, bubbling sm-* events up, no store imports
     sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-stage-controls.js, sm-status-line.js,
     sm-color-picker.js
-                       connected chrome: the options strip (a kit vfPanel band: tool name +
+                       connected chrome: the options strip (a kit vf-container band: tool name +
                        current-ink swatch + options; hidden while the desktop is focused;
                        bounds from the active document) / the Tools palette body / the
                        Sprite View body (the face-picker strip over the clickable 3×2

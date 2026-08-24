@@ -78,9 +78,9 @@
 // ---------------------------------------------------------------------------
 
 // The raster band reserved above windows: the 20px menu bar plus the options
-// strip's kit panel (a 37px band whose top border rides the bar's bottom
-// rule, so its box bottoms out at 20 − 1 + 37 = 56) — a window clamped below
-// it always keeps its title bar grabbable.
+// strip's kit container band (36px, `rule="bottom"` — 35 rows of paper over
+// its own bottom rule, so its box bottoms out at 20 + 36 = 56) — a window
+// clamped below it always keeps its title bar grabbable.
 export const TOP_RESERVE = 56;
 
 // The raster band reserved above ICONS: the menu bar alone — the icons' pin

@@ -8,13 +8,14 @@
 // utility windoids — on screen only while the application is active: a
 // desktop click hides the whole band, and it returns with the app.
 //
-// THE BAND IS A KIT PANEL: the strip composes the kit's exported `vfPanel`
-// recipe (`.vf-panel` — white surface, a `calc(--vf-scale × 1px)` black
-// border, the shared hard shadow), so its edge is drawn at the kit's own
-// width and every metric here rides --vf-scale with it. One system px of
-// negative margin merges the panel's top border with the menu bar's bottom
-// rule and tucks the side borders past the raster's edges (the kit's flush
-// composition idiom), leaving the bottom rule + shadow as the strip's edge.
+// THE BAND IS A KIT CONTAINER: the strip is a `<vf-container fill-width
+// height="36" pattern="white" rule="bottom">` — the menu bar's own anatomy in
+// the kit's grammar (white paper over one row of ink, NO drop shadow: a
+// chrome band, not a raised panel), so the rule and every metric here ride
+// --vf-scale. The rule is the box's own border inside the declared height,
+// so the band is 35 rows of paper over the line and its box bottoms out at
+// exactly TOP_RESERVE (20 + 36 = 56); the flex row inside fills the paper to
+// the rule (`fill-height`, the container's own word for it).
 //
 // A CONNECTED chrome component: session (tool + ink + option values) and doc
 // (the clamp bounds derive from the live tile geometry) drive it; every leaf
@@ -24,7 +25,6 @@
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
-import { vfPanel } from 'vintage-frames';
 import { css, LitElement, html, nothing } from 'lit';
 import { maxCornerRadius } from '../lib/rect.js';
 import { rgbToHex } from '../lib/color.js';
@@ -46,20 +46,16 @@ const TOOL_NAME = {
 export class SmOptionsBar extends LitElement {
   static styles = [
     baseStyles,
-    vfPanel,
     css`
       :host {
         display: block;
       }
-      /* The band (see header): 37 system px tall, its top border riding the
-       menu bar's rule, so its box bottoms out exactly at TOP_RESERVE. */
+      /* The row inside the band (see header): fills the paper to the rule and
+       lays the controls out; every length in system px rides --vf-scale. */
       .strip {
         display: flex;
         align-items: center;
         gap: calc(var(--vf-scale, 1) * 24px);
-        height: calc(var(--vf-scale, 1) * 37px);
-        width: calc(100% + var(--vf-scale, 1) * 2px);
-        margin: calc(var(--vf-scale, 1) * -1px) 0 0 calc(var(--vf-scale, 1) * -1px);
         padding: 0 calc(var(--vf-scale, 1) * 14px);
       }
       .tool-name {
@@ -100,7 +96,9 @@ export class SmOptionsBar extends LitElement {
     // window clamp still reserves its space (TOP_RESERVE), so windows never
     // shuffle when it comes back.
     if (!shell.get().appActive) return nothing;
-    return html`<div class="strip vf-panel">${this.#content()}</div>`;
+    return html`<vf-container fill-width height="36" pattern="white" rule="bottom">
+      <div class="strip" fill-height>${this.#content()}</div>
+    </vf-container>`;
   }
 
   #content() {

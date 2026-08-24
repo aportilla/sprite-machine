@@ -28,8 +28,8 @@ export class SmToolOptions extends LitElement {
   static styles = [
     baseStyles,
     css`
-      /* Kit-scaled metrics: the strip band is drawn in system px (the kit's
-       vfPanel recipe), so the lengths in it ride the same --vf-scale. */
+      /* Kit-scaled metrics: the strip band is drawn in system px (a kit
+       vf-container band), so the lengths in it ride the same --vf-scale. */
       :host {
         flex: 1;
         min-width: 0;
