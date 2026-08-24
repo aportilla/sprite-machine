@@ -499,18 +499,14 @@ export class SmDrawCanvas extends LitElement {
   }
 
   #drawGuidesLayer() {
-    if (!this.#overlayCtx) return;
-    drawGuides(this.#overlayCtx, this.guides, this.#texelSys, this.#sysW, this.#sysH);
-    // The texel lattice on the same layer — always on (drawTexelGrid no-ops
-    // below GRID_MIN_SCALE, where its hairlines would swamp the art).
-    drawTexelGrid(
-      this.#overlayCtx,
-      this.tileW,
-      this.tileH,
-      this.#texelSys,
-      this.#sysW,
-      this.#sysH
-    );
+    const g = this.#overlayCtx;
+    if (!g) return;
+    g.clearRect(0, 0, this.#sysW, this.#sysH);
+    // The texel lattice first — the layer's floor, always on (drawTexelGrid
+    // no-ops below GRID_MIN_SCALE, where its hairlines would swamp the art) —
+    // then the extent rules over it, opaque, covering the lattice under them.
+    drawTexelGrid(g, this.tileW, this.tileH, this.#texelSys, this.#sysW, this.#sysH);
+    drawGuides(g, this.guides, this.#texelSys, this.#sysW, this.#sysH);
   }
 
   // --- one-shot dev hooks (canvas halves; the state halves are boot actions) --

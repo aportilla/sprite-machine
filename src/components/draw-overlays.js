@@ -13,19 +13,46 @@
 import { brushBounds } from '../lib/brush.js';
 import { roundedRectRows } from '../lib/rect.js';
 
-// Hairline extent rules: translucent cyan so they read as guides distinct from
-// the sprite art.
-const GUIDE_COLOR = 'rgba(120, 200, 255, 0.6)';
+// Hairline extent rules: cyan so they read as guides distinct from the sprite
+// art — OPAQUE, so a rule drawn over the texel lattice covers it outright
+// (a translucent rule would let the lattice line under it show through).
+const GUIDE_COLOR = 'rgb(120, 200, 255)';
 
 /** `scale` is whole system px per texel; `sysW`/`sysH` the layer in system px.
  *  @typedef {{tileW:number, tileH:number, scale:number, sysW:number, sysH:number}} OverlayView */
 
-// Draw the four "furthest extent" hairlines into an OVERLAY context sized to
-// the stack in system px. The lines box the region where a painted pixel can survive
-// the carve: verticals at the outer edges of the supported columns, horizontals
-// at the supported rows.
+// The guide layer is two painters over one cleared context, in this order:
+// drawTexelGrid (the lattice — the layer's floor), then drawGuides (the
+// extent rules, on top). Neither clears the layer; the caller does, once.
+
+// The texel lattice — always on. Only drawn at texel sizes where the
+// hairlines don't swamp the art; GRID_MIN_SCALE is that threshold, in system
+// px per texel.
+export const GRID_MIN_SCALE = 4;
+
+/** @param {CanvasRenderingContext2D} g @param {number} tileW @param {number} tileH
+ *  @param {number} scale @param {number} sysW @param {number} sysH */
+export function drawTexelGrid(g, tileW, tileH, scale, sysW, sysH) {
+  if (scale < GRID_MIN_SCALE) return;
+  // ONE fill for the whole lattice: a single fill() composites each pixel
+  // once however many subpaths cover it, so the crossings take the 20% ink
+  // exactly as the runs do. Per-line fillRects would composite twice where a
+  // horizontal meets a vertical (1 − 0.8² = 36%) — a dark dot at every
+  // intersection.
+  const lattice = new Path2D();
+  for (let x = 1; x < tileW; x++) lattice.rect(x * scale, 0, 1, sysH);
+  for (let y = 1; y < tileH; y++) lattice.rect(0, y * scale, sysW, 1);
+  g.fillStyle = 'rgba(0, 0, 0, 0.2)';
+  g.fill(lattice);
+}
+
+// Draw the four "furthest extent" hairlines OVER the lattice. The lines box
+// the region where a painted pixel can survive the carve: verticals at the
+// outer edges of the supported columns, horizontals at the supported rows.
+// Being opaque, a rule simply covers whatever lattice line it lands on — the
+// left/top rules sit exactly on one (uMin·scale), the right/bottom ones a px
+// inside theirs — and the rules' own crossings can't double either.
 export function drawGuides(g, guides, scale, sysW, sysH) {
-  g.clearRect(0, 0, sysW, sysH);
   if (!guides) return;
   const { uMin, uMax, vMin, vMax } = guides.extent;
   g.fillStyle = GUIDE_COLOR;
@@ -34,21 +61,6 @@ export function drawGuides(g, guides, scale, sysW, sysH) {
   if (uMax != null) g.fillRect((uMax + 1) * scale - T, 0, T, sysH); // right extent
   if (vMin != null) g.fillRect(0, vMin * scale, sysW, T); // top extent
   if (vMax != null) g.fillRect(0, (vMax + 1) * scale - T, sysW, T); // bottom extent
-}
-
-// The texel lattice — always on — drawn OVER the guide layer's current
-// content (no clear — drawGuides clears first). Only drawn at texel sizes
-// where the hairlines don't swamp the art; GRID_MIN_SCALE is that threshold,
-// in system px per texel.
-export const GRID_MIN_SCALE = 4;
-
-/** @param {CanvasRenderingContext2D} g @param {number} tileW @param {number} tileH
- *  @param {number} scale @param {number} sysW @param {number} sysH */
-export function drawTexelGrid(g, tileW, tileH, scale, sysW, sysH) {
-  if (scale < GRID_MIN_SCALE) return;
-  g.fillStyle = 'rgba(0, 0, 0, 0.2)';
-  for (let x = 1; x < tileW; x++) g.fillRect(x * scale, 0, 1, sysH);
-  for (let y = 1; y < tileH; y++) g.fillRect(0, y * scale, sysW, 1);
 }
 
 // The haloed hairline box both cursor overlays share: a dark halo so the
