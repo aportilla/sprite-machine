@@ -1737,6 +1737,60 @@ async function main() {
     drawAfter > drawBefore,
     `${drawBefore} → ${drawAfter}`
   );
+  // The canvas renders on the kit's virtual system-pixel grid (README's
+  // Canvas layout bullet): the layers ride a placed vf-container sized at a
+  // whole number of SYSTEM px per texel (so a texel is whole device px by
+  // the kit's scale contract), its centered top/left stated in whole system
+  // px — on the lattice by construction — probed after the grow, so the
+  // re-fit path is what's pinned, not just the boot layout.
+  const stackGrid = await evaluate(
+    `(() => {${DEEP} const stack = __qd('.editor-canvas-stack');
+      const canvas = __qd('.editor-canvas');
+      const r = stack.getBoundingClientRect();
+      const scale =
+        parseFloat(getComputedStyle(stack).getPropertyValue('--vf-scale')) || 1;
+      const err = (v) =>
+        Math.abs(v * devicePixelRatio - Math.round(v * devicePixelRatio));
+      return { left: err(r.left), top: err(r.top),
+        texel: r.width / scale / canvas.width }; })()`
+  );
+  check(
+    'the canvas stack sits on the device grid at a whole-system-px texel size',
+    stackGrid.left < 0.06 &&
+      stackGrid.top < 0.06 &&
+      stackGrid.texel >= 1 &&
+      Math.abs(stackGrid.texel - Math.round(stackGrid.texel)) < 0.01,
+    JSON.stringify(stackGrid)
+  );
+  // …and placement must not RATCHET across resizes. History: the first grid
+  // implementation flex-centered the stack and canceled the fractional
+  // origin with an accumulating measured snap — each pass landed within half
+  // a px of the PREVIOUS offset, and the .5 residuals centering mints on
+  // odd-sized wells always round UP (Math.round ties), so a resize stream
+  // walked the canvas steadily down-right (failed here at {dx:4,dy:5}).
+  // Placement is DECLARED in whole system px on a vf-container now, so there
+  // is nothing to accumulate — this pin holds the door shut on any future
+  // mechanism. The steps are ODD deliberately: an even resize preserves the
+  // parity of (well − canvas) and never re-mints the .5 that engaged the old
+  // ratchet (±64 passed against the accumulating code). Eight odd
+  // round-trips, then the canvas must still sit centered in the well.
+  for (let i = 0; i < 4; i++) {
+    await grow('DOC', -63, -63);
+    await grow('DOC', 63, 63);
+  }
+  const centered = await evaluate(
+    `(() => {${DEEP} const wrap = __qd('.editor-canvas-wrap');
+      const stack = __qd('.editor-canvas-stack');
+      const w = wrap.getBoundingClientRect();
+      const s = stack.getBoundingClientRect();
+      return { dx: s.left + s.width / 2 - (w.left + w.width / 2),
+        dy: s.top + s.height / 2 - (w.top + w.height / 2) }; })()`
+  );
+  check(
+    'eight grow round-trips leave the canvas centered (the snap cannot ratchet)',
+    Math.abs(centered.dx) <= 1.5 && Math.abs(centered.dy) <= 1.5,
+    JSON.stringify(centered)
+  );
 
   // --- desktop: focus / deactivation ------------------------------------------
   // The two-role model: clicking the desktop's own surface is "clicking the

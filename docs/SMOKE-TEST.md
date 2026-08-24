@@ -76,9 +76,9 @@ browser, `http://localhost:5173/`.
 - [ ] **Hover previews**: pencil hover shows the exact N×N footprint filled
       with the live ink under the kit's crosshair; eraser shows the red
       treatment; eyedropper shows the 1-cell outline.
-- [ ] **Show Grid** (⌘G): texel lattice appears at canvas scales ≥ 4; shrink
-      the document window until the scale drops below 4 — the lattice
-      disappears rather than swamping the art.
+- [ ] **Show Grid** (⌘G): texel lattice appears at texel sizes ≥ 4 system px;
+      shrink the document window until the texel size drops below 4 — the
+      lattice disappears rather than swamping the art.
 - [ ] **One cursor, everywhere**: over the pixel canvas only the kit's drawn
       crosshair shows (no native crosshair beneath it), and the tool cells
       show only the kit's arrow (no native hand). Open the Colors dialog

@@ -130,13 +130,23 @@ component (`vf-number-field`, `vf-radio-group`, `vf-slider`, `vf-checkbox`,
 template — see [UI layer: Lit](#ui-layer-lit).
 
 - **Canvas layout** — the pixel canvas fills the artwork well — its height is
-  **CSS-driven** (flex), no JS pin — and the square editable canvas is
-  **centered** in it and drawn **as large as an integer texel scale fits**
-  (crisp, never a fractional pixel), **re-fitting responsively** when the
-  window (or its grow box) resizes. See `#layout()` in
-  `src/components/sm-draw-canvas.js`. View → Show Grid (⌘G) draws the texel
-  lattice on the overlay, only at scales ≥ 4 where the hairlines don't swamp
-  the art.
+  **CSS-driven** (flex), no JS pin — and the square editable canvas is drawn
+  on the kit's own **virtual system-pixel grid**: the texel size is **the
+  largest whole count of system px that fits** — a texel is then a whole
+  count of device px by the kit's scale contract (crisp at any display
+  density or browser zoom, never a fractional pixel) and a whole multiple of
+  the unit the surrounding 1-bit chrome is drawn in — and the canvas layers
+  ride a **placed `vf-container`**: `#layout()` states its
+  width/height/top/left in whole system px (the DITL rectangle, centered by
+  arithmetic — no flex centering, no measured correction), so the box lands
+  on the pixel lattice **by construction** and the container's own grid-snap
+  holds it there against any upstream fraction. It **re-fits responsively**
+  when the window (or its grow box) resizes and when the display density or
+  browser zoom changes. The guide + cursor overlays draw at system-px
+  resolution, so their hairlines are 1 system px — the kit's hairline unit.
+  See `#layout()` in `src/components/sm-draw-canvas.js`. View → Show Grid
+  (⌘G) draws the texel lattice on the overlay, only at texel sizes ≥ 4
+  system px where the hairlines don't swamp the art.
 - **Tools** — the **Tools palette** holds the **tool strip**: a single column of square
   cells (**pencil `B`**, **rect `R`**, **fill `G`**, the **eraser `E`**, and the
   **eyedropper `I`**; the selected cell inverts) — each an icon from the

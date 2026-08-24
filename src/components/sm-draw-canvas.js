@@ -3,7 +3,7 @@
 // onion-skin background, the editable pixel canvas, the hairline guide overlay,
 // the cursor overlay), the working buffer, the pencil/rect/fill/eraser/
 // eyedropper gestures (the eraser is a pencil that writes transparency — it
-// shares the stroke path but carries its OWN tip size), the integer-scale layout fitting, and
+// shares the stroke path but carries its OWN tip size), the whole-system-px layout fitting, and
 // the gesture-scoped keys (Esc cancels an in-flight rect, Shift square-locks
 // it — document-level, but canvas business).
 //
@@ -44,6 +44,9 @@
 
 import { css, LitElement, html } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
+// The named imports also execute the kit module, registering <vf-container>
+// (and every other vf-* element) for the template below.
+import { effectiveScale, onScaleChange } from 'vintage-frames';
 import { writeTexel, stampBrush, strokeLine } from '../lib/brush.js';
 import { roundedRectRows, squareEnd } from '../lib/rect.js';
 import { keyAt, floodFill, replaceColor } from '../lib/fill.js';
@@ -89,27 +92,37 @@ export class SmDrawCanvas extends LitElement {
       :host {
         display: contents;
       }
-      /* The canvas CONTAINER fills the draw box below the options bar and centers
-       the integer-scaled canvas stack (sized by #layout()). */
+      /* The canvas WELL fills the draw box below the options bar. No flex
+       centering: it is only the measuring box and the positioning anchor
+       (position: relative — "the one line of CSS this feature can't write
+       for you", the kit's position.ts) for the placed vf-container holding
+       the canvas layers; #layout() computes the centered top/left in whole
+       system px. The padding rides --vf-scale (12 system px) like every
+       other chrome metric, keeping the whole chain above the canvas in
+       whole system px. */
       .editor-canvas-wrap {
         flex: 1 1 auto;
         min-height: 0; /* let it shrink so #layout() can integer-fit the canvas inside */
         position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 12px;
+        padding: calc(var(--vf-scale, 1) * 12px);
         overflow: hidden; /* clip if a tiny container forces the min (scale 1) canvas over */
       }
-      /* The centered square holding the four aligned canvas layers; sized by #layout(). */
-      .editor-canvas-stack {
-        position: relative;
-        flex: 0 0 auto;
-      }
+      /* The square holding the four aligned canvas layers is a kit
+       <vf-container> — the DITL rectangle: #layout() states its width/
+       height/top/left in whole system px and the kit writes them as live
+       calc(var(--vf-scale) * Npx) lengths (VfSized / VfPositioned), so the
+       box lands on the device-pixel grid BY CONSTRUCTION — no measured
+       correction, nothing that can ratchet. The container's own
+       GridSnapController still holds the box on the grid against any
+       upstream fraction, and its shadow .box is both that correction's
+       target and the canvases' positioning anchor, so all four layers ride
+       it together. No rule block needed: the kit owns the container's
+       layout entirely. */
       /* All four layers fill the stack (backing stores managed in JS): a background
        (per-texel checkerboard + faded onion-skin, drawn at native tile res), the
        transparent pixel canvas (native tile res), then the guide + cursor overlays
-       (screen res). */
+       (system-px res — their 1px hairlines are 1 system px, the kit's hairline
+       unit). */
       .editor-canvas-stack > canvas {
         position: absolute;
         inset: 0;
@@ -211,18 +224,23 @@ export class SmDrawCanvas extends LitElement {
   #rectPointer = null; // captured pointerId, for release on cancel
   #shiftLock = false; // Shift held → constrain the drag to a square
 
-  // Live on-screen geometry, re-derived by #layout(): `#scale` is the integer texel
-  // size, `#cssW`/`#cssH` the pixel canvas's on-screen px. The guide + cursor overlays
-  // draw in this screen space, so they read these.
-  #scale = 1;
-  #cssW = 0;
-  #cssH = 0;
+  // Live on-screen geometry, re-derived by #layout(), in the kit's SYSTEM px
+  // (the vintage-frames virtual pixel grid): `#texelSys` is the whole-system-px
+  // texel size, `#sysW`/`#sysH` the canvas box in system px (also the overlay
+  // backings' resolution — the painters draw in system space), `#fitScale` the
+  // CSS px per system px the fit was derived at. Placement itself lives on
+  // the vf-container's own top/left/width/height properties.
+  #texelSys = 1;
+  #sysW = 0;
+  #sysH = 0;
+  #fitScale = 1;
   #laidOut = false;
   #resizeObs = null;
+  #offScale = null; // onScaleChange release — set up per connect, like the observer
 
   /** @type {import('lit/directives/ref.js').Ref<HTMLElement>} */
   #wrap = createRef();
-  /** @type {import('lit/directives/ref.js').Ref<HTMLElement>} */
+  /** @type {import('lit/directives/ref.js').Ref<import('vintage-frames').VfContainer>} */
   #stack = createRef();
   /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
   #bg = createRef();
@@ -252,6 +270,12 @@ export class SmDrawCanvas extends LitElement {
     // must come back here. On the first connect there's no wrap yet, so this
     // no-ops and firstUpdated does the initial setup.
     this.#observeResize();
+    // A density/zoom change moves --vf-scale under the fit: re-derive it.
+    // The kit updates every --vf-scale BEFORE these callbacks run (writer
+    // tier first), so effectiveScale() inside #layout() reads the new value;
+    // the container's declared lengths are live calcs and stay on the new
+    // grid even in the beat before this re-fit lands.
+    this.#offScale = onScaleChange(() => this.#layout());
   }
 
   disconnectedCallback() {
@@ -260,6 +284,8 @@ export class SmDrawCanvas extends LitElement {
     document.removeEventListener('keyup', this.#onKeyUp);
     this.#resizeObs?.disconnect();
     this.#resizeObs = null;
+    this.#offScale?.();
+    this.#offScale = null;
   }
 
   willUpdate(changed) {
@@ -404,48 +430,80 @@ export class SmDrawCanvas extends LitElement {
     if (this.#ctx && this.#imgData) this.#ctx.putImageData(this.#imgData, 0, 0);
   }
 
-  // Fit the largest integer-scaled tile rect inside the canvas container's content
-  // box, size every layer to it, and redraw the screen-res overlays. The container's
-  // height is CSS-driven (it fills the flex draw box), so this only MEASURES it — it
-  // never sets a height. Idempotent: a re-run at the same scale early-returns.
+  // Fit the largest whole-SYSTEM-px texel size inside the well's content box,
+  // place + size the canvas vf-container, and redraw the system-res overlays.
+  // This is what puts the art on the same virtual pixel grid as the kit's
+  // chrome: a texel of k system px covers k × (--vf-scale × trueDpr) device px
+  // — a whole count by the kit's scale contract — so every texel renders
+  // identically crisp at any display density or browser zoom, at a whole
+  // multiple of the unit the surrounding 1-bit art is drawn in (vf-img's one
+  // image px = one system px, times k).
+  //
+  // Placement is DECLARED, not corrected: the centered top/left are computed
+  // here in whole system px (centering rounds to the art grid — within half a
+  // system px of true center, the way QuickDraw placed things, and the same
+  // whole-art-px rule snapToSystemPx holds window chrome to) and handed to
+  // the vf-container, which writes them as live calc(var(--vf-scale) * Npx)
+  // lengths — on the device-pixel grid by construction, per the kit's
+  // SIZING.md. The flex centering + measured snap this replaces produced
+  // fractional origins by design and then had to cancel them per resize
+  // event, which is where the down-right ratchet lived (drive.mjs's "cannot
+  // ratchet" pin holds the door shut).
+  //
+  // The well's height is CSS-driven (it fills the flex draw box), so this
+  // only MEASURES the wrap — it never sets a size on it. Idempotent: a re-run
+  // at the same (texel, scale) pair re-states only the placement
+  // (value-idempotent on the kit's reactive properties).
   #layout() {
     const wrap = this.#wrap.value;
     const stack = this.#stack.value;
     if (!wrap || !stack || !this.tileW || !this.tileH) return;
     // Measure both axes from the client box (border-excluded), subtracting padding so
-    // the 1px border isn't double-counted: an over-measure could round the integer
-    // scale one step too big and the stack would clip under overflow:hidden.
+    // the 1px border isn't double-counted: an over-measure could round the texel
+    // size one step too big and the canvas would clip under overflow:hidden.
     const cs = getComputedStyle(wrap);
-    const availW = Math.max(
+    const padL = parseFloat(cs.paddingLeft);
+    const padT = parseFloat(cs.paddingTop);
+    const availW = Math.max(1, wrap.clientWidth - padL - parseFloat(cs.paddingRight));
+    const availH = Math.max(1, wrap.clientHeight - padT - parseFloat(cs.paddingBottom));
+    // CSS px per system px in force here — the document window's inline
+    // --vf-scale, inherited through the flat tree into this shadow root; the
+    // same multiplier every metric around the canvas rides.
+    const scale = effectiveScale(this);
+    const availWSys = availW / scale;
+    const availHSys = availH / scale;
+    const k = Math.max(
       1,
-      wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+      Math.floor(Math.min(availWSys / this.tileW, availHSys / this.tileH)) || 1
     );
-    const availH = Math.max(
-      1,
-      wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
-    );
-    const s = Math.max(
-      1,
-      Math.floor(Math.min(availW / this.tileW, availH / this.tileH)) || 1
-    );
-    if (this.#laidOut && s === this.#scale) return; // scale unchanged → layers correct
+    const sysW = this.tileW * k;
+    const sysH = this.tileH * k;
+    // Center within the content box, in whole system px. VfPositioned anchors
+    // on the wrap's PADDING box, so the padding (12 system px — measured back
+    // out of the resolved style rather than restated here) is part of the
+    // offset. An oversized minimum-scale canvas centers negative and clips on
+    // both sides under overflow:hidden, exactly as the flex centering did.
+    stack.left = Math.round(padL / scale + (availWSys - sysW) / 2);
+    stack.top = Math.round(padT / scale + (availHSys - sysH) / 2);
+    if (this.#laidOut && k === this.#texelSys && scale === this.#fitScale) return;
     this.#laidOut = true;
-    this.#scale = s;
-    this.#cssW = this.tileW * s;
-    this.#cssH = this.tileH * s;
-    stack.style.width = `${this.#cssW}px`;
-    stack.style.height = `${this.#cssH}px`;
-    this.#overlay.value.width = this.#cssW; // screen-res backing: 1px hairlines stay crisp
-    this.#overlay.value.height = this.#cssH;
-    this.#cursor.value.width = this.#cssW;
-    this.#cursor.value.height = this.#cssH;
+    this.#texelSys = k;
+    this.#fitScale = scale;
+    this.#sysW = sysW;
+    this.#sysH = sysH;
+    stack.width = sysW;
+    stack.height = sysH;
+    this.#overlay.value.width = this.#sysW; // system-res backing: hairlines are 1 system px
+    this.#overlay.value.height = this.#sysH;
+    this.#cursor.value.width = this.#sysW;
+    this.#cursor.value.height = this.#sysH;
     this.#drawGuidesLayer();
     this.#redrawCursorLayer(); // re-stroke the footprint / rect preview at the new scale
   }
 
   #drawGuidesLayer() {
     if (!this.#overlayCtx) return;
-    drawGuides(this.#overlayCtx, this.guides, this.#scale, this.#cssW, this.#cssH);
+    drawGuides(this.#overlayCtx, this.guides, this.#texelSys, this.#sysW, this.#sysH);
     // View → Show Grid: the texel lattice on the same layer (drawTexelGrid
     // no-ops below its minimum legible scale).
     if (this.showGrid) {
@@ -453,9 +511,9 @@ export class SmDrawCanvas extends LitElement {
         this.#overlayCtx,
         this.tileW,
         this.tileH,
-        this.#scale,
-        this.#cssW,
-        this.#cssH
+        this.#texelSys,
+        this.#sysW,
+        this.#sysH
       );
     }
   }
@@ -490,19 +548,23 @@ export class SmDrawCanvas extends LitElement {
   }
 
   // --- template --------------------------------------------------------------
-  // The CONTAINER (.editor-canvas-wrap) fills the draw box below the options bar
+  // The WELL (.editor-canvas-wrap) fills the draw box below the options bar
   // (CSS flex:1) — its height comes from the flex layout, not JS — so nothing
-  // shifts when the tile size (and thus the drawn canvas) changes. Inside it, a
-  // .editor-canvas-stack holds four aligned layers, centered and scaled by #layout()
-  // to the largest integer texel size that fits. Only the pixel canvas takes
-  // pointer events. The pixel + bg canvases keep a native tileW×tileH backing store
-  // (CSS upscales them crisp); the overlay + cursor are SCREEN-res (backing tracks the
-  // on-screen px) so their 1px lines stay crisp. Backing stores are set in
+  // shifts when the tile size (and thus the drawn canvas) changes. Inside it,
+  // a kit <vf-container> holds the four aligned layers: #layout() states its
+  // width/height/top/left in whole system px (the DITL rectangle — centered
+  // by arithmetic, on the pixel lattice by construction), and the canvases
+  // fill its box (inset: 0 against the container's own anchor, so all four
+  // ride its grid-snap correction together). Only the pixel canvas takes
+  // pointer events. The pixel + bg canvases keep a native tileW×tileH backing
+  // store (CSS upscales them crisp); the overlay + cursor are SYSTEM-res
+  // (backing tracks the box's system px) so their 1px lines are 1 system px —
+  // the kit's own hairline unit. Backing stores are set in
   // #applyGeometry()/#layout(), never bound here.
   render() {
     return html`
       <div class="editor-canvas-wrap" ${ref(this.#wrap)}>
-        <div class="editor-canvas-stack" ${ref(this.#stack)}>
+        <vf-container class="editor-canvas-stack" ${ref(this.#stack)}>
           <canvas class="editor-canvas-bg" ${ref(this.#bg)}></canvas>
           <canvas
             class="editor-canvas"
@@ -517,7 +579,7 @@ export class SmDrawCanvas extends LitElement {
           ></canvas>
           <canvas class="editor-canvas-overlay" ${ref(this.#overlay)}></canvas>
           <canvas class="editor-canvas-cursor" ${ref(this.#cursor)}></canvas>
-        </div>
+        </vf-container>
       </div>
     `;
   }
@@ -664,14 +726,15 @@ export class SmDrawCanvas extends LitElement {
   }
 
   // --- overlays ---------------------------------------------------------------
-  // The screen-space view the overlay painters (draw-overlays.js) draw in.
+  // The system-px view the overlay painters (draw-overlays.js) draw in — the
+  // backings are system-res, so painter space IS the kit's pixel grid.
   get #overlayView() {
     return {
       tileW: this.tileW,
       tileH: this.tileH,
-      scale: this.#scale,
-      cssW: this.#cssW,
-      cssH: this.#cssH,
+      scale: this.#texelSys,
+      sysW: this.#sysW,
+      sysH: this.#sysH,
     };
   }
 
@@ -768,7 +831,7 @@ export class SmDrawCanvas extends LitElement {
     // The box wrote nothing — drop its undo capture without emitting.
     this.#gestureBefore = null;
     this.#gestureChanged = false;
-    this.#cursorCtx?.clearRect(0, 0, this.#cssW, this.#cssH);
+    this.#cursorCtx?.clearRect(0, 0, this.#sysW, this.#sysH);
     if (this.#rectPointer != null) {
       this.#canvas.value?.releasePointerCapture?.(this.#rectPointer);
       this.#rectPointer = null;
@@ -914,7 +977,7 @@ export class SmDrawCanvas extends LitElement {
       this.#shiftLock = false;
       this.#canvas.value.releasePointerCapture?.(this.#rectPointer); // the owner
       this.#rectPointer = null;
-      this.#cursorCtx.clearRect(0, 0, this.#cssW, this.#cssH); // commit is on `#work`
+      this.#cursorCtx.clearRect(0, 0, this.#sysW, this.#sysH); // commit is on `#work`
       return;
     }
     this.#endGesture();

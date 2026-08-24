@@ -1,11 +1,13 @@
 // ---------------------------------------------------------------------------
-// Pure canvas painters for <sm-draw-canvas>'s two screen-res overlay layers:
+// Pure canvas painters for <sm-draw-canvas>'s two system-res overlay layers:
 // the alignment-guide hairlines, the pencil's filled hover-footprint preview,
 // the eyedropper's sample-target outline, and the rect tool's live drag
 // preview. Stateless — everything arrives as arguments —
 // so the component keeps only gesture state and these stay trivially readable.
-// All three draw in SCREEN space (the integer-scaled on-screen px), which is
-// what keeps their 1px hairlines crisp at any texel scale.
+// All draw in SYSTEM-px space — the kit's virtual pixel grid: the backings are
+// tileW·k × tileH·k for a k-system-px texel, CSS-magnified nearest-neighbor in
+// lockstep with the art, so their 1px hairlines are exactly one system px (the
+// kit's own hairline unit), crisp at any display density or browser zoom.
 // ---------------------------------------------------------------------------
 
 import { brushBounds } from '../lib/brush.js';
@@ -15,36 +17,38 @@ import { roundedRectRows } from '../lib/rect.js';
 // the sprite art.
 const GUIDE_COLOR = 'rgba(120, 200, 255, 0.6)';
 
-/** @typedef {{tileW:number, tileH:number, scale:number, cssW:number, cssH:number}} OverlayView */
+/** `scale` is whole system px per texel; `sysW`/`sysH` the layer in system px.
+ *  @typedef {{tileW:number, tileH:number, scale:number, sysW:number, sysH:number}} OverlayView */
 
-// Draw the four "furthest extent" hairlines into an OVERLAY context sized to the
-// on-screen canvas. The lines box the region where a painted pixel can survive
+// Draw the four "furthest extent" hairlines into an OVERLAY context sized to
+// the stack in system px. The lines box the region where a painted pixel can survive
 // the carve: verticals at the outer edges of the supported columns, horizontals
 // at the supported rows.
-export function drawGuides(g, guides, scale, cssW, cssH) {
-  g.clearRect(0, 0, cssW, cssH);
+export function drawGuides(g, guides, scale, sysW, sysH) {
+  g.clearRect(0, 0, sysW, sysH);
   if (!guides) return;
   const { uMin, uMax, vMin, vMax } = guides.extent;
   g.fillStyle = GUIDE_COLOR;
-  const T = 1; // hairline thickness (screen px)
-  if (uMin != null) g.fillRect(uMin * scale, 0, T, cssH); // left extent
-  if (uMax != null) g.fillRect((uMax + 1) * scale - T, 0, T, cssH); // right extent
-  if (vMin != null) g.fillRect(0, vMin * scale, cssW, T); // top extent
-  if (vMax != null) g.fillRect(0, (vMax + 1) * scale - T, cssW, T); // bottom extent
+  const T = 1; // hairline thickness (1 system px — the kit's hairline unit)
+  if (uMin != null) g.fillRect(uMin * scale, 0, T, sysH); // left extent
+  if (uMax != null) g.fillRect((uMax + 1) * scale - T, 0, T, sysH); // right extent
+  if (vMin != null) g.fillRect(0, vMin * scale, sysW, T); // top extent
+  if (vMax != null) g.fillRect(0, (vMax + 1) * scale - T, sysW, T); // bottom extent
 }
 
 // The View → Show Grid texel lattice, drawn OVER the guide layer's current
-// content (no clear — drawGuides clears first). Only drawn at scales where
-// the hairlines don't swamp the art; GRID_MIN_SCALE is that threshold.
+// content (no clear — drawGuides clears first). Only drawn at texel sizes
+// where the hairlines don't swamp the art; GRID_MIN_SCALE is that threshold,
+// in system px per texel.
 export const GRID_MIN_SCALE = 4;
 
 /** @param {CanvasRenderingContext2D} g @param {number} tileW @param {number} tileH
- *  @param {number} scale @param {number} cssW @param {number} cssH */
-export function drawTexelGrid(g, tileW, tileH, scale, cssW, cssH) {
+ *  @param {number} scale @param {number} sysW @param {number} sysH */
+export function drawTexelGrid(g, tileW, tileH, scale, sysW, sysH) {
   if (scale < GRID_MIN_SCALE) return;
   g.fillStyle = 'rgba(0, 0, 0, 0.2)';
-  for (let x = 1; x < tileW; x++) g.fillRect(x * scale, 0, 1, cssH);
-  for (let y = 1; y < tileH; y++) g.fillRect(0, y * scale, cssW, 1);
+  for (let x = 1; x < tileW; x++) g.fillRect(x * scale, 0, 1, sysH);
+  for (let y = 1; y < tileH; y++) g.fillRect(0, y * scale, sysW, 1);
 }
 
 // The haloed hairline box both cursor overlays share: a dark halo so the
@@ -58,7 +62,7 @@ function haloBox(g, rx, ry, rw, rh, erasing) {
   g.strokeRect(rx, ry, rw, rh);
 }
 
-// The clamped on-screen rect of the brush footprint at `t`, or null when the
+// The clamped system-px rect of the brush footprint at `t`, or null when the
 // whole footprint is off-tile. Both hover painters below share it.
 function footprintRect(v, t, size) {
   const b = brushBounds(t.px, t.py, size);
@@ -77,7 +81,7 @@ function footprintRect(v, t, size) {
 /** @param {CanvasRenderingContext2D} g @param {OverlayView} v
  *  @param {{px:number,py:number}|null} t @param {number} size @param {boolean} erasing */
 export function drawCursorOutline(g, v, t, size, erasing) {
-  g.clearRect(0, 0, v.cssW, v.cssH);
+  g.clearRect(0, 0, v.sysW, v.sysH);
   if (!t) return;
   const r = footprintRect(v, t, size);
   if (!r) return;
@@ -93,7 +97,7 @@ export function drawCursorOutline(g, v, t, size, erasing) {
  *  @param {{px:number,py:number}|null} t @param {number} size
  *  @param {{r:number,g:number,b:number}} ink @param {boolean} erasing */
 export function drawPencilPreview(g, v, t, size, ink, erasing) {
-  g.clearRect(0, 0, v.cssW, v.cssH);
+  g.clearRect(0, 0, v.sysW, v.sysH);
   if (!t) return;
   const r = footprintRect(v, t, size);
   if (!r) return;
@@ -115,7 +119,7 @@ export function drawPencilPreview(g, v, t, size, ink, erasing) {
  *  @param {{x0:number,y0:number,x1:number,y1:number}|null} bounds
  *  @param {number} radius @param {{r:number,g:number,b:number}} ink @param {boolean} erasing */
 export function drawRectPreview(g, v, bounds, radius, ink, erasing) {
-  g.clearRect(0, 0, v.cssW, v.cssH);
+  g.clearRect(0, 0, v.sysW, v.sysH);
   if (!bounds) return;
   const s = v.scale;
   const b = bounds;
