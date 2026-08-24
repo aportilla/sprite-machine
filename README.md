@@ -61,7 +61,7 @@ session's open windows deliberately don't reopen — the URL, not
 localStorage, says what a load shows — and **no window's geometry comes
 back either**: every session places the windoids, and every open places
 its document window, fresh from the live raster (see
-[Windows](#windows)); only the desktop icons and Show Grid restore. And
+[Windows](#windows)); only the desktop icons restore. And
 the URL keeps itself true: opening, saving or
 switching to a saved document **mirrors its name into the fragment**
 (`#Cube`, via `replaceState` — no history spam; an untitled document or the
@@ -144,9 +144,9 @@ template — see [UI layer: Lit](#ui-layer-lit).
   when the window (or its grow box) resizes and when the display density or
   browser zoom changes. The guide + cursor overlays draw at system-px
   resolution, so their hairlines are 1 system px — the kit's hairline unit.
-  See `#layout()` in `src/components/sm-draw-canvas.js`. View → Show Grid
-  (⌘G) draws the texel lattice on the overlay, only at texel sizes ≥ 4
-  system px where the hairlines don't swamp the art.
+  See `#layout()` in `src/components/sm-draw-canvas.js`. The texel lattice
+  draws on the overlay too — always on, at texel sizes ≥ 4 system px where
+  the hairlines don't swamp the art.
 - **Tools** — the **Tools palette** holds the **tool strip**: a single column of square
   cells (**pencil `B`**, **rect `R`**, **fill `G`**, the **eraser `E`**, and the
   **eyedropper `I`**; the selected cell inverts) — each an icon from the
@@ -405,7 +405,7 @@ window the desktop's active window?**
   `shell/icons.js` re-selects across that press, a page-side bridge until
   the kit exempts its own chrome). Everything document-scoped greys out. A
   disabled item's key equivalent never fires (the kit's contract), so
-  ⌘S/⌘Z/⌘K/⌘G gate with their menus.
+  ⌘S/⌘Z/⌘K gate with their menus.
 - **Clicking any document window — or opening one** (File → New…, an icon
   double-click, a drop) — **reactivates**: the windoids come back exactly
   where they were, aimed at the newly active document — and the activation
@@ -473,13 +473,14 @@ strip's clamp bounds, and the Undo/Redo enablement.
   _Eraser_, _Eyedropper_ — with the active one checkmarked (the same session
   truth the palette's tool strip and the B/R/G/E/I keys write, so a pick from
   any of the three moves all three).
-- **View** — _Show Grid_ ⌘G (checkmarked), _Arrange Windows_ (the boot
-  placement re-run on the **current** raster: the windoids back to the
-  rail at their placed sizes, every open document window onto the doc box
-  at its size, cascaded in stacking order so the front window tops the
-  cascade — the one way to get the arrangement back after moving things
-  around or resizing the browser; app-level, never greyed, so from the
-  Finder role it re-rails the hidden windoids for the next open). The
+- **View** — _Arrange Windows_ (the boot placement re-run on the
+  **current** raster: the windoids back to the rail at their placed sizes,
+  every open document window onto the doc box at its size, cascaded in
+  stacking order so the front window tops the cascade — the one way to get
+  the arrangement back after moving things around or resizing the browser;
+  greyed with no document window open — nothing on screen to arrange — and
+  otherwise live in both roles, so from the Finder role with a document
+  open it re-rails the hidden windoids for the next open). The
   windoids need no toggles: they're permanent, up whenever a document
   window is active.
 
@@ -701,14 +702,14 @@ the classic left-edge column is a strut that stays at its 16px, its rows
 spring with the middle, an icon dragged into a corner stays in that
 corner — the same unrounded truth cache, the same no-clamp
 reversibility, so a shrink-then-grow round-trips every icon exactly
-home. Icon layout, Show
-Grid, and the open SAVED documents' edited faces (and which was active)
+home. Icon layout and the open SAVED documents' edited faces (and which
+was active)
 persist in one versioned localStorage key (`shell/desktop-state.js`, v3 —
 a v1 or v2 blob migrates shallowly, the window geometry those versions
 persisted simply dropped), snapshotted on change/exit. **No window
 geometry is in it**: the windoids and the document windows place fresh
 from the live raster every session (see [Windows](#windows)) — the
-persistence layer never sees a window. Icons and Show Grid restore at
+persistence layer never sees a window. Icons restore at
 boot; the per-document entries are deliberately NOT reopened then — what
 a load shows is the URL's call (`?file=<name>`, else the New Document
 dialog; and the address bar tracks the active saved document as `#<name>`
@@ -926,8 +927,8 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
   files.js            the document LIBRARY: listing + availability + per-document storage ops
                       (save/load/rename/remove/export, each taking an explicit doc + identity) —
                       browser deps (storage, PNG codec, icon art) injected
-  shell.js            appActive + icon selection + showGrid (the menus, the focus gating and the
-                      boot restore share one truth; the windoids are permanent — no flags)
+  shell.js            appActive + icon selection (the menus and the focus gating share one
+                      truth; the windoids are permanent — no flags)
   history.js          bounded undo/redo: tile-gesture + whole-atlas snapshot entries over the doc's
                       restores. A FACTORY — one instance per open document (no singleton)
   derive.js           pure selectors: editorViewModel(doc, face) -> { tile, mirrorBehind, guides, wasDerived }
@@ -965,7 +966,7 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   selection feeds the shell slice for the desktop-focused File → Open, and is
                   re-selected across a press on the app's chrome — menu bar / menu / dialog —
                   which the kit's vf-icon would otherwise clear: kit ask #5's page-side bridge)
-  desktop-state.js  icon layout + Show Grid + the open saved docs' edited faces (+ active) in one
+  desktop-state.js  icon layout + the open saved docs' edited faces (+ active) in one
                   versioned localStorage key (v3; v1/v2 migrate, their window geometry dropped)
                   — window geometry never persists; this module never sees a window
   url-state.js    the address-bar mirror: the ACTIVE saved document's name -> location.hash
@@ -1031,7 +1032,7 @@ takes by injection, so it stays Node-testable). The state mechanism is a
 app-level slices are `workspace` (the open documents — see below),
 `session` (the editor's brush state), `prefs`, `build`, `files` (the
 document library), and `shell` (appActive + icon
-selection + Show Grid); `doc` (the canonical document) and `history`
+selection); `doc` (the canonical document) and `history`
 (undo/redo) are **factories, instantiated per open document** inside each
 workspace DocContext. Two Lit ReactiveControllers bridge them:
 `StoreController` (re-render on a slice change) and `ActiveDocController`

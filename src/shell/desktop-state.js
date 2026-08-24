@@ -1,9 +1,11 @@
 // ---------------------------------------------------------------------------
 // Desktop state in localStorage — tiny, synchronous at boot, exactly what
 // it's good at (the documents themselves live in IndexedDB). One versioned
-// JSON key, v3: per-icon position, the Show Grid toggle, and per-open-SAVED-
-// document edited face (untitled windows are deliberately absent — no
-// autosave, explicit Save is the contract) plus which document was active.
+// JSON key, v3: per-icon position and per-open-SAVED-document edited face
+// (untitled windows are deliberately absent — no autosave, explicit Save is
+// the contract) plus which document was active. (An older v3 blob may still
+// carry the retired `showGrid` flag — it parses fine and drops on the next
+// write.)
 //
 // WINDOW GEOMETRY IS NOT HERE — not the windoids', not the document
 // windows'. A browser is resized and reopened on another monitor all the
@@ -24,11 +26,10 @@
 // change or desktop gesture — snapshotting is cheap and loses nothing that
 // matters. `?fresh=1` disables BOTH directions, so a capture neither reads
 // nor clobbers a real session's state. Older blobs migrate shallowly: icons
-// and Show Grid carry over (v1's `lastDocId` becomes the one docs entry),
-// and the window geometry v1/v2 persisted is simply dropped.
+// carry over (v1's `lastDocId` becomes the one docs entry), and the window
+// geometry v1/v2 persisted is simply dropped.
 // ---------------------------------------------------------------------------
 
-import { shell } from '../state/shell.js';
 import { files } from '../state/files.js';
 import { workspace } from '../state/workspace.js';
 
@@ -49,7 +50,6 @@ function migrate(parsed) {
       docs: (parsed.docs ?? []).filter((d) => d && d.fileId).map(docEntry),
       activeFileId: parsed.activeFileId ?? null,
       icons: parsed.icons ?? {},
-      showGrid: !!parsed.showGrid,
     };
   }
   if (parsed?.v === 1) {
@@ -58,7 +58,6 @@ function migrate(parsed) {
       docs: parsed.lastDocId ? [docEntry({ fileId: parsed.lastDocId })] : [],
       activeFileId: parsed.lastDocId ?? null,
       icons: parsed.icons ?? {},
-      showGrid: !!parsed.showGrid,
     };
   }
   return null;
@@ -98,7 +97,6 @@ export function createDesktopState(fresh) {
       if (fresh) return () => {};
 
       function snapshot() {
-        const sh = shell.get();
         // Open SAVED documents only: the edited face off each context.
         // Untitleds have nothing to reopen.
         const docs = [];
@@ -116,7 +114,6 @@ export function createDesktopState(fresh) {
           docs,
           activeFileId: workspace.active()?.fileId ?? null,
           icons,
-          showGrid: sh.showGrid,
         };
       }
 
@@ -134,15 +131,11 @@ export function createDesktopState(fresh) {
         timer = setTimeout(write, WRITE_DEBOUNCE_MS);
       };
 
-      // Store changes (grid, the open set, faces), desktop gestures (icon
-      // drags end in a pointerup), and browser resizes (every icon re-pins
-      // to the new raster) all schedule a write; leaving the page flushes
-      // one synchronously.
-      const unsubs = [
-        shell.subscribe(writeSoon),
-        files.subscribe(writeSoon),
-        workspace.subscribe(writeSoon),
-      ];
+      // Store changes (the open set, faces), desktop gestures (icon drags
+      // end in a pointerup), and browser resizes (every icon re-pins to the
+      // new raster) all schedule a write; leaving the page flushes one
+      // synchronously.
+      const unsubs = [files.subscribe(writeSoon), workspace.subscribe(writeSoon)];
       const onPointerUp = () => writeSoon();
       const onHide = () => {
         if (document.visibilityState === 'hidden') write();

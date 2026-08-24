@@ -69,13 +69,13 @@
           <vf-menu-item value="tool-eyedropper" shortcut="I">Eyedropper</vf-menu-item>
         </vf-menu>
         <vf-menu id="menu-view" label="View">
-          <vf-menu-item value="show-grid" shortcut="⌘G">Show Grid</vf-menu-item>
-          <vf-separator></vf-separator>
-          <!-- App-level (never greyed): re-runs the boot placement on the
-               CURRENT raster — the windoids back to the rail, every open
-               document window onto the cascade — after things were moved
-               around or the browser resized. -->
-          <vf-menu-item value="arrange">Arrange Windows</vf-menu-item>
+          <!-- Re-runs the boot placement on the CURRENT raster — the
+               windoids back to the rail, every open document window onto
+               the cascade — after things were moved around or the browser
+               resized. Greyed without an open document window (nothing on
+               screen to arrange; menus.js owns the sync) — boots disabled
+               to match the empty workspace, like Undo/Redo. -->
+          <vf-menu-item value="arrange" disabled>Arrange Windows</vf-menu-item>
         </vf-menu>
       </vf-menu-bar>
 

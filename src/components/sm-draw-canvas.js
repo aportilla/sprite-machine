@@ -177,7 +177,6 @@ export class SmDrawCanvas extends LitElement {
     cornerRadius: { type: Number },
     fillContiguous: { type: Boolean },
     fillAllFaces: { type: Boolean },
-    showGrid: { type: Boolean },
   };
 
   constructor() {
@@ -194,7 +193,6 @@ export class SmDrawCanvas extends LitElement {
     this.cornerRadius = 0;
     this.fillContiguous = true;
     this.fillAllFaces = false;
-    this.showGrid = false;
 
     // Dev hooks (plain: consumed once on the first update, never re-read).
     this.previewCursor = false;
@@ -346,7 +344,6 @@ export class SmDrawCanvas extends LitElement {
     ) {
       this.#redrawCursorLayer();
     }
-    if (!geom && changed.has('showGrid')) this.#drawGuidesLayer();
 
     // One-shot dev hooks fire on the first update WITH REAL GEOMETRY — the
     // element can mount before the first sheet arrives (tileW 0), and the
@@ -504,18 +501,16 @@ export class SmDrawCanvas extends LitElement {
   #drawGuidesLayer() {
     if (!this.#overlayCtx) return;
     drawGuides(this.#overlayCtx, this.guides, this.#texelSys, this.#sysW, this.#sysH);
-    // View → Show Grid: the texel lattice on the same layer (drawTexelGrid
-    // no-ops below its minimum legible scale).
-    if (this.showGrid) {
-      drawTexelGrid(
-        this.#overlayCtx,
-        this.tileW,
-        this.tileH,
-        this.#texelSys,
-        this.#sysW,
-        this.#sysH
-      );
-    }
+    // The texel lattice on the same layer — always on (drawTexelGrid no-ops
+    // below GRID_MIN_SCALE, where its hairlines would swamp the art).
+    drawTexelGrid(
+      this.#overlayCtx,
+      this.tileW,
+      this.tileH,
+      this.#texelSys,
+      this.#sysW,
+      this.#sysH
+    );
   }
 
   // --- one-shot dev hooks (canvas halves; the state halves are boot actions) --

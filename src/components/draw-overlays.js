@@ -36,7 +36,7 @@ export function drawGuides(g, guides, scale, sysW, sysH) {
   if (vMax != null) g.fillRect(0, (vMax + 1) * scale - T, sysW, T); // bottom extent
 }
 
-// The View → Show Grid texel lattice, drawn OVER the guide layer's current
+// The texel lattice — always on — drawn OVER the guide layer's current
 // content (no clear — drawGuides clears first). Only drawn at texel sizes
 // where the hairlines don't swamp the art; GRID_MIN_SCALE is that threshold,
 // in system px per texel.

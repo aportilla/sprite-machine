@@ -12,8 +12,8 @@
 // dialog set, light-DOM so the kit's cursor can stack above its modal.)
 //
 // Store wiring (the editor's share of it): StoreControllers re-render on any
-// session (brush state), shell (Show Grid), or workspace (face, activation)
-// change; the context's own doc is wired by hand in connectedCallback (the
+// session (brush state) or workspace (face, activation) change; the
+// context's own doc is wired by hand in connectedCallback (the
 // context isn't known at construction) and re-wired across the desktop's
 // disconnect/reconnect node moves. The per-face view model is memoized on
 // (face, views-identity, tile geometry) — the two-speed contract depends on
@@ -27,7 +27,6 @@ import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { maxCornerRadius } from '../lib/rect.js';
 import { session } from '../state/session.js';
-import { shell } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
 import { editorViewModel } from '../state/derive.js';
 import { StoreController } from '../state/store-controller.js';
@@ -73,11 +72,10 @@ export class SmEditor extends LitElement {
     /** @type {import('../state/workspace.js').DocContext|null} */
     this.ctx = null;
 
-    // Any session action (brush state), shell toggle (Show Grid), or
-    // workspace change (this window's face, the activation state the tool
-    // clamp gates on) re-renders; live strokes are silent on all by design.
+    // Any session action (brush state) or workspace change (this window's
+    // face, the activation state the tool clamp gates on) re-renders; live
+    // strokes are silent on all by design.
     new StoreController(this, session.store);
-    new StoreController(this, shell.store);
     new StoreController(this, workspace.store);
   }
 
@@ -177,7 +175,6 @@ export class SmEditor extends LitElement {
             .cornerRadius=${s.cornerRadius}
             .fillContiguous=${s.fillContiguous}
             .fillAllFaces=${s.fillAllFaces}
-            .showGrid=${shell.get().showGrid}
             .previewCursor=${hooks?.previewCursor ?? false}
             .previewRect=${hooks?.previewRect ?? null}
             .fillOnMount=${hooks?.fillOnMount ?? null}

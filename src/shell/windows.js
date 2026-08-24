@@ -476,9 +476,10 @@ export function initWindows(desktop, { hide = [] } = {}) {
      *  step with z-order: bottom-most first, so the front window tops the
      *  cascade; a sixth and beyond wrap, as an open would). The one way to
      *  get the arrangement back after moving things around or resizing the
-     *  browser — app-level, so it also re-rails the hidden windoids from the
-     *  Finder role, ready for the next open. Positions only: nothing
-     *  activates or re-stacks. */
+     *  browser. From the Finder role with a document open it also re-rails
+     *  the hidden windoids, ready for the next open (menus.js greys the
+     *  item with no document windows — nothing to arrange). Positions only:
+     *  nothing activates or re-stacks. */
     arrange() {
       placeUtility();
       let slot = 0;

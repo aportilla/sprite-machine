@@ -506,12 +506,11 @@ export function initMenus(desktop, windows) {
   on($('#menu-view'), 'vf-menu-select', (e) => {
     if (modalOpen()) return;
     switch (menuDetail(e).value) {
-      case 'show-grid':
-        shell.setShowGrid(!shell.get().showGrid);
-        break;
       case 'arrange':
-        // App-level, like New…: the boot placement re-run on the current
-        // raster — windoids and every open document window (windows.js).
+        // The boot placement re-run on the current raster — windoids and
+        // every open document window (windows.js). The item greys with no
+        // document window open (syncArrange below), so a pick always has
+        // something to arrange.
         windows.arrange();
         break;
     }
@@ -542,12 +541,13 @@ export function initMenus(desktop, windows) {
   // --- focus gating ------------------------------------------------------------
   // Two roles share one menu bar (the single-application affordance): with
   // the desktop focused, every document-scoped item greys out. About / Quit /
-  // New / Open / Arrange Windows stay — they're app-level (the parked
-  // Settings… is disabled in the markup in both roles) — and Open wears the
+  // New / Open stay — they're app-level (the parked Settings… is disabled
+  // in the markup in both roles); Arrange Windows keeps its own gate below
+  // (an open document window, in either role) — and Open wears the
   // Finder grammar above: its label follows the selection ("Open" on a
   // selected icon, "Open…" for the listing dialog otherwise), never greyed.
   // Disabling an item also parks its key equivalent (the kit never fires a
-  // disabled item's shortcut), so ⌘S/⌘K/⌘G gate with their menus; the
+  // disabled item's shortcut), so ⌘S/⌘K gate with their menus; the
   // bare-letter tool keys get the same guard in src/shortcuts.js.
   const DOC_SCOPED = [
     'close',
@@ -564,7 +564,6 @@ export function initMenus(desktop, windows) {
     'tool-fill',
     'tool-eraser',
     'tool-eyedropper',
-    'show-grid',
   ];
   const docItems = DOC_SCOPED.map((v) => $(`vf-menu-item[value="${v}"]`));
   const itemOpen = $('vf-menu-item[value="open"]');
@@ -580,12 +579,17 @@ export function initMenus(desktop, windows) {
   teardown.push(shell.subscribe(syncGate));
   syncGate();
 
-  const itemGrid = $('vf-menu-item[value="show-grid"]');
-  const syncView = () => {
-    itemGrid.checked = !!shell.get().showGrid;
+  // Arrange Windows wants something to arrange: at least one document
+  // window (the windoids hide with the desktop focused and re-place at
+  // open). Gated on the workspace's open set, NOT appActive — from the
+  // Finder role with a document open the item stays live and re-rails the
+  // hidden windoids too (positions only, nothing activates).
+  const itemArrange = $('vf-menu-item[value="arrange"]');
+  const syncArrange = () => {
+    itemArrange.disabled = workspace.get().contexts.length === 0;
   };
-  teardown.push(shell.subscribe(syncView));
-  syncView();
+  teardown.push(workspace.subscribe(syncArrange));
+  syncArrange();
 
   // The Tools menu mirrors the sticky tool modes — exactly one item checked,
   // off the same session truth the tool strip and the B/R/G/E/I keys write.

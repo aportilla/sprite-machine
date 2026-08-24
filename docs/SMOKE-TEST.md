@@ -76,9 +76,9 @@ browser, `http://localhost:5173/`.
 - [ ] **Hover previews**: pencil hover shows the exact N×N footprint filled
       with the live ink under the kit's crosshair; eraser shows the red
       treatment; eyedropper shows the 1-cell outline.
-- [ ] **Show Grid** (⌘G): texel lattice appears at texel sizes ≥ 4 system px;
-      shrink the document window until the texel size drops below 4 — the
-      lattice disappears rather than swamping the art.
+- [ ] **Texel grid (always on)**: the lattice shows at texel sizes ≥ 4
+      system px; shrink the document window until the texel size drops
+      below 4 — the lattice disappears rather than swamping the art.
 - [ ] **One cursor, everywhere**: over the pixel canvas only the kit's drawn
       crosshair shows (no native crosshair beneath it), and the tool cells
       show only the kit's arrow (no native hand). Open the Colors dialog
@@ -107,8 +107,8 @@ browser, `http://localhost:5173/`.
 
 ## Desktop state (localStorage)
 
-- [ ] Open two saved documents, drag an icon, toggle Show Grid, then reload
-      — the icon and Show Grid come back and the ACTIVE document reopens
+- [ ] Open two saved documents, drag an icon, then reload — the icon
+      position comes back and the ACTIVE document reopens
       (the address bar mirrored it as `#<name>`); the other deliberately
       does not (one URL, one document — the URL says what a load shows).
 - [ ] **Windows never remember**: drag all three windoids and the document
@@ -138,7 +138,9 @@ browser, `http://localhost:5173/`.
       on the first slot, the active one on top; nothing changes focus.
       Shrink the browser window, pick it again — the arrangement re-derives
       for the smaller raster. From the Finder role (click the desktop) the
-      item stays enabled and re-rails the hidden windoids for the next open.
+      item stays enabled while documents are open and re-rails the hidden
+      windoids for the next open; close every document — it greys (nothing
+      left to arrange).
 - [ ] **New windows cascade into free slots**: File → New… four more
       times — every window the same size, each a step down-right, the
       fifth flush with the rail's inset and the bottom margin, none under
@@ -154,7 +156,7 @@ browser, `http://localhost:5173/`.
       face it last had (its window at the default box), and the bar
       canonicalizes to `#Cube`. An unknown name falls back to the New
       Document dialog.
-- [ ] `?fresh=1` boots a bare desktop regardless (no icons, Show Grid off),
+- [ ] `?fresh=1` boots a bare desktop regardless (no icons),
       and doesn't clobber the saved state.
 - [ ] **First-boot seeding, once only**: clear the site's data (localStorage
       and IndexedDB) and reload — Car and Cube appear as ordinary saved-doc

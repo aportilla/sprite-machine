@@ -1,9 +1,8 @@
 // ---------------------------------------------------------------------------
 // `shell` slice — the desktop chrome's shared state: whether the APPLICATION
-// is active (vs. the desktop — "the Finder"), the desktop-icon selection,
-// and the Show Grid toggle. Store-driven so the menu checkmarks + enabled
-// states, the windows' `hidden` attributes, and the canvas's grid overlay
-// all read one truth (a menu pick, a desktop click and a boot restore are
+// is active (vs. the desktop — "the Finder") and the desktop-icon selection.
+// Store-driven so the menu checkmarks + enabled states and the windows'
+// `hidden` attributes read one truth (a menu pick and a desktop click are
 // the same action). Document windows live elsewhere entirely: one exists per
 // open document (the workspace), so their visibility is existence, not a
 // flag here.
@@ -39,7 +38,6 @@ export function createShell() {
     appActive: false,
     /** @type {string[]} selected desktop-icon keys ("doc:<id>") */
     iconSelection: [],
-    showGrid: false,
   });
   return {
     store,
@@ -59,11 +57,6 @@ export function createShell() {
       const prev = store.get().iconSelection;
       if (prev.length === keys.length && prev.every((k, i) => k === keys[i])) return;
       store.patch({ iconSelection: [...keys] });
-    },
-
-    /** @param {boolean} v */
-    setShowGrid(v) {
-      store.patch({ showGrid: !!v });
     },
   };
 }

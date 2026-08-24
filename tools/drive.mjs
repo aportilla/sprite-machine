@@ -452,11 +452,12 @@ const PROBE = `(() => {${DEEP}
       save: !__q('vf-menu-item[value="save"]').disabled,
       close: !__q('vf-menu-item[value="close"]').disabled,
       pickColor: !__q('vf-menu-item[value="pick-color"]').disabled,
-      grid: !__q('vf-menu-item[value="show-grid"]').disabled,
+      // Arrange gates on the workspace's open set (any document window, in
+      // either role) — not on appActive like the doc-scoped items.
+      arrange: !__q('vf-menu-item[value="arrange"]').disabled,
       toolPencil: !__q('vf-menu-item[value="tool-pencil"]').disabled,
     },
     menuChecks: {
-      grid: __q('vf-menu-item[value="show-grid"]').checked,
       // The Tools menu's checked tool item, sans its 'tool-' prefix. Exactly
       // one must be checked (the sticky mode) — any other count reads '!N',
       // so a stuck double-check fails the tool checks instead of hiding.
@@ -685,14 +686,14 @@ async function main() {
     JSON.stringify({ windows: greet.windows, strip: greet.optionsStrip })
   );
   check(
-    '…and the Finder menu grammar greets: New and Open… stay, doc-scoped items grey out',
+    '…and the Finder menu grammar greets: New and Open… stay, the rest grey out (Arrange too: nothing open)',
     greet.menuEnabled.newDoc === true &&
       greet.menuEnabled.open === true &&
       greet.menuEnabled.openLabel === 'Open…' &&
       greet.menuEnabled.save === false &&
       greet.menuEnabled.close === false &&
       greet.menuEnabled.pickColor === false &&
-      greet.menuEnabled.grid === false &&
+      greet.menuEnabled.arrange === false &&
       greet.menuEnabled.toolPencil === false,
     JSON.stringify(greet.menuEnabled)
   );
@@ -709,8 +710,8 @@ async function main() {
       docWindows: seed.docWindows,
     })
   );
-  // The reload finds persisted state (icons, Show Grid) — a different boot
-  // path from the virgin greet — and must land desktop-focused all the same.
+  // The reload finds persisted state (the icons) — a different boot path
+  // from the virgin greet — and must land desktop-focused all the same.
   const greet2 = await probe();
   check(
     'the persisted-state greet is desktop-focused too: windoids stay hidden',
@@ -1445,9 +1446,12 @@ async function main() {
     windoidMenuItems.length === 0,
     JSON.stringify(windoidMenuItems)
   );
-  await pickMenu('#menu-view', 'show-grid');
   s = await probe();
-  check('View → Show Grid checks its item', s.menuChecks.grid === true);
+  check(
+    'View → Arrange Windows is live with a document open',
+    s.menuEnabled.arrange === true,
+    JSON.stringify(s.menuEnabled)
+  );
 
   // --- desktop: the Tools menu ------------------------------------------------
   section('tools menu');
@@ -1841,14 +1845,14 @@ async function main() {
   );
   check('…the options strip hides with the application', s.optionsStrip === false);
   check(
-    '…the Finder menu grammar lands: New and Open… stay, the rest grey out',
+    '…the Finder menu grammar lands: New and Open… stay, the rest grey out (Arrange stays: a document is open)',
     s.menuEnabled.newDoc === true &&
       s.menuEnabled.open === true &&
       s.menuEnabled.openLabel === 'Open…' &&
       s.menuEnabled.save === false &&
       s.menuEnabled.close === false &&
       s.menuEnabled.pickColor === false &&
-      s.menuEnabled.grid === false &&
+      s.menuEnabled.arrange === true &&
       s.menuEnabled.toolPencil === false,
     JSON.stringify(s.menuEnabled)
   );

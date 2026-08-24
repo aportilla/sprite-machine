@@ -14,7 +14,6 @@ import { SAMPLES } from './lib/sprite-data.js';
 import { PALETTE_168 } from './lib/constants.js';
 import { session } from './state/session.js';
 import { prefs } from './state/prefs.js';
-import { shell } from './state/shell.js';
 import { files } from './state/files.js';
 import { workspace } from './state/workspace.js';
 import { parseBootParams } from './boot/params.js';
@@ -113,8 +112,8 @@ const removeCursor = applyCursor();
 
 // --- persistence wiring ------------------------------------------------------
 // The files slice gets its browser dependencies here (it stays Node-testable
-// with stubs); desktop state (icons, Show Grid, edited faces — never window
-// geometry) rides localStorage, both disabled by ?fresh=1.
+// with stubs); desktop state (icons, edited faces — never window geometry)
+// rides localStorage, both disabled by ?fresh=1.
 files.init({
   storage: createStorageIfAvailable(),
   encodeAtlas: imageDataToPngBytes,
@@ -123,7 +122,6 @@ files.init({
     tileToIconDataUri(state.views.front) ?? genericDocIconDataUri(),
 });
 const dstate = createDesktopState(boot.fresh);
-if (dstate.saved?.showGrid) shell.setShowGrid(true);
 
 // --- shell ------------------------------------------------------------------
 // The windows take no saved state: their geometry is placed fresh from the
@@ -220,8 +218,8 @@ if (hot) {
 //      library to name into, and everything the dialog creates is an
 //      untitled window needing none) all fall back to the New Document
 //      dialog. A prior session's open windows are deliberately NOT reopened
-//      — the URL, not localStorage, says what a load shows (the icons and
-//      Show Grid still restore).
+//      — the URL, not localStorage, says what a load shows (the icons
+//      still restore).
 (async () => {
   // ?edit seeds the sample path's context face AT open — a post-open setFace
   // would race the one-shot mount hooks (the mount fill commits against
