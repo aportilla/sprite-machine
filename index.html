@@ -219,7 +219,7 @@
            template's art has a native tile size, and a retile crops/pads
            rather than scales, so templates show theirs disabled. The dims
            label reads the resulting 3×2 atlas size. -->
-      <vf-dialog id="dlg-new" heading="New Document" closable width="360" height="200">
+      <vf-dialog id="dlg-new" heading="New Document" width="360" height="200">
         <vf-stack width="312" gap="10">
           <vf-list id="new-list" fill-width aria-label="Templates"></vf-list>
           <vf-stack fill-width direction="row" gap="8" place="start">
@@ -236,7 +236,13 @@
         <vf-button id="btn-new-ok" slot="buttons" variant="default">Create</vf-button>
       </vf-dialog>
 
-      <vf-dialog id="dlg-open" heading="Open" closable width="360" height="330">
+      <!-- The Open listing: the System 7 file-picker posture — the plain
+           dBoxProc frame (no bar, no title, no close box, immovable; Escape
+           reads as Cancel), the document list over the Open / Cancel row.
+           `label` names it for assistive tech (`heading` would draw a
+           body-top title on a plain frame). 312 = the barred 330 less the
+           18px title bar, so the content area is unchanged. -->
+      <vf-dialog id="dlg-open" frame="plain" label="Open" width="360" height="312">
         <vf-stack width="312" gap="10">
           <vf-list id="open-list" fill-width aria-label="Documents"></vf-list>
         </vf-stack>

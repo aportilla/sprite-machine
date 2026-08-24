@@ -1893,6 +1893,18 @@ async function main() {
     'File → Open… from the Finder raises the listing dialog',
     (await openDlgUp()) === true
   );
+  // The listing wears the plain dBoxProc frame: no title bar, no close box.
+  const openChrome = await evaluate(
+    `(() => {${DEEP} const r = __q('#dlg-open').shadowRoot; return {
+        bar: !!r.querySelector('[part="title-bar"]'),
+        closeBox: !!r.querySelector('[part="close-box"]'),
+      }; })()`
+  );
+  check(
+    'the Open dialog renders no title bar and no close box (plain frame)',
+    openChrome.bar === false && openChrome.closeBox === false,
+    JSON.stringify(openChrome)
+  );
   const openCancel = await centreOf('#btn-open-cancel');
   await click(openCancel.x, openCancel.y);
   await sleep(300);
@@ -2114,6 +2126,11 @@ async function main() {
     })()`);
   let nf = await newForm();
   check('File → New… raises the New Document dialog', nf.open === true);
+  // Cancel and Escape are its only dismissals — the bar carries no close box.
+  const newCloseBox = await evaluate(
+    `(() => {${DEEP} return !!__q('#dlg-new').shadowRoot.querySelector('[part="close-box"]'); })()`
+  );
+  check('the New Document dialog renders no close box', newCloseBox === false);
   check(
     'it lists Empty Document plus the built-in templates',
     nf.rows.join(',') === 'Empty Document,Car,Cube',
