@@ -1,12 +1,14 @@
 // ---------------------------------------------------------------------------
-// <sm-options-bar> — the settings strip under the menu bar: the active tool's
-// name, the current-ink swatch (every tool but the eraser — clicking it opens
-// the Colors dialog), and the per-tool options (<sm-tool-options>:
-// pencil/eraser tip sliders, rect radius stepper, fill checkboxes). A fixed
-// strip, not a window — blank-ish when a tool has no options (the standing
-// preference for persistent, in-flow controls over popups), and — like the
-// utility windoids — on screen only while the application is active: a
-// desktop click hides the whole band, and it returns with the app.
+// <sm-options-bar> — the settings strip under the menu bar: the current-ink
+// swatch (every tool but the eraser — clicking it opens the Colors dialog)
+// and the per-tool options (<sm-tool-options>: pencil/eraser tip sliders,
+// rect radius stepper, fill checkboxes). No tool-name caption: the Tools
+// palette's inverted cell and the Tools menu's checkmark already say which
+// tool is live. A fixed strip, not a window — blank when a tool has no
+// options (the standing preference for persistent, in-flow controls over
+// popups), and — like the utility windoids — on screen only while the
+// application is active: a desktop click hides the whole band, and it
+// returns with the app.
 //
 // THE BAND IS A KIT CONTAINER: the strip is a `<vf-container fill-width
 // height="36" pattern="white" rule="bottom">` — the menu bar's own anatomy in
@@ -35,14 +37,6 @@ import { StoreController, ActiveDocController } from '../state/store-controller.
 import { baseStyles } from './base-styles.js';
 import './sm-tool-options.js'; // registers <sm-tool-options>
 
-const TOOL_NAME = {
-  pencil: 'Pencil Tool',
-  rect: 'Rectangle Tool',
-  fill: 'Fill Tool',
-  eraser: 'Eraser Tool',
-  eyedropper: 'Eyedropper Tool',
-};
-
 export class SmOptionsBar extends LitElement {
   static styles = [
     baseStyles,
@@ -57,10 +51,6 @@ export class SmOptionsBar extends LitElement {
         align-items: center;
         gap: calc(var(--vf-scale, 1) * 24px);
         padding: 0 calc(var(--vf-scale, 1) * 14px);
-      }
-      .tool-name {
-        flex: none;
-        min-width: calc(var(--vf-scale, 1) * 120px);
       }
     `,
   ];
@@ -104,7 +94,6 @@ export class SmOptionsBar extends LitElement {
   #content() {
     const s = session.get();
     return html`
-      <vf-label class="tool-name">${TOOL_NAME[s.tool] ?? ''}</vf-label>
       ${this.#inkSwatch(s)}
       <sm-tool-options
         .tool=${s.tool}

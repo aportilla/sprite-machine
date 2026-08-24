@@ -153,9 +153,10 @@ template — see [UI layer: Lit](#ui-layer-lit).
   strip** (a kit-drawn band under the menu bar — a `vf-container` in the
   kit's own grammar, `pattern="white" rule="bottom"`: white paper over one
   row of ink, the menu bar's anatomy, no drop shadow — so its rule and every
-  metric in it scale with the raster) names the active tool and holds the
-  **current-ink swatch** plus the
-  tool's options. For the **pencil**, a **tip-size slider** (with an
+  metric in it scale with the raster) holds the **current-ink swatch** plus
+  the tool's options — no tool-name caption: the palette's inverted cell and
+  the Tools menu's checkmark already say which tool is live, and an
+  eyedropper strip is just the swatch. For the **pencil**, a **tip-size slider** (with an
   `N px` readout) that stamps an
   **N×N** square footprint and **previews it filled with the active ink** on the
   canvas as you hover — the exact texels a stamp will cover, looking exactly as
@@ -982,8 +983,8 @@ src/
                        presentational leaves: props down, bubbling sm-* events up, no store imports
     sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-stage-controls.js, sm-status-line.js,
     sm-color-picker.js
-                       connected chrome: the options strip (a kit vf-container band: tool name +
-                       current-ink swatch + options; hidden while the desktop is focused;
+                       connected chrome: the options strip (a kit vf-container band: current-ink
+                       swatch + options, no tool name; hidden while the desktop is focused;
                        bounds from the active document) / the Tools palette body / the
                        Sprite View body (the face-picker strip over the clickable 3×2
                        face-tile vf-grid, both -> workspace.setFace on the ACTIVE key —

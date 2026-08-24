@@ -11,7 +11,7 @@
 // after typing.
 //
 // This element IS the options area (`:host` carries the box — it fills the
-// desktop's options strip beside the tool-name caption); its shadow root
+// desktop's options strip beside the current-ink swatch); its shadow root
 // holds the bare controls, exactly the surface drive.mjs probes.
 // ---------------------------------------------------------------------------
 
