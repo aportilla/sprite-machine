@@ -59,6 +59,11 @@
 // Close boxes never hide windows directly: the windoids have no close box
 // at all, and a document window's close routes through the injected
 // dirty-checking flow (menus.js) — the workspace does the removing.
+//
+// The ZOOM BOX (document windows only — the template declares `zoomable`)
+// toggles a window between the placement's zoomed state and the size it
+// had before the zoom (a session truth, never persisted), top-left held
+// both ways: see onZoom below.
 // ---------------------------------------------------------------------------
 
 import { snapSys, systemPxQuantum, VfWindow } from 'vintage-frames';
@@ -74,6 +79,7 @@ import {
   SPRITE_WIDTH,
   TOP_RESERVE,
   WINDOW_FRAME,
+  zoomedBox,
 } from './layout.js';
 
 // The 3D View windoid's size floor, in system px — the kit's own grow floor
@@ -548,6 +554,7 @@ export function initWindows(desktop, { hide = [] } = {}) {
     dispose() {
       for (const u of unsubs) u();
       desktop.removeEventListener('vf-close', onClose);
+      desktop.removeEventListener('vf-zoom', onZoom);
       // HMR: leave the windows standing — the re-init's syncDocs adopts…
       // it cannot: the fresh Map starts empty and would double them. Remove
       // and let the next init rebuild from the surviving workspace state.
@@ -563,6 +570,65 @@ export function initWindows(desktop, { hide = [] } = {}) {
     if (key != null) api.onDocumentClose?.(key);
   };
   desktop.addEventListener('vf-close', onClose);
+
+  // --- zoom boxes --------------------------------------------------------------
+  // The kit's zoom box (`zoomable` on the document-window template — only
+  // document windows carry one) fires vf-zoom and leaves what zooming MEANS
+  // to the page. Here it is a toggle, the top-left held in both directions
+  // — a zoom never moves a window, only its far edges:
+  //
+  //   EXPAND — the window grows right and down to the vacant middle's own
+  //   edges (layout.js zoomedBox: the rail's inset gutter at the right, the
+  //   bottom margin below), filling the open area from wherever its
+  //   top-left sits without running under the windoid rail.
+  //
+  //   RESTORE — a window already AT that state (its size IS the box
+  //   zoomedBox computes for its top-left on the live raster) returns to
+  //   the size the expand RECORDED — what the window measured just before
+  //   it grew. The memory is a session truth in a WeakMap on the element,
+  //   the windoid-arrangement discipline exactly: within a session what
+  //   you had is yours, and nothing about it persists (a reload still
+  //   places every window fresh). With nothing recorded — a window grown
+  //   BY HAND onto the exact zoomed box, an HMR-adopted window — the doc
+  //   box's size (the placement's default for the CURRENT raster) is the
+  //   fallback. A zoomed window DRAGGED elsewhere reads unzoomed at its
+  //   new top-left (the state test is positional), so a further zoom
+  //   re-records the zoomed size as its pre-zoom truth — the drag made
+  //   that box the user's.
+  //
+  // The state test is arithmetic, so it survives a browser resize: a zoomed
+  // window's far edges are struts of the nine-slice pin (the rail gutter,
+  // the bottom band), so a re-pin holds them where a re-derived zoomedBox
+  // puts them and the next click still reads "zoomed". No clamp on either
+  // write: the expand fits the raster by construction (but for the DOC_MIN
+  // floor on a window dragged past the vacancy — hanging off is recoverable
+  // by a drag, the resize rule's own posture), and the restore leaves a
+  // far-dragged window hanging rather than moving its handle. A
+  // programmatic size write fires no vf-resize (the kit's value-set rule),
+  // and the next raster resize re-derives this window's pin (the pins
+  // cache reads the new geometry as a touch).
+  /** Pre-zoom sizes, per window — recorded by the expand, consumed by the
+   *  restore. A WeakMap so a closed window's record dies with its node. */
+  const zoomMemory = new WeakMap();
+  const onZoom = (e) => {
+    const win = e.target;
+    if (!(win instanceof VfWindow) || keyOf(win) == null) return;
+    const z = zoomedBox(desktop.width, desktop.height, {
+      left: win.left ?? 0,
+      top: win.top ?? 0,
+    });
+    if (win.width === z.width && win.height === z.height) {
+      const back = zoomMemory.get(win) ?? smartLayout().doc;
+      zoomMemory.delete(win);
+      win.width = back.width;
+      win.height = back.height;
+    } else {
+      zoomMemory.set(win, { width: win.width, height: win.height });
+      win.width = z.width;
+      win.height = z.height;
+    }
+  };
+  desktop.addEventListener('vf-zoom', onZoom);
 
   return api;
 }

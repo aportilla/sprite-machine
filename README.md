@@ -500,9 +500,22 @@ Two tiers, two regimes:
   `shell/windows.js` — created on open (the doc box, cascaded into the
   first free slot — never a remembered position), removed on close
   (existence IS visibility).
-  Each is `movable resizable`; its title is its document's name, its
-  `status` strip names the face it's editing ("Front Face"), and its
-  `<sm-editor>` lives exactly as long as the document is open.
+  Each is `movable resizable zoomable`; its title is its document's name,
+  its `status` strip names the face it's editing ("Front Face"), and its
+  `<sm-editor>` lives exactly as long as the document is open. The title
+  bar's **zoom box** (the kit's, at the bar's right end) is a stateless
+  toggle with the top-left held in both directions — a zoom never moves a
+  window, only its far edges: one click grows the window right and down
+  to the vacant middle's own edges (`zoomedBox` in `shell/layout.js` —
+  the rail's inset gutter at the right, the bottom margin below), filling
+  the open area from wherever its top-left sits without running under the
+  windoid rail — and records the size it grew from; a click on a window
+  already at that state returns exactly that remembered pre-zoom size (a
+  session truth, like a windoid arrangement you dragged: it never
+  persists — a reload still places every window fresh; the doc box's
+  size for the CURRENT raster is the no-memory fallback). And because a
+  zoomed window's far edges are struts of the nine-slice pin, a browser
+  resize keeps a zoomed window zoomed.
 - **Utility windoids** (floating tier, `variant="utility"`): the **Tools
   palette**, the **Full Sprite View**, and the **3D View** — static markup,
   **permanently open**: persistent panels with no close box and no menu

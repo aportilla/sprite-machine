@@ -26,6 +26,12 @@
 //   gives its slot back, and a full cascade wraps instead of walking off
 //   the raster.
 //
+//   zoomedBox() is the document windows' zoom-box arithmetic: the expanded
+//   state for a window's HELD top-left — right and down to the vacant
+//   middle's own edges (the rail's inset gutter, the bottom margin), the
+//   same boundaries the doc box leaves its cascade room against — so a
+//   zoomed window fills the open area without running under the rail.
+//
 //   spriteHeightFor() is the Sprite View windoid's sizing rule: the windoid
 //   is a fixed-size picture frame — no grow box — its width the atlas
 //   grid's (ATLAS_GRID: the 3×2 lattice of face tiles) and its height
@@ -239,6 +245,34 @@ export function cascadeSlot(base, i) {
     left: base.left + CASCADE_STEP * slot,
     top: base.top + CASCADE_STEP * slot,
     slot,
+  };
+}
+
+/**
+ * The zoom box's expanded state for a document window at `pos` (its
+ * top-left, in system px) on a `desktopW`×`desktopH` raster: the top-left
+ * HOLDS — a zoom grows the window right and down only — and the far edges
+ * land on the vacant middle's own boundaries, the rail's inset gutter at
+ * the right (railLeft − EDGE) and the bottom margin (desktopH − GAP): the
+ * exact edges the doc box leaves its cascade room against, so a zoomed
+ * window fills the open area WITHOUT running under the windoid rail (the
+ * windoids float above the document tier regardless; the limit keeps the
+ * artwork out from under them). Floored at DOC_MIN so a window dragged
+ * past the vacancy's edges still zooms to a workable box — which may hang
+ * off the raster, the resize rule's own recoverable-by-a-drag posture.
+ *
+ * @param {number} desktopW
+ * @param {number} desktopH
+ * @param {{left: number, top: number}} pos
+ * @returns {{left: number, top: number, width: number, height: number}}
+ */
+export function zoomedBox(desktopW, desktopH, pos) {
+  const railLeft = Math.max(0, desktopW - EDGE - SPRITE_WIDTH);
+  return {
+    left: pos.left,
+    top: pos.top,
+    width: Math.max(DOC_MIN, railLeft - EDGE - pos.left),
+    height: Math.max(DOC_MIN, desktopH - GAP - pos.top),
   };
 }
 

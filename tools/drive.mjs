@@ -63,6 +63,7 @@ import {
   WINDOW_FRAME,
   ICON_FRAME,
   ICON_CELL,
+  zoomedBox,
 } from '../src/shell/layout.js';
 
 const APP_PORT = process.argv[2] || '5173';
@@ -1569,6 +1570,76 @@ async function main() {
       arranged.stage.h === sizeBefore.h,
     JSON.stringify({ posBefore, sizeBefore, arranged })
   );
+
+  // --- the zoom box: fill the vacancy / back to the doc box -------------------
+  // The document window's title bar carries the kit's zoom box (`zoomable`
+  // on the template). One click grows the window right and down — top-left
+  // HELD — to the vacant middle's own edges (layout.js zoomedBox is the
+  // oracle: the rail's inset gutter at the right, the bottom margin below),
+  // filling the open area without running under the windoid rail — and
+  // records the size it grew FROM; a second click on a window still AT the
+  // zoomed state returns exactly that remembered size (the doc box is only
+  // the no-memory fallback), top-left still held. Probed right after
+  // Arrange FROM A GROW-BOX-SHRUNK SIZE, so the restore provably returns
+  // the REMEMBERED size and not the placement default; a final Arrange
+  // hands the sections below the state they assume.
+  const zoomClick = async () => {
+    const b = await evaluate(
+      `(() => {${DEEP} const z = __doc().shadowRoot
+          .querySelector('[part="zoom-box"]').getBoundingClientRect();
+        return { x: z.left + z.width / 2, y: z.top + z.height / 2 }; })()`
+    );
+    await click(b.x, b.y);
+    await sleep(300);
+  };
+  const docBox = () =>
+    evaluate(
+      `(() => {${DEEP} const w = __doc(); const d = __q('#desktop');
+        return { left: w.left, top: w.top, w: w.width, h: w.height,
+          deskW: d.width, deskH: d.height }; })()`
+    );
+  const growDoc = async (dx, dy) => {
+    const g = await evaluate(
+      `(() => {${DEEP} const b = __doc().shadowRoot
+          .querySelector('[part="grow-box"]').getBoundingClientRect();
+        return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`
+    );
+    await mouse('mousePressed', g.x, g.y);
+    await mouse('mouseMoved', g.x + dx, g.y + dy, { buttons: 1 });
+    await mouse('mouseReleased', g.x + dx, g.y + dy, { buttons: 0 });
+    await sleep(300);
+  };
+  const preZoom = await docBox();
+  await growDoc(-40, -28);
+  const zoomBefore = await docBox();
+  check(
+    'a grow set a distinctive pre-zoom size',
+    zoomBefore.w === preZoom.w - 40 && zoomBefore.h === preZoom.h - 28,
+    JSON.stringify({ preZoom, zoomBefore })
+  );
+  await zoomClick();
+  const zoomedNow = await docBox();
+  const zoomWant = zoomedBox(zoomBefore.deskW, zoomBefore.deskH, zoomBefore);
+  check(
+    'the zoom box fills the vacancy right and down, top-left held',
+    zoomedNow.left === zoomBefore.left &&
+      zoomedNow.top === zoomBefore.top &&
+      zoomedNow.w === zoomWant.width &&
+      zoomedNow.h === zoomWant.height,
+    JSON.stringify({ zoomBefore, zoomedNow, zoomWant })
+  );
+  await zoomClick();
+  const unzoomed = await docBox();
+  check(
+    'a second click returns the REMEMBERED pre-zoom size, top-left held',
+    unzoomed.left === zoomBefore.left &&
+      unzoomed.top === zoomBefore.top &&
+      unzoomed.w === zoomBefore.w &&
+      unzoomed.h === zoomBefore.h,
+    JSON.stringify({ zoomBefore, unzoomed })
+  );
+  // Leave the window as Arrange did — the sections below assume that state.
+  await pickMenu('#menu-view', 'arrange');
 
   // A raise makes vf-desktop re-order the slotted windows in the light DOM
   // (DOM order is kept in step with z-order), which disconnects + reconnects

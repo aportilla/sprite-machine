@@ -11,6 +11,7 @@ import {
   cascadeSlot,
   CASCADE_STEP,
   CASCADE_SLOTS,
+  zoomedBox,
   iconDefault,
   pinOf,
   pinTo,
@@ -210,6 +211,40 @@ test('cascade: a slot re-expresses on any doc box — the same step of a new ras
     slot: 2,
   });
   assert.deepEqual(cascadeSlot(b, CASCADE_SLOTS + 1), cascadeSlot(b, 1));
+});
+
+test('zoom: the zoomed box fills the vacancy right and down from a held top-left', () => {
+  const p = initialPlacement(W, H, TOOLS);
+  const x1 = p.sprite.left - 14; // the vacant middle's right edge (the rail's inset)
+  const y1 = H - 8; // …and its bottom
+  // From the doc box's own top-left, the zoomed state is the whole vacancy:
+  // the doc box plus exactly the cascade room it left.
+  const room = (CASCADE_SLOTS - 1) * CASCADE_STEP;
+  const z = zoomedBox(W, H, p.doc);
+  assert.equal(z.left, p.doc.left);
+  assert.equal(z.top, p.doc.top);
+  assert.equal(z.left + z.width, x1);
+  assert.equal(z.top + z.height, y1);
+  assert.equal(z.width, p.doc.width + room);
+  assert.equal(z.height, p.doc.height + room);
+  // From a dragged top-left the far edges land on the SAME boundaries —
+  // a zoom never moves the top-left, only the far edges.
+  const dragged = { left: p.doc.left + 100, top: p.doc.top + 60 };
+  const zd = zoomedBox(W, H, dragged);
+  assert.equal(zd.left, dragged.left);
+  assert.equal(zd.top, dragged.top);
+  assert.equal(zd.left + zd.width, x1);
+  assert.equal(zd.top + zd.height, y1);
+});
+
+test('zoom: a window dragged past the vacancy still gets a workable floor', () => {
+  // Top-left beyond the vacancy's edges: the arithmetic would go negative,
+  // so both extents floor (DOC_MIN) instead — the box may hang off the
+  // raster, the resize rule's own recoverable-by-a-drag posture.
+  const z = zoomedBox(W, H, { left: W - 20, top: H - 20 });
+  assert.equal(z.left, W - 20);
+  assert.equal(z.top, H - 20);
+  assert.ok(z.width >= 220 && z.height >= 220);
 });
 
 test('pin: a strut keeps its offset from its edge, a spring its fraction of the middle', () => {
