@@ -1912,6 +1912,11 @@ async function main() {
       strip: s.optionsStrip,
     })
   );
+  check(
+    '…and the activation clears the Finder selection',
+    (await selectedIcons()).length === 0,
+    JSON.stringify(await selectedIcons())
+  );
   // The key path: select again from the Finder, then ⌘O — the already-open
   // Car activates its existing window (one window per document).
   await click(BARE.x, BARE.y);
@@ -2312,6 +2317,11 @@ async function main() {
     'double-clicking its icon re-opens the saved doc',
     s.heading === 'Test Doc',
     s.heading
+  );
+  check(
+    '…and the double-click deselects the icon (focus is the window now)',
+    (await selectedIcons()).length === 0,
+    JSON.stringify(await selectedIcons())
   );
   const restored = await texelAt(1, 1);
   check('…with its pixels restored from storage', restored[3] === 255, `${restored}`);

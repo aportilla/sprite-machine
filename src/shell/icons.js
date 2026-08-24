@@ -64,6 +64,28 @@ export function initIcons(desktop, { actions, savedPos = () => null, fresh = fal
   root.addEventListener('vf-select', readSelection);
   teardown.push(() => root.removeEventListener('vf-select', readSelection));
 
+  // Opening moves focus INTO the application, and the ACTIVATION clears the
+  // Finder selection: the moment a document window takes active (an icon
+  // double-click's vf-open, the Finder's bare Open / ⌘O, File → New… — any
+  // path that lands appActive), the highlight has nothing left to name — it
+  // says what the next Finder action acts on, and the application is forward
+  // now. Driven off the shell mirror rather than the open paths themselves,
+  // so every way a window comes forward converges here. Clearing is a plain
+  // property write (the kit's documented programmatic route; false detaches
+  // the icon's own outside listener), and the kit fires vf-select only for
+  // its own gestures — so the slice re-reads by hand.
+  const onAppActive = () => {
+    if (!shell.get().appActive) return;
+    /** @type {any[]} */
+    const lit = [...root.querySelectorAll('vf-icon[data-key]')].filter(
+      (icon) => /** @type {any} */ (icon).selected
+    );
+    if (!lit.length) return;
+    for (const icon of lit) icon.selected = false;
+    readSelection();
+  };
+  teardown.push(shell.subscribe(onAppActive));
+
   // A press on the APPLICATION'S CHROME keeps the Finder selection. The
   // kit's vf-icon clears itself on ANY outside pointerdown — the menu bar
   // included — so a pointer-driven File → Open would lose its selection on

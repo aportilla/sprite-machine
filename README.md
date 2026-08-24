@@ -408,7 +408,10 @@ window the desktop's active window?**
   ⌘S/⌘Z/⌘K/⌘G gate with their menus.
 - **Clicking any document window — or opening one** (File → New…, an icon
   double-click, a drop) — **reactivates**: the windoids come back exactly
-  where they were, aimed at the newly active document.
+  where they were, aimed at the newly active document — and the activation
+  **clears the Finder selection** (double-click, bare Open and ⌘O alike):
+  the highlight names what the next Finder action acts on, and the
+  application is forward now.
 - Closing the last document window leaves the same desktop-focused state:
   a bare desktop whose windoid arrangement survives for the next open. And
   **boot begins in this state too**: until the first document window opens
@@ -669,7 +672,8 @@ an empty library — deleting or emptying later never resurrects them); the
 virgin boot then greets like any other — the New Document dialog, unless
 `?file` names a doc (the just-seeded Car and Cube are already nameable).
 Double-click opens
-(into the existing window if one is open),
+(into the existing window if one is open, deselecting the icon as the
+application takes focus),
 selecting an icon deactivates the application (a press in the icon layer is
 a press on the Finder) and turns File → Open… into a bare File → Open
 aimed at the selection — which holds through the menu-bar press that picks
