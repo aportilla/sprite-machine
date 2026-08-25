@@ -28,6 +28,7 @@ test('defaults: everything off / null on an empty query', () => {
       fresh: b.fresh,
       hide: b.hide,
       now: b.now,
+      patterns: b.patterns,
     },
     {
       flat: false,
@@ -48,8 +49,15 @@ test('defaults: everything off / null on an empty query', () => {
       fresh: false,
       hide: [],
       now: null,
+      patterns: false,
     }
   );
+});
+
+test('?patterns=1 opens the Desktop Patterns panel after the boot document', () => {
+  assert.equal(parseBootParams('?patterns=1').patterns, true);
+  assert.equal(parseBootParams('?patterns=0').patterns, false);
+  assert.equal(parseBootParams('?patterns=yes').patterns, false, 'only the documented 1');
 });
 
 test('?now freezes the menu bar clock: ISO date-time or epoch ms, else live', () => {

@@ -26,8 +26,9 @@ node tools/drive.mjs                                             # desktop + edi
 
 `capture.sh` shows what the app **looks** like — its shots are byte-deterministic
 (fixed window size, DSF 1, virtual time budget, `rotate=0`, `?fresh=1` on a
-machine with saved docs, and `?now=<when>` whenever the menu bar's clock is
-in frame), so `cmp` between two runs is a real regression check
+machine with saved docs or a set desktop pattern, and `?now=<when>` whenever
+the menu bar's clock is in frame), so `cmp` between two runs is a real
+regression check
 rather than a judgment call (its `dom` mode only serializes light DOM — the
 desktop skeleton and `<title>`, never the components' shadow internals).
 `drive.mjs` covers what no screenshot can: it drives the desktop over the
@@ -357,7 +358,7 @@ mount (the mount fill is always applied to the current tile only — combine wit
 `?pick=<N>` to fill with a specific palette color) so a shot can show the tool +
 result — the
 stepper, face picker, dialog, swatch pick, hover preview, rect drag, and fill click
-can't be driven headlessly. Three shell-era params round the set out:
+can't be driven headlessly. Four shell-era params round the set out:
 `?fresh=1` boots with **storage ignored** (no desktop-state restore, no
 `?file` resolution, no saved-doc icons — a bare desktop now, every icon
 being a saved doc — no first-boot seeding, no New Document dialog, and no
@@ -367,7 +368,10 @@ captures on a machine with saved docs) and `?hide=<window>[,<window>]`
 and `?now=<when>` (an ISO date-time like `2026-08-24T19:27`, read as local
 time, or epoch milliseconds) **freezes the menu bar clock** at that instant —
 a live clock would otherwise make every shot with the bar in frame differ by
-the minute.
+the minute — and `?patterns=1` opens the **Desktop Patterns** control
+panel once the boot document has landed (the capture tool can't pull a
+menu; under `?fresh` the desktop is on the dither, so the panel shows it
+seeded).
 `?sample` shares the storage-untouched discipline: it opens the named
 built-in as an untitled from in-memory data, skipping the seeding and the
 `?file`/dialog boot alike (the deterministic path `drive.mjs` drives).
@@ -417,6 +421,17 @@ window the desktop's active window?**
   **clears the Finder selection** (double-click, bare Open and ⌘O alike):
   the highlight names what the next Finder action acts on, and the
   application is forward now.
+- **Sprite Machine → Desktop Patterns opens the Finder's window**: the
+  Desktop Patterns control panel is a document-tier window (a striped
+  bar, a close box — not a windoid), and on a real System 7 machine a
+  control panel opened in the Finder's layer. `appActive` is "a
+  **document** window is the desktop's active window", not "any window
+  is", so the panel holding active mirrors as the desktop-focused state
+  exactly like none: opening it deactivates the application (the windoids
+  and the strip hide, the Finder grammar lands — which also clears the
+  desktop for previewing), and its close box hands active to the topmost
+  document window (the kit promotes the survivor), so the application
+  returns where it was. See [Desktop Patterns](#desktop-patterns).
 - Closing the last document window leaves the same desktop-focused state:
   a bare desktop whose windoid arrangement survives for the next open. And
   **boot begins in this state too**: until the first document window opens
@@ -443,7 +458,10 @@ strip's clamp bounds, and the Undo/Redo enablement.
 
 - **Sprite Machine** — _About…_, _Settings…_ (parked: the render prefs
   moved to the 3D View's controls strip, so the emptied item sits disabled
-  as a placeholder for a future settings surface), _Quit_ (the System 7
+  as a placeholder for a future settings surface), _Desktop Patterns_ (the
+  control panel — see [Desktop Patterns](#desktop-patterns); a window, not
+  a dialog, so no ellipsis — the Apple menu's Control Panels listed it
+  bare — and live in both roles), _Quit_ (the System 7
   cascade: every open document in
   turn, one unsaved-changes alert per dirty one — its window brought forward
   as it's asked about, Cancel anywhere aborting the rest — down to the bare
@@ -512,7 +530,9 @@ those letters in its shortcut column without ever double-firing them.
 
 ### Windows
 
-Two tiers, two regimes:
+Two tiers, two regimes — plus one **panel window** on demand, the Desktop
+Patterns control panel (document tier, not a document — see
+[Desktop Patterns](#desktop-patterns)):
 
 - **Document windows** (document tier): one per open document, cloned from
   the `#tpl-document-window` template by the reconciler in
@@ -666,6 +686,48 @@ clamp guards every placement (`clampWindow`) — the smart placement's
 size floors on a tiny raster, a cascaded document window near the
 raster's edge.
 
+### Desktop Patterns
+
+**Sprite Machine → Desktop Patterns** opens System 7.5's Desktop Patterns
+control panel — the composition of the original (the **preview well**
+across the top, the chooser under it, **Set Desktop Pattern** along the
+bottom) with the classic scrollbar (one pattern at a time, "67/74")
+replaced by a **grid of every pattern the kit ships**: the 38 standard
+MacPaint fills (`PATTERN_NAMES`, palette order — vintage-frames
+`docs/PATTERNS.md`) as a 13×3 `vf-grid` of 16px cells, a cell being
+exactly two repeats of its 8×8 pattern the way MacPaint's own pattern bar
+showed them (the last well stays empty — 38 tiles no rectangle). Every
+fill is the kit's own: the well and each cell are `vf-container
+pattern="…"` boxes at declared sizes (222×160 and 16×16), so the rasters
+are exact and 1-bit at every density — the well framed by the kit's
+`rule` on all four edges. The semantics are the Colors dialog's: opening
+seeds the **pending** pattern from the desktop's current one; **pressing**
+a cell selects it — the well previews it and a ring marks the cell (1px
+black over the edge, 1px white inside it, so it reads on `black` and
+`white` alike) on the pointer **down**, the windoid press rule, since a
+press that raises this window from behind a document window re-inserts
+its node and cancels the click — while the desktop stays as it was; only
+**Set Desktop Pattern** commits, through the shell slice's one setter
+(`shell.desktopPattern` → `shell/patterns.js` writes it onto
+`vf-desktop`'s `pattern`, the kit's whole-screen raster repainting under
+every window), and the close box discards a selection never set. The
+pattern is the **one desktop setting that persists** (`desktop-state.js`,
+in the same v3 blob as the icons; `?fresh=1` boots the dither), restored
+onto the desktop before its first render — a corrupt value is ignored
+through the kit's own `parsePattern`, never warned about. The window
+itself is a fixed-size `vf-window` (`heading="Desktop Patterns" movable`,
+248×304 — index.html's `#tpl-patterns-window` states the arithmetic; no
+grow box, no zoom box) cloned per open and **removed by its close box**
+(existence IS visibility, the document windows' discipline; a second pick
+while it's open just brings it forward — one panel, ever), placed by
+`centeredBox` in `shell/layout.js` (centered in the open area below the
+options strip's band) and **adopted by `shell/windows.js` as a panel**, so
+View → Arrange Windows re-centers it and a browser resize re-pins it like
+every window (centered, both edges spring — it keeps its center). It is
+the Finder's window: see [One machine, two roles](#one-machine-two-roles)
+for what opening and closing it does to the application. `?patterns=1`
+opens it over the boot document for captures.
+
 ### Documents: a document IS a .png
 
 A document is exactly one sprite `.png` — the 3×2 atlas — with all metadata
@@ -734,11 +796,14 @@ the classic left-edge column is a strut that stays at its 16px, its rows
 spring with the middle, an icon dragged into a corner stays in that
 corner — the same unrounded truth cache, the same no-clamp
 reversibility, so a shrink-then-grow round-trips every icon exactly
-home. Icon layout and the open SAVED documents' edited faces (and which
-was active)
+home. Icon layout, the open SAVED documents' edited faces (and which
+was active) and the **desktop pattern** (the Desktop Patterns panel's
+setting — the one desktop setting that persists; see
+[Desktop Patterns](#desktop-patterns))
 persist in one versioned localStorage key (`shell/desktop-state.js`, v3 —
 a v1 or v2 blob migrates shallowly, the window geometry those versions
-persisted simply dropped), snapshotted on change/exit. **No window
+persisted simply dropped, and a v3 blob from before the pattern reads the
+dither), snapshotted on change/exit. **No window
 geometry is in it**: the windoids and the document windows place fresh
 from the live raster every session (see [Windows](#windows)) — the
 persistence layer never sees a window. Icons restore at
@@ -878,7 +943,9 @@ naming, per-context dirty tracking off the doc's channels, the activation
 mirror, the stored flows, and `followActive`),
 `test/history.test.mjs` (undo/redo: tile-gesture and whole-atlas entries,
 snapshot copy-in/copy-out, the bound, load-boundary clearing),
-`test/params.test.mjs` (the whole `?param` dev-hook surface, typed), and
+`test/shell.test.mjs` (the shell slice's desktop pattern: the dither
+default, the setter's silent no-op, a trimmed custom value, empty → the
+default), `test/params.test.mjs` (the whole `?param` dev-hook surface, typed), and
 `test/layout.test.mjs` (the desktop's window + icon arithmetic, `shell/layout.js`:
 the smart placement — the one-column rail (the sprite windoid's fixed
 `SPRITE_WIDTH` × `spriteHeightFor` size, the stage as wide, absorbing the
@@ -886,7 +953,9 @@ rest of the height on any raster), the document box top-left beside Tools
 with exactly the cascade's room at its right and bottom (every slot inside
 the vacancy, the last flush with its edges), tiny rasters degrading
 gracefully — the document-window cascade (first free slot, a freed slot
-reused, a full cascade wrapping) — the raster-derived
+reused, a full cascade wrapping) — the panel placement (`centeredBox`:
+centered in the open area below the strip, its top-left floored at the
+reserve on a tiny raster) — the raster-derived
 icon lattice (the column wrap), the slot re-expression Arrange Windows
 cascades by (`cascadeSlot`), and the nine-slice resize rule: struts keep
 their offsets, springs their fraction of the middle, continuity across
@@ -960,7 +1029,8 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
                       (save/load/rename/remove/export, each taking an explicit doc + identity) —
                       browser deps (storage, PNG codec, icon art) injected
   shell.js            appActive + icon selection (the menus and the focus gating share one
-                      truth; the windoids are permanent — no flags)
+                      truth; the windoids are permanent — no flags) + the desktop pattern
+                      (the Desktop Patterns panel's Set; the one desktop setting that persists)
   history.js          bounded undo/redo: tile-gesture + whole-atlas snapshot entries over the doc's
                       restores. A FACTORY — one instance per open document (no singleton)
   derive.js           pure selectors: editorViewModel(doc, face) -> { tile, mirrorBehind, guides, wasDerived }
@@ -987,9 +1057,13 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   shell.appActive + workspace.activeKey; boot clamp + the resize rule (every window
                   re-pins by the nine-slice pin — the placement being a fixed point of it); arrange()
                   (View → Arrange Windows: the placement re-run over every window); the
-                  Sprite View's fixed sizing (fitSprite — boot + doc switches/tile resizes)
+                  Sprite View's fixed sizing (fitSprite — boot + doc switches/tile resizes);
+                  the PANEL adoption (addPanel/removePanel: a document-tier window that is
+                  not a document — the Desktop Patterns control panel — placed, arranged and
+                  re-pinned like every window, and mirroring as the Finder's turn when active)
   menus.js        vf-menu-select -> workspace/file actions on the ACTIVE document; the two-role
-                  focus gating + checkmark sync; every dialog flow (About / Settings / New
+                  focus gating + checkmark sync; Desktop Patterns -> the panel (patterns.js);
+                  every dialog flow (About / Settings / New
                   Document (templates + tile size) / Open / name prompt / Properties /
                   unsaved-changes / storage notice); the quit cascade
   icons.js        the icon layer: one vf-icon per saved doc (nothing else), generated front-tile art,
@@ -998,13 +1072,19 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   selection feeds the shell slice for the desktop-focused File → Open, and is
                   re-selected across a press on the app's chrome — menu bar / menu / dialog —
                   which the kit's vf-icon would otherwise clear: kit ask #5's page-side bridge)
-  desktop-state.js  icon layout + the open saved docs' edited faces (+ active) in one
-                  versioned localStorage key (v3; v1/v2 migrate, their window geometry dropped)
-                  — window geometry never persists; this module never sees a window
+  desktop-state.js  icon layout + the open saved docs' edited faces (+ active) + the desktop
+                  pattern in one versioned localStorage key (v3; v1/v2 migrate, their window
+                  geometry dropped) — window geometry never persists; this module never sees
+                  a window
   url-state.js    the address-bar mirror: the ACTIVE saved document's name -> location.hash
                   (#Cube, replaceState; cleared for untitled/none) so a reload restores it
   clock.js        the menu bar clock: a kit vf-label at the bar's right end — the time on the
                   minute, a press shows the date for a moment (injectable now(); ?now freezes it)
+  patterns.js     the desktop pattern: shell.desktopPattern -> vf-desktop's `pattern` (the boot
+                  restore validated through the kit's own parsePattern), and the Desktop
+                  Patterns control panel's lifecycle — ONE document-tier window cloned from
+                  #tpl-patterns-window, centered (layout.js centeredBox), adopted by windows.js
+                  as a panel, removed by its close box (existence IS visibility)
 src/
   main.js         the composition root: parse params -> seed stores -> fit desktop + cursor -> shell wiring
                   -> stage + rebuilder -> boot documents (test-path sample / ?file=<name> /
@@ -1031,7 +1111,7 @@ src/
     sm-face-picker.js, sm-tool-strip.js, sm-tool-options.js
                        presentational leaves: props down, bubbling sm-* events up, no store imports
     sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-stage-controls.js, sm-status-line.js,
-    sm-color-picker.js
+    sm-color-picker.js, sm-desktop-patterns.js
                        connected chrome: the options strip (a kit vf-container band: current-ink
                        swatch + options, no tool name; hidden while the desktop is focused;
                        bounds from the active document) / the Tools palette body / the
@@ -1046,7 +1126,10 @@ src/
                        the app-level Colors dialog (in index.html's dialog set, rendered into its
                        LIGHT DOM on purpose: the kit's page-drawn cursor stays above a modal only
                        when it can observe the vf-dialog's `open` flip, and its observer sees the
-                       light DOM alone — a shadow-rooted dialog would open above the cursor)
+                       light DOM alone — a shadow-rooted dialog would open above the cursor) /
+                       the Desktop Patterns panel's body (the kit-patterned preview well over
+                       the 13×3 grid of every kit pattern over Set Desktop Pattern: a pending
+                       selection picked on the press, committed through shell.setDesktopPattern)
     ui-bits.js         shared caption + warning-row template helpers (+ the warn row's styles,
                        a css export its consumers compose into their own `static styles`)
     base-styles.js     the shared border-box reset every component composes first (box-sizing

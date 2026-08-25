@@ -64,6 +64,7 @@ import {
   ICON_FRAME,
   ICON_CELL,
   zoomedBox,
+  centeredBox,
 } from '../src/shell/layout.js';
 
 const APP_PORT = process.argv[2] || '5173';
@@ -2078,6 +2079,202 @@ async function main() {
   // active); each document carries its own undo history and drives the
   // utility windows only while active; Close and Quit walk the dirty checks
   // per document (the System 7 cascade).
+  // --- desktop: the Desktop Patterns control panel ------------------------------
+  // Sprite Machine → Desktop Patterns opens a document-tier window — the
+  // Finder's: the application deactivates while it's front. A cell press
+  // previews (the well + the ring), Set Desktop Pattern commits onto the
+  // desktop, the close box removes the window and the application returns;
+  // the pattern rides desktop-state across a reload. The section ends back
+  // on the dither, so the profile's later sections boot on the default.
+  section('desktop patterns');
+  await freshPage();
+  const patternsProbe = () =>
+    evaluate(`(() => {${DEEP}
+      const d = document.querySelector('#desktop');
+      const w = document.querySelector('#win-patterns');
+      const body = w ? w.querySelector('sm-desktop-patterns') : null;
+      const root = body && body.shadowRoot;
+      const well = root ? root.querySelector('.well') : null;
+      const cells = root ? [...root.querySelectorAll('.cell')] : [];
+      const parts = (p) => !!(w && w.shadowRoot && w.shadowRoot.querySelector('[part="' + p + '"]'));
+      return {
+        dw: d.width,
+        dh: d.height,
+        desktop: d.pattern,
+        open: !!w,
+        active: !!w && w.hasAttribute('active'),
+        heading: w ? w.heading : null,
+        closeBox: parts('close-box'),
+        growBox: parts('grow-box'),
+        zoomBox: parts('zoom-box'),
+        well: well ? well.getAttribute('pattern') : null,
+        cells: cells.length,
+        ringed: cells.filter((c) => c.querySelector('.ring.on')).map((c) => c.title),
+        box: w ? { left: w.left, top: w.top, width: w.width, height: w.height } : null,
+      };
+    })()`);
+  let pp = await patternsProbe();
+  check(
+    'the desktop boots on the dither with no panel open',
+    pp.desktop === 'gray-50' && !pp.open,
+    JSON.stringify(pp)
+  );
+  await pickMenu('#menu-app', 'desktop-patterns');
+  pp = await patternsProbe();
+  s = await probe();
+  check(
+    'Sprite Machine → Desktop Patterns opens the panel: a titled, closable, fixed-size document-tier window',
+    pp.open &&
+      pp.active &&
+      pp.heading === 'Desktop Patterns' &&
+      pp.closeBox &&
+      !pp.growBox &&
+      !pp.zoomBox,
+    JSON.stringify(pp)
+  );
+  check(
+    "…it is the Finder's window: the application deactivates (windoids + strip hide, doc-scoped menus grey)",
+    s.docActive === false &&
+      !s.windows.tools &&
+      !s.windows.sprite &&
+      !s.windows.stage &&
+      s.optionsStrip === false &&
+      s.menuEnabled.save === false &&
+      s.menuEnabled.newDoc === true,
+    JSON.stringify({
+      docActive: s.docActive,
+      windows: s.windows,
+      strip: s.optionsStrip,
+      menus: s.menuEnabled,
+    })
+  );
+  const panelWant = centeredBox(pp.dw, pp.dh, {
+    width: pp.box.width,
+    height: pp.box.height,
+  });
+  check(
+    '…centered in the open area below the strip (layout.js centeredBox, the oracle)',
+    pp.box.left === panelWant.left && pp.box.top === panelWant.top,
+    JSON.stringify({ got: pp.box, want: panelWant })
+  );
+  check(
+    '…the well previews the current pattern, every kit pattern has a cell, the current one ringed',
+    pp.well === 'gray-50' &&
+      pp.cells === 38 &&
+      JSON.stringify(pp.ringed) === '["gray-50"]',
+    JSON.stringify({ well: pp.well, cells: pp.cells, ringed: pp.ringed })
+  );
+  // A cell picks on the PRESS (the windoid rule): probe between the press
+  // and the release. The desktop is untouched until Set.
+  const cellCentre = (name) =>
+    evaluate(`(() => {${DEEP}
+      const r = __q('.cell[title="${name}"]').getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    })()`);
+  const bricks = await cellCentre('bricks');
+  await mouse('mousePressed', bricks.x, bricks.y);
+  await sleep(100);
+  pp = await patternsProbe();
+  check(
+    'pressing a cell previews it in the well and rings it — on the press, the desktop untouched',
+    pp.well === 'bricks' &&
+      JSON.stringify(pp.ringed) === '["bricks"]' &&
+      pp.desktop === 'gray-50',
+    JSON.stringify({ well: pp.well, ringed: pp.ringed, desktop: pp.desktop })
+  );
+  await mouse('mouseReleased', bricks.x, bricks.y, { buttons: 0 });
+  await sleep(100);
+  const setBtn = await centreOf('.set');
+  await click(setBtn.x, setBtn.y);
+  await sleep(400);
+  pp = await patternsProbe();
+  check(
+    'Set Desktop Pattern writes the pending pattern onto the desktop (the panel stays up)',
+    pp.desktop === 'bricks' && pp.open,
+    JSON.stringify({ desktop: pp.desktop, open: pp.open })
+  );
+  const panelCloseBox = () =>
+    evaluate(`(() => {${DEEP}
+      const w = document.querySelector('#win-patterns');
+      const r = w.shadowRoot.querySelector('[part="close-box"]').getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    })()`);
+  let cb = await panelCloseBox();
+  await click(cb.x, cb.y);
+  await sleep(400);
+  pp = await patternsProbe();
+  s = await probe();
+  check(
+    'the close box removes the panel and the application comes back (document active, windoids up)',
+    !pp.open && s.docActive && s.windows.tools && s.windows.sprite && s.windows.stage,
+    JSON.stringify({ open: pp.open, docActive: s.docActive, windows: s.windows })
+  );
+  check('…the set pattern stays on the desktop', pp.desktop === 'bricks', pp.desktop);
+  await freshPage();
+  pp = await patternsProbe();
+  check(
+    'a reload restores the set pattern (desktop-state.js)',
+    pp.desktop === 'bricks' && !pp.open,
+    JSON.stringify({ desktop: pp.desktop, open: pp.open })
+  );
+  // Reopen: the pending selection seeds from the CURRENT pattern. A pick
+  // left unset is discarded by the close box; a second open seeds afresh.
+  await pickMenu('#menu-app', 'desktop-patterns');
+  pp = await patternsProbe();
+  check(
+    'reopening seeds the well and the ring from the current desktop pattern',
+    pp.well === 'bricks' && JSON.stringify(pp.ringed) === '["bricks"]',
+    JSON.stringify({ well: pp.well, ringed: pp.ringed })
+  );
+  const waves = await cellCentre('waves');
+  await click(waves.x, waves.y);
+  await sleep(100);
+  cb = await panelCloseBox();
+  await click(cb.x, cb.y);
+  await sleep(400);
+  pp = await patternsProbe();
+  check(
+    'a pick without Set is discarded by the close box',
+    !pp.open && pp.desktop === 'bricks',
+    JSON.stringify({ open: pp.open, desktop: pp.desktop })
+  );
+  await pickMenu('#menu-app', 'desktop-patterns');
+  pp = await patternsProbe();
+  check(
+    '…and the next open seeds from the desktop again, not the discarded pick',
+    pp.well === 'bricks' && JSON.stringify(pp.ringed) === '["bricks"]',
+    JSON.stringify({ well: pp.well, ringed: pp.ringed })
+  );
+  // A second pick while it's open brings the same window forward — never a
+  // second panel.
+  await pickMenu('#menu-app', 'desktop-patterns');
+  const panelCount = await evaluate(
+    `document.querySelectorAll('#win-patterns, vf-window[heading="Desktop Patterns"]').length`
+  );
+  check(
+    'a second menu pick brings the open panel forward — one panel, ever',
+    panelCount === 1,
+    String(panelCount)
+  );
+  // Back to the dither, through the panel — the round trip the later
+  // sections rely on (their profile persists).
+  const gray = await cellCentre('gray-50');
+  await click(gray.x, gray.y);
+  await sleep(100);
+  const setAgain = await centreOf('.set');
+  await click(setAgain.x, setAgain.y);
+  await sleep(400);
+  cb = await panelCloseBox();
+  await click(cb.x, cb.y);
+  await sleep(400);
+  await freshPage();
+  pp = await patternsProbe();
+  check(
+    'setting the dither back restores the default across a reload',
+    pp.desktop === 'gray-50' && !pp.open,
+    JSON.stringify({ desktop: pp.desktop, open: pp.open })
+  );
+
   section('multiple documents');
   await freshPage(); // the Car sample, one window
   s = await probe();

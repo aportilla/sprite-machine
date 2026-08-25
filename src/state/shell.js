@@ -1,6 +1,9 @@
 // ---------------------------------------------------------------------------
 // `shell` slice — the desktop chrome's shared state: whether the APPLICATION
-// is active (vs. the desktop — "the Finder") and the desktop-icon selection.
+// is active (vs. the desktop — "the Finder"), the desktop-icon selection,
+// and the DESKTOP PATTERN (System 7's General Controls / 7.5's Desktop
+// Patterns setting — what the Desktop Patterns panel's Set writes, what
+// shell/patterns.js paints onto the desktop and desktop-state.js persists).
 // Store-driven so the menu checkmarks + enabled states and the windows'
 // `hidden` attributes read one truth (a menu pick and a desktop click are
 // the same action). Document windows live elsewhere entirely: one exists per
@@ -28,6 +31,10 @@ import { createStore } from './store.js';
  *  windows are workspace-managed. */
 export const WINDOW_IDS = ['tools', 'sprite', 'stage'];
 
+/** The desktop pattern a desktop boots on — the kit's own default, the
+ *  classic 50% dither (vintage-frames docs/PATTERNS.md). */
+export const DEFAULT_DESKTOP_PATTERN = 'gray-50';
+
 export function createShell() {
   const store = createStore({
     // Whether a document window is the desktop's active window. False =
@@ -38,6 +45,11 @@ export function createShell() {
     appActive: false,
     /** @type {string[]} selected desktop-icon keys ("doc:<id>") */
     iconSelection: [],
+    /** @type {string} the desktop pattern — a kit library name (`gray-50`,
+     *  `bricks`, …) or sixteen hex digits: exactly what vf-desktop's
+     *  `pattern` takes. Restored from desktop-state at boot (a persisted
+     *  setting, unlike the two above), else the dither. */
+    desktopPattern: DEFAULT_DESKTOP_PATTERN,
   });
   return {
     store,
@@ -57,6 +69,17 @@ export function createShell() {
       const prev = store.get().iconSelection;
       if (prev.length === keys.length && prev.every((k, i) => k === keys[i])) return;
       store.patch({ iconSelection: [...keys] });
+    },
+
+    /** @param {string} v  A kit pattern name or sixteen hex digits — the
+     *  Desktop Patterns panel's Set, or the boot restore. Stored as given
+     *  (trimmed; an empty write is the default): the slice doesn't validate
+     *  — the wire (shell/patterns.js) checks a restored value against the
+     *  kit's grammar, and the panel only ever sets library names. */
+    setDesktopPattern(v) {
+      const next = String(v ?? '').trim() || DEFAULT_DESKTOP_PATTERN;
+      if (store.get().desktopPattern === next) return;
+      store.patch({ desktopPattern: next });
     },
   };
 }

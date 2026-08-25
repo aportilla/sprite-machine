@@ -3,9 +3,11 @@
 // it's good at (the documents themselves live in IndexedDB). One versioned
 // JSON key, v3: per-icon position and per-open-SAVED-document edited face
 // (untitled windows are deliberately absent — no autosave, explicit Save is
-// the contract) plus which document was active. (An older v3 blob may still
-// carry the retired `showGrid` flag — it parses fine and drops on the next
-// write.)
+// the contract) plus which document was active, and the DESKTOP PATTERN
+// (the Desktop Patterns panel's setting — System 7 kept it in the System
+// file; here it's the one desktop setting that persists). An older v3 blob
+// may still carry the retired `showGrid` flag (it parses fine and drops on
+// the next write) or lack `pattern` (it reads null — the dither).
 //
 // WINDOW GEOMETRY IS NOT HERE — not the windoids', not the document
 // windows'. A browser is resized and reopened on another monitor all the
@@ -31,6 +33,7 @@
 // ---------------------------------------------------------------------------
 
 import { files } from '../state/files.js';
+import { shell } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
 
 const KEY = 'sprite-machine:desktop';
@@ -87,6 +90,14 @@ export function createDesktopState(fresh) {
       return Number.isFinite(p?.left) && Number.isFinite(p?.top) ? p : null;
     },
 
+    /** The saved desktop pattern (a kit name or sixteen hex digits, as the
+     *  panel set it), or null — a blob from before the setting, or a
+     *  fresh boot. Validated by the wire (shell/patterns.js), not here. */
+    desktopPattern() {
+      const p = saved?.pattern;
+      return typeof p === 'string' && p.trim() ? p : null;
+    },
+
     /**
      * Start persisting. `iconsRoot` is the icon layer (positions are read
      * off the live elements at snapshot time — the properties ARE the truth
@@ -114,6 +125,7 @@ export function createDesktopState(fresh) {
           docs,
           activeFileId: workspace.active()?.fileId ?? null,
           icons,
+          pattern: shell.get().desktopPattern,
         };
       }
 
@@ -131,11 +143,16 @@ export function createDesktopState(fresh) {
         timer = setTimeout(write, WRITE_DEBOUNCE_MS);
       };
 
-      // Store changes (the open set, faces), desktop gestures (icon drags
-      // end in a pointerup), and browser resizes (every icon re-pins to the
-      // new raster) all schedule a write; leaving the page flushes one
-      // synchronously.
-      const unsubs = [files.subscribe(writeSoon), workspace.subscribe(writeSoon)];
+      // Store changes (the open set, faces, the desktop pattern — the shell
+      // slice's other flips schedule a harmless extra snapshot), desktop
+      // gestures (icon drags end in a pointerup), and browser resizes
+      // (every icon re-pins to the new raster) all schedule a write;
+      // leaving the page flushes one synchronously.
+      const unsubs = [
+        files.subscribe(writeSoon),
+        workspace.subscribe(writeSoon),
+        shell.subscribe(writeSoon),
+      ];
       const onPointerUp = () => writeSoon();
       const onHide = () => {
         if (document.visibilityState === 'hidden') write();

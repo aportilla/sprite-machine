@@ -33,10 +33,12 @@ import { initWindows } from './shell/windows.js';
 import { initMenus } from './shell/menus.js';
 import { initIcons } from './shell/icons.js';
 import { initClock } from './shell/clock.js';
+import { initPatterns } from './shell/patterns.js';
 import { createDesktopState } from './shell/desktop-state.js';
 import { initUrlState } from './shell/url-state.js';
 import './components/sm-editor.js'; // registers <sm-editor>
 import './components/sm-color-picker.js'; // registers <sm-color-picker>
+import './components/sm-desktop-patterns.js'; // registers <sm-desktop-patterns>
 import './components/sm-options-bar.js'; // registers <sm-options-bar>
 import './components/sm-tools-panel.js'; // registers <sm-tools-panel>
 import './components/sm-atlas-view.js'; // registers <sm-atlas-view>
@@ -128,7 +130,12 @@ const dstate = createDesktopState(boot.fresh);
 // The windows take no saved state: their geometry is placed fresh from the
 // live raster at every boot and every open (shell/windows.js header).
 const windows = initWindows(desktop, { hide: boot.hide });
-const menus = initMenus(desktop, windows);
+// The desktop pattern: the last session's choice restored onto the desktop
+// (nothing under ?fresh — the dither), written before the desktop's first
+// render; and the Desktop Patterns control panel's owner (its menu item
+// routes through menus.js).
+const patterns = initPatterns(desktop, windows, { saved: dstate.desktopPattern() });
+const menus = initMenus(desktop, windows, { patterns });
 const icons = initIcons(desktop, {
   actions: menus.actions,
   savedPos: dstate.iconPos,
@@ -194,6 +201,7 @@ if (hot) {
     menus.dispose();
     icons.dispose();
     clock.dispose();
+    patterns.dispose();
     stopPersist();
     stopUrlState();
     window.removeEventListener('resize', fitDesktop);
@@ -227,7 +235,10 @@ if (hot) {
 //      dialog. A prior session's open windows are deliberately NOT reopened
 //      — the URL, not localStorage, says what a load shows (the icons
 //      still restore).
-(async () => {
+// Then the one post-boot hook: ?patterns=1 opens the Desktop Patterns panel
+// over whatever booted (a capture hook — the capture tool can't pull a
+// menu; the panel lands on top, the newest window).
+async function bootDocuments() {
   // ?edit seeds the sample path's context face AT open — a post-open setFace
   // would race the one-shot mount hooks (the mount fill commits against
   // ctx.face, so a late switch files the old face's buffer under the new
@@ -278,4 +289,9 @@ if (hot) {
   }
 
   menus.actions.showNewDialog();
+}
+
+(async () => {
+  await bootDocuments();
+  if (boot.patterns) patterns.open();
 })();

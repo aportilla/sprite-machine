@@ -12,6 +12,7 @@ import {
   CASCADE_STEP,
   CASCADE_SLOTS,
   zoomedBox,
+  centeredBox,
   iconDefault,
   pinOf,
   pinTo,
@@ -136,6 +137,23 @@ test('placement: a tiny raster still yields finite, usable boxes', () => {
     assert.ok(box.width > 0 && box.height > 0);
     assert.ok(box.left >= 0 && box.top >= TOP_RESERVE);
   }
+});
+
+test('panel placement: centeredBox centers a fixed-size panel in the open area below the strip', () => {
+  const size = { width: 248, height: 304 }; // the Desktop Patterns window (index.html)
+  const b = centeredBox(W, H, size);
+  assert.equal(b.width, size.width);
+  assert.equal(b.height, size.height);
+  // Centered on the raster's width, and on the open area BELOW the options
+  // strip's band (the windows' frame, whether or not the strip is showing).
+  assert.equal(b.left, Math.floor((W - size.width) / 2));
+  assert.equal(b.top, TOP_RESERVE + Math.floor((H - TOP_RESERVE - size.height) / 2));
+  assert.ok(Number.isInteger(b.left) && Number.isInteger(b.top));
+  // A raster smaller than the panel floors the top-left at the reserve and
+  // the left edge — the title bar stays grabbable; the clamp does the rest.
+  const t = centeredBox(200, 200, size);
+  assert.equal(t.left, 0);
+  assert.equal(t.top, TOP_RESERVE);
 });
 
 test('cascade: the first open takes the doc box, each further one steps down-right', () => {

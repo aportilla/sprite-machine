@@ -46,8 +46,10 @@ import { downloadPngBytes } from '../image-io.js';
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
  * @param {ReturnType<typeof import('./windows.js').initWindows>} windows
+ * @param {{patterns: ReturnType<typeof import('./patterns.js').initPatterns>}} panels
+ *   The panel windows a menu item opens (the Desktop Patterns control panel).
  */
-export function initMenus(desktop, windows) {
+export function initMenus(desktop, windows, panels) {
   const $ = (sel) => {
     const el = desktop.querySelector(sel);
     if (!el) throw new Error(`shell/menus: missing element ${sel}`);
@@ -399,6 +401,12 @@ export function initMenus(desktop, windows) {
       case 'about':
         dlgAbout.show();
         break;
+      case 'desktop-patterns':
+        // The Desktop Patterns control panel (shell/patterns.js): a window,
+        // app-level like About — live in both roles. Opening it deactivates
+        // the application: it's the Finder's window.
+        panels.patterns.open();
+        break;
       case 'quit':
         quit();
         break;
@@ -540,9 +548,10 @@ export function initMenus(desktop, windows) {
 
   // --- focus gating ------------------------------------------------------------
   // Two roles share one menu bar (the single-application affordance): with
-  // the desktop focused, every document-scoped item greys out. About / Quit /
-  // New / Open stay — they're app-level (the parked Settings… is disabled
-  // in the markup in both roles); Arrange Windows keeps its own gate below
+  // the desktop focused, every document-scoped item greys out. About /
+  // Desktop Patterns / Quit / New / Open stay — they're app-level (the
+  // parked Settings… is disabled in the markup in both roles); Arrange
+  // Windows keeps its own gate below
   // (an open document window, in either role) — and Open wears the
   // Finder grammar above: its label follows the selection ("Open" on a
   // selected icon, "Open…" for the listing dialog otherwise), never greyed.

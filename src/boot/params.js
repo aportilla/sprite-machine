@@ -152,5 +152,10 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     /** @type {number|null} ?now=<when> — epoch ms the menu bar clock is
      *  frozen at (a capture hook); null = the live clock. */
     now,
+    // ?patterns=1: open the Desktop Patterns control panel once the boot
+    // document has landed (a capture hook — the capture tool can't pull a
+    // menu). Under ?fresh the desktop is on the dither, so a shot shows the
+    // panel seeded with it.
+    patterns: params.get('patterns') === '1',
   };
 }

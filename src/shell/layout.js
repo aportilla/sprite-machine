@@ -32,6 +32,11 @@
 //   same boundaries the doc box leaves its cascade room against — so a
 //   zoomed window fills the open area without running under the rail.
 //
+//   centeredBox() is the PANEL windows' placement — the Desktop Patterns
+//   control panel: a fixed-size window centered in the open area below the
+//   options strip's band, the way the Finder placed a window it had no
+//   stored position for (nothing about it persists either).
+//
 //   spriteHeightFor() is the Sprite View windoid's sizing rule: the windoid
 //   is a fixed-size picture frame — no grow box — its width the atlas
 //   grid's (ATLAS_GRID: the 3×2 lattice of face tiles) and its height
@@ -273,6 +278,32 @@ export function zoomedBox(desktopW, desktopH, pos) {
     top: pos.top,
     width: Math.max(DOC_MIN, railLeft - EDGE - pos.left),
     height: Math.max(DOC_MIN, desktopH - GAP - pos.top),
+  };
+}
+
+/**
+ * A PANEL window's placement — the Desktop Patterns control panel: `size`
+ * (the panel is fixed-size; its box is the caller's) centered in the open
+ * area below the options strip's band (TOP_RESERVE — the windows' frame,
+ * whether or not the strip is showing). The top-left floors at the reserve
+ * and the raster's left edge, so a raster smaller than the panel still
+ * keeps its title bar grabbable (windows.js's clamp does the rest). Whole
+ * system px, floored — the same lattice discipline as every placement.
+ *
+ * @param {number} desktopW
+ * @param {number} desktopH
+ * @param {{width: number, height: number}} size
+ * @returns {{left: number, top: number, width: number, height: number}}
+ */
+export function centeredBox(desktopW, desktopH, size) {
+  return {
+    left: Math.max(0, Math.floor((desktopW - size.width) / 2)),
+    top: Math.max(
+      TOP_RESERVE,
+      TOP_RESERVE + Math.floor((desktopH - TOP_RESERVE - size.height) / 2)
+    ),
+    width: size.width,
+    height: size.height,
   };
 }
 

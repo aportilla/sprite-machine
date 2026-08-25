@@ -30,6 +30,12 @@
                strip, leaving Settings… empty. The item stays disabled as the
                placeholder for a future settings surface. -->
           <vf-menu-item value="settings" disabled>Settings…</vf-menu-item>
+          <!-- The Desktop Patterns control panel (shell/patterns.js): a
+               window, not a dialog, so no ellipsis — the Apple menu's
+               Control Panels listed it bare. App-level like About, live in
+               both roles; it IS the Finder's window, so opening it
+               deactivates the application. -->
+          <vf-menu-item value="desktop-patterns">Desktop Patterns</vf-menu-item>
           <vf-separator></vf-separator>
           <vf-menu-item value="quit">Quit</vf-menu-item>
         </vf-menu>
@@ -481,6 +487,26 @@
       <vf-window heading="untitled" movable resizable zoomable flush>
         <sm-editor></sm-editor>
         <sm-status-line kind="tile" slot="status"></sm-status-line>
+      </vf-window>
+    </template>
+
+    <!-- ================ The Desktop Patterns window template ============= -->
+    <!-- ONE clone at a time, opened by Sprite Machine → Desktop Patterns
+         (shell/patterns.js), removed by its close box — existence IS
+         visibility, the document windows' discipline. A DOCUMENT-TIER
+         window (the striped bar and close box of System 7.5's Desktop
+         Patterns control panel — a windoid's slim bar carries no title),
+         movable, FIXED-size: no grow box, no zoom box. The size is authored
+         here, the one box shell/layout.js takes as input (centeredBox): the
+         body's 222-wide column — the preview well (222×160, the kit's rule
+         framing it) over the 13×3 chooser of 16px cells (13×16 + 12 rules +
+         2 frame = 222 wide, 3×16 + 2 + 2 = 52 tall) over the default button
+         (20 + its 4px ring margins), two 10px gaps between — plus the 12px
+         body padding, the 18px title bar and the 1px borders: 248 × 304
+         (sm-desktop-patterns.js states the well and grid). -->
+    <template id="tpl-patterns-window">
+      <vf-window heading="Desktop Patterns" movable width="248" height="304">
+        <sm-desktop-patterns></sm-desktop-patterns>
       </vf-window>
     </template>
 

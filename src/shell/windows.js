@@ -17,6 +17,14 @@
 //   forward). A context closing removes its window outright: a document
 //   window's visibility IS its existence.
 //
+//   PANEL WINDOWS: document-tier windows that are NOT documents — the
+//   Desktop Patterns control panel (shell/patterns.js owns its lifecycle
+//   and its body). Adopted here (addPanel / removePanel) with the pure
+//   placement that puts them on a raster, so arrange() re-places them and
+//   the resize re-pin moves them like every window; the owner appends and
+//   removes the node. A panel holding the desktop's active state is the
+//   Finder's turn (see APP ACTIVATION below).
+//
 // PLACEMENT comes from shell/layout.js (pure), and ONLY from there: the
 // smart arrangement is computed from the live raster at boot (windoids) and
 // per document open (the doc box, cascaded into the first free slot), then
@@ -46,6 +54,12 @@
 // fires it on every change of active document-tier window, null included)
 // lands here and is mirrored into BOTH truths — shell.appActive (the
 // boolean the chrome gates on) and workspace.activeKey (which document).
+// appActive is "a DOCUMENT window is the desktop's active window", not
+// "any window is": a panel window holding active (the Desktop Patterns
+// control panel — a System 7 control panel opened in the FINDER's layer)
+// mirrors as the desktop-focused state exactly like none, so opening it
+// deactivates the application and closing it (the kit promotes the topmost
+// document window) brings the application back.
 // Deactivation is interaction-only, and the PAGE owns the press test (the
 // kit's 0.4.0 position: only the page knows which presses mean "the
 // Finder"): a press on the desktop's bare dither — wired here — or in the
@@ -209,6 +223,21 @@ export function initWindows(desktop, { hide = [] } = {}) {
     const smart = smartLayout();
     for (const id of WINDOW_IDS) placeWindoid(id, smart);
   };
+  // Panel windows adopted from outside (see the header), each with the
+  // pure placement that puts it on a raster: `(desktopW, desktopH) → box`.
+  /** @type {Map<VfWindow, (w: number, h: number) => {left: number, top: number, width: number, height: number}>} */
+  const panels = new Map();
+  const placePanel = (win) => {
+    const boxFor = panels.get(win);
+    if (!boxFor) return;
+    const g = boxFor(desktop.width, desktop.height);
+    win.left = g.left;
+    win.top = g.top;
+    win.width = g.width;
+    win.height = g.height;
+    clampWindow(desktop, win);
+    pins.delete(win);
+  };
   // A document window onto cascade slot `slot` of the CURRENT raster's doc
   // box, at the box's size: arrange().
   const placeDoc = (win, slot) => {
@@ -359,8 +388,12 @@ export function initWindows(desktop, { hide = [] } = {}) {
     return null;
   };
   const applyActive = (win) => {
-    workspace.setActive(win ? keyOf(win) : null);
-    shell.setAppActive(!!win);
+    const key = win ? keyOf(win) : null;
+    workspace.setActive(key);
+    // A DOCUMENT window active, not any window: a panel (the Desktop
+    // Patterns control panel) holding active is the Finder's turn — the
+    // desktop-focused state (see the header's APP ACTIVATION).
+    shell.setAppActive(key != null);
   };
   const onActivate = (e) => applyActive(/** @type {CustomEvent} */ (e).detail.window);
   desktop.addEventListener('vf-activate', onActivate);
@@ -493,6 +526,22 @@ export function initWindows(desktop, { hide = [] } = {}) {
         const win = /** @type {VfWindow} */ (el);
         if (keyOf(win) != null) placeDoc(win, slot++);
       }
+      // A panel goes back where its placement puts it on this raster too.
+      for (const win of panels.keys()) placePanel(win);
+    },
+    /** Adopt a PANEL window (see the header): `boxFor` is its pure placement
+     *  on a raster, applied now (+ the boot clamp), by arrange(), and —
+     *  through the pin — on every raster resize. The window must already be
+     *  a slotted child of the desktop (the clamp reads its live lattice). */
+    addPanel(win, boxFor) {
+      panels.set(win, boxFor);
+      placePanel(win);
+    },
+    /** Drop a panel from the placement + re-pin set (the owner removes the
+     *  node). */
+    removePanel(win) {
+      panels.delete(win);
+      pins.delete(win);
     },
     /** The raster changed size (a browser resize / zoom re-fit — main.js
      *  calls this right after fitWithin, per event, un-debounced: the raster
@@ -544,6 +593,7 @@ export function initWindows(desktop, { hide = [] } = {}) {
       if (before.width === after.width && before.height === after.height) return;
       for (const id of WINDOW_IDS) repin(byId[id], before, after);
       for (const { win } of byKey.values()) repin(win, before, after);
+      for (const win of panels.keys()) repin(win, before, after);
     },
     /** Deactivate the application programmatically (nothing calls this on
      *  the happy paths — closing the last window deactivates via the kit —
@@ -560,6 +610,7 @@ export function initWindows(desktop, { hide = [] } = {}) {
       // and let the next init rebuild from the surviving workspace state.
       for (const [, rec] of byKey) rec.win.remove();
       byKey.clear();
+      panels.clear(); // the owner (shell/patterns.js) removes its node
     },
   };
 

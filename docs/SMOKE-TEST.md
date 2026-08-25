@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 188 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 203 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -34,6 +34,16 @@ browser, `http://localhost:5173/`.
       the app comes back, windoids included.
 - [ ] **Windoids never steal focus**: click into the 3D View or the Tools
       palette — the active document window keeps its stripes.
+- [ ] **Desktop Patterns is the Finder's window**: Sprite Machine → Desktop
+      Patterns (both roles) opens the control panel centered below the
+      strip's band — a striped title bar with a close box, no grow box, no
+      zoom box — and the application deactivates: the document window
+      goes plain, the three windoids and the options strip hide, the
+      document-scoped menus grey. Click the document window: it
+      reactivates (windoids back) and the panel goes plain behind it;
+      click the panel: the reverse. Its close box hands the application
+      back (document active, windoids up). A second menu pick while it's
+      open brings the same window forward — never a second panel.
 
 ## Multiple documents
 
@@ -166,6 +176,20 @@ browser, `http://localhost:5173/`.
 
 ## Odds and ends
 
+- [ ] **Desktop Patterns, by eye**: in the panel, the well shows the
+      current desktop pattern inside a 1px frame at 1:1 (the dither reads
+      as the desktop's own); the 13×3 grid shows all 38 kit patterns at
+      two repeats each, the last well empty, and the current one ringed
+      (1px black outside, 1px white inside — visible on `black` and on
+      `white` alike). Press a cell: the ring moves and the well previews
+      on the mouse DOWN, the desktop unchanged; Set Desktop Pattern
+      repaints the desktop under every window and icon, 1-bit crisp at
+      any browser zoom. Close without Set after picking another cell —
+      the desktop keeps what was set, and the next open seeds from it.
+      Drag the panel somewhere and resize the browser: it keeps its
+      place (its center, in the middle); View → Arrange Windows
+      re-centers it. Reload: the pattern persists (`?fresh=1` boots the
+      dither regardless, and doesn't clobber it).
 - [ ] **The menu bar clock**: the time sits at the bar's right end in
       Chicago, its baseline on the menu titles' row, ~9px of bar between
       its last glyph and the raster's edge (the corner mask clear of it);
