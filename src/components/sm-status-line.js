@@ -7,11 +7,10 @@
 //            reconciler assigns this instance's `ctx` (its window's
 //            DocContext) before the append, and the readout follows that
 //            window's own face selection
-//   - build: the 3D View's fixed name, "3D Model View" — but an error or the
-//            first warning takes the line, ⚠-prefixed (the strip truncates
-//            with the kit's own overflow); the build stats (grid / voxels /
-//            tris, from the build slice) ride the label's `title`, a hover
-//            tooltip — and the probe surface drive.mjs reads.
+//   - build: the 3D View's fixed name, "3D Model View" — a static label, no
+//            build error or warning ever takes the line; the build stats
+//            (grid / voxels / tris, from the build slice) ride the label's
+//            `title`, a hover tooltip — and the probe surface drive.mjs reads.
 // `:host { display: contents }` so the slotted element the window's slot
 // gate sees is this host, while the kit's status-bar styles lay out the
 // label inside.
@@ -54,10 +53,7 @@ export class SmStatusLine extends LitElement {
       const f = this.ctx?.face;
       return f ? `${f[0].toUpperCase()}${f.slice(1)} Face` : '';
     }
-    // kind === 'build'
-    const b = build.get();
-    if (b.error) return `⚠ ${b.error}`;
-    if (b.warnings?.length) return `⚠ ${b.warnings[0]}`;
+    // kind === 'build': the fixed name, whatever the build slice holds.
     return '3D Model View';
   }
 

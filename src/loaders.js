@@ -30,7 +30,7 @@ import { build } from './state/build.js';
 
 // Validate + open a decoded sheet as a fresh context. The single trunk under
 // the loaders below. Returns the new context, or null (with the error
-// surfaced) on a malformed sheet. `face` seeds the context's starting face AT
+// recorded on the build slice) on a malformed sheet. `face` seeds the context's starting face AT
 // open (the ?edit boot hook): a post-open setFace would race the one-shot
 // mount hooks — the canvas's mount fill commits its working buffer against
 // ctx.face, so a face switched between the editor's first render and that

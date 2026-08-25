@@ -601,10 +601,10 @@ Patterns control panel (document tier, not a document — see
   slack): the renderer clears **transparent** (`alpha: true`, no scene
   background), so the model and its shadow composite over the 1-bit
   pattern rather than a flat gray — the same pattern the Sprite View's
-  cells wear, both the kit's own fill; its status strip reading
-  "3D Model View" — a build
-  error or warning takes that line, ⚠-prefixed, and the build stats
-  (grid / voxels / tris) ride the strip's hover tooltip. The 3D View
+  cells wear, both the kit's own fill; its status strip reading the fixed
+  "3D Model View" — a static label; no build error or warning ever takes
+  the line — with the build stats (grid / voxels / tris) riding the
+  strip's hover tooltip. The 3D View
   carries its own size floor (`shell/windows.js`, against the grow box and
   any boot geometry alike): width at the controls strip's content width so
   the checkboxes can never be clipped, height at enough canvas under the
@@ -1024,7 +1024,8 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
   session.js          editor session (app-level): tool, ink, per-tool options, picker
                       flag — one palette, one ink, however many documents are open
   prefs.js            lowpoly / autoRotate (the render toggles; the 3D View's controls strip writes them)
-  build.js            dims / voxels / tris / warnings / error — written by the rebuilder, read by the status line
+  build.js            dims / voxels / tris / warnings / error — written by the rebuilder (+ the loaders'
+                      errors); the stats read by the 3D View's status tooltip, warnings/error recorded only
   files.js            the document LIBRARY: listing + availability + per-document storage ops
                       (save/load/rename/remove/export, each taking an explicit doc + identity) —
                       browser deps (storage, PNG codec, icon art) injected

@@ -1,9 +1,12 @@
 // ---------------------------------------------------------------------------
 // `build` slice — the last mesh build's readout. Written by the rebuilder
-// (stats) and the loaders (errors); read by the stats overlay. An `error` (a
-// failed decode / unusable sample) REPLACES the readout until the next
-// successful build's `setStats` clears it — the same contract the old
-// `ui.setStats` / `ui.setError` pair implemented.
+// (stats + warnings) and the loaders (errors); the stats are read by the 3D
+// View's status line, as its hover tooltip. An `error` (a failed decode /
+// unusable sample) stands until the next successful build's `setStats`
+// clears it — the same contract the old `ui.setStats` / `ui.setError` pair
+// implemented — but `error` and `warnings` are RECORDED ONLY: the status
+// line reads its fixed "3D Model View" label regardless, and no other
+// surface shows them yet.
 // ---------------------------------------------------------------------------
 
 import { createStore } from './store.js';

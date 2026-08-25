@@ -339,8 +339,8 @@ const PROBE = `(() => {${DEEP}
     ? canvas.getBoundingClientRect()
     : { left: 0, top: 0, width: 0, height: 0 };
   const checked = __q('vf-radio[checked]');
-  // The 3D View's status line: the fixed "3D Model View" label (or a
-  // ⚠-prefixed error/warning taking the line); the build stats
+  // The 3D View's status line: the fixed "3D Model View" label (a static
+  // readout — no error or warning ever takes the line); the build stats
   // ("grid 40px · voxels 4950 · tris 1784") ride the label's title tooltip —
   // parsed back into a stats map from there.
   const buildLine = (() => {
@@ -2300,12 +2300,16 @@ async function main() {
   s = await probe();
   check(
     '…enables Undo for THIS document and rebuilds the stage from it',
-    // A single face on a blank sheet builds ONE voxel with an
-    // unconstrained-axis warning — and the warning takes over the readout
-    // line (the fixed "3D Model View" label otherwise), so the ⚠ line IS
-    // the proof this doc reached the stage.
-    s.menuChecks.undoEnabled === true && s.buildLine.includes('unconstrained'),
-    JSON.stringify({ undo: s.menuChecks.undoEnabled, buildLine: s.buildLine })
+    // The blank untitled read 0 voxels a moment ago; a single face on a
+    // blank sheet builds a voxel (the status tooltip's stats), so a nonzero
+    // count IS the proof this doc reached the stage — the status LINE stays
+    // its fixed "3D Model View" label whatever the build says.
+    s.menuChecks.undoEnabled === true && s.voxels > 0 && s.buildLine === '3D Model View',
+    JSON.stringify({
+      undo: s.menuChecks.undoEnabled,
+      voxels: s.voxels,
+      buildLine: s.buildLine,
+    })
   );
   // Switch back to Car by clicking its (still-exposed) title bar.
   const carBar = await evaluate(
