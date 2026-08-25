@@ -77,6 +77,14 @@
                to match the empty workspace, like Undo/Redo. -->
           <vf-menu-item value="arrange" disabled>Arrange Windows</vf-menu-item>
         </vf-menu>
+        <!-- The menu bar clock (System 7.5's Date & Time clock): a kit
+             vf-label at the bar's right end. The bar's slot is unfiltered
+             and its row is flex, so style.css's margin-inline-start: auto
+             lands it there, clear of the menu coordination (the bar
+             hit-tests titles by coordinate and ignores the rest). Boots
+             empty — the text and the press-to-date flip are
+             shell/clock.js's, so markup never carries a stale time. -->
+        <vf-label id="clock"></vf-label>
       </vf-menu-bar>
 
       <!-- The options strip: the current-ink swatch (every tool but the

@@ -107,6 +107,17 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
 
   const editParam = params.get('edit');
 
+  // ?now=<when>: freeze the menu bar clock at an instant — an ISO date-time
+  // (`2026-08-24T19:27`; an offset-less form reads as LOCAL time, a bare
+  // date as UTC midnight) or epoch milliseconds — so a capture with the bar
+  // in frame stays byte-deterministic. Unparseable → null, the live clock.
+  let now = null;
+  const nowParam = (params.get('now') ?? '').trim();
+  if (nowParam) {
+    const t = /^\d+$/.test(nowParam) ? +nowParam : Date.parse(nowParam);
+    if (Number.isFinite(t)) now = t;
+  }
+
   return {
     flat: params.get('flat') === '1',
     diag: params.get('diag') === '1',
@@ -138,5 +149,8 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
+    /** @type {number|null} ?now=<when> — epoch ms the menu bar clock is
+     *  frozen at (a capture hook); null = the live clock. */
+    now,
   };
 }

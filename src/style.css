@@ -45,6 +45,20 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* The menu bar clock: a kit vf-label slotted at the END of the vf-menu-bar
+   (index.html; shell/clock.js writes it). The bar is a flex row with an
+   unfiltered slot, so the auto start margin lands the label at the right
+   end, its inset from the raster's edge mirroring the 9px the first title
+   plate keeps from the left. The label's line box is pinned to the bar's
+   own 20px (whole and even — the label's rule for the token) so the 16px
+   em centers on the same rows as the menu titles: the clock's baseline IS
+   the titles' (row 14 of the bar), with no measured nudge. */
+#clock {
+  margin-inline-start: auto;
+  margin-inline-end: calc(var(--vf-scale, 1) * 9px);
+  --vf-label-line-height: 20px;
+}
+
 /* The Colors dialog's host — the one LIGHT-DOM component (its vf-dialog must
    sit where the kit cursor's observer can see it open): no box of its own. */
 sm-color-picker {

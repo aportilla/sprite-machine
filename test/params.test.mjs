@@ -27,6 +27,7 @@ test('defaults: everything off / null on an empty query', () => {
       file: b.file,
       fresh: b.fresh,
       hide: b.hide,
+      now: b.now,
     },
     {
       flat: false,
@@ -46,8 +47,17 @@ test('defaults: everything off / null on an empty query', () => {
       file: null,
       fresh: false,
       hide: [],
+      now: null,
     }
   );
+});
+
+test('?now freezes the menu bar clock: ISO date-time or epoch ms, else live', () => {
+  const iso = '2026-08-24T19:27';
+  assert.equal(parseBootParams(`?now=${iso}`).now, Date.parse(iso));
+  assert.equal(parseBootParams('?now=1700000000000').now, 1700000000000);
+  assert.equal(parseBootParams('?now=yesterday').now, null, 'unparseable → live');
+  assert.equal(parseBootParams('?now=').now, null);
 });
 
 test('?file / #fragment: the boot document request', () => {

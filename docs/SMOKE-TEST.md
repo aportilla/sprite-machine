@@ -166,6 +166,17 @@ browser, `http://localhost:5173/`.
 
 ## Odds and ends
 
+- [ ] **The menu bar clock**: the time sits at the bar's right end in
+      Chicago, its baseline on the menu titles' row, ~9px of bar between
+      its last glyph and the raster's edge (the corner mask clear of it);
+      watch it tick over a minute boundary. Press it (mouse DOWN — it flips
+      before the button comes up): the date reads `M/D/YY` (`8/24/26`, no
+      leading zeros) for ~3 s, then
+      the time returns; press again while the date shows — the time returns
+      at once. Neither press moves focus, deactivates the app, or clears a
+      selected desktop icon. With a menu dropped, a press on the clock
+      leaves the menu open (the bar closes only on presses outside itself —
+      an open kit ask).
 - [ ] **3D View controls strip**: the rotate / smooth checkboxes across the
       window's top toggle live — the model stops spinning / re-meshes
       immediately (Settings… in the menu stays disabled, a parked

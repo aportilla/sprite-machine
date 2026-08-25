@@ -25,8 +25,9 @@ node tools/drive.mjs                                             # desktop + edi
 ```
 
 `capture.sh` shows what the app **looks** like — its shots are byte-deterministic
-(fixed window size, DSF 1, virtual time budget, `rotate=0`, and `?fresh=1` on a
-machine with saved docs), so `cmp` between two runs is a real regression check
+(fixed window size, DSF 1, virtual time budget, `rotate=0`, `?fresh=1` on a
+machine with saved docs, and `?now=<when>` whenever the menu bar's clock is
+in frame), so `cmp` between two runs is a real regression check
 rather than a judgment call (its `dom` mode only serializes light DOM — the
 desktop skeleton and `<title>`, never the components' shadow internals).
 `drive.mjs` covers what no screenshot can: it drives the desktop over the
@@ -356,13 +357,17 @@ mount (the mount fill is always applied to the current tile only — combine wit
 `?pick=<N>` to fill with a specific palette color) so a shot can show the tool +
 result — the
 stepper, face picker, dialog, swatch pick, hover preview, rect drag, and fill click
-can't be driven headlessly. Two shell-era params round the set out:
+can't be driven headlessly. Three shell-era params round the set out:
 `?fresh=1` boots with **storage ignored** (no desktop-state restore, no
 `?file` resolution, no saved-doc icons — a bare desktop now, every icon
 being a saved doc — no first-boot seeding, no New Document dialog, and no
 state writes — deterministic
 captures on a machine with saved docs) and `?hide=<window>[,<window>]`
-(`document|tools|sprite|stage`) hides windows a capture needs out of frame.
+(`document|tools|sprite|stage`) hides windows a capture needs out of frame,
+and `?now=<when>` (an ISO date-time like `2026-08-24T19:27`, read as local
+time, or epoch milliseconds) **freezes the menu bar clock** at that instant —
+a live clock would otherwise make every shot with the bar in frame differ by
+the minute.
 `?sample` shares the storage-untouched discipline: it opens the named
 built-in as an untitled from in-memory data, skipping the seeding and the
 `?file`/dialog boot alike (the deterministic path `drive.mjs` drives).
@@ -483,6 +488,20 @@ strip's clamp bounds, and the Undo/Redo enablement.
   open it re-rails the hidden windoids for the next open). The
   windoids need no toggles: they're permanent, up whenever a document
   window is active.
+- **The clock** — System 7.5's menu bar clock at the bar's right end
+  (`shell/clock.js` over a kit `vf-label` slotted after the last menu): the
+  time in the bar's own Chicago (`7:27 PM`), ticking on the minute, its em
+  on the menu titles' own rows (the label's line box is pinned to the bar's
+  20px — no measured nudge). **Pressing it** (pointer down — the bar's own
+  title rule) shows the **date** (`8/24/26` — System 7.5's own unpadded
+  M/D/YY) for three seconds
+  before the time returns; a second press returns it early. It's chrome,
+  not a menu: the bar's press controller hit-tests titles by coordinate and
+  ignores it, a press on it keeps the Finder selection like any menu-bar
+  press and never deactivates the application, and it takes no focus. No
+  icons beside it — the application menu and Balloon Help were furniture a
+  one-application machine has no use for. `?now=<when>` freezes it for
+  captures.
 
 Key equivalents are the kit's own (`shortcut` on `vf-menu-item`; Ctrl stands
 in for ⌘ off-Mac). ⌘N/⌘W stay unassigned on purpose — the browser owns them
@@ -984,6 +1003,8 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   — window geometry never persists; this module never sees a window
   url-state.js    the address-bar mirror: the ACTIVE saved document's name -> location.hash
                   (#Cube, replaceState; cleared for untitled/none) so a reload restores it
+  clock.js        the menu bar clock: a kit vf-label at the bar's right end — the time on the
+                  minute, a press shows the date for a moment (injectable now(); ?now freezes it)
 src/
   main.js         the composition root: parse params -> seed stores -> fit desktop + cursor -> shell wiring
                   -> stage + rebuilder -> boot documents (test-path sample / ?file=<name> /

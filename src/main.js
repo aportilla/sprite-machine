@@ -32,6 +32,7 @@ import {
 import { initWindows } from './shell/windows.js';
 import { initMenus } from './shell/menus.js';
 import { initIcons } from './shell/icons.js';
+import { initClock } from './shell/clock.js';
 import { createDesktopState } from './shell/desktop-state.js';
 import { initUrlState } from './shell/url-state.js';
 import './components/sm-editor.js'; // registers <sm-editor>
@@ -133,6 +134,11 @@ const icons = initIcons(desktop, {
   savedPos: dstate.iconPos,
   fresh: boot.fresh,
 });
+// The menu bar clock (shell/clock.js); ?now freezes it for captures.
+const clock = initClock(
+  /** @type {HTMLElement} */ (document.getElementById('clock')),
+  boot.now != null ? { now: () => /** @type {number} */ (boot.now) } : {}
+);
 // Wired only now — nothing between the boot fit and here can fire a resize
 // (this top level runs synchronously to completion before any event task).
 repinDesktop = (before) => {
@@ -187,6 +193,7 @@ if (hot) {
     windows.dispose();
     menus.dispose();
     icons.dispose();
+    clock.dispose();
     stopPersist();
     stopUrlState();
     window.removeEventListener('resize', fitDesktop);
