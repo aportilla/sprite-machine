@@ -80,6 +80,15 @@ export function initMenus(desktop, windows, panels) {
   const dlgExportModel = $('#dlg-export-model');
   const dlgExportAtlas = $('#dlg-export-atlas');
 
+  // The About box — Sprite Machine → About…, and the BOOT GREETING (main.js
+  // parks a load with no document to open on it: the classic launch splash;
+  // OK or Escape leaves the bare desktop, nothing activates). The copy is
+  // the markup's; the version and date lines are BUILD facts (vite.config.js
+  // `define`: package.json's version, HEAD's commit date), written once here
+  // so the markup never carries a stale number.
+  $('#about-version').textContent = `version ${__APP_VERSION__}`;
+  $('#about-date').textContent = __APP_DATE__;
+  const showAbout = () => dlgAbout.show();
   on($('#btn-about-ok'), 'click', () => dlgAbout.close());
   on($('#btn-storage-ok'), 'click', () => dlgStorage.close());
   on($('#btn-props-ok'), 'click', () => dlgProps.close());
@@ -399,7 +408,7 @@ export function initMenus(desktop, windows, panels) {
     // the file header), and a disabled item never fires by kit contract.
     switch (menuDetail(e).value) {
       case 'about':
-        dlgAbout.show();
+        showAbout();
         break;
       case 'desktop-patterns':
         // The Desktop Patterns control panel (shell/patterns.js): a window,
@@ -619,9 +628,9 @@ export function initMenus(desktop, windows, panels) {
   };
 
   return {
-    // showNewDialog doubles as the boot greeting: a load with no ?file=<name>
-    // to open parks at the New Document dialog (main.js).
-    actions: { confirmDiscard, openDoc, closeContext, saveThen, showNewDialog },
+    // showAbout doubles as the boot greeting: a load with no ?file=<name>
+    // to open parks at the About box (main.js).
+    actions: { confirmDiscard, openDoc, closeContext, saveThen, showAbout },
     dispose() {
       for (const fn of teardown) fn();
     },

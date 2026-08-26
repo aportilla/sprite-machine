@@ -2,7 +2,7 @@
 // URL-param parsing → one typed boot object. Pure (string in, object out), so
 // the whole dev-hook surface is Node-testable. ?file (or a bare #fragment) is
 // the one USER-FACING param — the saved document a load should open instead
-// of greeting with the New Document dialog. main.js APPLIES the result:
+// of greeting with the About box. main.js APPLIES the result:
 // most hooks are boot-time store actions (?edit → the boot context's face, ?pick →
 // session.pickColor, ?palette → session.openPicker, ?tile → doc.resizeTiles,
 // ?cursor / ?rect / ?fill's state halves → session actions); only the
@@ -24,10 +24,10 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
   const params = new URLSearchParams(search);
 
   // ?file=<name> — or a bare #<name> fragment — asks the boot to open that
-  // SAVED document instead of greeting with the New Document dialog. This
-  // just carries the requested name; main.js resolves it against the
-  // refreshed library listing (case-insensitive) and falls back to the
-  // dialog when nothing matches. ?file wins when both forms are given.
+  // SAVED document instead of greeting with the About box. This just
+  // carries the requested name; main.js resolves it against the refreshed
+  // library listing (case-insensitive) and falls back to the About box
+  // when nothing matches. ?file wins when both forms are given.
   let file = (params.get('file') ?? '').trim();
   if (!file && hash) {
     const frag = hash.replace(/^#/, '');
@@ -157,5 +157,10 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     // menu). Under ?fresh the desktop is on the dither, so a shot shows the
     // panel seeded with it.
     patterns: params.get('patterns') === '1',
+    // ?about=1: open the About box once the boot document has landed (a
+    // capture hook — the plain boot greets with it, but that boot's virgin
+    // seeding is an IndexedDB round-trip the capture tool's virtual-time
+    // budget stalls on, so under ?fresh this is the way to a shot of it).
+    about: params.get('about') === '1',
   };
 }

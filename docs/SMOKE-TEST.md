@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 203 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 205 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -129,9 +129,9 @@ browser, `http://localhost:5173/`.
       browser window (or move it to another monitor) and reload — the
       arrangement re-derives for the new viewport; nothing hangs off-screen.
 - [ ] **A resize is an Arrange for the windoids, a proportional re-fit for
-      documents** (the nine-slice pin): boot to the New Document dialog,
-      squish the browser window, then Create — the windoids and the
-      document land exactly where Arrange Windows puts them on that
+      documents** (the nine-slice pin): boot to the About box, squish the
+      browser window, OK it, then File → New… → Create — the windoids and
+      the document land exactly where Arrange Windows puts them on that
       viewport (not a scaled-down copy of the old layout). With a document
       open, resize the browser — the rail stays right-flush and
       full-height, the document keeps its top-left and breathes with the
@@ -160,22 +160,36 @@ browser, `http://localhost:5173/`.
 - [ ] **The address bar follows the active document**: open/switch between
       saved documents — the fragment tracks the active one; an untitled
       window or the bare desktop clears it. With it cleared, a reload
-      greets with the New Document dialog (untitleds never survive).
+      greets with the About box (untitleds never survive).
 - [ ] **`?file=<name>` / `#<name>`**: load with `?file=cube` (or `#Cube`)
       in the URL — the stored Cube opens directly, no dialog, on the edited
       face it last had (its window at the default box), and the bar
-      canonicalizes to `#Cube`. An unknown name falls back to the New
-      Document dialog.
+      canonicalizes to `#Cube`. An unknown name falls back to the About
+      box.
 - [ ] `?fresh=1` boots a bare desktop regardless (no icons),
       and doesn't clobber the saved state.
 - [ ] **First-boot seeding, once only**: clear the site's data (localStorage
       and IndexedDB) and reload — Car and Cube appear as ordinary saved-doc
-      icons under the New Document dialog. Rename or delete-and-redraw one,
+      icons under the About box. Rename or delete-and-redraw one,
       then reload — the change sticks; the defaults are never re-created
       while any state persists.
 
 ## Odds and ends
 
+- [ ] **The About box, by eye**: a plain load (no `#name`) greets with it,
+      centered — the bare double frame (no title bar, no close box), the
+      32×32 icon crisp at 1:1 beside "Sprite Machine" / "version N"
+      (package.json's) / the date (HEAD's commit date, `Aug 24, 2026`
+      form) / "created by Adam Portilla", the two paragraphs in Chicago
+      with "Vintage Frames" underlined in the same black (no blue), OK
+      bottom right; behind it the desktop is in the Finder role (no
+      windoids, no strip, icons where they were). Hover the link: the
+      arrow stays the arrow; click it: the kit's npm page opens in a NEW
+      tab and the app is untouched behind it; Tab from OK reaches it with
+      a dotted ring. OK — or Escape — dismisses the box and NOTHING opens
+      or activates; Sprite Machine → About… raises the same box in either
+      role, over whatever is open. Pull a menu while it's up: nothing
+      responds (it's modal).
 - [ ] **Desktop Patterns, by eye**: in the panel, the well shows the
       current desktop pattern inside a 1px frame at 1:1 (the dither reads
       as the desktop's own); the 13×3 grid shows all 38 kit patterns at

@@ -6,7 +6,7 @@
 // (an untitled's first ⌘S mints its identity), renaming and window switches
 // all land here through the one workspace subscription; an untitled active
 // document or the bare desktop CLEARS the fragment — a reload then greets
-// with the New Document dialog, the no-autosave contract.
+// with the About box, the no-autosave contract.
 //
 // replaceState only — flipping between documents must not grow browser
 // history. The fragment is the written canonical form: any ?file= search

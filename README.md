@@ -55,7 +55,11 @@ The first-ever boot **seeds two starter documents** (Car, Cube) into the
 library as perfectly ordinary saved files — edit, rename or delete them like
 anything you saved yourself; they're created once and never come back (any
 persisted state, even an emptied desktop, suppresses the seeding). Every
-load **boots to the New Document dialog** — unless the URL names a saved
+load **boots to the About box** — the classic launch splash: the icon, the
+version, the blurb, the same dialog as Sprite Machine → About… (see
+[The About box](#the-about-box)); OK it and the bare desktop is yours,
+File → New…, an icon's double-click or File → Open… the ways in — unless
+the URL names a saved
 document (**`?file=Cube`**, or the bare fragment **`#Cube`**;
 case-insensitive, most-recently-modified on a name collision), which opens
 that library file directly, on its remembered edited face. A prior
@@ -69,8 +73,8 @@ switching to a saved document **mirrors its name into the fragment**
 (`#Cube`, via `replaceState` — no history spam; an untitled document or the
 bare desktop clears it, and any `?file=` is canonicalized away), so a plain
 browser reload restores exactly what's on screen. The same
-built-ins live on as **templates in File → New…**, the same New
-Document dialog: an Empty Document at a chosen tile size, or a template as a
+built-ins live on as **templates in File → New…**, the New Document
+dialog: an Empty Document at a chosen tile size, or a template as a
 fresh untitled copy. **Double-click a desktop icon**, pick File → Open…, or
 drop your own **3×2 sprite sheet** PNG anywhere on the window. **Smooth slopes** (low-poly additive 45° wedges) is
 on by default and toggles live in the 3D View's controls strip ("smooth",
@@ -358,20 +362,23 @@ mount (the mount fill is always applied to the current tile only — combine wit
 `?pick=<N>` to fill with a specific palette color) so a shot can show the tool +
 result — the
 stepper, face picker, dialog, swatch pick, hover preview, rect drag, and fill click
-can't be driven headlessly. Four shell-era params round the set out:
+can't be driven headlessly. Five shell-era params round the set out:
 `?fresh=1` boots with **storage ignored** (no desktop-state restore, no
 `?file` resolution, no saved-doc icons — a bare desktop now, every icon
-being a saved doc — no first-boot seeding, no New Document dialog, and no
+being a saved doc — no first-boot seeding, no About box greet, and no
 state writes — deterministic
 captures on a machine with saved docs) and `?hide=<window>[,<window>]`
 (`document|tools|sprite|stage`) hides windows a capture needs out of frame,
 and `?now=<when>` (an ISO date-time like `2026-08-24T19:27`, read as local
 time, or epoch milliseconds) **freezes the menu bar clock** at that instant —
 a live clock would otherwise make every shot with the bar in frame differ by
-the minute — and `?patterns=1` opens the **Desktop Patterns** control
+the minute — `?patterns=1` opens the **Desktop Patterns** control
 panel once the boot document has landed (the capture tool can't pull a
 menu; under `?fresh` the desktop is on the dither, so the panel shows it
-seeded).
+seeded), and `?about=1` opens the **About box** over the boot document
+(the plain boot's own greet — but that boot's virgin seeding is an
+IndexedDB round-trip the capture tool's virtual-time budget stalls on, so
+under `?fresh` this is the way to a shot of it).
 `?sample` shares the storage-untouched discipline: it opens the named
 built-in as an untitled from in-memory data, skipping the seeding and the
 `?file`/dialog boot alike (the deterministic path `drive.mjs` drives).
@@ -435,8 +442,9 @@ window the desktop's active window?**
 - Closing the last document window leaves the same desktop-focused state:
   a bare desktop whose windoid arrangement survives for the next open. And
   **boot begins in this state too**: until the first document window opens
-  (a `?file` load, the New dialog's Create, a drop), nothing has activated —
-  a dialog-greeted load shows the Finder grammar with the windoids hidden.
+  (a `?file` load, File → New…'s Create, a drop), nothing has activated —
+  an About-greeted load shows the Finder grammar with the windoids hidden,
+  and OK leaves it so (the splash opens nothing).
   A windoid is on screen _because_ a document window is, never before.
 
 ### Documents are windows
@@ -456,7 +464,9 @@ strip's clamp bounds, and the Undo/Redo enablement.
 
 ### Menu bar
 
-- **Sprite Machine** — _About…_, _Settings…_ (parked: the render prefs
+- **Sprite Machine** — _About…_ (the About box — see
+  [The About box](#the-about-box); it is also the boot greeting),
+  _Settings…_ (parked: the render prefs
   moved to the 3D View's controls strip, so the emptied item sits disabled
   as a placeholder for a future settings surface), _Desktop Patterns_ (the
   control panel — see [Desktop Patterns](#desktop-patterns); a window, not
@@ -728,6 +738,35 @@ the Finder's window: see [One machine, two roles](#one-machine-two-roles)
 for what opening and closing it does to the application. `?patterns=1`
 opens it over the boot document for captures.
 
+### The About box
+
+**Sprite Machine → About…** — and every load the URL gives no document to
+open (the top of this README): the classic launch splash, System 7's
+About box on the plain dBoxProc frame (no bar, no close box; OK or Escape
+dismisses it onto whatever was there — at boot, the bare desktop in the
+Finder role, nothing opened and nothing activated). The application's
+**32×32 icon** (`src/assets/sprite-machine-icon.png`, through the kit's
+`vf-img` at 1:1 — one image pixel one system px) sits beside four lines
+in the display face — **Sprite Machine**, **version N**, a date, and
+**created by Adam Portilla** — over the two-paragraph blurb set in the
+same Chicago (System 7's alerts and About boxes used chrome type), whose
+**Vintage Frames** is a real link to the kit's
+[npm page](https://www.npmjs.com/package/vintage-frames) — opened in a new
+tab, so the app and any unsaved document stay put; inked by `style.css`
+in the paragraph's own black with the underline as its whole affordance,
+and the arrow stays the arrow over it (System 7 had no pointing hand, and
+the kit ships none) — and a default OK. The version and the
+date are **build facts, never markup**: `vite.config.js` `define`s
+`__APP_VERSION__` (package.json's `version`) and `__APP_DATE__` (HEAD's
+commit date — the date of the code that is running, so every build of one
+commit says the same thing and a capture stays byte-identical across runs;
+formatted in Node as `Aug 24, 2026`, so no runtime locale or timezone can
+move it, and a checkout without git reads the build day), and
+`shell/menus.js` writes them into the box's two empty labels at wire-up,
+so the markup never carries a stale number. Bumping `version` in
+package.json is the whole release ritual. `?about=1` opens the box over
+the boot document for captures.
+
 ### Documents: a document IS a .png
 
 A document is exactly one sprite `.png` — the 3×2 atlas — with all metadata
@@ -764,7 +803,7 @@ into the library at the first-ever boot** (`seedDefaultDocs` in
 generated icon) and are ordinary mutable documents from then on; the
 seeding runs only when NO prior state persists (no desktop-state blob AND
 an empty library — deleting or emptying later never resurrects them); the
-virgin boot then greets like any other — the New Document dialog, unless
+virgin boot then greets like any other — the About box, unless
 `?file` names a doc (the just-seeded Car and Cube are already nameable).
 Double-click opens
 (into the existing window if one is open, deselecting the icon as the
@@ -808,8 +847,8 @@ geometry is in it**: the windoids and the document windows place fresh
 from the live raster every session (see [Windows](#windows)) — the
 persistence layer never sees a window. Icons restore at
 boot; the per-document entries are deliberately NOT reopened then — what
-a load shows is the URL's call (`?file=<name>`, else the New Document
-dialog; and the address bar tracks the active saved document as `#<name>`
+a load shows is the URL's call (`?file=<name>`, else the About box; and
+the address bar tracks the active saved document as `#<name>`
 — `shell/url-state.js` — so a plain reload restores it) — they hand a
 saved doc its remembered edited face whenever it IS opened. Untitled
 windows don't survive a reload either way (no autosave — explicit Save is
@@ -1064,7 +1103,8 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   re-pinned like every window, and mirroring as the Finder's turn when active)
   menus.js        vf-menu-select -> workspace/file actions on the ACTIVE document; the two-role
                   focus gating + checkmark sync; Desktop Patterns -> the panel (patterns.js);
-                  every dialog flow (About / Settings / New
+                  every dialog flow (About — the boot greeting too, its version + date
+                  lines stamped at wire-up from vite.config.js's define — / Settings / New
                   Document (templates + tile size) / Open / name prompt / Properties /
                   unsaved-changes / storage notice); the quit cascade
   icons.js        the icon layer: one vf-icon per saved doc (nothing else), generated front-tile art,
@@ -1089,7 +1129,8 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
 src/
   main.js         the composition root: parse params -> seed stores -> fit desktop + cursor -> shell wiring
                   -> stage + rebuilder -> boot documents (test-path sample / ?file=<name> /
-                  the New Document dialog, after the one truly-virgin seeding)
+                  the About box greet, after the one truly-virgin seeding) -> the ?patterns /
+                  ?about capture hooks
   boot/params.js  URL-param parsing -> one typed boot object (pure, Node-tested)
   loaders.js      every way a sheet enters (template-or-sample / file / blank at a chosen tile size):
                   decode + validateSheet -> a FRESH workspace context | build.setError; a dropped

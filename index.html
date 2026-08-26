@@ -207,24 +207,64 @@
       ></div>
 
       <!-- ============================ Dialogs =========================== -->
+      <!-- The About box: the classic launch splash, and Sprite Machine →
+           About… — one dialog, and the BOOT GREETING (main.js parks a load
+           with no document to open on it; OK or Escape leaves the bare
+           desktop). The plain dBoxProc frame (no bar, no close box — `label`
+           names it for assistive tech), the application's 32×32 icon
+           (src/assets/sprite-machine-icon.png, shown through vf-img at 1:1 —
+           a plain <img src> Vite resolves: served as-is in dev, inlined as a
+           data URI at build, being under its asset inline limit) beside the
+           name / version /
+           date / author block, the two-paragraph blurb in the display face
+           (System 7 alerts and About boxes used chrome type) — its "Vintage
+           Frames" a real link to the kit's npm page, opened in a NEW tab so
+           the app (and any unsaved document) stays put; the arrow stays the
+           arrow over it, System 7 having no pointing hand (style.css inks
+           it) — and OK bottom right. The version and date lines are BUILD
+           facts, so the markup boots them empty and shell/menus.js fills
+           them (package.json's version, HEAD's commit date — vite.config.js
+           `define`); the markup never carries a stale number. Arithmetic:
+           the plain frame's body begins 5px inside every edge and pads 16
+           (the kit), so 464 wide is a 416 content measure, and 238 high is
+           5 + 16 + [64 header (four 16px lines beside the 32px icon) + 8 +
+           two 2-line paragraphs at 16px lines with 16 between (80)] + the 44
+           footer (16 above the ringed 28px default button) + 16 + 5. -->
       <vf-dialog
         id="dlg-about"
-        heading="About Sprite Machine"
-        closable
-        width="420"
-        height="240"
+        frame="plain"
+        label="About Sprite Machine"
+        width="464"
+        height="238"
       >
-        <vf-stack width="370" gap="10">
-          <vf-paragraph>
-            Sprite Machine turns low-resolution pixel-art face sprites (top / front / side
-            / …) into a real, rotatable 3D object — the chunky look is baked into the
-            geometry, not faked by a shader.
-          </vf-paragraph>
-          <vf-paragraph>
-            One sheet, six tiles: a 3×2 atlas is carved into a voxel solid by multi-view
-            visual-hull reconstruction — 1 pixel = 1 voxel = 1 cube — and smoothed with
-            additive 45° wedges.
-          </vf-paragraph>
+        <vf-stack width="416" gap="8">
+          <vf-stack direction="row" gap="8" place="start">
+            <vf-img width="32" height="32">
+              <img src="src/assets/sprite-machine-icon.png" alt="" />
+            </vf-img>
+            <vf-stack>
+              <vf-label>Sprite Machine</vf-label>
+              <vf-label id="about-version"></vf-label>
+              <vf-label id="about-date"></vf-label>
+              <vf-label>created by Adam Portilla</vf-label>
+            </vf-stack>
+          </vf-stack>
+          <vf-stack gap="16">
+            <vf-paragraph face="display">
+              Generate real 3d models and configurable sprite atlases by drawing the 2d
+              projected faces with simple pixel art tools.
+            </vf-paragraph>
+            <vf-paragraph face="display">
+              Sprite Machine uses
+              <a
+                href="https://www.npmjs.com/package/vintage-frames"
+                target="_blank"
+                rel="noopener"
+                >Vintage Frames</a
+              >
+              components to present itself in the style of a classic Macintosh app.
+            </vf-paragraph>
+          </vf-stack>
         </vf-stack>
         <vf-button id="btn-about-ok" slot="buttons" variant="default">OK</vf-button>
       </vf-dialog>

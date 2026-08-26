@@ -7,7 +7,8 @@
    (custom properties inherit into every shadow tree), the reset, the black
    ground behind the desktop bezel, the light-DOM Colors dialog's page share
    (host display, the hover readout's color chip), the 3D View body's
-   column + viewport fill rules, the desktop-icon column width, and the drop overlay
+   column + viewport fill rules, the desktop-icon column width, the About
+   box's link ink, and the drop overlay
    drop-target.js renders into the page. If a rule here paints a border or a
    color on kit chrome, it's a bug — the kit draws everything.
    --------------------------------------------------------------------------- */
@@ -57,6 +58,25 @@ body {
   margin-inline-start: auto;
   margin-inline-end: calc(var(--vf-scale, 1) * 9px);
   --vf-label-line-height: 20px;
+}
+
+/* The About box's one hyperlink (index.html — "Vintage Frames", the kit's
+   npm page): page copy, not kit chrome, so the page inks it. The UA's blue
+   would be the only color on a 1-bit dialog — it takes the paragraph's own
+   ink with the underline as the link's whole affordance (System 7 had no
+   links; the underline is the one mark everyone reads), and the kit's
+   dotted ring when keyboard-focused (the convention for a control that
+   can't carry the buttons' dashed underline — it already wears one). No
+   cursor claim: the kit ships no pointing hand, and System 7 had none. */
+#dlg-about a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: calc(var(--vf-scale, 1) * 1px);
+  outline: none;
+}
+#dlg-about a:focus-visible {
+  outline: calc(var(--vf-scale, 1) * 1px) dotted currentColor;
+  outline-offset: calc(var(--vf-scale, 1) * 1px);
 }
 
 /* The Colors dialog's host — the one LIGHT-DOM component (its vf-dialog must

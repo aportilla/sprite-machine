@@ -213,7 +213,9 @@ if (hot) {
 
 // --- boot documents ----------------------------------------------------------
 // The boot is URL-DRIVEN: ?file=<name> (or a bare #<name> fragment) opens
-// that SAVED document; any other load greets with the New Document dialog.
+// that SAVED document; any other load greets with the About box — the
+// classic launch splash (the same dialog as Sprite Machine → About…): OK it
+// and the bare desktop is yours (File → New…, an icon, File → Open…).
 // Three boots, in precedence order:
 //   1. TEST (?fresh or an explicit ?sample): the named sample opens as an
 //      untitled from in-memory data, storage untouched beyond a background
@@ -230,14 +232,15 @@ if (hot) {
 //      remembered edited face, its window placed fresh from the live raster
 //      (window geometry is never restored). No param, an unknown name, a
 //      failed load, or broken storage (a private window — there's no
-//      library to name into, and everything the dialog creates is an
-//      untitled window needing none) all fall back to the New Document
-//      dialog. A prior session's open windows are deliberately NOT reopened
-//      — the URL, not localStorage, says what a load shows (the icons
-//      still restore).
-// Then the one post-boot hook: ?patterns=1 opens the Desktop Patterns panel
+//      library to name into; File → New… still makes untitled windows
+//      needing none) all fall back to the About box. A prior session's
+//      open windows are deliberately NOT reopened — the URL, not
+//      localStorage, says what a load shows (the icons still restore).
+// Then the post-boot hooks: ?patterns=1 opens the Desktop Patterns panel
 // over whatever booted (a capture hook — the capture tool can't pull a
-// menu; the panel lands on top, the newest window).
+// menu; the panel lands on top, the newest window), and ?about=1 the About
+// box (the plain boot's own greet, but that boot's seeding stalls under the
+// capture tool's virtual-time budget — this reaches the box under ?fresh).
 async function bootDocuments() {
   // ?edit seeds the sample path's context face AT open — a post-open setFace
   // would race the one-shot mount hooks (the mount fill commits against
@@ -288,10 +291,11 @@ async function bootDocuments() {
     }
   }
 
-  menus.actions.showNewDialog();
+  menus.actions.showAbout();
 }
 
 (async () => {
   await bootDocuments();
   if (boot.patterns) patterns.open();
+  if (boot.about) menus.actions.showAbout();
 })();

@@ -77,10 +77,10 @@ const URL = `http://localhost:${APP_PORT}/?sample=car&edit=front&rotate=0`;
 // The PLAIN app url — no ?sample, so the real boot path runs. On this run's
 // brand-new profile the first load is the one TRULY VIRGIN boot: it seeds the
 // built-in defaults (Car, Cube) into IndexedDB as ordinary stored documents
-// and parks at the New Document dialog (no ?file=<name> in the url, so no
-// document opens). Every ?sample boot after it skips the seeding (the
-// deterministic test path), so the rest of the run sees exactly the two
-// seeded docs plus whatever it saves itself.
+// and parks at the About box (no ?file=<name> in the url, so no document
+// opens). Every ?sample boot after it skips the seeding (the deterministic
+// test path), so the rest of the run sees exactly the two seeded docs plus
+// whatever it saves itself.
 const SEED_URL = `http://localhost:${APP_PORT}/?rotate=0`;
 
 if (!existsSync(CHROME)) {
@@ -555,15 +555,15 @@ async function waitForApp() {
 }
 
 // The plain boot (no ?sample, no ?file) opens NO document — it parks at the
-// New Document dialog, so APP_READY (an editor canvas + build stats) never
-// comes true there. This is that boot's readiness signal.
-const DIALOG_READY = `(() => {${DEEP}
-  const d = __q('#dlg-new');
+// About box (the launch splash), so APP_READY (an editor canvas + build
+// stats) never comes true there. This is that boot's readiness signal.
+const GREET_READY = `(() => {${DEEP}
+  const d = __q('#dlg-about');
   return !!(d && d.open);
 })()`;
-async function waitForNewDialog() {
+async function waitForGreet() {
   for (let i = 0; i < 100; i++) {
-    if (await evaluate(DIALOG_READY).catch(() => false)) break;
+    if (await evaluate(GREET_READY).catch(() => false)) break;
     await sleep(200);
   }
   await sleep(400);
@@ -630,18 +630,19 @@ async function main() {
   });
   await send('Runtime.enable');
   await send('Page.enable');
-  await waitForNewDialog();
+  await waitForGreet();
 
-  // --- virgin boot: the defaults seed, the dialog greets ----------------------
+  // --- virgin boot: the defaults seed, the About box greets -------------------
   // The run's first load is the PLAIN url on a brand-new profile — the one
   // boot allowed to seed: Car and Cube land in the library as normal stored
   // documents (real PNGs, generated icons, `doc:` keys like any save), and
-  // with no ?file=<name> in the url the boot parks at the New Document
-  // dialog, no document window open. A reload then finds persisted state and
-  // must NOT seed again — and greets with the dialog again (a prior
-  // session's open windows deliberately don't reopen; the URL says what a
-  // load shows). ?file=<name> is that URL: it opens the named stored doc,
-  // case-insensitively.
+  // with no ?file=<name> in the url the boot parks at the About box (the
+  // launch splash — the same dialog as Sprite Machine → About…), no document
+  // window open and no New Document dialog. A reload then finds persisted
+  // state and must NOT seed again — and greets with the About box again (a
+  // prior session's open windows deliberately don't reopen; the URL says
+  // what a load shows). ?file=<name> is that URL: it opens the named stored
+  // doc, case-insensitively.
   section('virgin boot seeds the defaults');
   const seedProbe = () =>
     evaluate(`(() => {${DEEP}
@@ -654,7 +655,13 @@ async function main() {
         heading: d ? d.heading : '',
         docWindows: [...document.querySelectorAll('vf-window')].filter((w) =>
           w.id.startsWith('win-doc-')).length,
+        aboutOpen: !!__q('#dlg-about').open,
         newDialogOpen: !!__q('#dlg-new').open,
+        // The About box's build-fact lines (menus.js writes them at wire-up
+        // from vite.config.js's define — package.json's version, HEAD's
+        // commit date in System 7's short form).
+        aboutVersion: __q('#about-version').textContent.trim(),
+        aboutDate: __q('#about-date').textContent.trim(),
       };
     })()`);
   let seed = await seedProbe();
@@ -669,9 +676,19 @@ async function main() {
     JSON.stringify(seed.icons)
   );
   check(
-    'the boot parks at the New Document dialog — no document window',
-    seed.newDialogOpen === true && seed.docWindows === 0,
-    JSON.stringify({ open: seed.newDialogOpen, docWindows: seed.docWindows })
+    'the boot parks at the About box — no document window, no New Document dialog',
+    seed.aboutOpen === true && seed.newDialogOpen === false && seed.docWindows === 0,
+    JSON.stringify({
+      about: seed.aboutOpen,
+      newDialog: seed.newDialogOpen,
+      docWindows: seed.docWindows,
+    })
+  );
+  check(
+    'the About box reads the build facts: "version <package.json>" and a "Mon D, YYYY" date',
+    /^version \d+\.\d+\.\d+/.test(seed.aboutVersion) &&
+      /^[A-Z][a-z]{2} \d{1,2}, \d{4}$/.test(seed.aboutDate),
+    JSON.stringify({ version: seed.aboutVersion, date: seed.aboutDate })
   );
   // The dialog greet is DESKTOP-FOCUSED: no document window has opened, so
   // the application never activated (the mirror reads the desktop's own
@@ -701,14 +718,14 @@ async function main() {
   );
   await sleep(600); // let the desktop-state debounce land before navigating
   await send('Page.navigate', { url: SEED_URL });
-  await waitForNewDialog();
+  await waitForGreet();
   seed = await seedProbe();
   check(
-    'a plain reload does not re-seed and greets with the dialog again',
-    seed.icons.length === 2 && seed.newDialogOpen === true && seed.docWindows === 0,
+    'a plain reload does not re-seed and greets with the About box again',
+    seed.icons.length === 2 && seed.aboutOpen === true && seed.docWindows === 0,
     JSON.stringify({
       icons: seed.icons.length,
-      open: seed.newDialogOpen,
+      about: seed.aboutOpen,
       docWindows: seed.docWindows,
     })
   );
@@ -720,24 +737,53 @@ async function main() {
     !greet2.windows.tools && !greet2.windows.sprite && !greet2.windows.stage,
     JSON.stringify(greet2.windows)
   );
-  // Creating from the greeting dialog opens the FIRST document window, and
-  // that is what activates the application: the windoids and the options
-  // strip appear BECAUSE a document window opened, never before. (A fresh
-  // Empty Document is born clean — the load's sheet bump marks it — so
-  // navigating away below can't trip the beforeunload guard.) A headless
-  // artifact reload can land mid-gesture and boot back to the dialog,
-  // dropping the untitled window (they never survive a reload — by design),
-  // so the gesture retries: the run's standing tolerance for that artifact.
+  // OK dismisses the greet onto the BARE desktop: nothing opens and nothing
+  // activates — the splash is a splash. (`dismissGreet` is reused wherever a
+  // plain boot has to be got past: it OKs the box only if it is up, so a
+  // retry after a headless reload lands on either state.)
+  const dismissGreet = async () => {
+    if (!(await evaluate(GREET_READY).catch(() => false))) return;
+    const ok = await centreOf('#btn-about-ok');
+    await click(ok.x, ok.y);
+    await sleep(400);
+  };
+  await dismissGreet();
+  seed = await seedProbe();
+  const bare = await probe();
+  check(
+    'OK closes the About box onto the bare desktop: nothing opens, nothing activates',
+    seed.aboutOpen === false &&
+      seed.docWindows === 0 &&
+      !bare.windows.tools &&
+      !bare.windows.sprite &&
+      !bare.windows.stage &&
+      bare.optionsStrip === false &&
+      bare.menuEnabled.newDoc === true &&
+      bare.menuEnabled.save === false,
+    JSON.stringify({
+      about: seed.aboutOpen,
+      docWindows: seed.docWindows,
+      windows: bare.windows,
+      strip: bare.optionsStrip,
+    })
+  );
+  // File → New… → Create opens the FIRST document window, and that is what
+  // activates the application: the windoids and the options strip appear
+  // BECAUSE a document window opened, never before. (A fresh Empty Document
+  // is born clean — the load's sheet bump marks it — so navigating away
+  // below can't trip the beforeunload guard.) A headless artifact reload can
+  // land mid-gesture and boot back to the greet, dropping the untitled
+  // window (they never survive a reload — by design), so the gesture
+  // retries, re-dismissing the greet: the run's standing tolerance for that
+  // artifact.
   let created = null;
   for (let attempt = 0; attempt < 3 && created?.docWindows !== 1; attempt++) {
-    await waitForNewDialog();
-    const newOk = await centreOf('#btn-new-ok');
-    await click(newOk.x, newOk.y);
-    await sleep(650);
+    await dismissGreet();
+    await newBlankDoc();
     created = await probe();
   }
   check(
-    "the dialog's Create opens a window and ACTIVATES: windoids + strip up",
+    'File → New… → Create opens a window and ACTIVATES: windoids + strip up',
     created.docWindows === 1 &&
       created.docActive === true &&
       created.windows.tools &&
@@ -755,9 +801,10 @@ async function main() {
   await waitForApp();
   seed = await seedProbe();
   check(
-    '?file=cube opens the stored Cube (case-insensitive), no dialog',
+    '?file=cube opens the stored Cube (case-insensitive), no greet',
     seed.heading === 'Cube' &&
       seed.docWindows === 1 &&
+      seed.aboutOpen === false &&
       seed.newDialogOpen === false &&
       seed.icons.find((i) => i.label === 'Cube')?.open === true,
     JSON.stringify(seed)
@@ -2904,30 +2951,28 @@ async function main() {
     JSON.stringify({ before: cornered.wins, after: cornerBack.wins })
   );
 
-  // The reported case: the browser is resized WHILE the New Document dialog
-  // is up (a dialog-greeted boot — windoids hidden, nothing open), then
+  // The reported case: the browser is resized WHILE the About box is up (a
+  // greeted boot — windoids hidden, nothing open), then OK, File → New…,
   // Create. The hidden windoids are untouched, so the resize re-placed
   // them; the new window places on the live raster — so everything lands
   // exactly where Arrange Windows would put it on the squished raster, not
   // on a scaled-down copy of the boot layout. (A one-axis squish: the
   // kit's zoom tracker can't read it as page zoom.)
   await send('Page.navigate', { url: SEED_URL });
-  await waitForNewDialog();
+  await waitForGreet();
   await metrics(780, 500);
   await sleep(400);
   let made = null;
   for (let attempt = 0; attempt < 3 && made?.docWindows !== 1; attempt++) {
-    await waitForNewDialog();
-    const ok = await centreOf('#btn-new-ok');
-    await click(ok.x, ok.y);
-    await sleep(650);
+    await dismissGreet();
+    await newBlankDoc();
     made = await probe();
   }
   const afterCreate = await layoutSnap();
   await pickMenu('#menu-view', 'arrange');
   const afterArrange = await layoutSnap();
   check(
-    'a resize behind the New Document dialog: Create lands every window where Arrange would',
+    'a resize behind the About box: Create lands every window where Arrange would',
     made?.docWindows === 1 &&
       afterCreate.wins.length === 4 &&
       JSON.stringify(afterCreate.wins) === JSON.stringify(afterArrange.wins),
