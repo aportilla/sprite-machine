@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 228 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 234 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -127,9 +127,37 @@ browser, `http://localhost:5173/`.
       the selection stays and the tool stays Selection; Alt-click empty
       space — the eraser is selected and the selection drops (the existing
       empty-sample rule).
-- [ ] **Texel grid (always on)**: the lattice shows at texel sizes ≥ 4
-      system px; shrink the document window until the texel size drops
-      below 4 — the lattice disappears rather than swamping the art.
+- [ ] **1-bit canvas, by eye**: the artwork well is white; empty texels show
+      the dot grid — one black system px at every lattice crossing, the
+      right and bottom edges of dots included, so the dots alone bound the
+      canvas surface — and a painted texel covers the dot at its top-left
+      corner (paint a white texel: the dot goes, and that is the only
+      tell); nothing is drawn over the art but the extent rules, and those
+      only with **View → Guides** checked — a fresh load boots them off
+      with the item unchecked; the pick checks it and every open window's
+      rules appear at once, a second pick clears them; the item greys with
+      the desktop focused — black-and-white dotted hairlines that agree
+      where they cross (no
+      doubled or missing dot at the crossing) and sit ON the dot grid's
+      lines, all four (the right and bottom rules run through a column /
+      row of dots, never a px inside it — a face whose extent reaches the
+      tile edge shows its far rule on the edge column of dots); no lattice of
+      grid lines, no cyan, no gray checker — the art is the only color on
+      the canvas. Shrink the document window until the texel size drops to
+      1 system px: the dots go (a dot would be the texel) and the paper is
+      plain. On a derived face the onion-skin is a pale tint of the
+      opposite face's art, the dots still black through it. And the paper
+      is WHITE under the empty texels, never the desktop pattern — a kit
+      leak the stack's declared `pattern` bridges (kit ask #6).
+- [ ] **Dithered paper, by eye**: View → Dither Background puts the canvas
+      on the kit's 50% dither, edge to edge of the canvas box (it is the
+      stack container's own pattern, so it re-rasters crisp at any zoom):
+      a white texel now reads against it, the dots are gone (the dither is
+      the transparency indicator), and with Guides on a rule reads as an
+      INVERTED line through the gray rather than disappearing into it;
+      the onion-skin still tints through. A second pick brings the white
+      paper and its dots back; the item greys with the desktop focused;
+      a reload boots white.
 - [ ] **One cursor, everywhere**: over the pixel canvas only the kit's drawn
       crosshair shows (no native crosshair beneath it), and the tool cells
       show only the kit's arrow (no native hand). Open the Colors dialog

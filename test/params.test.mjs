@@ -31,6 +31,8 @@ test('defaults: everything off / null on an empty query', () => {
       now: b.now,
       patterns: b.patterns,
       about: b.about,
+      guides: b.guides,
+      dither: b.dither,
     },
     {
       flat: false,
@@ -54,8 +56,22 @@ test('defaults: everything off / null on an empty query', () => {
       now: null,
       patterns: false,
       about: false,
+      guides: false,
+      dither: false,
     }
   );
+});
+
+test('?guides=1 shows the extent rules (off by default)', () => {
+  assert.equal(parseBootParams('?guides=1').guides, true);
+  assert.equal(parseBootParams('?guides=0').guides, false);
+  assert.equal(parseBootParams('?guides=yes').guides, false, 'only the documented 1');
+});
+
+test('?dither=1 puts the canvas on the dithered paper (white by default)', () => {
+  assert.equal(parseBootParams('?dither=1').dither, true);
+  assert.equal(parseBootParams('?dither=0').dither, false);
+  assert.equal(parseBootParams('?dither=yes').dither, false, 'only the documented 1');
 });
 
 test('?patterns=1 opens the Desktop Patterns panel after the boot document', () => {

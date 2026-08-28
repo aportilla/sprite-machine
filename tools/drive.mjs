@@ -459,8 +459,14 @@ const PROBE = `(() => {${DEEP}
       // either role) — not on appActive like the doc-scoped items.
       arrange: !__q('vf-menu-item[value="arrange"]').disabled,
       toolPencil: !__q('vf-menu-item[value="tool-pencil"]').disabled,
+      guides: !__q('vf-menu-item[value="guides"]').disabled,
+      dither: !__q('vf-menu-item[value="dither"]').disabled,
     },
     menuChecks: {
+      // View → Guides / Dither Background: the extent rules' and the paper's
+      // toggles, checkmarks off prefs.
+      guides: !!__q('vf-menu-item[value="guides"]').checked,
+      dither: !!__q('vf-menu-item[value="dither"]').checked,
       // The Tools menu's checked tool item, sans its 'tool-' prefix. Exactly
       // one must be checked (the sticky mode) — any other count reads '!N',
       // so a stuck double-check fails the tool checks instead of hiding.
@@ -731,6 +737,8 @@ async function main() {
       greet.menuEnabled.close === false &&
       greet.menuEnabled.pickColor === false &&
       greet.menuEnabled.arrange === false &&
+      greet.menuEnabled.guides === false &&
+      greet.menuEnabled.dither === false &&
       greet.menuEnabled.toolPencil === false,
     JSON.stringify(greet.menuEnabled)
   );
@@ -1439,7 +1447,16 @@ async function main() {
     return probe();
   };
   const canvasEmpty = () => layerIsEmpty('.editor-canvas');
-  const onionSkinShowing = async () => !(await layerIsEmpty('.editor-canvas-bg'));
+  // The onion-skin is the one TRANSLUCENT thing on the background layer (its
+  // ground is transparent, its dot grid opaque black), so "showing" is a
+  // texel with a partial alpha — MIRROR_ALPHA's tint of the opposite face.
+  const onionSkinShowing = () =>
+    evaluate(`(() => {${DEEP}
+      const c = __qd('.editor-canvas-bg');
+      const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 0 && d[i] < 255) return true;
+      return false;
+    })()`);
 
   s = await gotoFace('right');
   check('a mirror-derived face opens with an empty canvas', await canvasEmpty());
@@ -1662,6 +1679,66 @@ async function main() {
     'View → Arrange Windows is live with a document open',
     s.menuEnabled.arrange === true,
     JSON.stringify(s.menuEnabled)
+  );
+  // View → Guides: the extent rules over the canvas are OFF every load (the
+  // guide layer is the rules' only painter now, so "off" is an empty layer)
+  // and the item is a checkmark toggle off the prefs slice — a real menu
+  // pick draws them and checks the item, a second pick clears both.
+  const guidesShowing = async () => !(await layerIsEmpty('.editor-canvas-overlay'));
+  check(
+    'the extent rules boot off: View → Guides unchecked, the guide layer clear',
+    s.menuChecks.guides === false && !(await guidesShowing()),
+    JSON.stringify({ checked: s.menuChecks.guides, showing: await guidesShowing() })
+  );
+  await pickMenu('#menu-view', 'guides');
+  s = await probe();
+  check(
+    'View → Guides draws the extent rules and checks the item',
+    s.menuChecks.guides === true && (await guidesShowing()),
+    JSON.stringify({ checked: s.menuChecks.guides, showing: await guidesShowing() })
+  );
+  await pickMenu('#menu-view', 'guides');
+  s = await probe();
+  check(
+    '…and a second pick clears the rules and the check',
+    s.menuChecks.guides === false && !(await guidesShowing()),
+    JSON.stringify({ checked: s.menuChecks.guides, showing: await guidesShowing() })
+  );
+  // View → Dither Background: the paper under the art is the canvas stack
+  // container's OWN kit pattern — `white` every load, the 50% dither
+  // (`gray-50`, the desktop's default) with the item checked — and on the
+  // dither the dot grid stands down: the bg layer's (0,0) texel is an opaque
+  // dot on white paper and clear on the dither (the car's back leaves that
+  // corner empty, so no onion-skin tint confuses it).
+  const paper = () =>
+    evaluate(`(() => {${DEEP} return __qd('.editor-canvas-stack').pattern; })()`);
+  const cornerDot = async () =>
+    (await evaluate(`(() => {${DEEP}
+      const c = __qd('.editor-canvas-bg');
+      return c.getContext('2d').getImageData(0, 0, 1, 1).data[3]; })()`)) === 255;
+  const paperState = async () => ({
+    checked: s.menuChecks.dither,
+    paper: await paper(),
+    dot: await cornerDot(),
+  });
+  check(
+    'the paper boots white: View → Dither Background unchecked, the dot grid up',
+    s.menuChecks.dither === false && (await paper()) === 'white' && (await cornerDot()),
+    JSON.stringify(await paperState())
+  );
+  await pickMenu('#menu-view', 'dither');
+  s = await probe();
+  check(
+    "View → Dither Background makes the kit's 50% dither the paper, checks the item, and the dots stand down",
+    s.menuChecks.dither === true && (await paper()) === 'gray-50' && !(await cornerDot()),
+    JSON.stringify(await paperState())
+  );
+  await pickMenu('#menu-view', 'dither');
+  s = await probe();
+  check(
+    '…and a second pick returns the white paper and its dots',
+    s.menuChecks.dither === false && (await paper()) === 'white' && (await cornerDot()),
+    JSON.stringify(await paperState())
   );
 
   // --- desktop: the Tools menu ------------------------------------------------
@@ -2134,6 +2211,8 @@ async function main() {
       s.menuEnabled.close === false &&
       s.menuEnabled.pickColor === false &&
       s.menuEnabled.arrange === true &&
+      s.menuEnabled.guides === false &&
+      s.menuEnabled.dither === false &&
       s.menuEnabled.toolPencil === false,
     JSON.stringify(s.menuEnabled)
   );

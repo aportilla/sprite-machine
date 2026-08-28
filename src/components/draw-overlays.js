@@ -1,67 +1,95 @@
 // ---------------------------------------------------------------------------
-// Pure canvas painters for <sm-draw-canvas>'s three system-res overlay
-// layers: the alignment-guide hairlines, the pencil's filled hover-footprint
+// Pure canvas painters for <sm-draw-canvas>'s system-res layers: the dot-grid
+// ground UNDER the art (the transparency indicator), and the three overlays
+// over it — the alignment-guide hairlines, the pencil's filled hover-footprint
 // preview, the eyedropper's sample-target outline, the rect tool's live drag
 // preview, and the selection tool's marching ants. Stateless — everything
 // arrives as arguments — so the component keeps only gesture state and these
 // stay trivially readable.
 // All draw in SYSTEM-px space — the kit's virtual pixel grid: the backings are
 // tileW·k × tileH·k for a k-system-px texel, CSS-magnified nearest-neighbor in
-// lockstep with the art, so their 1px hairlines are exactly one system px (the
-// kit's own hairline unit), crisp at any display density or browser zoom.
+// lockstep with the art, so their 1px dots and hairlines are exactly one
+// system px (the kit's own hairline unit), crisp at any display density or
+// browser zoom. The canvas is 1-BIT BUT FOR THE ART: everything here is black
+// or white (the hover previews' ink tint and erase red are the exceptions —
+// they preview the art itself), so the sprite is the only color on the page.
 // ---------------------------------------------------------------------------
 
 import { brushBounds } from '../lib/brush.js';
 import { roundedRectRows } from '../lib/rect.js';
 
-// Hairline extent rules: cyan so they read as guides distinct from the sprite
-// art — OPAQUE, so a rule drawn over the texel lattice covers it outright
-// (a translucent rule would let the lattice line under it show through).
-const GUIDE_COLOR = 'rgb(120, 200, 255)';
-
 /** `scale` is whole system px per texel; `sysW`/`sysH` the layer in system px.
  *  @typedef {{tileW:number, tileH:number, scale:number, sysW:number, sysH:number}} OverlayView */
 
-// The guide layer is two painters over one cleared context, in this order:
-// drawTexelGrid (the lattice — the layer's floor), then drawGuides (the
-// extent rules, on top). Neither clears the layer; the caller does, once.
-
-// The texel lattice — always on. Only drawn at texel sizes where the
-// hairlines don't swamp the art; GRID_MIN_SCALE is that threshold, in system
-// px per texel.
-export const GRID_MIN_SCALE = 4;
+// The dot grid — the transparency indicator, drawn UNDER the art on the
+// background layer (the checkerboard's successor, on white paper): one black
+// system px at EVERY LATTICE CROSSING, (tileW+1)×(tileH+1) of them — the far
+// column and row included, on the art's outer edge, so the dots alone bound
+// the canvas surface (the layer is one system px wider and taller than the
+// art for them: sm-draw-canvas's LATTICE_PAD). An empty texel reads as paper
+// with a dot at its top-left corner and a painted one covers that dot — at
+// any texel size ≥ DOT_MIN_SCALE, that is the one tell between a white texel
+// and an empty one. Below DOT_MIN_SCALE a dot would BE the texel (k = 1 → a
+// solid black sheet), so the paper goes plain there; at k = 2 the dots are
+// the kit's own 25% dither.
+export const DOT_MIN_SCALE = 2;
 
 /** @param {CanvasRenderingContext2D} g @param {number} tileW @param {number} tileH
- *  @param {number} scale @param {number} sysW @param {number} sysH */
-export function drawTexelGrid(g, tileW, tileH, scale, sysW, sysH) {
-  if (scale < GRID_MIN_SCALE) return;
-  // ONE fill for the whole lattice: a single fill() composites each pixel
-  // once however many subpaths cover it, so the crossings take the 20% ink
-  // exactly as the runs do. Per-line fillRects would composite twice where a
-  // horizontal meets a vertical (1 − 0.8² = 36%) — a dark dot at every
-  // intersection.
-  const lattice = new Path2D();
-  for (let x = 1; x < tileW; x++) lattice.rect(x * scale, 0, 1, sysH);
-  for (let y = 1; y < tileH; y++) lattice.rect(0, y * scale, sysW, 1);
-  g.fillStyle = 'rgba(0, 0, 0, 0.2)';
-  g.fill(lattice);
+ *  @param {number} scale */
+export function drawDotGrid(g, tileW, tileH, scale) {
+  if (scale < DOT_MIN_SCALE) return;
+  const dots = new Path2D();
+  for (let y = 0; y <= tileH; y++)
+    for (let x = 0; x <= tileW; x++) dots.rect(x * scale, y * scale, 1, 1);
+  g.fillStyle = '#000';
+  g.fill(dots);
 }
 
-// Draw the four "furthest extent" hairlines OVER the lattice. The lines box
-// the region where a painted pixel can survive the carve: verticals at the
-// outer edges of the supported columns, horizontals at the supported rows.
-// Being opaque, a rule simply covers whatever lattice line it lands on — the
-// left/top rules sit exactly on one (uMin·scale), the right/bottom ones a px
-// inside theirs — and the rules' own crossings can't double either.
-export function drawGuides(g, guides, scale, sysW, sysH) {
+// A 1-bit DOTTED hairline: black and white system px alternating along the
+// rule, so a guide reads as a guide — distinct from the art (no color of its
+// own) and from the selection's dashed ants (a 1px period against their 4).
+// OPAQUE — the white px are white, not gaps — so the rule reads as one line
+// on any art color (a translucent rule would tint with the art under it).
+// The phase is absolute in the layer's coordinates (x + y + phase even →
+// black), so a horizontal and a vertical rule agree at their crossing: no
+// seam, no doubled or missing dot, whichever draws second. `phase` is 0 on
+// white paper and 1 on the dithered paper: the kit's 50% dither is black
+// exactly where x + y is even from the same origin, so a phase-0 rule would
+// vanish into it — phase 1 INVERTS the dither along the line instead, the
+// classic way a line is drawn on gray.
+function dottedRule(g, x, y, w, h, phase) {
+  g.fillStyle = '#fff';
+  g.fillRect(x, y, w, h);
+  const dots = new Path2D();
+  for (let j = 0; j < h; j++)
+    for (let i = 0; i < w; i++)
+      if (((x + i + y + j + phase) & 1) === 0) dots.rect(x + i, y + j, 1, 1);
+  g.fillStyle = '#000';
+  g.fill(dots);
+}
+
+// Draw the four "furthest extent" hairlines — the guide layer's only painter
+// (there are no lines over the art: the texel grid is the dot grid UNDER it).
+// The lines box the region where a painted pixel can survive the carve, and
+// they sit ON THE DOT GRID'S LATTICE LINES: a rule is the column (or row) of
+// system px that holds the dots it bounds — the left rule at the first
+// supported column's near edge (uMin·scale), the right rule at the last
+// supported column's FAR edge ((uMax+1)·scale: the next column's dots, or
+// the lattice's far column when the extent reaches the tile's edge),
+// horizontals likewise. `layerW`/`layerH` are the padded lattice layer's
+// size — the art plus the far dot column/row — so every rule runs through
+// the far dots and a far-edge rule has a column to land on. `phase` is the
+// dotting's phase (dottedRule): 0 on white paper, 1 on the dithered paper.
+// The caller clears the layer first.
+export function drawGuides(g, guides, scale, layerW, layerH, phase = 0) {
   if (!guides) return;
   const { uMin, uMax, vMin, vMax } = guides.extent;
-  g.fillStyle = GUIDE_COLOR;
   const T = 1; // hairline thickness (1 system px — the kit's hairline unit)
-  if (uMin != null) g.fillRect(uMin * scale, 0, T, sysH); // left extent
-  if (uMax != null) g.fillRect((uMax + 1) * scale - T, 0, T, sysH); // right extent
-  if (vMin != null) g.fillRect(0, vMin * scale, sysW, T); // top extent
-  if (vMax != null) g.fillRect(0, (vMax + 1) * scale - T, sysW, T); // bottom extent
+  const p = phase & 1;
+  if (uMin != null) dottedRule(g, uMin * scale, 0, T, layerH, p); // left extent
+  if (uMax != null) dottedRule(g, (uMax + 1) * scale, 0, T, layerH, p); // right extent
+  if (vMin != null) dottedRule(g, 0, vMin * scale, layerW, T, p); // top extent
+  if (vMax != null) dottedRule(g, 0, (vMax + 1) * scale, layerW, T, p); // bottom extent
 }
 
 // The haloed hairline box both cursor overlays share: a dark halo so the

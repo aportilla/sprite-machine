@@ -185,5 +185,11 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     // seeding is an IndexedDB round-trip the capture tool's virtual-time
     // budget stalls on, so under ?fresh this is the way to a shot of it).
     about: params.get('about') === '1',
+    // ?guides=1: show the canvas's extent rules (View → Guides), which boot
+    // OFF — a capture hook, since the capture tool can't pull a menu.
+    guides: params.get('guides') === '1',
+    // ?dither=1: put the canvas on the kit's 50% dither paper (View → Dither
+    // Background), which boots off — the same capture-hook reasoning.
+    dither: params.get('dither') === '1',
   };
 }

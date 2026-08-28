@@ -16,7 +16,7 @@
 :root {
   --sm-black: #000;
   --sm-white: #fff;
-  --sm-artwork: #000000; /* panel behind the pixel canvas */
+  --sm-artwork: #fff; /* the paper behind the pixel canvas — white: the canvas is 1-bit but for the art */
   --sm-select: #ff4f4f; /* the face-picker art's red — selection strokes */
   /* Clear the 20px menu bar (+4px reserve) for the kit's clipped popup panels. */
   --vf-popup-inset-top: 24px;

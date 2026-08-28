@@ -34,6 +34,7 @@
 // ---------------------------------------------------------------------------
 
 import { session } from '../state/session.js';
+import { prefs } from '../state/prefs.js';
 import { build } from '../state/build.js';
 import { shell } from '../state/shell.js';
 import { files, UNTITLED, docFilename } from '../state/files.js';
@@ -523,6 +524,17 @@ export function initMenus(desktop, windows, panels) {
   on($('#menu-view'), 'vf-menu-select', (e) => {
     if (modalOpen()) return;
     switch (menuDetail(e).value) {
+      case 'guides':
+        // The extent rules over every document canvas: a toggle on the
+        // prefs slice (off by default); syncGuides below mirrors it back
+        // as the item's checkmark.
+        prefs.setShowGuides(!prefs.get().showGuides);
+        break;
+      case 'dither':
+        // The paper under the art: white ↔ the kit's 50% dither (the canvas
+        // container's own pattern); same toggle-and-mirror shape.
+        prefs.setCanvasDither(!prefs.get().canvasDither);
+        break;
       case 'arrange':
         // The boot placement re-run on the current raster — windoids and
         // every open document window (windows.js). The item greys with no
@@ -577,6 +589,8 @@ export function initMenus(desktop, windows, panels) {
     'export-atlas',
     'properties',
     'pick-color',
+    'guides',
+    'dither',
     'tool-select',
     'tool-pencil',
     'tool-rect',
@@ -620,6 +634,19 @@ export function initMenus(desktop, windows, panels) {
   };
   teardown.push(session.subscribe(syncTools));
   syncTools();
+
+  // The View menu's two checkmarks mirror the prefs slice — Guides ↔
+  // showGuides, Dither Background ↔ canvasDither: a pick toggles the slice,
+  // the check follows it (both boot unchecked, the slice's defaults).
+  const itemGuides = $('vf-menu-item[value="guides"]');
+  const itemDither = $('vf-menu-item[value="dither"]');
+  const syncView = () => {
+    const p = prefs.get();
+    itemGuides.checked = p.showGuides;
+    itemDither.checked = p.canvasDither;
+  };
+  teardown.push(prefs.subscribe(syncView));
+  syncView();
 
   // A document window's close box routes through the same dirty check.
   windows.onDocumentClose = (key) => {

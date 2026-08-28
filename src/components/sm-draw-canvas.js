@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// <sm-draw-canvas> — the pixel-canvas subsystem: the 5-layer stack (checker/
+// <sm-draw-canvas> — the pixel-canvas subsystem: the 5-layer stack (dot-grid/
 // onion-skin background, the editable pixel canvas, the hairline guide overlay,
 // the cursor overlay, the selection's marching-ants overlay), the working
 // buffer, the selection/pencil/rect/fill/eraser/eyedropper gestures (the
@@ -47,10 +47,15 @@
 // re-render at pointer-move rate. Canvas backing stores are sized
 // imperatively, never template-bound (a bound width would clear the buffer
 // mid-diff). Every stroke is HARD-pixel (alpha 0 or 255) via lib/brush.js.
-// The one low-rate reactive input beyond the brush state is `active` —
+// The low-rate reactive inputs beyond the brush state are `active` —
 // whether this window is the desktop's active document window — which gates
 // the selection's no-drag Esc (every open window's canvas listens on the
-// document; only the active one answers).
+// document; only the active one answers) — `showGuides` (View → Guides, off
+// by default): whether the extent rules draw on the guide layer at all —
+// and `dither` (View → Dither Background, off by default): the PAPER under
+// the art, the stack container's own kit pattern — white, or the 50% dither
+// (PAPER_DITHER), on which the dot grid stands down (the dither is the
+// transparency indicator) and the rules draw at the opposite phase.
 //
 // The working buffer resets in willUpdate when the tile IDENTITY (or the tile
 // geometry) changes — identity is the caller's contract: the same reference
@@ -90,8 +95,8 @@ import {
   constrainAxis,
 } from '../lib/select.js';
 import {
+  drawDotGrid,
   drawGuides,
-  drawTexelGrid,
   drawCursorOutline,
   drawPencilPreview,
   drawRectPreview,
@@ -99,7 +104,9 @@ import {
 } from './draw-overlays.js';
 import { baseStyles } from './base-styles.js';
 
-// MIRROR_ALPHA keeps the onion-skin a faint hint.
+// MIRROR_ALPHA keeps the onion-skin a faint hint — a pale tint of the
+// opposite face's art on the white paper. It is the fade's ONLY source: the
+// background layer carries no CSS opacity (its dot grid must stay pure black).
 const MIRROR_ALPHA = 0.22;
 
 // The marching ants' step: one system px of dash travel per tick. Brisk, the
@@ -110,28 +117,23 @@ const ANTS_MS = 100;
 // abandons the drag in flight before the switch it makes lands.
 const TOOL_KEYS = new Set(['s', 'b', 'r', 'g', 'e', 'i']);
 
-// The classic light transparency checker (pale gray + off-white), so empty
-// texels read as "no color" against the darker gray canvas well framing them.
-const CHECKER_LIGHT = 0xd0;
-const CHECKER_DARK = 0xa8;
+// The LATTICE layers — the background's dot grid and the guide overlay — run
+// one system px past the art on the right and bottom: the dot lattice is
+// (tileW+1)×(tileH+1) crossings, its far column and row on the art's outer
+// edge (so the dots alone bound the canvas), and the far extent rules sit
+// on them. Their backings are the art's system px plus this pad, and the
+// CSS below sizes their boxes to match (calc(100% + 1 system px)); the
+// pixel, cursor and ants layers stay at the art's size.
+const LATTICE_PAD = 1;
 
-// Fill a native-tile-res context with the transparency checker at ONE CHECKER
-// SQUARE PER PIXEL — the layer is CSS-upscaled (pixelated) in lockstep with
-// the art, so each square is exactly one document texel, registered to the
-// pixel grid by construction at any scale (a higher-res tile reads as a
-// tighter checker).
-function paintTexelChecker(g, w, h) {
-  const img = g.createImageData(w, h);
-  const d = img.data;
-  for (let y = 0, i = 0; y < h; y++) {
-    for (let x = 0; x < w; x++, i += 4) {
-      const v = (x + y) & 1 ? CHECKER_DARK : CHECKER_LIGHT;
-      d[i] = d[i + 1] = d[i + 2] = v;
-      d[i + 3] = 255;
-    }
-  }
-  g.putImageData(img, 0, 0);
-}
+// The PAPER under the art — the stack container's `pattern`, the kit's own
+// 1-bit fill (vintage-frames docs/PATTERNS.md): white by default, and the
+// classic 50% dither (`gray-50`, the desktop's own default pattern) with
+// View → Dither Background, so WHITE art reads against it. Declaring one or
+// the other is also what keeps the desktop's pattern ink out of the box —
+// see the template note.
+const PAPER_WHITE = 'white';
+const PAPER_DITHER = 'gray-50';
 
 export class SmDrawCanvas extends LitElement {
   static styles = [
@@ -167,10 +169,10 @@ export class SmDrawCanvas extends LitElement {
        it together. No rule block needed: the kit owns the container's
        layout entirely. */
       /* All five layers fill the stack (backing stores managed in JS): a background
-       (per-texel checkerboard + faded onion-skin, drawn at native tile res), the
-       transparent pixel canvas (native tile res), then the guide + cursor +
-       selection overlays (system-px res — their 1px hairlines are 1 system px,
-       the kit's hairline unit). */
+       (the dot grid + faded onion-skin, system-px res — its dots are 1 system
+       px), the transparent pixel canvas (native tile res), then the guide +
+       cursor + selection overlays (system-px res — their 1px hairlines are 1
+       system px, the kit's hairline unit). */
       .editor-canvas-stack > canvas {
         position: absolute;
         inset: 0;
@@ -178,6 +180,17 @@ export class SmDrawCanvas extends LitElement {
         height: 100%;
         image-rendering: pixelated;
         image-rendering: crisp-edges;
+      }
+      /* The two LATTICE layers run LATTICE_PAD (one system px) past the art
+       on the right and bottom — the dot lattice's far column and row, and
+       the far rules on them — so their boxes are the art's plus one system
+       px on each axis, matching their padded backings 1:1. The container
+       doesn't clip (the kit's .box is a plain flow-root), and the well's
+       12 system px of padding holds the overflow. */
+      .editor-canvas-stack > .editor-canvas-bg,
+      .editor-canvas-stack > .editor-canvas-overlay {
+        width: calc(100% + var(--vf-scale, 1) * 1px);
+        height: calc(100% + var(--vf-scale, 1) * 1px);
       }
       /* Only the pixel canvas takes pointer events (default auto); the others pass
        clicks through to it. The kit's page-drawn cursor claims the crosshair via
@@ -192,13 +205,14 @@ export class SmDrawCanvas extends LitElement {
         cursor: var(--vf-cursor, crosshair);
         touch-action: none;
       }
-      /* Faded onion-skin over the transparency checker, both DRAWN into the
-       native-res backing store (see #paintBg), UNDER the transparent pixel
-       canvas so both show through unpainted texels. */
+      /* The dot grid over the faded onion-skin, both DRAWN into the system-res
+       backing store (see #paintBg) on a transparent ground — the well's white
+       is the paper — UNDER the transparent pixel canvas so both show through
+       unpainted texels. No layer opacity: the dots are black, 1-bit like the
+       chrome; the onion-skin's fade is its own alpha (MIRROR_ALPHA). */
       .editor-canvas-bg {
         z-index: 0;
         pointer-events: none;
-        opacity: 0.2;
       }
       /* Hairline extent rules sit ABOVE the pixel canvas; the cursor preview above them. */
       .editor-canvas-overlay {
@@ -237,6 +251,15 @@ export class SmDrawCanvas extends LitElement {
      *  selection's no-drag Esc gate (decision: Esc drops the ACTIVE window's
      *  selection only). Nothing else reads it. */
     active: { type: Boolean },
+    /** Whether the extent rules (the dotted alignment guides) draw on the
+     *  guide layer — View → Guides, prefs.showGuides, OFF by default. The
+     *  guides themselves (`guides`) are always computed; this only gates
+     *  their painting. */
+    showGuides: { type: Boolean },
+    /** The paper under the art: false = white, true = the kit's 50% dither
+     *  (View → Dither Background, prefs.canvasDither, OFF by default). On
+     *  the dither the dot grid stands down and the rules invert their phase. */
+    dither: { type: Boolean },
   };
 
   constructor() {
@@ -254,6 +277,8 @@ export class SmDrawCanvas extends LitElement {
     this.fillContiguous = true;
     this.fillAllFaces = false;
     this.active = false;
+    this.showGuides = false;
+    this.dither = false;
 
     // Dev hooks (plain: consumed once on the first update, never re-read).
     this.previewCursor = false;
@@ -429,8 +454,15 @@ export class SmDrawCanvas extends LitElement {
     // are reconstructed together, imperatively, never bound in the template (a
     // template-bound width/height would clear the backing store mid-diff).
     if (geom) this.#applyGeometry();
-    else if (changed.has('mirrorBehind')) this.#paintBg();
-    if (!geom && changed.has('guides')) this.#drawGuidesLayer();
+    // A paper flip (`dither`) repaints the background (the dots stand down
+    // on the dither) and the guide layer (the rules' phase inverts); the
+    // container's pattern itself is a template binding.
+    else if (changed.has('mirrorBehind') || changed.has('dither')) this.#paintBg();
+    if (
+      !geom &&
+      (changed.has('guides') || changed.has('showGuides') || changed.has('dither'))
+    )
+      this.#drawGuidesLayer();
 
     // The cursor overlay is canvas-drawn, so the state the template can't express
     // has to be re-stroked here.
@@ -500,45 +532,52 @@ export class SmDrawCanvas extends LitElement {
     this.#laidOut = false; // force #layout() to re-fit for the new tile size
   }
 
-  // Size the native-resolution layers to the tile, restore the checker +
-  // onion-skin the resize cleared, repaint the pixels and re-fit the stack.
+  // Size the native-resolution pixel canvas to the tile, repaint the pixels
+  // and re-fit the stack — which sizes and paints the system-res layers, the
+  // background among them (#resetWorking cleared #laidOut, so #layout() runs
+  // in full).
   #applyGeometry() {
-    const bg = this.#bg.value;
     const canvas = this.#canvas.value;
-    if (!bg || !canvas) return;
-    bg.width = this.tileW;
-    bg.height = this.tileH;
+    if (!canvas) return;
     canvas.width = this.tileW;
     canvas.height = this.tileH;
-    this.#paintBg();
     this.#repaint();
     this.#layout();
   }
 
-  // The (native-res) background layer under the transparent pixel canvas: the
-  // per-texel transparency checker, then the faded opposite-face onion-skin
-  // over it.
+  // The background layer under the transparent pixel canvas — SYSTEM-res,
+  // sized in #layout() beside the overlays: the faded opposite-face
+  // onion-skin, magnified nearest-neighbor to the texel size, then the dot
+  // grid over it — one black system px at every texel's corner, the
+  // transparency indicator (drawDotGrid). The ground stays transparent (the
+  // well's white is the paper), and the dots go on LAST so they stay pure
+  // black through the onion-skin's tint.
   #paintBg() {
     const bg = this.#bg.value;
     if (!bg || !bg.width || !bg.height) return;
     const g = bg.getContext('2d');
-    paintTexelChecker(g, bg.width, bg.height); // covers every pixel — no clear needed
+    g.clearRect(0, 0, bg.width, bg.height);
     const m = this.mirrorBehind;
-    if (!m) return;
-    const tmp = document.createElement('canvas');
-    tmp.width = this.tileW;
-    tmp.height = this.tileH;
-    tmp
-      .getContext('2d')
-      .putImageData(
-        new ImageData(new Uint8ClampedArray(m.data), this.tileW, this.tileH),
-        0,
-        0
-      );
-    g.imageSmoothingEnabled = false;
-    g.globalAlpha = MIRROR_ALPHA; // putImageData ignores alpha; drawImage honors it
-    g.drawImage(tmp, 0, 0);
-    g.globalAlpha = 1;
+    if (m) {
+      const tmp = document.createElement('canvas');
+      tmp.width = this.tileW;
+      tmp.height = this.tileH;
+      tmp
+        .getContext('2d')
+        .putImageData(
+          new ImageData(new Uint8ClampedArray(m.data), this.tileW, this.tileH),
+          0,
+          0
+        );
+      g.imageSmoothingEnabled = false; // a whole-multiple magnification: crisp texels
+      g.globalAlpha = MIRROR_ALPHA; // putImageData ignores alpha; drawImage honors it
+      g.drawImage(tmp, 0, 0, this.#sysW, this.#sysH); // the ART's size — the backing is a pad wider
+      g.globalAlpha = 1;
+    }
+    // (tileW+1)×(tileH+1) — the pad holds the far edge. Not on the dithered
+    // paper: there the dither itself says "transparent", and dots on a dither
+    // are noise (half of them would land on its black px anyway).
+    if (!this.dither) drawDotGrid(g, this.tileW, this.tileH, this.#texelSys);
   }
 
   #repaint() {
@@ -608,12 +647,17 @@ export class SmDrawCanvas extends LitElement {
     this.#sysH = sysH;
     stack.width = sysW;
     stack.height = sysH;
-    this.#overlay.value.width = this.#sysW; // system-res backing: hairlines are 1 system px
-    this.#overlay.value.height = this.#sysH;
+    // System-res backings: dots + hairlines are 1 system px. The two lattice
+    // layers take the pad (their CSS boxes grow by the same system px).
+    this.#bg.value.width = this.#sysW + LATTICE_PAD;
+    this.#bg.value.height = this.#sysH + LATTICE_PAD;
+    this.#overlay.value.width = this.#sysW + LATTICE_PAD;
+    this.#overlay.value.height = this.#sysH + LATTICE_PAD;
     this.#cursor.value.width = this.#sysW;
     this.#cursor.value.height = this.#sysH;
     this.#antsLayer.value.width = this.#sysW;
     this.#antsLayer.value.height = this.#sysH;
+    this.#paintBg(); // the backing resize cleared it — the dot grid + onion-skin at the new scale
     this.#drawGuidesLayer();
     this.#redrawCursorLayer(); // re-stroke the footprint / rect preview at the new scale
     this.#drawAnts(); // the backing resize cleared the ants — re-stroke them at the new scale
@@ -622,12 +666,17 @@ export class SmDrawCanvas extends LitElement {
   #drawGuidesLayer() {
     const g = this.#overlayCtx;
     if (!g) return;
-    g.clearRect(0, 0, this.#sysW, this.#sysH);
-    // The texel lattice first — the layer's floor, always on (drawTexelGrid
-    // no-ops below GRID_MIN_SCALE, where its hairlines would swamp the art) —
-    // then the extent rules over it, opaque, covering the lattice under them.
-    drawTexelGrid(g, this.tileW, this.tileH, this.#texelSys, this.#sysW, this.#sysH);
-    drawGuides(g, this.guides, this.#texelSys, this.#sysW, this.#sysH);
+    const w = this.#sysW + LATTICE_PAD;
+    const h = this.#sysH + LATTICE_PAD;
+    g.clearRect(0, 0, w, h);
+    // The extent rules are the layer's only painter: the texel grid is the
+    // dot grid UNDER the art (the background layer), never lines over it.
+    // They span the padded layer, so a rule runs through the far dots too —
+    // and only when asked for (View → Guides): off, the layer stays clear.
+    // On the dithered paper the dotting flips phase (dottedRule), so a rule
+    // inverts the dither along its line instead of vanishing into it.
+    if (this.showGuides)
+      drawGuides(g, this.guides, this.#texelSys, w, h, this.dither ? 1 : 0);
   }
 
   // --- one-shot dev hooks (canvas halves; the state halves are boot actions) --
@@ -692,19 +741,39 @@ export class SmDrawCanvas extends LitElement {
   // width/height/top/left in whole system px (the DITL rectangle — centered
   // by arithmetic, on the pixel lattice by construction), and the canvases
   // fill its box (inset: 0 against the container's own anchor, so all five
-  // ride its grid-snap correction together). Only the pixel canvas takes
-  // pointer events. The pixel + bg canvases keep a native tileW×tileH backing
-  // store (CSS upscales them crisp); the overlay + cursor + selection layers
-  // are SYSTEM-res (backing tracks the box's system px) so their 1px lines
-  // are 1 system px — the kit's own hairline unit. Backing stores are set in
-  // #applyGeometry()/#layout(), never bound here. The pixel canvas's
+  // ride its grid-snap correction together). The container DECLARES its
+  // pattern — the PAPER: the kit's white (the options strip's own grammar)
+  // or, with View → Dither Background, its 50% dither (PAPER_WHITE /
+  // PAPER_DITHER; the kit re-rasters the fill on the flip) — and not only
+  // for the reading: a vf-container with no pattern of its
+  // own INHERITS THE DESKTOP'S. vf-desktop paints its pattern as black ink
+  // on transparent through an inline --_vf-pattern-image custom property on
+  // its .screen, custom properties inherit through the slot into every
+  // window, and a bare container's shadow .box (.vf-pattern-fill) resolves
+  // it — so the stack would paint the desktop dither's ink under the
+  // transparent texels. The old black well hid the leak (black on black);
+  // the white paper showed it (a 1px checker under every empty texel). A
+  // declared pattern gives the box its own (empty) ink and its own white,
+  // which is what the paper wants anyway. Kit ask #6: the private token
+  // should not inherit.
+  // Only the pixel canvas takes pointer events. It keeps a native tileW×tileH
+  // backing store (CSS upscales it crisp); the bg + overlay + cursor +
+  // selection layers are SYSTEM-res (backing tracks the box's system px) so
+  // their 1px dots and lines are 1 system px — the kit's own hairline unit —
+  // the bg + overlay a LATTICE_PAD past the art for the far dots and rules.
+  // Backing stores are set in #applyGeometry()/#layout(), never bound here.
+  // The pixel canvas's
   // data-vf-cursor is the kit's page-drawn cursor claim — cloned once, never
   // re-applied by Lit, so #setCursorClaim's imperative flips (the arrow over a
   // selection) are never reverted by a render.
   render() {
     return html`
       <div class="editor-canvas-wrap" ${ref(this.#wrap)}>
-        <vf-container class="editor-canvas-stack" ${ref(this.#stack)}>
+        <vf-container
+          class="editor-canvas-stack"
+          pattern=${this.dither ? PAPER_DITHER : PAPER_WHITE}
+          ${ref(this.#stack)}
+        >
           <canvas class="editor-canvas-bg" ${ref(this.#bg)}></canvas>
           <canvas
             class="editor-canvas"

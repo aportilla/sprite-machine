@@ -5,7 +5,7 @@
 // with its `ctx` (the workspace DocContext) assigned BEFORE the append, and
 // it lives until the document closes — a hide (or the desktop's DOM
 // re-orders) never unmounts it, so canvas identity and focus behavior
-// survive. What it holds: the full-bleed grey artwork well holding
+// survive. What it holds: the full-bleed white artwork well holding
 // <sm-draw-canvas>. (The face picker is app-level chrome now — the strip
 // across the Full Sprite View windoid, serving the ACTIVE document; the
 // 168-color Colors dialog likewise — <sm-color-picker> in index.html's
@@ -26,12 +26,16 @@
 // Edit-menu gating — to follow. The canvas also learns whether THIS window is
 // the active one (`active`): a selection's no-drag Esc acts on the active
 // window's selection only — every open window's canvas listens on the
-// document, so without it one Esc would drop them all.
+// document, so without it one Esc would drop them all. And whether to draw
+// the extent rules at all (`showGuides`) and which paper the art sits on
+// (`dither`) — both off the prefs slice (View → Guides / Dither Background),
+// app-level like the tool and ink, so every window follows.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { maxCornerRadius } from '../lib/rect.js';
+import { prefs } from '../state/prefs.js';
 import { session } from '../state/session.js';
 import { workspace } from '../state/workspace.js';
 import { editorViewModel } from '../state/derive.js';
@@ -53,10 +57,11 @@ export class SmEditor extends LitElement {
         flex-direction: column;
         background: var(--sm-white);
       }
-      /* The artwork well: the grey field the pixel canvas centers in — full
+      /* The artwork well: the white paper the pixel canvas centers in — full
          bleed, running edge to edge from the title bar down to the status
-         strip (the window is flush, so the grey meets the frame's own black
-         line). */
+         strip (the window is flush, so the paper meets the frame's own black
+         line). The canvas's transparent texels show this white through their
+         dot grid: the well IS the paper. */
       .editor-drawbox {
         flex: 1;
         min-height: 0;
@@ -78,11 +83,13 @@ export class SmEditor extends LitElement {
     /** @type {import('../state/workspace.js').DocContext|null} */
     this.ctx = null;
 
-    // Any session action (brush state) or workspace change (this window's
-    // face, the activation state the tool clamp gates on) re-renders; live
-    // strokes are silent on all by design.
+    // Any session action (brush state), workspace change (this window's
+    // face, the activation state the tool clamp gates on) or prefs change
+    // (the guides toggle) re-renders; live strokes are silent on all by
+    // design.
     new StoreController(this, session.store);
     new StoreController(this, workspace.store);
+    new StoreController(this, prefs.store);
   }
 
   // The context's doc: wired by hand (the context isn't known at
@@ -182,6 +189,8 @@ export class SmEditor extends LitElement {
             .fillContiguous=${s.fillContiguous}
             .fillAllFaces=${s.fillAllFaces}
             .active=${this.#isActive}
+            .showGuides=${prefs.get().showGuides}
+            .dither=${prefs.get().canvasDither}
             .previewCursor=${hooks?.previewCursor ?? false}
             .previewRect=${hooks?.previewRect ?? null}
             .fillOnMount=${hooks?.fillOnMount ?? null}
