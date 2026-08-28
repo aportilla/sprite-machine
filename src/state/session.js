@@ -22,9 +22,11 @@ const clampRadius = (n, max) => Math.max(0, Math.min(max, Math.round(Number(n) |
 
 export function createSession() {
   const store = createStore({
-    // The active tool: 'pencil' | 'rect' | 'fill' | 'eraser' | 'eyedropper'.
-    // The eraser is a formal tool mode (a pencil that writes transparency),
-    // not an ink: the ink below is always a solid color.
+    // The active tool: 'select' | 'pencil' | 'rect' | 'fill' | 'eraser' |
+    // 'eyedropper'. The eraser is a formal tool mode (a pencil that writes
+    // transparency), not an ink: the ink below is always a solid color. The
+    // selection tool's marquee is CANVAS state (per document window), never
+    // the session's — only the mode is app-level.
     tool: 'pencil',
     // The active color. Seeded from the pencil palette so it is never null.
     ink: { ...PENCIL_PALETTE[0].rgb },
@@ -47,10 +49,11 @@ export function createSession() {
     get: store.get,
     subscribe: store.subscribe,
 
-    // Select a tool — every tool (the eraser and eyedropper included) is a
-    // sticky mode: it stays selected until another tool is picked. The ink is
-    // always set (seeded at boot), so there is nothing to "ensure".
-    /** @param {'pencil'|'rect'|'fill'|'eraser'|'eyedropper'} tool */
+    // Select a tool — every tool (the eraser, eyedropper and selection
+    // included) is a sticky mode: it stays selected until another tool is
+    // picked. The ink is always set (seeded at boot), so there is nothing to
+    // "ensure".
+    /** @param {'select'|'pencil'|'rect'|'fill'|'eraser'|'eyedropper'} tool */
     setTool(tool) {
       store.patch({ tool });
     },
@@ -59,7 +62,7 @@ export function createSession() {
     // in-sprite eyedrop): make `color` the ink. Picking a color while the
     // ERASER is held means "paint with this" — it returns to the pencil; any
     // other tool is untouched, so an eyedrop leaves the eyedropper selected
-    // (sticky modality).
+    // and a pick leaves the selection tool selected (sticky modality).
     /** @param {{r:number,g:number,b:number}} color */
     pickColor(color) {
       const patch = { ink: { r: color.r, g: color.g, b: color.b } };

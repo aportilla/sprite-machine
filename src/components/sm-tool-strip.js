@@ -1,9 +1,10 @@
 // ---------------------------------------------------------------------------
-// <sm-tool-strip> — the rail's tool strip: pencil / rect / fill / eraser /
-// eyedropper as a 1-column vf-grid of square cells (the selected cell inverts,
-// CSS off `.active`). A presentational LEAF: props down (`tool`), bubbling
-// `sm-pick-tool {tool}` events up. All five cells are sibling sticky modes —
-// the eraser and eyedropper select like any other tool.
+// <sm-tool-strip> — the rail's tool strip: selection / pencil / rect / fill /
+// eraser / eyedropper as a 1-column vf-grid of square cells (the selected
+// cell inverts, CSS off `.active`). A presentational LEAF: props down
+// (`tool`), bubbling `sm-pick-tool {tool}` events up. All six cells are
+// sibling sticky modes — the eraser, eyedropper and selection select like any
+// other tool. The selection leads, as MacPaint's palette did.
 //
 // A cell picks on the PRESS, not the click — System 7's tool palettes act on
 // mouse-down (the cell inverts the instant the button goes down, and the
@@ -26,9 +27,10 @@ import { classMap } from 'lit/directives/class-map.js';
 import '../icons.js'; // registers the <sp-icon-*> tool glyphs used below
 import { baseStyles } from './base-styles.js';
 
-// The five tool glyphs, as module-constant templates: a TemplateResult diffs to
+// The six tool glyphs, as module-constant templates: a TemplateResult diffs to
 // a no-op, where a freshly built element would make lit swap the icon on every
 // re-render.
+const ICON_SELECT = html`<sp-icon-rect-select></sp-icon-rect-select>`;
 const ICON_DRAW = html`<sp-icon-draw></sp-icon-draw>`;
 const ICON_RECT = html`<sp-icon-rectangle></sp-icon-rectangle>`;
 const ICON_FILL = html`<sp-icon-color-fill></sp-icon-color-fill>`;
@@ -107,6 +109,13 @@ export class SmToolStrip extends LitElement {
         role="group"
         aria-label="tools"
       >
+        ${cell(
+          'selection',
+          ICON_SELECT,
+          'selection — drag a box, then drag inside it to move (S)',
+          this.tool === 'select',
+          'select'
+        )}
         ${cell(
           'pencil',
           ICON_DRAW,

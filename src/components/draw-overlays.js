@@ -1,9 +1,10 @@
 // ---------------------------------------------------------------------------
-// Pure canvas painters for <sm-draw-canvas>'s two system-res overlay layers:
-// the alignment-guide hairlines, the pencil's filled hover-footprint preview,
-// the eyedropper's sample-target outline, and the rect tool's live drag
-// preview. Stateless — everything arrives as arguments —
-// so the component keeps only gesture state and these stay trivially readable.
+// Pure canvas painters for <sm-draw-canvas>'s three system-res overlay
+// layers: the alignment-guide hairlines, the pencil's filled hover-footprint
+// preview, the eyedropper's sample-target outline, the rect tool's live drag
+// preview, and the selection tool's marching ants. Stateless — everything
+// arrives as arguments — so the component keeps only gesture state and these
+// stay trivially readable.
 // All draw in SYSTEM-px space — the kit's virtual pixel grid: the backings are
 // tileW·k × tileH·k for a k-system-px texel, CSS-magnified nearest-neighbor in
 // lockstep with the art, so their 1px hairlines are exactly one system px (the
@@ -150,4 +151,38 @@ export function drawRectPreview(g, v, bounds, radius, ink, erasing) {
     (b.y1 - b.y0 + 1) * s - 1,
     erasing
   );
+}
+
+// The selection tool's marching ants — MacPaint's 1-bit border: black and
+// white dashes alternating along a 1-system-px line on the selection's
+// outermost texel rows/columns (the haloBox alignment: half a px in, so the
+// stroke covers exactly the edge pixels), readable on any art. The dash walks
+// the perimeter continuously — strokeRect is one path, with the classic seam
+// at the start corner — as `phase` grows; a bounds hanging off the tile clips
+// at the canvas edge. ANTS_DASH is the on/off run in system px (an 8px
+// period, so a phase of 0..7 covers one cycle).
+export const ANTS_DASH = 4;
+
+/** @param {CanvasRenderingContext2D} g @param {OverlayView} v
+ *  @param {{x0:number,y0:number,x1:number,y1:number}|null} bounds  the CURRENT
+ *    (translated) selection; null clears the layer
+ *  @param {number} phase  0..7, advanced by the canvas's ticker */
+export function drawMarchingAnts(g, v, bounds, phase) {
+  g.clearRect(0, 0, v.sysW, v.sysH);
+  if (!bounds) return;
+  const s = v.scale;
+  const x = bounds.x0 * s + 0.5;
+  const y = bounds.y0 * s + 0.5;
+  const w = (bounds.x1 - bounds.x0 + 1) * s - 1;
+  const h = (bounds.y1 - bounds.y0 + 1) * s - 1;
+  g.lineWidth = 1;
+  g.setLineDash([]);
+  g.strokeStyle = '#fff';
+  g.strokeRect(x, y, w, h); // the white half of the 1-bit ants
+  g.setLineDash([ANTS_DASH, ANTS_DASH]);
+  g.lineDashOffset = -phase; // a growing offset marches the dashes
+  g.strokeStyle = '#000';
+  g.strokeRect(x, y, w, h); // the black half over it
+  g.setLineDash([]);
+  g.lineDashOffset = 0;
 }

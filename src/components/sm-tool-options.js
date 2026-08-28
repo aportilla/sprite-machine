@@ -2,8 +2,11 @@
 // <sm-tool-options> — the draw box's per-tool options bar: the pencil's
 // tip-size slider (with a live readout), the eraser's OWN tip-size slider (an
 // independent setting and a deliberately separate branch — not a DRY slip; the
-// two tools' options may diverge), the rect's corner-radius field, or the
-// fill's two checkboxes. A presentational LEAF: props down (`tool`, values +
+// two tools' options may diverge), the rect's corner-radius field, the
+// fill's two checkboxes, or the selection's READOUT — a tool with no
+// settings: its strip states the active window's marquee (left, top ·
+// width × height, texels; a resting caption for none), live through a drag —
+// and nothing for the eyedropper (its strip is just the ink swatch). A presentational LEAF: props down (`tool`, values +
 // clamp BOUNDS — the clamping itself lives in the session actions the
 // container calls), bubbling `sm-set-pencil-size {n}` / `sm-set-eraser-size
 // {n}` / `sm-set-corner-radius {n}` / `sm-set-fill-opts {contiguous?|allFaces?}`
@@ -53,6 +56,9 @@ export class SmToolOptions extends LitElement {
     radiusMax: { type: Number },
     fillContiguous: { type: Boolean },
     fillAllFaces: { type: Boolean },
+    /** The selection tool's readout: the active window's current marquee
+     *  {x0,y0,x1,y1} in texels (may hang off the tile), or null for none. */
+    selection: { attribute: false },
   };
 
   constructor() {
@@ -65,6 +71,7 @@ export class SmToolOptions extends LitElement {
     this.radiusMax = 0;
     this.fillContiguous = true;
     this.fillAllFaces = false;
+    this.selection = null;
   }
 
   render() {
@@ -133,6 +140,20 @@ export class SmToolOptions extends LitElement {
           @vf-change=${(e) =>
             this.#emit('sm-set-fill-opts', { allFaces: !!e.detail.checked })}
           >on all faces</vf-checkbox
+        >
+      `;
+    }
+    if (this.tool === 'select') {
+      // A readout, not a setting: the marquee's top-left and size in texels,
+      // the numbers a registration-minded author wants while lining a
+      // FRONT-face column up with the TOP face. The position is the CURRENT
+      // rectangle's (a float pushed off the tile reads negative), the size
+      // the whole float's.
+      const b = this.selection;
+      if (!b) return html`<vf-label dim>no selection</vf-label>`;
+      return html`
+        <vf-label dim title="selection: left, top · width × height (texels)"
+          >${b.x0}, ${b.y0} · ${b.x1 - b.x0 + 1} × ${b.y1 - b.y0 + 1}</vf-label
         >
       `;
     }

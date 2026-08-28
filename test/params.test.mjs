@@ -22,6 +22,7 @@ test('defaults: everything off / null on an empty query', () => {
       cursor: b.cursor,
       rect: b.rect,
       fill: b.fill,
+      select: b.select,
       sampleIndex: b.sampleIndex,
       sampleExplicit: b.sampleExplicit,
       file: b.file,
@@ -44,6 +45,7 @@ test('defaults: everything off / null on an empty query', () => {
       cursor: null,
       rect: null,
       fill: null,
+      select: null,
       sampleIndex: 0,
       sampleExplicit: false,
       file: null,
@@ -166,6 +168,29 @@ test('?fill: point + contiguous/all-faces flags (contiguous defaults ON)', () =>
     contiguous: false,
     allFaces: true,
   });
+});
+
+test('?select: box + optional float offset (defaults 0,0); fewer than four ints → null', () => {
+  assert.deepEqual(parseBootParams('?select=3,3,20,14').select, {
+    x0: 3,
+    y0: 3,
+    x1: 20,
+    y1: 14,
+    dx: 0,
+    dy: 0,
+  });
+  assert.deepEqual(parseBootParams('?select=3,3,20,14,5,-2').select, {
+    x0: 3,
+    y0: 3,
+    x1: 20,
+    y1: 14,
+    dx: 5,
+    dy: -2,
+  });
+  assert.equal(parseBootParams('?select=3,3,20,14,6').select.dx, 6, 'dx alone');
+  assert.equal(parseBootParams('?select=3,3,20,14,6').select.dy, 0);
+  assert.equal(parseBootParams('?select=3,3').select, null);
+  assert.equal(parseBootParams('?select=a,b,c,d').select, null);
 });
 
 test('?sample: name wins over index; bad values clamp to a valid index', () => {

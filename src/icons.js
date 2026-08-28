@@ -15,6 +15,7 @@
 // Icons are DECORATIVE (no `label` ⇒ the host sets aria-hidden); the button they
 // sit in carries the accessible name (aria-label / title / text).
 // ---------------------------------------------------------------------------
+import '@spectrum-web-components/icons-workflow/icons/sp-icon-rect-select.js';
 import '@spectrum-web-components/icons-workflow/icons/sp-icon-draw.js';
 import '@spectrum-web-components/icons-workflow/icons/sp-icon-rectangle.js';
 import '@spectrum-web-components/icons-workflow/icons/sp-icon-color-fill.js';

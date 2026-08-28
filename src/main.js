@@ -58,7 +58,8 @@ const boot = parseBootParams(location.search, {
 if (boot.lowpoly != null) prefs.setLowpoly(boot.lowpoly);
 if (boot.rotate === false) prefs.setAutoRotate(false);
 // The on-mount hook order, preserved: pencil size, then pick (so ?palette
-// reflects it and ?fill fills with it), then the dialog, then rect, then fill.
+// reflects it and ?fill fills with it), then the dialog, then rect, then
+// fill, then select (the last tool seed wins the session's one tool).
 // The size/radius seeds are clamped for real against the tile geometry when
 // the editor first mounts (it re-clamps on any tile-geometry change).
 if (boot.cursor != null) session.setPencilSize(boot.cursor, Number.MAX_SAFE_INTEGER);
@@ -73,15 +74,17 @@ if (boot.fill) {
   session.setFillContiguous(boot.fill.contiguous);
   session.setFillAllFaces(boot.fill.allFaces);
 }
-// The boot context's one-shot canvas hooks (?cursor / ?rect / ?fill paint
-// halves) — created here, carried on the context so no assignment can race
-// the editor's first update.
+if (boot.select) session.setTool('select');
+// The boot context's one-shot canvas hooks (?cursor / ?rect / ?fill /
+// ?select paint halves) — created here, carried on the context so no
+// assignment can race the editor's first update.
 const bootHooks =
-  boot.cursor != null || boot.rect || boot.fill
+  boot.cursor != null || boot.rect || boot.fill || boot.select
     ? {
         previewCursor: boot.cursor != null,
         previewRect: boot.rect,
         fillOnMount: boot.fill,
+        selectOnMount: boot.select,
       }
     : null;
 

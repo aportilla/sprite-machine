@@ -577,6 +577,7 @@ export function initMenus(desktop, windows, panels) {
     'export-atlas',
     'properties',
     'pick-color',
+    'tool-select',
     'tool-pencil',
     'tool-rect',
     'tool-fill',
@@ -610,11 +611,10 @@ export function initMenus(desktop, windows, panels) {
   syncArrange();
 
   // The Tools menu mirrors the sticky tool modes — exactly one item checked,
-  // off the same session truth the tool strip and the B/R/G/E/I keys write.
-  const toolItems = ['pencil', 'rect', 'fill', 'eraser', 'eyedropper'].map((t) => [
-    t,
-    $(`vf-menu-item[value="tool-${t}"]`),
-  ]);
+  // off the same session truth the tool strip and the S/B/R/G/E/I keys write.
+  const toolItems = ['select', 'pencil', 'rect', 'fill', 'eraser', 'eyedropper'].map(
+    (t) => [t, $(`vf-menu-item[value="tool-${t}"]`)]
+  );
   const syncTools = () => {
     for (const [t, item] of toolItems) item.checked = session.get().tool === t;
   };

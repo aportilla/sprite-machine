@@ -177,6 +177,38 @@ test('setFace is per-context', () => {
   assert.equal(b.face, 'left');
 });
 
+test('setSelection is per-context, on the context’s OWN store, silent when unchanged', () => {
+  const { ws } = makeWorld();
+  const a = openLoaded(ws);
+  const b = openLoaded(ws);
+  assert.equal(a.selection.get().bounds, null, 'no selection at birth');
+  let aNotes = 0;
+  let bNotes = 0;
+  let wsNotes = 0;
+  a.selection.subscribe(() => aNotes++);
+  b.selection.subscribe(() => bNotes++);
+  ws.subscribe(() => wsNotes++);
+  const box = { x0: 2, y0: 3, x1: 7, y1: 9 };
+  ws.setSelection(a.key, box);
+  assert.deepEqual(a.selection.get().bounds, box);
+  assert.notEqual(a.selection.get().bounds, box, 'stored as a copy');
+  assert.equal(b.selection.get().bounds, null, 'the other context is untouched');
+  assert.equal(aNotes, 1);
+  assert.equal(bNotes, 0);
+  assert.equal(wsNotes, 0, 'never published through the workspace store');
+  ws.setSelection(a.key, { ...box });
+  assert.equal(aNotes, 1, 'an equal-valued write is silent');
+  ws.setSelection(a.key, { ...box, x1: 8 });
+  assert.equal(aNotes, 2, 'a changed edge notifies');
+  ws.setSelection(a.key, null);
+  assert.equal(a.selection.get().bounds, null);
+  assert.equal(aNotes, 3);
+  ws.setSelection(a.key, null);
+  assert.equal(aNotes, 3, 'null → null is silent');
+  ws.setSelection('nope', box); // an unknown key is a no-op
+  assert.equal(wsNotes, 0);
+});
+
 // --- dirty tracking --------------------------------------------------------------
 
 test('the birth load leaves a context clean; strokes and structure dirty it', () => {

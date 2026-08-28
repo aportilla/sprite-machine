@@ -1,11 +1,28 @@
 // ---------------------------------------------------------------------------
-// <sm-draw-canvas> — the pixel-canvas subsystem: the 4-layer stack (checker/
+// <sm-draw-canvas> — the pixel-canvas subsystem: the 5-layer stack (checker/
 // onion-skin background, the editable pixel canvas, the hairline guide overlay,
-// the cursor overlay), the working buffer, the pencil/rect/fill/eraser/
-// eyedropper gestures (the eraser is a pencil that writes transparency — it
-// shares the stroke path but carries its OWN tip size), the whole-system-px layout fitting, and
-// the gesture-scoped keys (Esc cancels an in-flight rect, Shift square-locks
-// it — document-level, but canvas business).
+// the cursor overlay, the selection's marching-ants overlay), the working
+// buffer, the selection/pencil/rect/fill/eraser/eyedropper gestures (the
+// eraser is a pencil that writes transparency — it shares the stroke path but
+// carries its OWN tip size), the whole-system-px layout fitting, and the
+// gesture-scoped keys (Esc cancels an in-flight rect or drops a selection,
+// Shift square-locks a rect or axis-locks a selection move — document-level,
+// but canvas business).
+//
+// THE SELECTION (MacPaint's selection rectangle): drag a marquee out, drag
+// inside it to move the selected pixels, click outside / Esc / switch tools
+// to drop it where it sits. The model is BASE + FLOAT: on the first move
+// press the marquee's texels are lifted out ONCE as their own tile
+// (#selFloat, lib/select.js liftRect) and the hole they leave is cleared on a
+// pristine copy of the buffer (#selBase); every offset is then a pure
+// composite of (base, float, offset) written INTO #work in place — so
+// dragging across the sprite and back never smears what it crossed, and the
+// working buffer's identity (which the doc holds by reference) never changes.
+// Transparent texels of the float never travel: the base shows through them.
+// The selection is canvas state and dies with the working buffer (any
+// structural change — undo, a face switch, a resize — drops it; the pixels
+// are already in the document). Each move gesture is one undo step through
+// the ordinary begin/end bracket; a marquee writes nothing.
 //
 // A presentational LEAF: props down (tile geometry + view model + the brush
 // state), bubbling events up:
@@ -13,6 +30,10 @@
 //                    the working buffer BY REFERENCE — never cloned)
 //   - sm-commit      { before, after }  one finished gesture's snapshot pair
 //                    (copies), for the container's undo history
+//   - sm-selection   { bounds | null }  the selection's CURRENT outline
+//                    whenever it changes (a marquee corner, a float offset,
+//                    a drop) — never per ants tick, never twice for the
+//                    same value; the container mirrors it onto its context
 //   - sm-pick-color  { rgb }          an eyedrop hit a painted texel
 //   - sm-pick-transparent             an eyedrop hit empty space
 //   - sm-replace-all-tiles { target, fill }  a fill click with contiguous off
@@ -21,10 +42,15 @@
 // STATE SPLIT — the correctness core, carried over verbatim: reactive props are
 // what the template + updated() react to; everything the pointer hot paths
 // touch is a plain `#private` field (the pixel buffer and its ImageData view,
-// stroke/drag state, the on-screen scale), so a pencil drag can never schedule
-// a re-render at pointer-move rate. Canvas backing stores are sized
+// stroke/drag state, the selection's base/float/offset, the cursor claim, the
+// on-screen scale), so a pencil drag or a selection move can never schedule a
+// re-render at pointer-move rate. Canvas backing stores are sized
 // imperatively, never template-bound (a bound width would clear the buffer
 // mid-diff). Every stroke is HARD-pixel (alpha 0 or 255) via lib/brush.js.
+// The one low-rate reactive input beyond the brush state is `active` —
+// whether this window is the desktop's active document window — which gates
+// the selection's no-drag Esc (every open window's canvas listens on the
+// document; only the active one answers).
 //
 // The working buffer resets in willUpdate when the tile IDENTITY (or the tile
 // geometry) changes — identity is the caller's contract: the same reference
@@ -40,27 +66,49 @@
 //   - fillOnMount {x,y}: perform a fill click at (x,y). Applied LOCALLY (this
 //     tile) even with "on all faces" on — a local fill avoids a re-mount
 //     mid-mount.
+//   - selectOnMount {x0,y0,x1,y1,dx,dy}: select that box, and with a nonzero
+//     offset lift + float it there (the pixels reach the doc like a mount
+//     fill — no gesture bracket, no undo entry). The ants draw at phase 0 and
+//     never tick under the hook, so a capture stays byte-deterministic.
 // ---------------------------------------------------------------------------
 
 import { css, LitElement, html } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
 // The named imports also execute the kit module, registering <vf-container>
 // (and every other vf-* element) for the template below.
-import { effectiveScale, onScaleChange } from 'vintage-frames';
+import { effectiveScale, onScaleChange, prefersReducedMotion } from 'vintage-frames';
 import { writeTexel, stampBrush, strokeLine } from '../lib/brush.js';
 import { roundedRectRows, squareEnd } from '../lib/rect.js';
 import { keyAt, floodFill, replaceColor } from '../lib/fill.js';
+import {
+  liftRect,
+  clearRect,
+  compositeFloat,
+  normalizeBounds,
+  boundsContain,
+  translateBounds,
+  constrainAxis,
+} from '../lib/select.js';
 import {
   drawGuides,
   drawTexelGrid,
   drawCursorOutline,
   drawPencilPreview,
   drawRectPreview,
+  drawMarchingAnts,
 } from './draw-overlays.js';
 import { baseStyles } from './base-styles.js';
 
 // MIRROR_ALPHA keeps the onion-skin a faint hint.
 const MIRROR_ALPHA = 0.22;
+
+// The marching ants' step: one system px of dash travel per tick. Brisk, the
+// way MacPaint's were; an 8px dash period makes eight ticks one cycle.
+const ANTS_MS = 100;
+
+// The bare-letter tool keys (shortcuts.js's map) — mid-gesture, any of them
+// abandons the drag in flight before the switch it makes lands.
+const TOOL_KEYS = new Set(['s', 'b', 'r', 'g', 'e', 'i']);
 
 // The classic light transparency checker (pale gray + off-white), so empty
 // texels read as "no color" against the darker gray canvas well framing them.
@@ -118,11 +166,11 @@ export class SmDrawCanvas extends LitElement {
        target and the canvases' positioning anchor, so all four layers ride
        it together. No rule block needed: the kit owns the container's
        layout entirely. */
-      /* All four layers fill the stack (backing stores managed in JS): a background
+      /* All five layers fill the stack (backing stores managed in JS): a background
        (per-texel checkerboard + faded onion-skin, drawn at native tile res), the
-       transparent pixel canvas (native tile res), then the guide + cursor overlays
-       (system-px res — their 1px hairlines are 1 system px, the kit's hairline
-       unit). */
+       transparent pixel canvas (native tile res), then the guide + cursor +
+       selection overlays (system-px res — their 1px hairlines are 1 system px,
+       the kit's hairline unit). */
       .editor-canvas-stack > canvas {
         position: absolute;
         inset: 0;
@@ -161,6 +209,14 @@ export class SmDrawCanvas extends LitElement {
         z-index: 3;
         pointer-events: none;
       }
+      /* The selection's marching ants, topmost — nothing may cover the
+       boundary — and on their OWN layer: every hover / rect painter clears
+       and redraws the cursor layer at pointer-move rate, and ants drawn
+       there would be wiped by the next move. */
+      .editor-canvas-select {
+        z-index: 4;
+        pointer-events: none;
+      }
     `,
   ];
 
@@ -177,6 +233,10 @@ export class SmDrawCanvas extends LitElement {
     cornerRadius: { type: Number },
     fillContiguous: { type: Boolean },
     fillAllFaces: { type: Boolean },
+    /** Whether this window is the desktop's active document window — the
+     *  selection's no-drag Esc gate (decision: Esc drops the ACTIVE window's
+     *  selection only). Nothing else reads it. */
+    active: { type: Boolean },
   };
 
   constructor() {
@@ -193,11 +253,13 @@ export class SmDrawCanvas extends LitElement {
     this.cornerRadius = 0;
     this.fillContiguous = true;
     this.fillAllFaces = false;
+    this.active = false;
 
     // Dev hooks (plain: consumed once on the first update, never re-read).
     this.previewCursor = false;
     this.previewRect = null;
     this.fillOnMount = null;
+    this.selectOnMount = null;
   }
 
   // --- plain fields: the pixel buffer, gesture state, on-screen geometry -----
@@ -221,6 +283,28 @@ export class SmDrawCanvas extends LitElement {
   #rectEnd = null; // raw moving corner texel {px,py} (pre square-lock)
   #rectPointer = null; // captured pointerId, for release on cancel
   #shiftLock = false; // Shift held → constrain the drag to a square
+
+  // Selection-tool state (the header's base + float model). `#sel` is the
+  // marquee in TILE texels, inclusive — the LIFT ORIGIN, never translated in
+  // place; the CURRENT rectangle (what the ants draw, what "inside"
+  // hit-tests against) is `#sel` shifted by `#selOffset` — see #selRect.
+  #sel = null; // {x0,y0,x1,y1} | null
+  #selFloat = null; // {width,height,data,opaque} — lifted once, on the first move press
+  #selBase = null; // #work with the marquee cleared: "the hole" — pristine for the selection's life
+  #selOffset = { dx: 0, dy: 0 }; // the float's displacement from #sel
+  #selDrag = null; // null | 'marquee' | 'move' — the gesture in flight
+  #selAnchor = null; // marquee: the anchor texel · move: the grab texel
+  #selOffsetAtGrab = null; // move: #selOffset when the press landed (a cancel reverts to it)
+  #selLast = null; // move: the last pointer texel (Shift with the pointer still re-derives from it)
+  #selPointer = null; // the captured pointerId, released on every exit path
+  #selShift = false; // Shift held during a move → the axis lock (guards keydown repeat)
+  #selNotified = null; // the outline last reported through sm-selection (dedupes emits)
+  // The ants: their own overlay layer + a ticker that runs only while a
+  // selection is up. `#antsStatic` (the ?select hook) pins phase 0 with no
+  // timer, so a capture with a selection in frame stays byte-deterministic.
+  #antsPhase = 0;
+  #antsTimer = null;
+  #antsStatic = false;
 
   // Live on-screen geometry, re-derived by #layout(), in the kit's SYSTEM px
   // (the vintage-frames virtual pixel grid): `#texelSys` is the whole-system-px
@@ -248,20 +332,30 @@ export class SmDrawCanvas extends LitElement {
   #overlay = createRef();
   /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
   #cursor = createRef();
+  /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
+  #antsLayer = createRef();
   #ctx = null;
   #overlayCtx = null;
   #cursorCtx = null;
+  #antsCtx = null;
 
   #drawHooksDone = false; // the one-shot canvas dev hooks ran (first update)
 
   // --- lifecycle -------------------------------------------------------------
   connectedCallback() {
     super.connectedCallback();
-    // Gesture-scoped keys only (Esc cancel, Shift square-lock, and the
-    // B/R/G/E/I mid-drag abandon) — they must work wherever focus is, so they
-    // live on the document; the general tool shortcuts belong to shortcuts.js.
+    // Gesture-scoped keys only (Esc cancel / selection drop, Shift square- or
+    // axis-lock, and the S/B/R/G/E/I mid-drag abandon) — they must work
+    // wherever focus is, so they live on the document; the general tool
+    // shortcuts belong to shortcuts.js.
     document.addEventListener('keydown', this.#onKeyDown);
     document.addEventListener('keyup', this.#onKeyUp);
+    // The desktop re-inserts a document window's node to raise it, which
+    // disconnects and reconnects this element mid-session: the selection
+    // fields survive (same instance), so the ants' ticker — stopped on
+    // disconnect so it can't leak into a context whose element is gone —
+    // comes back here iff a selection is up.
+    if (this.#sel) this.#startAnts();
     // Setup mirrors disconnectedCallback's teardown: raising any window makes
     // vf-desktop re-order the slotted windows in the light DOM, which
     // disconnects + reconnects this element — the observer torn down there
@@ -284,6 +378,7 @@ export class SmDrawCanvas extends LitElement {
     this.#resizeObs = null;
     this.#offScale?.();
     this.#offScale = null;
+    this.#stopAnts();
   }
 
   willUpdate(changed) {
@@ -294,9 +389,12 @@ export class SmDrawCanvas extends LitElement {
     if (changed.has('tileW') || changed.has('tileH') || changed.has('tile')) {
       this.#resetWorking();
     } else if (changed.has('tool')) {
-      // Switching tools abandons any in-flight gesture — the rect box is
-      // discarded (nothing committed) and a live pencil stroke ends (its
-      // pixels stay, so it still commits an undo entry).
+      // Switching tools abandons any in-flight gesture — a selection drops
+      // where it sits (its pixels are already in the buffer; a move mid-drag
+      // reverts to where it was grabbed first), the rect box is discarded
+      // (nothing committed) and a live pencil stroke ends (its pixels stay,
+      // so it still commits an undo entry).
+      this.#dropSelection();
       this.#cancelRect();
       this.#endGesture();
       this.#drawing = false;
@@ -309,6 +407,7 @@ export class SmDrawCanvas extends LitElement {
     this.#ctx = this.#canvas.value.getContext('2d');
     this.#overlayCtx = this.#overlay.value.getContext('2d');
     this.#cursorCtx = this.#cursor.value.getContext('2d');
+    this.#antsCtx = this.#antsLayer.value.getContext('2d');
     this.#observeResize();
   }
 
@@ -379,6 +478,25 @@ export class SmDrawCanvas extends LitElement {
     this.#rectEnd = null;
     this.#rectPointer = null;
     this.#shiftLock = false;
+    // A selection dies with the buffer it was lifted from (the pixels it
+    // moved are already in the document): null the fields outright — no
+    // cancel, nothing to revert into a buffer being replaced — and stop the
+    // ticker. The ants layer clears on the re-fit below (a backing resize
+    // clears a canvas) and directly here for a same-size swap.
+    this.#sel = null;
+    this.#selFloat = null;
+    this.#selBase = null;
+    this.#selOffset = { dx: 0, dy: 0 };
+    this.#selDrag = null;
+    this.#selAnchor = null;
+    this.#selOffsetAtGrab = null;
+    this.#selLast = null;
+    this.#selPointer = null;
+    this.#selShift = false;
+    this.#stopAnts();
+    this.#clearAnts();
+    this.#setCursorClaim('crosshair');
+    this.#notifySelection(); // the outline went with it (a no-op when none was up)
     this.#laidOut = false; // force #layout() to re-fit for the new tile size
   }
 
@@ -494,8 +612,11 @@ export class SmDrawCanvas extends LitElement {
     this.#overlay.value.height = this.#sysH;
     this.#cursor.value.width = this.#sysW;
     this.#cursor.value.height = this.#sysH;
+    this.#antsLayer.value.width = this.#sysW;
+    this.#antsLayer.value.height = this.#sysH;
     this.#drawGuidesLayer();
     this.#redrawCursorLayer(); // re-stroke the footprint / rect preview at the new scale
+    this.#drawAnts(); // the backing resize cleared the ants — re-stroke them at the new scale
   }
 
   #drawGuidesLayer() {
@@ -536,22 +657,50 @@ export class SmDrawCanvas extends LitElement {
         false
       );
     }
+    if (this.selectOnMount) {
+      // A selection with no owning pointer (like ?rect's phantom drag): the
+      // ants stand at phase 0 for the capture, and a real press inside takes
+      // over normally (#selDrag stays null). With an offset, lift and float
+      // it there — the pixels reach the doc like a mount fill, no gesture
+      // bracket, no undo entry.
+      const h = this.selectOnMount;
+      this.#antsStatic = true;
+      this.#sel = normalizeBounds(
+        { px: clampX(h.x0), py: clampY(h.y0) },
+        { px: clampX(h.x1), py: clampY(h.y1) }
+      );
+      this.#selOffset = { dx: 0, dy: 0 };
+      if (h.dx || h.dy) {
+        this.#liftSelection();
+        this.#selOffset = { dx: h.dx | 0, dy: h.dy | 0 };
+        if (this.#selFloat.opaque > 0) {
+          this.#compositeSelection();
+          this.#commitPixels();
+        }
+      }
+      this.#startAnts(); // a no-op under #antsStatic — the once-drawn phase 0
+      this.#drawAnts();
+      this.#notifySelection();
+    }
   }
 
   // --- template --------------------------------------------------------------
   // The WELL (.editor-canvas-wrap) fills the draw box below the options bar
   // (CSS flex:1) — its height comes from the flex layout, not JS — so nothing
   // shifts when the tile size (and thus the drawn canvas) changes. Inside it,
-  // a kit <vf-container> holds the four aligned layers: #layout() states its
+  // a kit <vf-container> holds the five aligned layers: #layout() states its
   // width/height/top/left in whole system px (the DITL rectangle — centered
   // by arithmetic, on the pixel lattice by construction), and the canvases
-  // fill its box (inset: 0 against the container's own anchor, so all four
+  // fill its box (inset: 0 against the container's own anchor, so all five
   // ride its grid-snap correction together). Only the pixel canvas takes
   // pointer events. The pixel + bg canvases keep a native tileW×tileH backing
-  // store (CSS upscales them crisp); the overlay + cursor are SYSTEM-res
-  // (backing tracks the box's system px) so their 1px lines are 1 system px —
-  // the kit's own hairline unit. Backing stores are set in
-  // #applyGeometry()/#layout(), never bound here.
+  // store (CSS upscales them crisp); the overlay + cursor + selection layers
+  // are SYSTEM-res (backing tracks the box's system px) so their 1px lines
+  // are 1 system px — the kit's own hairline unit. Backing stores are set in
+  // #applyGeometry()/#layout(), never bound here. The pixel canvas's
+  // data-vf-cursor is the kit's page-drawn cursor claim — cloned once, never
+  // re-applied by Lit, so #setCursorClaim's imperative flips (the arrow over a
+  // selection) are never reverted by a render.
   render() {
     return html`
       <div class="editor-canvas-wrap" ${ref(this.#wrap)}>
@@ -570,6 +719,7 @@ export class SmDrawCanvas extends LitElement {
           ></canvas>
           <canvas class="editor-canvas-overlay" ${ref(this.#overlay)}></canvas>
           <canvas class="editor-canvas-cursor" ${ref(this.#cursor)}></canvas>
+          <canvas class="editor-canvas-select" ${ref(this.#antsLayer)}></canvas>
         </vf-container>
       </div>
     `;
@@ -611,12 +761,31 @@ export class SmDrawCanvas extends LitElement {
   }
 
   // --- gesture-scoped keyboard -------------------------------------------------
-  // Esc aborts an in-flight rect drag (nothing committed); Shift held mid-drag
-  // locks the box to a square; B/R/G/E/I mid-drag abandon the box (shortcuts.js
-  // does the actual tool switch — abandoning is this canvas's business, so the
-  // two compose without ordering coupling). Everything here is a no-op unless a
-  // gesture is actually in flight.
+  // Three tiers, checked in order. A SELECTION DRAG in flight (a pointer is
+  // captured, so nothing modal can be open): Esc cancels it, Shift toggles
+  // the move's axis lock, the tool letters abandon it. A SELECTION UP with no
+  // drag: only Esc, dropping it — and this one key is a document-wide
+  // listener for as long as the selection lives (minutes, across dialogs and
+  // menus, with other windows active), so it carries guards no gesture key
+  // ever needed: the ACTIVE window only, no modal open, not typed into a
+  // field — and never preventDefault (the kit's modal Esc is the native
+  // `cancel` event, which a prevented keydown suppresses; the kit's menus
+  // bail on defaultPrevented, so a prevented Esc would strand a dropped menu
+  // open). Then the rect tier as ever: Esc aborts an in-flight rect drag
+  // (nothing committed); Shift held mid-drag locks the box to a square;
+  // S/B/R/G/E/I mid-drag abandon the box (shortcuts.js does the actual tool
+  // switch — abandoning is this canvas's business, so the two compose without
+  // ordering coupling). Everything here is a no-op unless a gesture is
+  // actually in flight or a selection is up.
   #onKeyDown = (e) => {
+    if (this.#selDrag) {
+      this.#onSelectionDragKey(e);
+      return;
+    }
+    if (this.tool === 'select' && this.#sel) {
+      this.#onSelectionUpKey(e);
+      return;
+    }
     if (!this.#rectDragging) return;
     if (e.key === 'Escape') {
       this.#cancelRect(); // discard the box mid-drag — no pixels written
@@ -639,13 +808,64 @@ export class SmDrawCanvas extends LitElement {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key.toLowerCase();
     // Switching tools mid rect-drag abandons the box (nothing committed) — same as
-    // ESC, so B/R/G/E/I can't leave a half-dragged rect wired to the old pointer.
-    if (k === 'b' || k === 'r' || k === 'g' || k === 'e' || k === 'i') this.#cancelRect();
+    // ESC, so S/B/R/G/E/I can't leave a half-dragged rect wired to the old pointer.
+    if (TOOL_KEYS.has(k)) this.#cancelRect();
   };
 
-  // Releasing Shift mid-drag drops the square-lock and re-derives the free box.
+  // A selection drag in flight: Esc cancels (the marquee vanishes; a move
+  // reverts to where it was grabbed), Shift down starts the move's axis lock
+  // from the last pointer texel (keydown repeats, so guard on the flag), and
+  // a tool letter abandons the drag — the tool switch shortcuts.js makes then
+  // drops the selection through willUpdate (S with the selection tool live
+  // is a silent no-op patch and switches nothing; listed so the key set
+  // mirrors the rect's rule).
+  #onSelectionDragKey(e) {
+    if (e.key === 'Escape') {
+      if (this.#selDrag === 'marquee') this.#cancelMarquee();
+      else this.#cancelMove();
+      e.preventDefault();
+      return;
+    }
+    if (e.key === 'Shift') {
+      if (this.#selDrag === 'move' && !this.#selShift) {
+        this.#selShift = true;
+        this.#applyMove(this.#selLast, true);
+      }
+      return;
+    }
+    const target = e.composedPath ? e.composedPath()[0] : e.target;
+    const tag = target && /** @type {Element} */ (target).tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (TOOL_KEYS.has(e.key.toLowerCase())) {
+      if (this.#selDrag === 'marquee') this.#cancelMarquee();
+      else this.#cancelMove();
+    }
+  }
+
+  // A selection up, no drag: Esc drops it — under the three guards the header
+  // of #onKeyDown spells out, and without preventDefault. Anything else
+  // passes untouched.
+  #onSelectionUpKey(e) {
+    if (e.key !== 'Escape') return;
+    if (!this.active) return; // the ACTIVE window's selection only
+    if (document.querySelector('vf-dialog[open]')) return; // the modal owns Esc
+    const target = e.composedPath ? e.composedPath()[0] : e.target;
+    const tag = target && /** @type {Element} */ (target).tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    this.#dropSelection();
+  }
+
+  // Releasing Shift mid-drag drops the square-lock (rect) or the axis lock
+  // (selection move) and re-derives the free box / offset.
   #onKeyUp = (e) => {
-    if (e.key === 'Shift' && this.#rectDragging && this.#shiftLock) {
+    if (e.key !== 'Shift') return;
+    if (this.#selDrag === 'move' && this.#selShift) {
+      this.#selShift = false;
+      this.#applyMove(this.#selLast, false);
+      return;
+    }
+    if (this.#rectDragging && this.#shiftLock) {
       this.#shiftLock = false;
       this.#drawRectPreview();
     }
@@ -838,6 +1058,308 @@ export class SmDrawCanvas extends LitElement {
     else this.#drawCursor(this.#hoverTexel);
   }
 
+  // --- the selection ------------------------------------------------------------
+  // The CURRENT selection rectangle: the lift origin shifted by the float's
+  // offset — what the ants draw and what a press hit-tests against. May hang
+  // off the tile (the ants layer clips it; the composite clips per texel).
+  get #selRect() {
+    return this.#sel
+      ? translateBounds(this.#sel, this.#selOffset.dx, this.#selOffset.dy)
+      : null;
+  }
+
+  // The outline the world sees: the current rectangle — except a marquee
+  // still on its anchor texel alone, which is a click in progress, not a
+  // selection (nothing drawn, nothing reported).
+  get #selOutline() {
+    const b = this.#selRect;
+    if (b && this.#selDrag === 'marquee' && b.x0 === b.x1 && b.y0 === b.y1) return null;
+    return b;
+  }
+
+  // Report the outline to the container — only when it actually changed
+  // (a same-texel move, an ants tick, a re-fit report nothing), so the
+  // per-context selection store downstream sees one patch per real change.
+  #notifySelection() {
+    const next = this.#selOutline;
+    const last = this.#selNotified;
+    if (
+      next === last ||
+      (next &&
+        last &&
+        next.x0 === last.x0 &&
+        next.y0 === last.y0 &&
+        next.x1 === last.x1 &&
+        next.y1 === last.y1)
+    )
+      return;
+    this.#selNotified = next;
+    this.#emit('sm-selection', { bounds: next });
+  }
+
+  // Lift the marquee's texels out ONCE (the first move press): the float is a
+  // copy of the rect with its opaque count, the base is the buffer with the
+  // rect cleared to transparency — pristine for the selection's whole life,
+  // so every offset is a pure function of (base, float, offset).
+  #liftSelection() {
+    this.#selFloat = liftRect(this.#work, this.tileW, this.#sel);
+    this.#selBase = this.#work.slice();
+    clearRect(this.#selBase, this.tileW, this.#sel);
+  }
+
+  // #work ← base, then the float's OPAQUE texels at the current offset —
+  // written IN PLACE (never `#work = …`): the doc holds this buffer by
+  // reference, and a fresh one would silently detach it from the screen.
+  #compositeSelection() {
+    compositeFloat(
+      this.#work,
+      this.#selBase,
+      this.tileW,
+      this.tileH,
+      this.#selFloat,
+      this.#sel.x0 + this.#selOffset.dx,
+      this.#sel.y0 + this.#selOffset.dy
+    );
+  }
+
+  // The selection tool's press: inside the current selection starts a MOVE
+  // (lifting on the first one); anywhere else drops what's up and starts a
+  // MARQUEE. Primary button only — a right-click does nothing with this tool
+  // (there is nothing to erase with), and a second concurrent pointer never
+  // hijacks a drag (the rect's rule).
+  #onSelectDown(e, t) {
+    if (e.button !== 0) return;
+    if (this.#selDrag) return;
+    const cur = this.#selRect;
+    if (cur && boundsContain(cur, t.px, t.py)) {
+      this.#startMove(e, t);
+      return;
+    }
+    this.#dropSelection();
+    this.#startMarquee(e, t);
+  }
+
+  #startMarquee(e, t) {
+    this.#selAnchor = t;
+    this.#sel = { x0: t.px, y0: t.py, x1: t.px, y1: t.py };
+    this.#selOffset = { dx: 0, dy: 0 };
+    this.#selDrag = 'marquee';
+    this.#selPointer = e.pointerId;
+    this.#canvas.value.setPointerCapture?.(e.pointerId);
+    this.#startAnts();
+    this.#drawAnts(); // draws nothing yet: the box is still the anchor texel alone
+  }
+
+  // Release: a box that never left its anchor texel is a CLICK, not a
+  // selection (which is also what "click outside to deselect" means — the
+  // drop already happened on the press); anything larger becomes the
+  // selection, ants marching.
+  #endMarquee(e) {
+    const end = this.#toTexelClamped(e);
+    this.#releaseSelPointer();
+    this.#selDrag = null;
+    if (end.px === this.#selAnchor.px && end.py === this.#selAnchor.py) {
+      this.#sel = null;
+      this.#selAnchor = null;
+      this.#stopAnts();
+      this.#clearAnts();
+      this.#notifySelection();
+      return;
+    }
+    this.#sel = normalizeBounds(this.#selAnchor, end);
+    this.#drawAnts();
+    this.#notifySelection();
+  }
+
+  // Abort a marquee in flight (Esc, pointercancel, a tool letter): as the
+  // click case — no selection.
+  #cancelMarquee() {
+    if (this.#selDrag !== 'marquee') return;
+    this.#releaseSelPointer();
+    this.#selDrag = null;
+    this.#sel = null;
+    this.#selAnchor = null;
+    this.#stopAnts();
+    this.#clearAnts();
+    this.#notifySelection();
+  }
+
+  // Grab the float: lift on the first move, open the undo bracket (`before`
+  // is the buffer as it is now — the composite at the current offset, or the
+  // untouched art), remember where the offset stood, capture the pointer.
+  #startMove(e, t) {
+    if (!this.#selFloat) this.#liftSelection();
+    this.#beginGesture();
+    this.#selAnchor = t;
+    this.#selOffsetAtGrab = { ...this.#selOffset };
+    this.#selLast = t;
+    this.#selShift = e.shiftKey;
+    this.#selDrag = 'move';
+    this.#selPointer = e.pointerId;
+    this.#canvas.value.setPointerCapture?.(e.pointerId);
+    this.#setCursorClaim('arrow');
+  }
+
+  // One pointer texel → the float's offset: the drag delta from the grab
+  // texel (axis-locked under Shift) on top of the offset at the grab. A
+  // same-texel move is no churn. An EMPTY float (opaque 0 — a marquee over
+  // empty space, a derived face) moves only its marquee: it can never change
+  // a byte, so it must not composite, dirty the buffer, fire sm-live or
+  // trigger a rebuild per pointer move — the guard IS the derived-face
+  // special case.
+  //
+  // FUTURE — THE REGISTERED MOVE ("on all faces", the fill tool's idiom; a
+  // planned follow-up, not a maybe). Today a move edits THIS face alone,
+  // which breaks the carve's registration: the front face's roof shifted +6
+  // columns no longer lines up with the top face's, so the voxels the two
+  // agreed on vanish. A marquee on one face is really a SLAB of voxels —
+  // a FRONT rect (columns x0..x1, rows y0..y1) is those columns across the
+  // whole depth on TOP/BOTTOM and those rows across the whole depth on
+  // LEFT/RIGHT, with BACK the mirror of FRONT — so the registered move is
+  // well-defined: a +dx on FRONT shifts TOP's and BOTTOM's columns x0..x1
+  // (every row) by dx and BACK's mirrored columns by −dx, the sides
+  // untouched (x is their depth axis); a +dy shifts LEFT's, RIGHT's and
+  // BACK's rows y0..y1 (every column) by dy, TOP/BOTTOM untouched. The
+  // per-face bounds and deltas come from lib/views.js's axis mappings
+  // (VIEW_IMAGE_AXES — the same table the alignment guides are derived
+  // from); the per-face edit is lib/select.js's lift / clear / composite
+  // over each face's own slice; the undo is ONE whole-atlas snapshot
+  // (history.withAtlasSnapshot) rather than a tile entry; and the live
+  // preview during the drag stays THIS face's (the other faces land at
+  // release through doc.replaceAllTiles-style structural write, like the
+  // all-faces fill). A session checkbox (`moveAllFaces`) in the strip is the
+  // control. Nothing about the single-face move above changes shape for it.
+  #applyMove(t, shift) {
+    const a = this.#selAnchor;
+    const g = this.#selOffsetAtGrab;
+    let d = { dx: t.px - a.px, dy: t.py - a.py };
+    if (shift) d = constrainAxis(d.dx, d.dy);
+    const next = { dx: g.dx + d.dx, dy: g.dy + d.dy };
+    if (next.dx === this.#selOffset.dx && next.dy === this.#selOffset.dy) return;
+    this.#selOffset = next;
+    if (this.#selFloat.opaque > 0) {
+      this.#compositeSelection();
+      this.#commitPixels(); // dirty + changed + repaint + sm-live
+    }
+    this.#drawAnts();
+    this.#notifySelection();
+  }
+
+  // Release: close the undo bracket (sm-commit iff a byte changed — a drag
+  // that returned exactly to its start emits a pair the history drops as
+  // identical anyway). The selection stays up, FLOATING: the next drag inside
+  // starts from this offset over the same base and float.
+  #endMove() {
+    this.#endGesture();
+    this.#releaseSelPointer();
+    this.#selDrag = null;
+    this.#selShift = false;
+    this.#drawAnts();
+  }
+
+  // Abort a move in flight: the offset reverts to where the press landed and
+  // the buffer re-composites there — through #repaint + #notifyLive DIRECTLY,
+  // never #commitPixels (that would mark the gesture changed and #endGesture
+  // would then record an undo entry for a gesture that ended where it
+  // began); then the capture drops without emitting (the #cancelRect idiom).
+  // The selection stays floating at its pre-drag offset.
+  #cancelMove() {
+    if (this.#selDrag !== 'move') return;
+    const g = this.#selOffsetAtGrab;
+    if (this.#selOffset.dx !== g.dx || this.#selOffset.dy !== g.dy) {
+      this.#selOffset = { ...g };
+      if (this.#selFloat.opaque > 0) {
+        this.#compositeSelection();
+        this.#repaint();
+        this.#notifyLive(); // the live channel must see the bytes go back
+      }
+    }
+    this.#gestureBefore = null;
+    this.#gestureChanged = false;
+    this.#releaseSelPointer();
+    this.#selDrag = null;
+    this.#selShift = false;
+    this.#drawAnts();
+    this.#notifySelection();
+  }
+
+  // The one exit: cancel any drag in flight, then forget. It writes nothing —
+  // #work already holds the composite (the last move gesture committed it),
+  // so a drop is purely forgetting. Called from a press outside the
+  // selection, the selection-up Esc, and willUpdate's tool-change branch
+  // (#resetWorking nulls the fields directly — nothing to revert into a
+  // buffer being replaced).
+  #dropSelection() {
+    if (!this.#sel) return;
+    this.#cancelMarquee();
+    this.#cancelMove();
+    this.#sel = null;
+    this.#selFloat = null;
+    this.#selBase = null;
+    this.#selOffset = { dx: 0, dy: 0 };
+    this.#selAnchor = null;
+    this.#selOffsetAtGrab = null;
+    this.#selLast = null;
+    this.#selShift = false;
+    this.#stopAnts();
+    this.#clearAnts();
+    this.#setCursorClaim('crosshair');
+    this.#notifySelection();
+  }
+
+  #releaseSelPointer() {
+    if (this.#selPointer != null) {
+      this.#canvas.value?.releasePointerCapture?.(this.#selPointer);
+      this.#selPointer = null;
+    }
+  }
+
+  // The ants on their own layer: the current rectangle at the current phase.
+  // A marquee still on its anchor texel alone draws NOTHING — a click never
+  // flashes a one-texel box; the ants appear the moment the moving corner
+  // leaves the anchor.
+  #drawAnts() {
+    const g = this.#antsCtx;
+    if (!g) return;
+    drawMarchingAnts(g, this.#overlayView, this.#selOutline, this.#antsPhase);
+  }
+
+  #clearAnts() {
+    this.#antsCtx?.clearRect(0, 0, this.#sysW, this.#sysH);
+  }
+
+  // The ticker runs only while a selection is up (idle costs nothing). Under
+  // the OS's reduce-motion preference, or the ?select hook's static flag,
+  // the ants draw once at phase 0 and stand still.
+  #startAnts() {
+    if (this.#antsTimer != null) return;
+    if (this.#antsStatic || prefersReducedMotion()) return;
+    this.#antsTimer = setInterval(() => {
+      this.#antsPhase = (this.#antsPhase + 1) & 7;
+      this.#drawAnts();
+    }, ANTS_MS);
+  }
+
+  #stopAnts() {
+    if (this.#antsTimer != null) clearInterval(this.#antsTimer);
+    this.#antsTimer = null;
+    this.#antsPhase = 0;
+  }
+
+  // The kit's page-drawn cursor: the arrow over a selection (you're about to
+  // grab it), the crosshair elsewhere — MacPaint's reading. Flipped on the
+  // pixel canvas's own claim attribute, imperatively (a bound attribute would
+  // put a pointer-move-rate value on the reactive path), and only when it
+  // differs (a setAttribute per move would be churn). The kit resolves the
+  // claim by hit-test on the NEXT pointer move (its observer can't see into
+  // this shadow root), so a flip lands a frame later — invisible in motion,
+  // and a reset with the pointer still shows when it next moves. Accepted.
+  #setCursorClaim(kind) {
+    const c = this.#canvas.value;
+    if (c && c.getAttribute('data-vf-cursor') !== kind)
+      c.setAttribute('data-vf-cursor', kind);
+  }
+
   // --- sampling + fill ---------------------------------------------------------
   // An eyedrop: report what was hit — a painted texel's color, or empty space
   // (which the container maps to the eraser tool: sampling emptiness hands you
@@ -904,6 +1426,14 @@ export class SmDrawCanvas extends LitElement {
       this.#sampleAt(t.px, t.py);
       return;
     }
+    // The selection tool: a move press inside the selection, a marquee
+    // press anywhere else (the Alt-sample above still works with it — and an
+    // Alt-sample of emptiness selects the eraser, a tool change that drops
+    // the selection through willUpdate).
+    if (this.tool === 'select') {
+      this.#onSelectDown(e, t);
+      return;
+    }
     if (this.tool === 'fill') {
       // Single click — no drag, no pointer capture; the whole gesture is
       // synchronous (the on-all-faces path writes nothing locally, so its
@@ -940,6 +1470,24 @@ export class SmDrawCanvas extends LitElement {
   };
 
   #onPointerMove = (e) => {
+    if (this.#selDrag) {
+      // Only the drag-owning pointer moves the marquee's corner or the float
+      // (the rect's rule); the corner is clamped so a past-the-edge drag pins
+      // to the tile, and so the float's grab texel can never leave it — the
+      // float itself may hang off, clipped at drop time.
+      if (e.pointerId !== this.#selPointer) return;
+      const t = this.#toTexelClamped(e);
+      if (this.#selDrag === 'marquee') {
+        this.#sel = normalizeBounds(this.#selAnchor, t);
+        this.#drawAnts();
+        this.#notifySelection();
+      } else {
+        this.#selLast = t;
+        this.#selShift = e.shiftKey; // track Shift held during the drag
+        this.#applyMove(t, e.shiftKey);
+      }
+      return;
+    }
     if (this.#rectDragging) {
       // Only the drag-owning pointer rubber-bands the box; a non-owner move (or a
       // bare hover over the ownerless dev-hook phantom) leaves the preview pinned.
@@ -950,12 +1498,27 @@ export class SmDrawCanvas extends LitElement {
       return;
     }
     const t = this.#toTexel(e);
+    // The selection tool's hover: the arrow inside the selection, the
+    // crosshair outside (its cursor layer stays clear — the ants live on
+    // their own layer, so #drawCursor below is just the clear).
+    if (this.tool === 'select') {
+      const cur = this.#selRect;
+      this.#setCursorClaim(
+        cur && t && boundsContain(cur, t.px, t.py) ? 'arrow' : 'crosshair'
+      );
+    }
     this.#drawCursor(t); // keep the footprint preview under the cursor (hover + drag)
     if (!this.#drawing || !t) return;
     this.#stroke(t.px, t.py);
   };
 
   #onPointerUp = (e) => {
+    if (this.#selDrag) {
+      if (e.pointerId !== this.#selPointer) return; // ignore a stray second pointer
+      if (this.#selDrag === 'marquee') this.#endMarquee(e);
+      else this.#endMove();
+      return;
+    }
     if (this.#rectDragging) {
       if (e.pointerId !== this.#rectPointer) return; // ignore a stray second pointer
       this.#rectEnd = this.#toTexelClamped(e);
@@ -979,9 +1542,17 @@ export class SmDrawCanvas extends LitElement {
   };
 
   // pointercancel (gesture interrupted) discards an in-flight rect rather than
-  // committing a box the user didn't finish; a pencil stroke is already
-  // committed (its pixels stay, so its undo entry still lands).
+  // committing a box the user didn't finish, and cancels a selection drag
+  // the same way (a marquee vanishes, a move reverts to its grab); a pencil
+  // stroke is already committed (its pixels stay, so its undo entry still
+  // lands).
   #onPointerCancel = (e) => {
+    if (this.#selDrag) {
+      if (e.pointerId !== this.#selPointer) return; // a non-owner can't abort the drag
+      if (this.#selDrag === 'marquee') this.#cancelMarquee();
+      else this.#cancelMove();
+      return;
+    }
     if (this.#rectDragging) {
       if (e.pointerId !== this.#rectPointer) return; // a non-owner can't abort the drag
       this.#cancelRect();
@@ -994,10 +1565,15 @@ export class SmDrawCanvas extends LitElement {
     this.#canvas.value.releasePointerCapture?.(e.pointerId);
   };
 
-  // Clear the pencil hover footprint when the pointer leaves — but not mid rect
-  // drag (capture keeps the events coming; the preview must survive an edge cross).
+  // Clear the pencil hover footprint when the pointer leaves — but not mid
+  // rect or selection drag (capture keeps the events coming; the preview must
+  // survive an edge cross — with the pointer captured a mid-move leave fires
+  // only on a release outside). The selection tool's cursor claim returns to
+  // the crosshair too, so re-entry starts honest.
   #onPointerLeave = () => {
-    if (!this.#rectDragging) this.#drawCursor(null);
+    if (this.#rectDragging || this.#selDrag) return;
+    this.#drawCursor(null);
+    if (this.tool === 'select') this.#setCursorClaim('crosshair');
   };
 
   #onContextMenu = (e) => e.preventDefault(); // right-click = erase

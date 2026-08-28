@@ -372,12 +372,13 @@ const PROBE = `(() => {${DEEP}
   const picker = __q('sm-color-picker');
   const colorsDialog = picker ? picker.querySelector('vf-dialog') : null;
   return {
-    // All five tools are mutually exclusive sticky modes — exactly one cell is
+    // All six tools are mutually exclusive sticky modes — exactly one cell is
     // lit. The eyedropper is listed LAST so a drawing-tool cell wrongly left
     // active alongside it would win the find and fail the tool checks.
     drawTool:
-      ['pencil', 'rectangle', 'fill', 'eraser', 'eyedropper'].find((t) => tools[t]) ||
-      null,
+      ['selection', 'pencil', 'rectangle', 'fill', 'eraser', 'eyedropper'].find(
+        (t) => tools[t]
+      ) || null,
     // The current-ink swatch lives in the options strip and hides for the
     // eraser (the one tool that paints no color) — inkColor reads null then.
     inkSwatchShown: !!sw,
@@ -538,7 +539,16 @@ const texelPos = (rect, tile, px, py) => ({
 const hex = ([r, g, b]) =>
   '#' + [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('');
 
+// Both readiness predicates ALSO require the page to be unstamped: every
+// wait ends by stamping the document (`window.__stamp = 'S'`), so a stamp
+// means "the document we already waited for". Page.navigate resolves while
+// the OLD document is still up, and that document satisfies the predicate
+// on its own (its canvas / its open About box) — without this, a wait after
+// a same-URL navigation could return on the old page and the next probe
+// land on the new one mid-boot (icons 0, no greet: a flake seen 3 runs in
+// 5 on the plain-reload greet check). A fresh document carries no stamp.
 const APP_READY = `(() => {${DEEP}
+  if (window.__stamp) return false;
   const build = __q('sm-status-line[kind="build"]');
   const lb = build && build.shadowRoot && build.shadowRoot.querySelector('vf-label');
   return !!(__q('.editor-canvas') && lb &&
@@ -557,7 +567,15 @@ async function waitForApp() {
 // The plain boot (no ?sample, no ?file) opens NO document — it parks at the
 // About box (the launch splash), so APP_READY (an editor canvas + build
 // stats) never comes true there. This is that boot's readiness signal.
+// GREET_UP is the plain "is the About box open?" test (dismissGreet asks it
+// of a page already waited for — stamped — so it must NOT carry the stamp
+// guard); GREET_READY is the wait's predicate, which does.
+const GREET_UP = `(() => {${DEEP}
+  const d = __q('#dlg-about');
+  return !!(d && d.open);
+})()`;
 const GREET_READY = `(() => {${DEEP}
+  if (window.__stamp) return false;
   const d = __q('#dlg-about');
   return !!(d && d.open);
 })()`;
@@ -742,7 +760,7 @@ async function main() {
   // plain boot has to be got past: it OKs the box only if it is up, so a
   // retry after a headless reload lands on either state.)
   const dismissGreet = async () => {
-    if (!(await evaluate(GREET_READY).catch(() => false))) return;
+    if (!(await evaluate(GREET_UP).catch(() => false))) return;
     const ok = await centreOf('#btn-about-ok');
     await click(ok.x, ok.y);
     await sleep(400);
@@ -1124,6 +1142,150 @@ async function main() {
   await sleep(200);
   const committed = await texelAt(32, 6);
   check('a plain drag commits the box', committed[3] === 255, `texel=${committed}`);
+
+  // --- the selection tool: marquee, ants, move, the transparency rule -------
+  // Fresh load: the section carries a selection + undo state across many
+  // inputs. Mechanisms only — the ants layer's emptiness, texel bytes, the
+  // cursor claim attribute, the menu enablement — never copy. The Shift axis
+  // lock stays a manual item (chorded drags wedge headless Chrome).
+  section('selection');
+  await freshPage();
+  s = await probe();
+  const antsUp = async () => !(await layerIsEmpty('.editor-canvas-select'));
+  await keyPress('s');
+  s = await probe();
+  check(
+    'S selects the selection tool (strip + menu agree)',
+    s.drawTool === 'selection' && s.menuChecks.tool === 'select',
+    JSON.stringify({ strip: s.drawTool, menu: s.menuChecks.tool })
+  );
+  // The strip: no ink swatch (the tool lays no color) and a lone readout
+  // label (a mechanism check: one label, no digits while nothing is up).
+  check(
+    'the selection tool hides the ink swatch and shows only its readout',
+    s.inkSwatchShown === false &&
+      s.opts.join(',') === 'vf-label' &&
+      !/\d/.test(s.optsReadout || ''),
+    JSON.stringify({ opts: s.opts, swatch: s.inkSwatchShown, readout: s.optsReadout })
+  );
+  await drag(at(30, 4), at(34, 8));
+  await sleep(150);
+  s = await probe();
+  check('a marquee drag puts the ants up', await antsUp());
+  // The readout carries the marquee's numbers in order: left 30, top 4, then
+  // 5 × 5 (a value-shape check, not copy).
+  check(
+    'the readout states the marquee (left, top, then width × height)',
+    /\b30\b.*\b4\b.*\b5\b.*\b5\b/.test(s.optsReadout || ''),
+    s.optsReadout
+  );
+  check(
+    'a marquee writes nothing and is no undo step',
+    (await texelAt(32, 6))[3] === 0 && s.menuChecks.undoEnabled === false,
+    JSON.stringify({ texel: await texelAt(32, 6), undo: s.menuChecks.undoEnabled })
+  );
+  await mouse('mouseMoved', at(32, 6).x, at(32, 6).y, { buttons: 0 });
+  await sleep(100);
+  s = await probe();
+  check(
+    'inside the selection the canvas claims the arrow',
+    s.cursorClaim === 'arrow',
+    s.cursorClaim
+  );
+  await mouse('mouseMoved', at(10, 30).x, at(10, 30).y, { buttons: 0 });
+  await sleep(100);
+  s = await probe();
+  check('outside it the crosshair returns', s.cursorClaim === 'crosshair', s.cursorClaim);
+  await keyPress('Escape');
+  await sleep(100);
+  s = await probe();
+  check('Esc drops the selection (ants gone)', !(await antsUp()));
+  check(
+    '…and the readout empties with it',
+    !/\d/.test(s.optsReadout || ''),
+    s.optsReadout
+  );
+
+  // Two pencil dots: A inside the marquee-to-be, B where a TRANSPARENT texel
+  // of the float will land after the move.
+  await keyPress('b');
+  await click(at(32, 6).x, at(32, 6).y);
+  await sleep(100);
+  await click(at(30, 16).x, at(30, 16).y);
+  await sleep(150);
+  s = await probe();
+  const inkA = hex(await texelAt(32, 6));
+  const inkB = hex(await texelAt(30, 16));
+  check(
+    'two pencil clicks land A and B in the boot ink',
+    inkA === s.inkColor && inkB === s.inkColor,
+    JSON.stringify({ A: inkA, B: inkB, ink: s.inkColor })
+  );
+  await keyPress('s');
+  await drag(at(30, 4), at(34, 8));
+  await sleep(150);
+  check(
+    'the marquee holds A, and its (30,6) texel is empty',
+    (await antsUp()) &&
+      (await texelAt(32, 6))[3] === 255 &&
+      (await texelAt(30, 6))[3] === 0,
+    JSON.stringify({ A: await texelAt(32, 6), hole: await texelAt(30, 6) })
+  );
+  // The modal guard: ⌘K then Esc closes the Colors dialog and leaves the
+  // selection alone (a prevented Esc would strand the dialog open).
+  await keyPress('k', META);
+  await sleep(300);
+  s = await probe();
+  check('⌘K opens the Colors dialog over a selection', s.colorsOpen === true);
+  await keyPress('Escape');
+  await sleep(300);
+  s = await probe();
+  check(
+    'Esc closes the dialog and the selection stays up',
+    s.colorsOpen === false && (await antsUp()),
+    JSON.stringify({ colorsOpen: s.colorsOpen, ants: await antsUp() })
+  );
+  // The move: grab A's texel, drag it ten rows down.
+  await drag(at(32, 6), at(32, 16));
+  await sleep(300);
+  s = await probe();
+  const movedA = await texelAt(32, 16);
+  const hole = await texelAt(32, 6);
+  const keptB = await texelAt(30, 16);
+  check(
+    'dragging inside moves the painted texel',
+    hex(movedA) === inkA && movedA[3] === 255,
+    `${movedA}`
+  );
+  check('…and leaves transparency behind', hole[3] === 0, `${hole}`);
+  check(
+    'a transparent texel of the float leaves the art under it (the rule)',
+    hex(keptB) === inkB && keptB[3] === 255,
+    `${keptB}`
+  );
+  check('the ants follow the float', await antsUp());
+  // The float moved +10 rows: the readout's top is 14 now, its size unchanged.
+  check(
+    'the readout follows the float (top 4 → 14, size held)',
+    /\b30\b.*\b14\b.*\b5\b.*\b5\b/.test(s.optsReadout || ''),
+    s.optsReadout
+  );
+  check('a move is one undo step', s.menuChecks.undoEnabled === true);
+  await keyPress('z', META);
+  await sleep(300);
+  check(
+    '⌘Z puts the texel back',
+    (await texelAt(32, 6))[3] === 255 && (await texelAt(32, 16))[3] === 0,
+    JSON.stringify({ origin: await texelAt(32, 6), moved: await texelAt(32, 16) })
+  );
+  check('…and a structural change drops the selection', !(await antsUp()));
+  await keyPress('s');
+  await drag(at(30, 4), at(34, 8));
+  await sleep(150);
+  check('a fresh marquee comes up', await antsUp());
+  await keyPress('b');
+  await sleep(100);
+  check('a tool switch drops it', !(await antsUp()));
 
   // --- an edit must reach the voxel pipeline --------------------------------
   // Fresh load first: the headless reload artifact reliably strikes right after

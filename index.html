@@ -66,8 +66,10 @@
         </vf-menu>
         <!-- The tool items' bare-letter shortcuts are DISPLAY-only by kit
              contract (an unmodified printable key never matches), so
-             src/shortcuts.js keeps owning the actual B/R/G/E/I keys. -->
+             src/shortcuts.js keeps owning the actual S/B/R/G/E/I keys. The
+             selection leads, as MacPaint's palette did. -->
         <vf-menu id="menu-tools" label="Tools">
+          <vf-menu-item value="tool-select" shortcut="S">Selection</vf-menu-item>
           <vf-menu-item value="tool-pencil" shortcut="B" checked>Pencil</vf-menu-item>
           <vf-menu-item value="tool-rect" shortcut="R">Rectangle</vf-menu-item>
           <vf-menu-item value="tool-fill" shortcut="G">Fill</vf-menu-item>
@@ -180,9 +182,9 @@
            document windows and never deactivates them. Its SIZE stays
            authored (the one box layout.js takes as input): hugging the tool
            strip with NO inner padding — the frameless 28px-cell grid
-           (5×28 + 4 rules = 144) sits flush against the windoid's own frame
+           (6×28 + 5 rules = 173) sits flush against the windoid's own frame
            (the desk-accessory composition), + the chrome (1px borders,
-           12px bar). -->
+           12px bar) = 187. -->
       <vf-window
         id="win-tools"
         variant="utility"
@@ -190,7 +192,7 @@
         movable
         flush
         width="30"
-        height="158"
+        height="187"
       >
         <sm-tools-panel></sm-tools-panel>
       </vf-window>

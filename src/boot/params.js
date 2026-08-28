@@ -5,8 +5,8 @@
 // of greeting with the About box. main.js APPLIES the result:
 // most hooks are boot-time store actions (?edit → the boot context's face, ?pick →
 // session.pickColor, ?palette → session.openPicker, ?tile → doc.resizeTiles,
-// ?cursor / ?rect / ?fill's state halves → session actions); only the
-// canvas-paint halves ride as one-shot props on <sm-draw-canvas>.
+// ?cursor / ?rect / ?fill / ?select's state halves → session actions); only
+// the canvas-paint halves ride as one-shot props on <sm-draw-canvas>.
 // ---------------------------------------------------------------------------
 
 import { clampTile } from '../lib/atlas.js';
@@ -94,6 +94,28 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     }
   }
 
+  // ?select=x0,y0,x1,y1[,dx,dy]: select that box with the selection tool on
+  // mount, and — with an offset — lift it and float it there (a moved
+  // selection over the art, the transparency rule in a shot). The canvas
+  // draws the ants at phase 0 and never ticks under the hook, so a capture
+  // stays byte-deterministic. Fewer than four ints → null.
+  /** @type {{x0:number,y0:number,x1:number,y1:number,dx:number,dy:number}|null} */
+  let select = null;
+  const selectParam = params.get('select');
+  if (selectParam) {
+    const p = selectParam.split(',').map((s) => parseInt(s, 10));
+    if (p.length >= 4 && p.slice(0, 4).every(Number.isFinite)) {
+      select = {
+        x0: p[0],
+        y0: p[1],
+        x1: p[2],
+        y1: p[3],
+        dx: p.length > 4 && Number.isFinite(p[4]) ? p[4] : 0,
+        dy: p.length > 5 && Number.isFinite(p[5]) ? p[5] : 0,
+      };
+    }
+  }
+
   // ?sample=<index|name>: a known name wins; else a clamped index; else 0.
   // `sampleExplicit` records whether the param was GIVEN — an explicit sample
   // is a test path and beats the boot restore of the last open document.
@@ -135,6 +157,7 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     cursor,
     rect,
     fill,
+    select,
     sampleIndex,
     sampleExplicit: q != null,
     /** @type {string|null} the ?file=/#fragment saved-doc name request */

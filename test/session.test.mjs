@@ -35,6 +35,17 @@ test('eyedropper is a sticky tool: a pick leaves it selected', () => {
   assert.equal(s.get().tool, 'pencil', 'only an explicit tool pick leaves it');
 });
 
+test('the selection tool is sticky: a color pick leaves it selected', () => {
+  const s = createSession();
+  s.setTool('select');
+  assert.equal(s.get().tool, 'select');
+  s.pickColor(RED); // ⌘K → OK, or an Alt-sample of a painted texel
+  assert.equal(s.get().tool, 'select', 'a pick does not switch tools');
+  assert.deepEqual(s.get().ink, RED, 'but it does take the ink');
+  s.setTool('pencil');
+  assert.equal(s.get().tool, 'pencil', 'only an explicit tool pick leaves it');
+});
+
 test('eraserSize is its own setting — independent of pencilSize both ways', () => {
   const s = createSession();
   assert.equal(s.get().eraserSize, 1, 'boots at 1, like the pencil');

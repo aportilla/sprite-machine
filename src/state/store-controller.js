@@ -35,23 +35,34 @@ export class StoreController {
  * context's structural doc changes — re-wired across activation switches by
  * followActive. For hosts that render FROM the active document (the atlas
  * status readout, the options strip's tile bounds) without owning a context
- * of their own.
+ * of their own. `selection: true` also follows the active context's
+ * selection store (the canvas's marquee outline — pointer-move rate during
+ * a drag): OPT-IN, so only a host that actually shows it (the options
+ * strip's readout) re-renders per move, never every follower.
  */
 export class ActiveDocController {
   /**
    * @param {import('lit').ReactiveControllerHost} host
    * @param {ReturnType<typeof import('./workspace.js').createWorkspace>} workspace
+   * @param {{selection?: boolean}} [opts]
    */
-  constructor(host, workspace) {
+  constructor(host, workspace, { selection = false } = {}) {
     (this.host = host).addController(this);
     this.workspace = workspace;
+    this.selection = selection;
   }
   hostConnected() {
     const update = () => this.host.requestUpdate();
     const unsubWs = this.workspace.subscribe(update);
-    const stop = followActive(this.workspace, (ctx) =>
-      ctx ? ctx.doc.subscribe(update) : undefined
-    );
+    const stop = followActive(this.workspace, (ctx) => {
+      if (!ctx) return undefined;
+      const unsubDoc = ctx.doc.subscribe(update);
+      const unsubSel = this.selection ? ctx.selection.subscribe(update) : null;
+      return () => {
+        unsubDoc();
+        unsubSel?.();
+      };
+    });
     this.unsub = () => {
       unsubWs();
       stop();

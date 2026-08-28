@@ -20,7 +20,13 @@
 // it: a live stroke mutates `views[face]` SILENTLY (same object), so guides /
 // onion-skin / the working tile's identity stay put mid-stroke and the canvas
 // never resets its buffer. Canvas gesture commits feed THIS document's undo
-// history (sm-commit → ctx.history.pushTile).
+// history (sm-commit → ctx.history.pushTile), and the canvas's selection
+// outline (sm-selection) is mirrored onto THIS context's own selection store
+// (workspace.setSelection) for the options strip's readout — and the coming
+// Edit-menu gating — to follow. The canvas also learns whether THIS window is
+// the active one (`active`): a selection's no-drag Esc acts on the active
+// window's selection only — every open window's canvas listens on the
+// document, so without it one Esc would drop them all.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
@@ -175,11 +181,14 @@ export class SmEditor extends LitElement {
             .cornerRadius=${s.cornerRadius}
             .fillContiguous=${s.fillContiguous}
             .fillAllFaces=${s.fillAllFaces}
+            .active=${this.#isActive}
             .previewCursor=${hooks?.previewCursor ?? false}
             .previewRect=${hooks?.previewRect ?? null}
             .fillOnMount=${hooks?.fillOnMount ?? null}
+            .selectOnMount=${hooks?.selectOnMount ?? null}
             @sm-live=${this.#onLive}
             @sm-commit=${this.#onCommit}
+            @sm-selection=${(e) => workspace.setSelection(this.ctx.key, e.detail.bounds)}
             @sm-pick-color=${(e) => session.pickColor(e.detail.rgb)}
             @sm-pick-transparent=${() => session.setTool('eraser')}
             @sm-replace-all-tiles=${this.#onReplaceAllTiles}

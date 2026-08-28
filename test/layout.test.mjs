@@ -28,7 +28,7 @@ import {
   ICON_FRAME,
 } from '../src/shell/layout.js';
 
-const TOOLS = { width: 30, height: 158 };
+const TOOLS = { width: 30, height: 187 };
 // The capture tool's raster (1000×850 CSS at DSF 1, minus the 10px bezel).
 const W = 980;
 const H = 830;
@@ -297,7 +297,7 @@ test('pin: a strut keeps its offset from its edge, a spring its fraction of the 
 test('pin: the frame reserve is the y = 0 line — a box under the strip stays under it', () => {
   // The window frame: a box riding the options strip's bottom edge is a
   // near strut at offset 0 on any raster height.
-  const b = box(14, TOP_RESERVE, 30, 158);
+  const b = box(14, TOP_RESERVE, 30, 187);
   const home = { width: 1000, height: 830 };
   assert.equal(
     roundTrip(b, home, { width: 1000, height: 400 }, WINDOW_FRAME).top,

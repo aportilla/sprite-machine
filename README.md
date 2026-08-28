@@ -26,8 +26,10 @@ node tools/drive.mjs                                             # desktop + edi
 
 `capture.sh` shows what the app **looks** like — its shots are byte-deterministic
 (fixed window size, DSF 1, virtual time budget, `rotate=0`, `?fresh=1` on a
-machine with saved docs or a set desktop pattern, and `?now=<when>` whenever
-the menu bar's clock is in frame), so `cmp` between two runs is a real
+machine with saved docs or a set desktop pattern, `?now=<when>` whenever
+the menu bar's clock is in frame, and a selection only ever through
+`?select=…`, whose ants stand still — a live selection's would tick between
+shots), so `cmp` between two runs is a real
 regression check
 rather than a judgment call (its `dom` mode only serializes light DOM — the
 desktop skeleton and `<title>`, never the components' shadow internals).
@@ -154,10 +156,11 @@ template — see [UI layer: Lit](#ui-layer-lit).
   draws on the overlay too — always on, at texel sizes ≥ 4 system px where
   the hairlines don't swamp the art.
 - **Tools** — the **Tools palette** holds the **tool strip**: a single column of square
-  cells (**pencil `B`**, **rect `R`**, **fill `G`**, the **eraser `E`**, and the
+  cells (the **selection `S`** first — MacPaint's palette led with it — then
+  **pencil `B`**, **rect `R`**, **fill `G`**, the **eraser `E`**, and the
   **eyedropper `I`**; the selected cell inverts) — each an icon from the
-  open-source **Adobe Spectrum _workflow_** set (`draw` / `rectangle` /
-  `color-fill` / `erase` / `sampler`) in a frameless `vf-grid` lattice run
+  open-source **Adobe Spectrum _workflow_** set (`rect-select` / `draw` /
+  `rectangle` / `color-fill` / `erase` / `sampler`) in a frameless `vf-grid` lattice run
   flush to the windoid's edge — no inner padding, the cells sharing the
   window frame's own black line. A cell **picks on the press**, not the
   click — System 7's tool palettes act on mouse-down (the cell inverts the
@@ -171,8 +174,11 @@ template — see [UI layer: Lit](#ui-layer-lit).
   row of ink, the menu bar's anatomy, no drop shadow — so its rule and every
   metric in it scale with the raster) holds the **current-ink swatch** plus
   the tool's options — no tool-name caption: the palette's inverted cell and
-  the Tools menu's checkmark already say which tool is live, and an
-  eyedropper strip is just the swatch. For the **pencil**, a **tip-size slider** (with an
+  the Tools menu's checkmark already say which tool is live, an
+  eyedropper strip is just the swatch, and the selection's strip (no
+  swatch — the one tool besides the eraser that lays no color) is a
+  **readout**: the active window's marquee as `left, top · width × height`
+  in texels, live through a drag, "no selection" at rest. For the **pencil**, a **tip-size slider** (with an
   `N px` readout) that stamps an
   **N×N** square footprint and **previews it filled with the active ink** on the
   canvas as you hover — the exact texels a stamp will cover, looking exactly as
@@ -201,8 +207,50 @@ template — see [UI layer: Lit](#ui-layer-lit).
   empty space targets transparent (so **replace** floods every empty texel with the
   ink), and a **right-click** fills _to_ transparent (delete a
   color). The flood + replace are pure, Node-tested primitives (`src/lib/fill.js`).
+  The **selection** (`S`) is MacPaint's selection rectangle: **drag a box**
+  out on the canvas and it takes the **marching ants** — a 1-system-px
+  black/white dashed border on the selection's outermost texels, walking the
+  perimeter briskly (its own topmost canvas layer, so no hover painter can
+  wipe it; it stands still under the OS's reduce-motion preference) — with
+  the kit's **arrow** over the selection and the crosshair outside; **drag
+  inside** the box and the selected pixels **move** with the pointer,
+  leaving transparency behind (the sprite's "white" IS transparency — there
+  is no paper color); **Shift** while moving constrains to the dominant axis
+  (toggleable mid-drag). **Transparent texels inside the selection are not
+  pixels and never travel**: a moved selection overwrites the destination
+  only where it is painted, so art under its empty texels shows through
+  untouched — the lasso's most useful property, for free. Click outside,
+  press **Esc**, or pick another tool and the selection **drops** where it
+  sits (a click with no drag makes no selection — the smallest is 1×2 — and
+  never flashes a one-texel box; Esc mid-drag cancels the marquee, or puts a
+  moving float back where it was grabbed). Push the float off the canvas
+  and what's off-tile at the drop is gone, as MacPaint lost what you dragged
+  off the page (Undo has it). A right-click does nothing with this tool; an
+  Alt-click still samples (an empty sample selects the eraser — a tool
+  change, so the selection drops). Each **move gesture is one undo step**; a
+  marquee writes nothing. The selection is canvas state and **dies with the
+  working buffer** — any structural change (undo/redo, a face switch, a tile
+  resize, an all-faces replace) drops it, its pixels already in the document
+  (MacPaint kept a selection through Undo; re-deriving a float from a
+  restored tile isn't worth the machinery). Each **document window holds its
+  own**: switching windows leaves both up, ants marching; Esc drops only the
+  active window's, a tool switch drops every window's — and the options
+  strip's readout follows the active one (the canvas reports its outline
+  through `sm-selection` onto its context's own per-window selection store,
+  the plumbing Edit → Cut/Copy will gate on). A move edits **this face
+  alone** today — which can break the carve's registration (a roof shifted
+  on FRONT no longer lines up with TOP); the **registered move** ("on all
+  faces": a FRONT marquee is a slab of voxels, so its columns shift on
+  TOP/BOTTOM and its rows on the sides) is the planned follow-up, spelled
+  out beside `#applyMove` in `sm-draw-canvas.js`. Under the hood the
+  model is base + float (`src/lib/select.js`, pure, Node-tested): the
+  marquee's texels are lifted out **once** on the first move press, the hole
+  they leave is cleared on a pristine copy, and every offset composites
+  (base, float, offset) into the working buffer **in place** — so a drag
+  across the sprite and back never smears what it crossed, and the buffer's
+  identity (which the document holds by reference) never changes.
   Every edit is **undoable** (Edit → Undo ⌘Z / Redo ⇧⌘Z): a gesture — stroke,
-  rect, fill — undoes as one step, and an all-faces replace or tile resize as
+  rect, fill, selection move — undoes as one step, and an all-faces replace or tile resize as
   one whole-sheet step (bounded history, ~50 entries, cleared on a document
   load). The **eraser** (`E`) is a formal _tool_ mode, a full sibling
   of the drawing ops in the strip — not a "transparent color" in the wells: a
@@ -360,8 +408,12 @@ can show the tool mid-drag, and `?fill=<x,y[,c[,a]]>` to select the fill tool, s
 checkboxes (`contiguous=c`, defaulting on; `on-all-faces=a`), and fill at `(x,y)` on
 mount (the mount fill is always applied to the current tile only — combine with
 `?pick=<N>` to fill with a specific palette color) so a shot can show the tool +
-result — the
-stepper, face picker, dialog, swatch pick, hover preview, rect drag, and fill click
+result, and `?select=<x0,y0,x1,y1[,dx,dy]>` to select the selection tool and
+put that box up on mount — with an offset, lifted and floated there, the
+pixels landing like a mount fill (no undo entry) — its **ants standing at
+phase 0** (no ticker, so the shot stays byte-identical across runs) — the
+stepper, face picker, dialog, swatch pick, hover preview, rect drag, fill click,
+and selection marquee / move
 can't be driven headlessly. Five shell-era params round the set out:
 `?fresh=1` boots with **storage ignored** (no desktop-state restore, no
 `?file` resolution, no saved-doc icons — a bare desktop now, every icon
@@ -502,10 +554,10 @@ strip's clamp bounds, and the Undo/Redo enablement.
   disabled until it has something — which also hands the key back to a
   focused field's native undo), _Pick Color…_ ⌘K (the 168-color dialog —
   app-level, like the ink it picks).
-- **Tools** — the five sticky tool modes — _Pencil_, _Rectangle_, _Fill_,
-  _Eraser_, _Eyedropper_ — with the active one checkmarked (the same session
-  truth the palette's tool strip and the B/R/G/E/I keys write, so a pick from
-  any of the three moves all three).
+- **Tools** — the six sticky tool modes — _Selection_, _Pencil_, _Rectangle_,
+  _Fill_, _Eraser_, _Eyedropper_ — with the active one checkmarked (the same
+  session truth the palette's tool strip and the S/B/R/G/E/I keys write, so a
+  pick from any of the three moves all three).
 - **View** — _Arrange Windows_ (the boot placement re-run on the
   **current** raster: the windoids back to the rail at their placed sizes,
   every open document window onto the doc box at its size, cascaded in
@@ -533,7 +585,7 @@ strip's clamp bounds, and the Undo/Redo enablement.
 
 Key equivalents are the kit's own (`shortcut` on `vf-menu-item`; Ctrl stands
 in for ⌘ off-Mac). ⌘N/⌘W stay unassigned on purpose — the browser owns them
-before the page ever sees them. The bare-letter tool keys (B/R/G/I/E) keep
+before the page ever sees them. The bare-letter tool keys (S/B/R/G/E/I) keep
 living in `src/shortcuts.js`; the kit deliberately never matches an
 unmodified printable key — which is also what lets the Tools menu _display_
 those letters in its shortcut column without ever double-firing them.
@@ -956,6 +1008,10 @@ rounded-rectangle rasterization (radius clamp, convex corners, per-row symmetry)
 the Shift square-lock. `test/fill.test.mjs` pins the fill tool's flood + replace
 primitives (4-connectivity, contiguous vs. global scope, transparent-as-a-color,
 the no-op guards, and a full-tile flood that can't overflow the stack).
+`test/select.test.mjs` pins the selection tool's base + float primitives
+(the bounds helpers, Shift's axis lock, lift → clear → composite as an
+identity, the transparency rule, per-texel clipping that can never wrap a
+right-edge overflow onto the next row, and off-tile-and-back reversibility).
 `test/palette.test.mjs` pins the editor's
 168-color palette: 168 entries in a 21×8 grid, all colors AND names distinct,
 valid `#rrggbb`, `packed` derived from `css`, the layout corners (the
@@ -1038,6 +1094,8 @@ src/lib/
   guides.js       editor alignment guides: per-face cross-axis extent (pure)
   rect.js         editor rect tool: rounded-rectangle rasterization, per-row runs (pure)
   fill.js         editor fill tool: contiguous flood + global color replace (pure)
+  select.js       editor selection tool: bounds helpers, the axis lock, lift / clear / composite —
+                  the base + float model with the transparency rule and the no-wrap clip (pure)
   brush.js        editor pencil primitives: writeTexel / stampBrush / strokeLine (Bresenham) (pure)
   pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
   t-junction.js   lattice-exact T-junction repair for merged+wedge meshes (pure)
@@ -1051,13 +1109,16 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
   store.js            createStore(): get / patch / subscribe — values BY REFERENCE, silent no-op patches
   store-controller.js the Lit bridges: StoreController (store change -> host.requestUpdate) and
                       ActiveDocController (workspace + active-doc structural changes, re-wired
-                      across activation switches)
+                      across activation switches; opt-in `selection: true` follows the active
+                      context's selection store too — only the options strip asks)
   doc.js              the canonical document (atlas + sliced views + tile geometry) with TWO channels:
                       change (structural) and live (stroke-rate, rAF-coalesced blit-then-notify);
                       owns applyTileEdit / drain / dropLive / loadAtlas / resizeTiles / replaceAllTiles
                       / restoreTile / restoreAtlas (the undo paths). A FACTORY — one instance per
                       open document (no singleton)
-  workspace.js        the OPEN documents: DocContexts (own doc + history + face + fileId/name/dirty),
+  workspace.js        the OPEN documents: DocContexts (own doc + history + face + fileId/name/dirty
+                      + a per-context selection store: the canvas's marquee OUTLINE, for the strip's
+                      readout — never through the workspace store, it moves at pointer rate),
                       activeKey (the kit's vf-activate mirrored in), untitled naming, per-context
                       dirty tracking, the stored flows (openStored/save/duplicate/rename/export),
                       and followActive() — the follow-the-active-document primitive
@@ -1138,19 +1199,21 @@ src/
                   PNG's Title/transforms chunks restore its identity; + seedDefaultDocs, the
                   virgin-boot one-shot that saves the built-ins as ordinary stored documents
   drop-target.js  whole-app drag & drop + overlay -> loaders -> the new window surfaces
-  shortcuts.js    document-level B/R/G/I/E -> session actions, gated on appActive (menu key
+  shortcuts.js    document-level S/B/R/G/E/I -> session actions, gated on appActive (menu key
                   equivalents are the kit's; Esc/Shift are gesture-scoped and live in the canvas)
   components/     all Lit, standard SHADOW DOM (mostly `:host { display: contents }`; the one
                   exception is sm-color-picker — light DOM, see its entry) — see "UI layer" below
     sm-editor.js       CONNECTED container: a document window's body, one per open document — the
                        artwork well over ITS DocContext (`ctx`, assigned by
                        the reconciler pre-append); memoizes the per-face view model (face /
-                       views-identity / geometry), feeds canvas gesture commits to ITS history
+                       views-identity / geometry), feeds canvas gesture commits to ITS history,
+                       tells its canvas whether it is the ACTIVE window (the selection's Esc gate)
     sm-draw-canvas.js  leaf: the pixel-canvas subsystem — working buffer (+ImageData view, by reference),
-                       pencil/rect/fill gestures, integer-scale layout, overlay layers, gesture-scoped keys,
-                       per-gesture undo capture (sm-commit)
+                       selection/pencil/rect/fill gestures (the selection's base + float + offset
+                       composited in place, its ants on their own layer), integer-scale layout,
+                       overlay layers, gesture-scoped keys, per-gesture undo capture (sm-commit)
     draw-overlays.js   pure canvas painters for the guide hairlines / texel grid / hover footprint /
-                       rect drag preview
+                       rect drag preview / the selection's marching ants
     sm-face-picker.js, sm-tool-strip.js, sm-tool-options.js
                        presentational leaves: props down, bubbling sm-* events up, no store imports
     sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-stage-controls.js, sm-status-line.js,
@@ -1291,6 +1354,19 @@ only when the tile's IDENTITY actually changes.
 - **Autosave** — a deliberate non-goal: explicit Save is the contract, with
   the `beforeunload` guard (any dirty open document) as the net; untitled
   windows don't survive a reload for the same reason.
+- **The registered move** — the selection tool's next step, and the one
+  that makes it a 3D tool: a move "on all faces" that keeps the atlas in
+  registration. A marquee on one face is a slab of voxels — a FRONT rect's
+  columns on TOP/BOTTOM, its rows on LEFT/RIGHT, its mirror on BACK — so a
+  horizontal move on FRONT shifts those columns on the top and bottom
+  faces (and the mirrored ones on BACK) by the same delta, a vertical move
+  those rows on the sides, everything else untouched; the per-face bounds
+  and deltas come from the same axis table the alignment guides use
+  (`VIEW_IMAGE_AXES`), the per-face edit is `select.js`'s lift / clear /
+  composite over each face's slice, and the undo is one whole-atlas
+  snapshot. Controlled by a session checkbox in the strip, the fill tool's
+  "on all faces" idiom. The single-face move is written so nothing about it
+  changes shape for this (see `#applyMove` in `sm-draw-canvas.js`).
 - **Export** — the two File → Export items (3D Model, Sprite Atlas) are
   parked configurator dialogs, forms only: the merged mesh is glTF-ready
   (`GLTFExporter`) for the model exporter, and the sprite-atlas exporter

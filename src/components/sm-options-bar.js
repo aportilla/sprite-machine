@@ -1,14 +1,16 @@
 // ---------------------------------------------------------------------------
 // <sm-options-bar> — the settings strip under the menu bar: the current-ink
-// swatch (every tool but the eraser — clicking it opens the Colors dialog)
-// and the per-tool options (<sm-tool-options>: pencil/eraser tip sliders,
-// rect radius stepper, fill checkboxes). No tool-name caption: the Tools
-// palette's inverted cell and the Tools menu's checkmark already say which
-// tool is live. A fixed strip, not a window — blank when a tool has no
-// options (the standing preference for persistent, in-flow controls over
-// popups), and — like the utility windoids — on screen only while the
-// application is active: a desktop click hides the whole band, and it
-// returns with the app.
+// swatch (every tool that paints — the eraser and the selection hide it;
+// clicking it opens the Colors dialog) and the per-tool options
+// (<sm-tool-options>: pencil/eraser tip sliders, rect radius stepper, fill
+// checkboxes, the selection's bounds READOUT — a tool with no settings, whose
+// strip says what it has instead: the active window's marquee, live). No
+// tool-name caption: the Tools palette's inverted cell and the Tools menu's
+// checkmark already say which tool is live. A fixed strip, not a window —
+// blank when a tool has no options (the standing preference for persistent,
+// in-flow controls over popups), and — like the utility windoids — on screen
+// only while the application is active: a desktop click hides the whole
+// band, and it returns with the app.
 //
 // THE BAND IS A KIT CONTAINER: the strip is a `<vf-container fill-width
 // height="36" pattern="white" rule="bottom">` — the menu bar's own anatomy in
@@ -60,8 +62,15 @@ export class SmOptionsBar extends LitElement {
     new StoreController(this, session.store);
     new StoreController(this, shell.store);
     // The clamp bounds derive from the ACTIVE document's tile geometry — the
-    // strip's controls apply to whichever window is being edited.
-    new ActiveDocController(this, workspace);
+    // strip's controls apply to whichever window is being edited — and the
+    // selection readout follows its marquee (opt-in: this strip is the one
+    // host that shows it, so the per-move re-render lands here alone).
+    new ActiveDocController(this, workspace, { selection: true });
+  }
+
+  /** The active window's selection outline, for the readout (null: none). */
+  get #activeSelection() {
+    return workspace.active()?.selection.get().bounds ?? null;
   }
 
   // The same geometric bounds the editor derives: tips capped at the tile
@@ -104,6 +113,7 @@ export class SmOptionsBar extends LitElement {
         .radiusMax=${this.#radiusMax}
         .fillContiguous=${s.fillContiguous}
         .fillAllFaces=${s.fillAllFaces}
+        .selection=${this.#activeSelection}
         @sm-set-pencil-size=${(e) => session.setPencilSize(e.detail.n, this.#brushMax)}
         @sm-set-eraser-size=${(e) => session.setEraserSize(e.detail.n, this.#brushMax)}
         @sm-set-corner-radius=${(e) =>
@@ -113,11 +123,13 @@ export class SmOptionsBar extends LitElement {
     `;
   }
 
-  // The current-ink swatch: shown for every tool but the eraser (which paints
-  // no color), a lone well standing in for the current color — the case the
-  // kit says wants the hard `shadow`. Clicking it opens the Colors dialog.
+  // The current-ink swatch: shown for every tool that paints — the eraser
+  // (transparency) and the selection (it moves pixels, never lays any) hide
+  // it — a lone well standing in for the current color, the case the kit
+  // says wants the hard `shadow`. Clicking it opens the Colors dialog (⌘K
+  // still works with any tool; an Alt-sample still changes the ink).
   #inkSwatch(s) {
-    if (s.tool === 'eraser') return nothing;
+    if (s.tool === 'eraser' || s.tool === 'select') return nothing;
     return html`
       <vf-swatch
         class="editor-selected"

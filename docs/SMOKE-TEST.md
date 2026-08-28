@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 205 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 228 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -86,6 +86,47 @@ browser, `http://localhost:5173/`.
 - [ ] **Hover previews**: pencil hover shows the exact N×N footprint filled
       with the live ink under the kit's crosshair; eraser shows the red
       treatment; eyedropper shows the 1-cell outline.
+- [ ] **Marching ants**: S, drag a box — a 1px black/white dashed border
+      marches around it (briskly, continuously, one seam at the start
+      corner); it stays up while you hover, moves with the float, and clips
+      at the canvas edge when the float is pushed off. Shrink the document
+      window: the ants re-fit with the texel size.
+- [ ] **The cursor flips**: the kit's crosshair outside the selection, the
+      arrow inside it and throughout a move; the crosshair returns on drop
+      (a frame late with the pointer still — the kit re-hit-tests on the
+      next move).
+- [ ] **The strip is a readout**: with S live the options strip shows no
+      ink swatch and a dim `no selection`; drag a marquee — it reads
+      `left, top · width × height` and the numbers track the corner as you
+      drag; move the float — the position follows per texel, the size holds;
+      push it off the left edge — the position goes negative; drop — back
+      to `no selection`. Two documents with a selection each: the readout
+      follows the ACTIVE window as you click between them.
+- [ ] **Shift constrains a move**: drag the float diagonally, press Shift —
+      it snaps to the dominant axis; release Shift — it follows freely
+      again.
+- [ ] **Transparency doesn't travel**: marquee a region with empty texels
+      around a shape, drag it over other art — the other art shows through
+      the empty texels; only the shape overwrites. Drop; ⌘Z puts everything
+      back (and drops the selection).
+- [ ] **Reduced motion**: with the OS "reduce motion" on, the ants stand
+      still (phase 0); the tool otherwise behaves the same.
+- [ ] **A click is no selection**: click (no drag) on the canvas — nothing
+      appears (not even a one-texel flash during the press); click outside
+      an existing selection — it drops; drag from outside — the old drops
+      and a new marquee starts in the same gesture. Esc mid-marquee cancels
+      it; Esc mid-move puts the float back where it was grabbed.
+- [ ] **Esc respects a dialog**: with a selection up, ⌘K (or the swatch)
+      then Esc — the Colors dialog closes, the ants stay; a second Esc on
+      the canvas drops them. Drop a menu and press Esc — the menu closes
+      (the selection drops too; accepted).
+- [ ] **Per-window**: two documents open, a selection in each — switching
+      windows leaves both up, ants marching in the inactive one; Esc drops
+      only the active window's; picking another tool drops both.
+- [ ] **Alt-click samples**: Alt-click a painted texel — the ink changes,
+      the selection stays and the tool stays Selection; Alt-click empty
+      space — the eraser is selected and the selection drops (the existing
+      empty-sample rule).
 - [ ] **Texel grid (always on)**: the lattice shows at texel sizes ≥ 4
       system px; shrink the document window until the texel size drops
       below 4 — the lattice disappears rather than swamping the art.
