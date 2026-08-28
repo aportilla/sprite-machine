@@ -3,7 +3,7 @@
 // toggles, written by the stage controls (and the ?lowpoly / ?rotate boot
 // params): `lowpoly` is read by the rebuilder, `autoRotate` by the render
 // loop as a plain per-frame read. `showGuides` is the editor's extent rules
-// — the dotted alignment guides over every document canvas — written by
+// — the alignment guides over every document canvas — written by
 // View → Guides (and ?guides=1), read by each document window's canvas; OFF
 // by default: the rules are a registration aid you ask for, not furniture.
 // `canvasDither` is the paper under the art: white by default, the kit's 50%

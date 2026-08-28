@@ -165,12 +165,11 @@ template — see [UI layer: Lit](#ui-layer-lit).
   kit's **50% dither** — `gray-50`, the desktop's own default, painted by
   the kit as the stack container's `pattern` — the classic transparency
   look that lets **white art** read, on which the dot grid stands down, the
-  dither being the indicator, and the rules draw at the opposite phase,
-  inverting the dither along their line rather than vanishing into it);
+  dither being the indicator);
   the extent rules — **View → Guides**, off by default,
-  so a fresh canvas is paper, dots and art alone — are **black-and-white
-  dotted** hairlines (alternating system px, phased on the layer so crossing rules
-  agree at the crossing) **on the dot grid's own lattice lines** — each
+  so a fresh canvas is paper, dots and art alone — are **solid black**
+  hairlines (one system px, opaque — a continuous run the eye picks out of
+  the dithered paper too) **on the dot grid's own lattice lines** — each
   rule is the column or row of dots it bounds, the far rules on the next
   column's or row's dots, the lattice's far edge included; and nothing is
   drawn over the art but those rules — the
@@ -399,7 +398,7 @@ Drawn pixels map 1:1 to voxels at their **literal tile position** — `buildVoxe
 reads each view at full size (no crop, no re-centering) and the carve intersects
 the extruded silhouettes, so a pixel survives only where every view sharing an
 axis agrees. To help meet that stricter requirement the editor draws **hairline
-extent rules** (black-and-white dotted: how far the orthogonal faces' pixels
+extent rules** (solid black hairlines: how far the orthogonal faces' pixels
 reach — the box a pixel must land inside to survive the carve; **View →
 Guides** shows them, off by default) and a **faded onion-skin** of the
 opposite face behind the canvas. There is **no auto ground-rest**: an object sits at whatever Y
@@ -583,7 +582,7 @@ strip's clamp bounds, and the Undo/Redo enablement.
   _Fill_, _Eraser_, _Eyedropper_ — with the active one checkmarked (the same
   session truth the palette's tool strip and the S/B/R/G/E/I keys write, so a
   pick from any of the three moves all three).
-- **View** — _Guides_ (a checkmark toggle for the canvas's dotted **extent
+- **View** — _Guides_ (a checkmark toggle for the canvas's **extent
   rules** — see [Drawing editor](#drawing-editor); **off every load**, the
   item unchecked, and the pick flips `prefs.showGuides` so every open
   document window's rules appear or clear together; document-scoped, so it
@@ -1247,7 +1246,7 @@ src/
                        selection/pencil/rect/fill gestures (the selection's base + float + offset
                        composited in place, its ants on their own layer), integer-scale layout,
                        overlay layers, gesture-scoped keys, per-gesture undo capture (sm-commit)
-    draw-overlays.js   pure canvas painters for the dot-grid ground under the art / the dotted guide
+    draw-overlays.js   pure canvas painters for the dot-grid ground under the art / the guide
                        hairlines / hover footprint / rect drag preview / the selection's marching ants
     sm-face-picker.js, sm-tool-strip.js, sm-tool-options.js
                        presentational leaves: props down, bubbling sm-* events up, no store imports

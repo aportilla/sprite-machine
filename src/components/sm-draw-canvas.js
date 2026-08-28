@@ -55,7 +55,7 @@
 // and `dither` (View → Dither Background, off by default): the PAPER under
 // the art, the stack container's own kit pattern — white, or the 50% dither
 // (PAPER_DITHER), on which the dot grid stands down (the dither is the
-// transparency indicator) and the rules draw at the opposite phase.
+// transparency indicator).
 //
 // The working buffer resets in willUpdate when the tile IDENTITY (or the tile
 // geometry) changes — identity is the caller's contract: the same reference
@@ -251,14 +251,14 @@ export class SmDrawCanvas extends LitElement {
      *  selection's no-drag Esc gate (decision: Esc drops the ACTIVE window's
      *  selection only). Nothing else reads it. */
     active: { type: Boolean },
-    /** Whether the extent rules (the dotted alignment guides) draw on the
+    /** Whether the extent rules (the alignment guides) draw on the
      *  guide layer — View → Guides, prefs.showGuides, OFF by default. The
      *  guides themselves (`guides`) are always computed; this only gates
      *  their painting. */
     showGuides: { type: Boolean },
     /** The paper under the art: false = white, true = the kit's 50% dither
      *  (View → Dither Background, prefs.canvasDither, OFF by default). On
-     *  the dither the dot grid stands down and the rules invert their phase. */
+     *  the dither the dot grid stands down. */
     dither: { type: Boolean },
   };
 
@@ -455,13 +455,9 @@ export class SmDrawCanvas extends LitElement {
     // template-bound width/height would clear the backing store mid-diff).
     if (geom) this.#applyGeometry();
     // A paper flip (`dither`) repaints the background (the dots stand down
-    // on the dither) and the guide layer (the rules' phase inverts); the
-    // container's pattern itself is a template binding.
+    // on the dither); the container's pattern itself is a template binding.
     else if (changed.has('mirrorBehind') || changed.has('dither')) this.#paintBg();
-    if (
-      !geom &&
-      (changed.has('guides') || changed.has('showGuides') || changed.has('dither'))
-    )
+    if (!geom && (changed.has('guides') || changed.has('showGuides')))
       this.#drawGuidesLayer();
 
     // The cursor overlay is canvas-drawn, so the state the template can't express
@@ -673,10 +669,7 @@ export class SmDrawCanvas extends LitElement {
     // dot grid UNDER the art (the background layer), never lines over it.
     // They span the padded layer, so a rule runs through the far dots too —
     // and only when asked for (View → Guides): off, the layer stays clear.
-    // On the dithered paper the dotting flips phase (dottedRule), so a rule
-    // inverts the dither along its line instead of vanishing into it.
-    if (this.showGuides)
-      drawGuides(g, this.guides, this.#texelSys, w, h, this.dither ? 1 : 0);
+    if (this.showGuides) drawGuides(g, this.guides, this.#texelSys, w, h);
   }
 
   // --- one-shot dev hooks (canvas halves; the state halves are boot actions) --

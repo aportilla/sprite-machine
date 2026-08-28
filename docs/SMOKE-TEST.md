@@ -136,9 +136,8 @@ browser, `http://localhost:5173/`.
       only with **View → Guides** checked — a fresh load boots them off
       with the item unchecked; the pick checks it and every open window's
       rules appear at once, a second pick clears them; the item greys with
-      the desktop focused — black-and-white dotted hairlines that agree
-      where they cross (no
-      doubled or missing dot at the crossing) and sit ON the dot grid's
+      the desktop focused — solid black hairlines, one system px, that
+      sit ON the dot grid's
       lines, all four (the right and bottom rules run through a column /
       row of dots, never a px inside it — a face whose extent reaches the
       tile edge shows its far rule on the edge column of dots); no lattice of
@@ -153,9 +152,9 @@ browser, `http://localhost:5173/`.
       on the kit's 50% dither, edge to edge of the canvas box (it is the
       stack container's own pattern, so it re-rasters crisp at any zoom):
       a white texel now reads against it, the dots are gone (the dither is
-      the transparency indicator), and with Guides on a rule reads as an
-      INVERTED line through the gray rather than disappearing into it;
-      the onion-skin still tints through. A second pick brings the white
+      the transparency indicator), and with Guides on a rule reads as a
+      solid black line through the gray; the onion-skin still tints
+      through. A second pick brings the white
       paper and its dots back; the item greys with the desktop focused;
       a reload boots white.
 - [ ] **One cursor, everywhere**: over the pixel canvas only the kit's drawn

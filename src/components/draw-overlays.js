@@ -45,51 +45,31 @@ export function drawDotGrid(g, tileW, tileH, scale) {
   g.fill(dots);
 }
 
-// A 1-bit DOTTED hairline: black and white system px alternating along the
-// rule, so a guide reads as a guide — distinct from the art (no color of its
-// own) and from the selection's dashed ants (a 1px period against their 4).
-// OPAQUE — the white px are white, not gaps — so the rule reads as one line
-// on any art color (a translucent rule would tint with the art under it).
-// The phase is absolute in the layer's coordinates (x + y + phase even →
-// black), so a horizontal and a vertical rule agree at their crossing: no
-// seam, no doubled or missing dot, whichever draws second. `phase` is 0 on
-// white paper and 1 on the dithered paper: the kit's 50% dither is black
-// exactly where x + y is even from the same origin, so a phase-0 rule would
-// vanish into it — phase 1 INVERTS the dither along the line instead, the
-// classic way a line is drawn on gray.
-function dottedRule(g, x, y, w, h, phase) {
-  g.fillStyle = '#fff';
-  g.fillRect(x, y, w, h);
-  const dots = new Path2D();
-  for (let j = 0; j < h; j++)
-    for (let i = 0; i < w; i++)
-      if (((x + i + y + j + phase) & 1) === 0) dots.rect(x + i, y + j, 1, 1);
-  g.fillStyle = '#000';
-  g.fill(dots);
-}
-
 // Draw the four "furthest extent" hairlines — the guide layer's only painter
 // (there are no lines over the art: the texel grid is the dot grid UNDER it).
-// The lines box the region where a painted pixel can survive the carve, and
-// they sit ON THE DOT GRID'S LATTICE LINES: a rule is the column (or row) of
-// system px that holds the dots it bounds — the left rule at the first
-// supported column's near edge (uMin·scale), the right rule at the last
-// supported column's FAR edge ((uMax+1)·scale: the next column's dots, or
-// the lattice's far column when the extent reaches the tile's edge),
-// horizontals likewise. `layerW`/`layerH` are the padded lattice layer's
-// size — the art plus the far dot column/row — so every rule runs through
-// the far dots and a far-edge rule has a column to land on. `phase` is the
-// dotting's phase (dottedRule): 0 on white paper, 1 on the dithered paper.
-// The caller clears the layer first.
-export function drawGuides(g, guides, scale, layerW, layerH, phase = 0) {
+// SOLID BLACK, one system px: 1-bit like everything else on the canvas,
+// opaque so a rule reads as one line on any art color, and a continuous run
+// the eye picks out of the dithered paper too (half its px coincide with
+// the dither's black and the rest turn its white px black — a solid line
+// through gray, the way MacPaint ruled over a fill). The lines box the
+// region where a painted pixel can survive the carve, and they sit ON THE
+// DOT GRID'S LATTICE LINES: a rule is the column (or row) of system px that
+// holds the dots it bounds — the left rule at the first supported column's
+// near edge (uMin·scale), the right rule at the last supported column's FAR
+// edge ((uMax+1)·scale: the next column's dots, or the lattice's far column
+// when the extent reaches the tile's edge), horizontals likewise.
+// `layerW`/`layerH` are the padded lattice layer's size — the art plus the
+// far dot column/row — so every rule runs through the far dots and a
+// far-edge rule has a column to land on. The caller clears the layer first.
+export function drawGuides(g, guides, scale, layerW, layerH) {
   if (!guides) return;
   const { uMin, uMax, vMin, vMax } = guides.extent;
   const T = 1; // hairline thickness (1 system px — the kit's hairline unit)
-  const p = phase & 1;
-  if (uMin != null) dottedRule(g, uMin * scale, 0, T, layerH, p); // left extent
-  if (uMax != null) dottedRule(g, (uMax + 1) * scale, 0, T, layerH, p); // right extent
-  if (vMin != null) dottedRule(g, 0, vMin * scale, layerW, T, p); // top extent
-  if (vMax != null) dottedRule(g, 0, (vMax + 1) * scale, layerW, T, p); // bottom extent
+  g.fillStyle = '#000';
+  if (uMin != null) g.fillRect(uMin * scale, 0, T, layerH); // left extent
+  if (uMax != null) g.fillRect((uMax + 1) * scale, 0, T, layerH); // right extent
+  if (vMin != null) g.fillRect(0, vMin * scale, layerW, T); // top extent
+  if (vMax != null) g.fillRect(0, (vMax + 1) * scale, layerW, T); // bottom extent
 }
 
 // The haloed hairline box both cursor overlays share: a dark halo so the
