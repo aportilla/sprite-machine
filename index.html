@@ -216,8 +216,9 @@
            a plain <img src> Vite resolves: served as-is in dev, inlined as a
            data URI at build, being under its asset inline limit) beside the
            name / version /
-           date / author block, the two-paragraph blurb in the display face
-           (System 7 alerts and About boxes used chrome type) — its "Vintage
+           date / author block (the name in the display face — Chicago for
+           the title alone — the two lines under it and the two-paragraph
+           blurb in the body face, Geneva for the reading) — its "Vintage
            Frames" a real link to the kit's npm page, opened in a NEW tab so
            the app (and any unsaved document) stays put; the arrow stays the
            arrow over it, System 7 having no pointing hand (style.css inks
@@ -226,16 +227,17 @@
            them (package.json's version, HEAD's commit date — vite.config.js
            `define`); the markup never carries a stale number. Arithmetic:
            the plain frame's body begins 5px inside every edge and pads 16
-           (the kit), so 464 wide is a 416 content measure, and 238 high is
-           5 + 16 + [64 header (four 16px lines beside the 32px icon) + 8 +
-           two 2-line paragraphs at 16px lines with 16 between (80)] + the 44
-           footer (16 above the ringed 28px default button) + 16 + 5. -->
+           (the kit), so 464 wide is a 416 content measure, and 198 high is
+           5 + 16 + [40 header (a 16px display line over two 12px body
+           lines, beside the 32px icon) + 8 + two 2-line paragraphs at 12px
+           body lines with 16 between (64)] + the 44 footer (16 above the
+           ringed 28px default button) + 16 + 5. -->
       <vf-dialog
         id="dlg-about"
         frame="plain"
         label="About Sprite Machine"
         width="464"
-        height="238"
+        height="198"
       >
         <vf-stack width="416" gap="8">
           <vf-stack direction="row" gap="8" place="start">
@@ -244,17 +246,18 @@
             </vf-img>
             <vf-stack>
               <vf-label>Sprite Machine</vf-label>
-              <vf-label id="about-version"></vf-label>
-              <vf-label id="about-date"></vf-label>
-              <vf-label>created by Adam Portilla</vf-label>
+              <vf-label face="body"
+                ><span id="about-version"></span> &nbsp; <span id="about-date"></span
+              ></vf-label>
+              <vf-label face="body">created by Adam Portilla</vf-label>
             </vf-stack>
           </vf-stack>
           <vf-stack gap="16">
-            <vf-paragraph face="display">
+            <vf-paragraph face="body">
               Generate real 3d models and configurable sprite atlases by drawing the 2d
               projected faces with simple pixel art tools.
             </vf-paragraph>
-            <vf-paragraph face="display">
+            <vf-paragraph face="body">
               Sprite Machine uses
               <a
                 href="https://www.npmjs.com/package/vintage-frames"

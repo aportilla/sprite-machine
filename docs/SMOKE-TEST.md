@@ -178,10 +178,11 @@ browser, `http://localhost:5173/`.
 
 - [ ] **The About box, by eye**: a plain load (no `#name`) greets with it,
       centered — the bare double frame (no title bar, no close box), the
-      32×32 icon crisp at 1:1 beside "Sprite Machine" / "version N"
-      (package.json's) / the date (HEAD's commit date, `Aug 24, 2026`
-      form) / "created by Adam Portilla", the two paragraphs in Chicago
-      with "Vintage Frames" underlined in the same black (no blue), OK
+      32×32 icon crisp at 1:1 beside "Sprite Machine" (the display face)
+      / "version N" (package.json's) beside the date (HEAD's commit date,
+      `Aug 24, 2026` form) / "created by Adam Portilla" — those two lines
+      and the two paragraphs in the body face — with "Vintage Frames"
+      underlined in the same black (no blue), OK
       bottom right; behind it the desktop is in the Finder role (no
       windoids, no strip, icons where they were). Hover the link: the
       arrow stays the arrow; click it: the kit's npm page opens in a NEW

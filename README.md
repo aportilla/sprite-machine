@@ -746,10 +746,11 @@ About box on the plain dBoxProc frame (no bar, no close box; OK or Escape
 dismisses it onto whatever was there — at boot, the bare desktop in the
 Finder role, nothing opened and nothing activated). The application's
 **32×32 icon** (`src/assets/sprite-machine-icon.png`, through the kit's
-`vf-img` at 1:1 — one image pixel one system px) sits beside four lines
-in the display face — **Sprite Machine**, **version N**, a date, and
-**created by Adam Portilla** — over the two-paragraph blurb set in the
-same Chicago (System 7's alerts and About boxes used chrome type), whose
+`vf-img` at 1:1 — one image pixel one system px) sits beside three lines
+— **Sprite Machine** in the display face, then **version N** with the
+date beside it and **created by Adam Portilla** in the body face — over
+the two-paragraph blurb in the same body face (Chicago for the title
+alone; the reading lines in Geneva), whose
 **Vintage Frames** is a real link to the kit's
 [npm page](https://www.npmjs.com/package/vintage-frames) — opened in a new
 tab, so the app and any unsaved document stay put; inked by `style.css`
@@ -762,7 +763,7 @@ commit date — the date of the code that is running, so every build of one
 commit says the same thing and a capture stays byte-identical across runs;
 formatted in Node as `Aug 24, 2026`, so no runtime locale or timezone can
 move it, and a checkout without git reads the build day), and
-`shell/menus.js` writes them into the box's two empty labels at wire-up,
+`shell/menus.js` writes them into the box's two empty spans at wire-up,
 so the markup never carries a stale number. Bumping `version` in
 package.json is the whole release ritual. `?about=1` opens the box over
 the boot document for captures.
