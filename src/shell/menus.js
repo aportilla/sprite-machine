@@ -530,11 +530,6 @@ export function initMenus(desktop, windows, panels) {
         // as the item's checkmark.
         prefs.setShowGuides(!prefs.get().showGuides);
         break;
-      case 'dither':
-        // The paper under the art: white ↔ the kit's 50% dither (the canvas
-        // container's own pattern); same toggle-and-mirror shape.
-        prefs.setCanvasDither(!prefs.get().canvasDither);
-        break;
       case 'arrange':
         // The boot placement re-run on the current raster — windoids and
         // every open document window (windows.js). The item greys with no
@@ -590,7 +585,6 @@ export function initMenus(desktop, windows, panels) {
     'properties',
     'pick-color',
     'guides',
-    'dither',
     'tool-select',
     'tool-pencil',
     'tool-rect',
@@ -635,15 +629,12 @@ export function initMenus(desktop, windows, panels) {
   teardown.push(session.subscribe(syncTools));
   syncTools();
 
-  // The View menu's two checkmarks mirror the prefs slice — Guides ↔
-  // showGuides, Dither Background ↔ canvasDither: a pick toggles the slice,
-  // the check follows it (both boot unchecked, the slice's defaults).
+  // The View menu's Guides checkmark mirrors the prefs slice — Guides ↔
+  // showGuides: a pick toggles the slice, the check follows it (boots
+  // unchecked, the slice's default).
   const itemGuides = $('vf-menu-item[value="guides"]');
-  const itemDither = $('vf-menu-item[value="dither"]');
   const syncView = () => {
-    const p = prefs.get();
-    itemGuides.checked = p.showGuides;
-    itemDither.checked = p.canvasDither;
+    itemGuides.checked = prefs.get().showGuides;
   };
   teardown.push(prefs.subscribe(syncView));
   syncView();

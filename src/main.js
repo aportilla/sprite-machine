@@ -58,7 +58,6 @@ const boot = parseBootParams(location.search, {
 if (boot.lowpoly != null) prefs.setLowpoly(boot.lowpoly);
 if (boot.rotate === false) prefs.setAutoRotate(false);
 if (boot.guides) prefs.setShowGuides(true); // the extent rules are off by default
-if (boot.dither) prefs.setCanvasDither(true); // the paper is white by default
 // The on-mount hook order, preserved: pencil size, then pick (so ?palette
 // reflects it and ?fill fills with it), then the dialog, then rect, then
 // fill, then select (the last tool seed wins the session's one tool).

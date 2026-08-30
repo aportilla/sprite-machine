@@ -150,30 +150,23 @@ template — see [UI layer: Lit](#ui-layer-lit).
   on the pixel lattice **by construction** and the container's own grid-snap
   holds it there against any upstream fraction. It **re-fits responsively**
   when the window (or its grow box) resizes and when the display density or
-  browser zoom changes. The background under the art and the guide + cursor
-  overlays over it draw at system-px resolution, so their dots and hairlines
-  are 1 system px — the kit's hairline unit. See `#layout()` in
+  browser zoom changes. The onion-skin background under the art and the
+  guide + cursor overlays over it draw at system-px resolution, so their
+  hairlines are 1 system px — the kit's hairline unit. See `#layout()` in
   `src/components/sm-draw-canvas.js`. The canvas is **1-bit but for the
-  art**: the well is white paper; transparency is a **dot grid** — one black
-  system px at every lattice crossing, `(tileW+1)×(tileH+1)` of them, the
-  far column and row included so the dots alone bound the canvas (the two
-  lattice layers, the background and the guide overlay, run one system px
-  past the art to hold them), no checkerboard (a painted texel covers the
-  dot at its top-left corner, so an empty texel is the one still showing
-  it — at texel sizes ≥ 2 system px; at 1 a dot would be the texel, so the
-  paper goes plain; and **View → Dither Background** swaps the paper for the
-  kit's **50% dither** — `gray-50`, the desktop's own default, painted by
-  the kit as the stack container's `pattern` — the classic transparency
-  look that lets **white art** read, on which the dot grid stands down, the
-  dither being the indicator);
+  art**: its paper is the kit's **50% dither** — `gray-50`, the desktop's
+  own default, painted by the kit as the stack container's `pattern` — the
+  classic transparency indicator, so an empty texel reads as dither, a
+  painted one covers it, and **white art** reads against it (no
+  checkerboard, no dot grid);
   the extent rules — **View → Guides**, off by default,
-  so a fresh canvas is paper, dots and art alone — are **solid black**
+  so a fresh canvas is paper and art alone — are **solid black**
   hairlines (one system px, opaque — a continuous run the eye picks out of
-  the dithered paper too) **on the dot grid's own lattice lines** — each
-  rule is the column or row of dots it bounds, the far rules on the next
-  column's or row's dots, the lattice's far edge included; and nothing is
-  drawn over the art but those rules — the
-  dot grid under it is the whole texel grid, no lattice of lines. The
+  the dithered paper: half its px coincide with the dither's black, the
+  rest turn its white px black — a line through gray, the way MacPaint
+  ruled over a fill), the left/top rules on the supported extent's near
+  edge, the right/bottom ones one px inside its far edge; and nothing is
+  drawn over the art but those rules — no lattice of grid lines. The
   sprite is the only color on the canvas.
 - **Tools** — the **Tools palette** holds the **tool strip**: a single column of square
   cells (the **selection `S`** first — MacPaint's palette led with it — then
@@ -451,10 +444,8 @@ menu; under `?fresh` the desktop is on the dither, so the panel shows it
 seeded), `?about=1` opens the **About box** over the boot document
 (the plain boot's own greet — but that boot's virgin seeding is an
 IndexedDB round-trip the capture tool's virtual-time budget stalls on, so
-under `?fresh` this is the way to a shot of it), `?guides=1` shows the
-canvas's **extent rules** (View → Guides, which boot off), and `?dither=1`
-puts the canvas on the **dithered paper** (View → Dither Background,
-likewise off).
+under `?fresh` this is the way to a shot of it), and `?guides=1` shows the
+canvas's **extent rules** (View → Guides, which boot off).
 `?sample` shares the storage-untouched discipline: it opens the named
 built-in as an untitled from in-memory data, skipping the seeding and the
 `?file`/dialog boot alike (the deterministic path `drive.mjs` drives).
@@ -586,10 +577,7 @@ strip's clamp bounds, and the Undo/Redo enablement.
   rules** — see [Drawing editor](#drawing-editor); **off every load**, the
   item unchecked, and the pick flips `prefs.showGuides` so every open
   document window's rules appear or clear together; document-scoped, so it
-  greys with the desktop focused), _Dither Background_ (the same checkmark
-  shape for the **paper under the art** — `prefs.canvasDither`: white, or
-  the kit's 50% dither so white art reads; **off every load**, and see the
-  Canvas layout bullet for what the dither does to the dots and rules),
+  greys with the desktop focused),
   _Arrange Windows_ (the boot placement re-run on the
   **current** raster: the windoids back to the rail at their placed sizes,
   every open document window onto the doc box at its size, cascaded in
@@ -1157,8 +1145,7 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
   session.js          editor session (app-level): tool, ink, per-tool options, picker
                       flag — one palette, one ink, however many documents are open
   prefs.js            lowpoly / autoRotate (the render toggles; the 3D View's controls strip writes them)
-                      + showGuides / canvasDither (the canvas's extent rules, and its paper — white or
-                      the 50% dither; View → Guides / Dither Background write them, both off by default)
+                      + showGuides (the canvas's extent rules; View → Guides writes it, off by default)
   build.js            dims / voxels / tris / warnings / error — written by the rebuilder (+ the loaders'
                       errors); the stats read by the 3D View's status tooltip, warnings/error recorded only
   files.js            the document LIBRARY: listing + availability + per-document storage ops
@@ -1246,8 +1233,8 @@ src/
                        selection/pencil/rect/fill gestures (the selection's base + float + offset
                        composited in place, its ants on their own layer), integer-scale layout,
                        overlay layers, gesture-scoped keys, per-gesture undo capture (sm-commit)
-    draw-overlays.js   pure canvas painters for the dot-grid ground under the art / the guide
-                       hairlines / hover footprint / rect drag preview / the selection's marching ants
+    draw-overlays.js   pure canvas painters for the guide hairlines / hover footprint / rect
+                       drag preview / the selection's marching ants
     sm-face-picker.js, sm-tool-strip.js, sm-tool-options.js
                        presentational leaves: props down, bubbling sm-* events up, no store imports
     sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-stage-controls.js, sm-status-line.js,

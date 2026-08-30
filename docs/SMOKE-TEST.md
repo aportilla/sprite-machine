@@ -127,36 +127,26 @@ browser, `http://localhost:5173/`.
       the selection stays and the tool stays Selection; Alt-click empty
       space — the eraser is selected and the selection drops (the existing
       empty-sample rule).
-- [ ] **1-bit canvas, by eye**: the artwork well is white; empty texels show
-      the dot grid — one black system px at every lattice crossing, the
-      right and bottom edges of dots included, so the dots alone bound the
-      canvas surface — and a painted texel covers the dot at its top-left
-      corner (paint a white texel: the dot goes, and that is the only
-      tell); nothing is drawn over the art but the extent rules, and those
-      only with **View → Guides** checked — a fresh load boots them off
-      with the item unchecked; the pick checks it and every open window's
-      rules appear at once, a second pick clears them; the item greys with
-      the desktop focused — solid black hairlines, one system px, that
-      sit ON the dot grid's
-      lines, all four (the right and bottom rules run through a column /
-      row of dots, never a px inside it — a face whose extent reaches the
-      tile edge shows its far rule on the edge column of dots); no lattice of
-      grid lines, no cyan, no gray checker — the art is the only color on
-      the canvas. Shrink the document window until the texel size drops to
-      1 system px: the dots go (a dot would be the texel) and the paper is
-      plain. On a derived face the onion-skin is a pale tint of the
-      opposite face's art, the dots still black through it. And the paper
-      is WHITE under the empty texels, never the desktop pattern — a kit
-      leak the stack's declared `pattern` bridges (kit ask #6).
-- [ ] **Dithered paper, by eye**: View → Dither Background puts the canvas
-      on the kit's 50% dither, edge to edge of the canvas box (it is the
-      stack container's own pattern, so it re-rasters crisp at any zoom):
-      a white texel now reads against it, the dots are gone (the dither is
-      the transparency indicator), and with Guides on a rule reads as a
-      solid black line through the gray; the onion-skin still tints
-      through. A second pick brings the white
-      paper and its dots back; the item greys with the desktop focused;
-      a reload boots white.
+- [ ] **1-bit canvas, by eye**: the canvas box sits on the kit's 50%
+      dither, edge to edge (the stack container's own pattern, so it
+      re-rasters crisp at any zoom and display density) — the transparency
+      indicator: an empty texel reads as dither, a painted texel covers
+      it, and a WHITE texel reads against the gray; no dot grid, no
+      checkerboard, and no View item touches the paper. Nothing is drawn
+      over the art but the extent rules, and those only with
+      **View → Guides** checked — a fresh load boots them off with the
+      item unchecked; the pick checks it and every open window's rules
+      appear at once, a second pick clears them; the item greys with the
+      desktop focused — solid black hairlines, one system px, each
+      reading as a solid line through the gray: the left/top rules on the
+      supported extent's near edge, the right/bottom ones one px inside
+      its far edge; no lattice of grid lines, no cyan — the art is the
+      only color on the canvas. On a derived face the onion-skin is a
+      pale tint of the opposite face's art over the dither. And the paper
+      is the CANVAS'S OWN dither, never the desktop's pattern showing
+      through — a kit leak the stack's declared `pattern` bridges (kit
+      ask #6): set a different desktop pattern and the canvas paper must
+      not change.
 - [ ] **One cursor, everywhere**: over the pixel canvas only the kit's drawn
       crosshair shows (no native crosshair beneath it), and the tool cells
       show only the kit's arrow (no native hand). Open the Colors dialog

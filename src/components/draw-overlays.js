@@ -1,18 +1,19 @@
 // ---------------------------------------------------------------------------
-// Pure canvas painters for <sm-draw-canvas>'s system-res layers: the dot-grid
-// ground UNDER the art (the transparency indicator), and the three overlays
-// over it — the alignment-guide hairlines, the pencil's filled hover-footprint
-// preview, the eyedropper's sample-target outline, the rect tool's live drag
-// preview, and the selection tool's marching ants. Stateless — everything
-// arrives as arguments — so the component keeps only gesture state and these
-// stay trivially readable.
+// Pure canvas painters for <sm-draw-canvas>'s system-res layers: the
+// alignment-guide hairlines, the pencil's filled hover-footprint preview, the
+// eyedropper's sample-target outline, the rect tool's live drag preview, and
+// the selection tool's marching ants. Stateless — everything arrives as
+// arguments — so the component keeps only gesture state and these stay
+// trivially readable.
 // All draw in SYSTEM-px space — the kit's virtual pixel grid: the backings are
 // tileW·k × tileH·k for a k-system-px texel, CSS-magnified nearest-neighbor in
-// lockstep with the art, so their 1px dots and hairlines are exactly one
-// system px (the kit's own hairline unit), crisp at any display density or
-// browser zoom. The canvas is 1-BIT BUT FOR THE ART: everything here is black
-// or white (the hover previews' ink tint and erase red are the exceptions —
-// they preview the art itself), so the sprite is the only color on the page.
+// lockstep with the art, so their 1px hairlines are exactly one system px (the
+// kit's own hairline unit), crisp at any display density or browser zoom. The
+// canvas is 1-BIT BUT FOR THE ART: the paper under it is the kit's 50% dither
+// (the transparency indicator — the stack container's own pattern, not a
+// painter here) and everything here is black or white (the hover previews'
+// ink tint and erase red are the exceptions — they preview the art itself),
+// so the sprite is the only color on the page.
 // ---------------------------------------------------------------------------
 
 import { brushBounds } from '../lib/brush.js';
@@ -21,55 +22,28 @@ import { roundedRectRows } from '../lib/rect.js';
 /** `scale` is whole system px per texel; `sysW`/`sysH` the layer in system px.
  *  @typedef {{tileW:number, tileH:number, scale:number, sysW:number, sysH:number}} OverlayView */
 
-// The dot grid — the transparency indicator, drawn UNDER the art on the
-// background layer (the checkerboard's successor, on white paper): one black
-// system px at EVERY LATTICE CROSSING, (tileW+1)×(tileH+1) of them — the far
-// column and row included, on the art's outer edge, so the dots alone bound
-// the canvas surface (the layer is one system px wider and taller than the
-// art for them: sm-draw-canvas's LATTICE_PAD). An empty texel reads as paper
-// with a dot at its top-left corner and a painted one covers that dot — at
-// any texel size ≥ DOT_MIN_SCALE, that is the one tell between a white texel
-// and an empty one. Below DOT_MIN_SCALE a dot would BE the texel (k = 1 → a
-// solid black sheet), so the paper goes plain there; at k = 2 the dots are
-// the kit's own 25% dither.
-export const DOT_MIN_SCALE = 2;
-
-/** @param {CanvasRenderingContext2D} g @param {number} tileW @param {number} tileH
- *  @param {number} scale */
-export function drawDotGrid(g, tileW, tileH, scale) {
-  if (scale < DOT_MIN_SCALE) return;
-  const dots = new Path2D();
-  for (let y = 0; y <= tileH; y++)
-    for (let x = 0; x <= tileW; x++) dots.rect(x * scale, y * scale, 1, 1);
-  g.fillStyle = '#000';
-  g.fill(dots);
-}
-
 // Draw the four "furthest extent" hairlines — the guide layer's only painter
-// (there are no lines over the art: the texel grid is the dot grid UNDER it).
-// SOLID BLACK, one system px: 1-bit like everything else on the canvas,
-// opaque so a rule reads as one line on any art color, and a continuous run
-// the eye picks out of the dithered paper too (half its px coincide with
-// the dither's black and the rest turn its white px black — a solid line
-// through gray, the way MacPaint ruled over a fill). The lines box the
-// region where a painted pixel can survive the carve, and they sit ON THE
-// DOT GRID'S LATTICE LINES: a rule is the column (or row) of system px that
-// holds the dots it bounds — the left rule at the first supported column's
-// near edge (uMin·scale), the right rule at the last supported column's FAR
-// edge ((uMax+1)·scale: the next column's dots, or the lattice's far column
-// when the extent reaches the tile's edge), horizontals likewise.
-// `layerW`/`layerH` are the padded lattice layer's size — the art plus the
-// far dot column/row — so every rule runs through the far dots and a
-// far-edge rule has a column to land on. The caller clears the layer first.
-export function drawGuides(g, guides, scale, layerW, layerH) {
+// (there are no lines over the art: the texel grid is the dithered paper's
+// own lattice). SOLID BLACK, one system px: 1-bit like everything else on
+// the canvas, opaque so a rule reads as one line on any art color, and a
+// continuous run the eye picks out of the dithered paper (half its px
+// coincide with the dither's black and the rest turn its white px black — a
+// solid line through gray, the way MacPaint ruled over a fill). The lines
+// box the region where a painted pixel can survive the carve: verticals at
+// the outer edges of the supported columns — the left rule ON the first
+// supported column's near edge (uMin·scale), the right rule one px INSIDE
+// the last one's far edge ((uMax+1)·scale − T, so a far-edge extent still
+// has a column to land on) — horizontals likewise. The caller clears the
+// layer first.
+export function drawGuides(g, guides, scale, sysW, sysH) {
   if (!guides) return;
   const { uMin, uMax, vMin, vMax } = guides.extent;
   const T = 1; // hairline thickness (1 system px — the kit's hairline unit)
   g.fillStyle = '#000';
-  if (uMin != null) g.fillRect(uMin * scale, 0, T, layerH); // left extent
-  if (uMax != null) g.fillRect((uMax + 1) * scale, 0, T, layerH); // right extent
-  if (vMin != null) g.fillRect(0, vMin * scale, layerW, T); // top extent
-  if (vMax != null) g.fillRect(0, (vMax + 1) * scale, layerW, T); // bottom extent
+  if (uMin != null) g.fillRect(uMin * scale, 0, T, sysH); // left extent
+  if (uMax != null) g.fillRect((uMax + 1) * scale - T, 0, T, sysH); // right extent
+  if (vMin != null) g.fillRect(0, vMin * scale, sysW, T); // top extent
+  if (vMax != null) g.fillRect(0, (vMax + 1) * scale - T, sysW, T); // bottom extent
 }
 
 // The haloed hairline box both cursor overlays share: a dark halo so the

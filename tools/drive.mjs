@@ -460,13 +460,10 @@ const PROBE = `(() => {${DEEP}
       arrange: !__q('vf-menu-item[value="arrange"]').disabled,
       toolPencil: !__q('vf-menu-item[value="tool-pencil"]').disabled,
       guides: !__q('vf-menu-item[value="guides"]').disabled,
-      dither: !__q('vf-menu-item[value="dither"]').disabled,
     },
     menuChecks: {
-      // View → Guides / Dither Background: the extent rules' and the paper's
-      // toggles, checkmarks off prefs.
+      // View → Guides: the extent rules' toggle, checkmark off prefs.
       guides: !!__q('vf-menu-item[value="guides"]').checked,
-      dither: !!__q('vf-menu-item[value="dither"]').checked,
       // The Tools menu's checked tool item, sans its 'tool-' prefix. Exactly
       // one must be checked (the sticky mode) — any other count reads '!N',
       // so a stuck double-check fails the tool checks instead of hiding.
@@ -738,7 +735,6 @@ async function main() {
       greet.menuEnabled.pickColor === false &&
       greet.menuEnabled.arrange === false &&
       greet.menuEnabled.guides === false &&
-      greet.menuEnabled.dither === false &&
       greet.menuEnabled.toolPencil === false,
     JSON.stringify(greet.menuEnabled)
   );
@@ -1447,9 +1443,9 @@ async function main() {
     return probe();
   };
   const canvasEmpty = () => layerIsEmpty('.editor-canvas');
-  // The onion-skin is the one TRANSLUCENT thing on the background layer (its
-  // ground is transparent, its dot grid opaque black), so "showing" is a
-  // texel with a partial alpha — MIRROR_ALPHA's tint of the opposite face.
+  // The onion-skin is the background layer's only painter (its ground is
+  // transparent), so "showing" is a texel with a partial alpha —
+  // MIRROR_ALPHA's tint of the opposite face.
   const onionSkinShowing = () =>
     evaluate(`(() => {${DEEP}
       const c = __qd('.editor-canvas-bg');
@@ -1704,42 +1700,34 @@ async function main() {
     s.menuChecks.guides === false && !(await guidesShowing()),
     JSON.stringify({ checked: s.menuChecks.guides, showing: await guidesShowing() })
   );
-  // View → Dither Background: the paper under the art is the canvas stack
-  // container's OWN kit pattern — `white` every load, the 50% dither
-  // (`gray-50`, the desktop's default) with the item checked — and on the
-  // dither the dot grid stands down: the bg layer's (0,0) texel is an opaque
-  // dot on white paper and clear on the dither (the car's back leaves that
-  // corner empty, so no onion-skin tint confuses it).
+  // The paper under the art is the canvas stack container's OWN kit
+  // pattern — permanently the 50% dither (`gray-50`), the transparency
+  // indicator. No toggle: no menu item touches it, and the background layer
+  // carries no dot grid — its only painter left is the onion-skin, whose
+  // MIRROR_ALPHA tint never reaches full opacity (a dot was alpha 255).
   const paper = () =>
     evaluate(`(() => {${DEEP} return __qd('.editor-canvas-stack').pattern; })()`);
-  const cornerDot = async () =>
-    (await evaluate(`(() => {${DEEP}
-      const c = __qd('.editor-canvas-bg');
-      return c.getContext('2d').getImageData(0, 0, 1, 1).data[3]; })()`)) === 255;
-  const paperState = async () => ({
-    checked: s.menuChecks.dither,
-    paper: await paper(),
-    dot: await cornerDot(),
-  });
   check(
-    'the paper boots white: View → Dither Background unchecked, the dot grid up',
-    s.menuChecks.dither === false && (await paper()) === 'white' && (await cornerDot()),
-    JSON.stringify(await paperState())
+    "the paper is permanently the kit's 50% dither (the stack container's pattern)",
+    (await paper()) === 'gray-50',
+    `${await paper()}`
   );
-  await pickMenu('#menu-view', 'dither');
-  s = await probe();
+  const bgOpaquePx = await evaluate(`(() => {${DEEP}
+    const c = __qd('.editor-canvas-bg');
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] === 255) n++;
+    return n;
+  })()`);
   check(
-    "View → Dither Background makes the kit's 50% dither the paper, checks the item, and the dots stand down",
-    s.menuChecks.dither === true && (await paper()) === 'gray-50' && !(await cornerDot()),
-    JSON.stringify(await paperState())
+    'no dot grid: nothing opaque on the background layer (the onion-skin tint at most)',
+    bgOpaquePx === 0,
+    `${bgOpaquePx} opaque px`
   );
-  await pickMenu('#menu-view', 'dither');
-  s = await probe();
-  check(
-    '…and a second pick returns the white paper and its dots',
-    s.menuChecks.dither === false && (await paper()) === 'white' && (await cornerDot()),
-    JSON.stringify(await paperState())
+  const ditherItem = await evaluate(
+    `(() => {${DEEP} return !!__q('vf-menu-item[value="dither"]'); })()`
   );
+  check('no menu item toggles the paper', ditherItem === false);
 
   // --- desktop: the Tools menu ------------------------------------------------
   section('tools menu');
@@ -2212,7 +2200,6 @@ async function main() {
       s.menuEnabled.pickColor === false &&
       s.menuEnabled.arrange === true &&
       s.menuEnabled.guides === false &&
-      s.menuEnabled.dither === false &&
       s.menuEnabled.toolPencil === false,
     JSON.stringify(s.menuEnabled)
   );
