@@ -16,6 +16,12 @@
 // an empty build, so the first real build of a fresh sheet still frames
 // (e.g. the first stroke on a blank atlas).
 //
+// The MESH SEAM: `onMesh` hands every built mesh (with its dims) to one
+// consumer outside the stage — the 3D Sprite Atlas's renderer (scene/ring.js
+// takes a shared-geometry clone) — and null BEFORE the mesh is disposed, so
+// no clone is left holding disposed geometry. The rebuilder stays the
+// pipeline's only consumer; the seam carries its product.
+//
 // This being the pipeline's single call site is what makes the future
 // Web-Worker carve a drop-in: making this function async is a local change.
 // ---------------------------------------------------------------------------
@@ -30,15 +36,20 @@ import { build } from '../state/build.js';
 
 /**
  * @param {ReturnType<typeof import('./stage.js').createStage>} stage
- * @param {{flat?: boolean, diag?: boolean}} [opts]  the ?flat / ?diag dev flags
+ * @param {{
+ *   flat?: boolean,
+ *   diag?: boolean,
+ *   onMesh?: (m: {mesh: import('three').Object3D, dims: {nx: number, ny: number, nz: number}}|null) => void,
+ * }} [opts]  the ?flat / ?diag dev flags, and the mesh seam (see the header)
  */
-export function initRebuilder(stage, { flat = false, diag = false } = {}) {
+export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}) {
   let current = null; // THREE.Object3D in the scene
   let activeCtx = null; // the followed context
   let framedSheet = 0; // active doc's sheet generation at the last framed build
 
   function removeMesh() {
     if (!current) return;
+    onMesh?.(null); // the consumer drops its clone before the geometry dies
     stage.scene.remove(current);
     // Free the GPU resources of the mesh we're replacing. Both builders emit a
     // single vertex-colored MeshStandardMaterial (no textures to dispose).
@@ -94,6 +105,7 @@ export function initRebuilder(stage, { flat = false, diag = false } = {}) {
     }
     stage.scene.add(current);
     stage.setSpinTarget(current);
+    onMesh?.({ mesh: current, dims: result.dims });
     if (d.sheet !== framedSheet) {
       stage.frameObject(current);
       framedSheet = d.sheet;

@@ -32,6 +32,7 @@ test('defaults: everything off / null on an empty query', () => {
       patterns: b.patterns,
       about: b.about,
       guides: b.guides,
+      ring: b.ring,
     },
     {
       flat: false,
@@ -56,8 +57,33 @@ test('defaults: everything off / null on an empty query', () => {
       patterns: false,
       about: false,
       guides: false,
+      ring: null,
     }
   );
+});
+
+test('?ring: the view count, then optional elevation / offset / scale (defaults fill in)', () => {
+  assert.deepEqual(parseBootParams('?ring=4').ring, {
+    views: 4,
+    elevation: 45,
+    offset: 0,
+    scale: 1,
+  });
+  assert.deepEqual(parseBootParams('?ring=8,30,45,2').ring, {
+    views: 8,
+    elevation: 30,
+    offset: 45,
+    scale: 2,
+  });
+  assert.equal(
+    parseBootParams('?ring=8,x').ring.elevation,
+    45,
+    'a bad field keeps its default'
+  );
+  assert.equal(parseBootParams('?ring=8,x,90').ring.offset, 90);
+  assert.equal(parseBootParams('?ring=0').ring, null, 'fewer than one view is no ring');
+  assert.equal(parseBootParams('?ring=').ring, null);
+  assert.equal(parseBootParams('?ring=abc').ring, null);
 });
 
 test('?guides=1 shows the extent rules (off by default)', () => {

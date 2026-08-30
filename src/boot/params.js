@@ -5,13 +5,15 @@
 // of greeting with the About box. main.js APPLIES the result:
 // most hooks are boot-time store actions (?edit → the boot context's face, ?pick →
 // session.pickColor, ?palette → session.openPicker, ?tile → doc.resizeTiles,
-// ?cursor / ?rect / ?fill / ?select's state halves → session actions); only
-// the canvas-paint halves ride as one-shot props on <sm-draw-canvas>.
+// ?cursor / ?rect / ?fill / ?select's state halves → session actions, ?ring
+// → prefs.setShowRing + the ring slice's setters); only the canvas-paint
+// halves ride as one-shot props on <sm-draw-canvas>.
 // ---------------------------------------------------------------------------
 
 import { clampTile } from '../lib/atlas.js';
 import { VIEW_NAMES } from '../lib/views.js';
 import { PALETTE_168 } from '../lib/constants.js';
+import { RING_DEFAULTS } from '../state/ring.js';
 
 /**
  * @param {string} search  location.search (with or without the leading '?')
@@ -116,6 +118,27 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     }
   }
 
+  // ?ring=<views>[,<elevation>[,<offset>[,<scale>]]]: show the 3D Sprite
+  // Atlas windoid (it boots hidden) with those settings — a capture hook,
+  // since the capture tool can't pull a menu. Present with a valid first
+  // integer ≥ 1 means "show"; each missing or unparseable trailing field
+  // keeps its default (the slice clamps the rest at seed). ?ring=0 → null.
+  /** @type {{views: number, elevation: number, offset: number, scale: number}|null} */
+  let ring = null;
+  const ringParam = params.get('ring');
+  if (ringParam) {
+    const p = ringParam.split(',').map((s) => parseInt(s, 10));
+    if (Number.isFinite(p[0]) && p[0] >= 1) {
+      const at = (i, d) => (p.length > i && Number.isFinite(p[i]) ? p[i] : d);
+      ring = {
+        views: p[0],
+        elevation: at(1, RING_DEFAULTS.elevation),
+        offset: at(2, RING_DEFAULTS.offset),
+        scale: at(3, RING_DEFAULTS.scale),
+      };
+    }
+  }
+
   // ?sample=<index|name>: a known name wins; else a clamped index; else 0.
   // `sampleExplicit` records whether the param was GIVEN — an explicit sample
   // is a test path and beats the boot restore of the last open document.
@@ -188,5 +211,8 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     // ?guides=1: show the canvas's extent rules (View → Guides), which boot
     // OFF — a capture hook, since the capture tool can't pull a menu.
     guides: params.get('guides') === '1',
+    // ?ring=…: the 3D Sprite Atlas windoid, shown with these settings (see
+    // above); null leaves it hidden at the defaults.
+    ring,
   };
 }

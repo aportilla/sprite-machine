@@ -83,6 +83,13 @@
                back as the check. Document-scoped (greys with the desktop
                focused), like the Tools menu's modes. -->
           <vf-menu-item value="guides">Guides</vf-menu-item>
+          <!-- The 3D Sprite Atlas windoid (#win-ring below) as a checkmark
+               toggle over prefs.showRing, OFF every load: the pick shows or
+               hides it (menus.js flips the slice and mirrors it back as the
+               check), and the windoid's own close box is the same uncheck —
+               MacPaint's palettes closed from their box and came back from
+               the menu. Document-scoped like Guides. -->
+          <vf-menu-item value="ring">3D Sprite Atlas</vf-menu-item>
           <vf-separator></vf-separator>
           <!-- Re-runs the boot placement on the CURRENT raster — the
                windoids back to the rail, every open document window onto
@@ -114,19 +121,23 @@
            app. -->
       <sm-options-bar></sm-options-bar>
 
-      <!-- ==================== The three utility windoids ================ -->
-      <!-- Permanent chrome: always on screen while the application is
-           active — no close box (shell/windows.js sets closable=false;
+      <!-- ======================= The utility windoids =================== -->
+      <!-- Three are permanent chrome: always on screen while the application
+           is active — no close box (shell/windows.js sets closable=false;
            markup can't express a boolean attribute's off state) and no menu
-           toggle. Geometry is NOT authored here: shell/windows.js computes
+           toggle. The fourth, the 3D Sprite Atlas (#win-ring), is the one
+           TOGGLEABLE windoid: View → 3D Sprite Atlas shows it (off every
+           load) and its close box — the kit's, kept — hides it again.
+           Geometry is NOT authored here: shell/windows.js computes
            the smart arrangement from the live raster at boot (the Tools
-           palette top-left, the sprite/stage rail right — shell/layout.js),
-           lets any saved layout override it, and clamps;
-           a browser resize re-pins every window proportionally. All three
+           palette top-left, the sprite/stage rail right, the atlas strip
+           docked at the bottom — shell/layout.js) and clamps;
+           a browser resize re-pins every window proportionally. All four
            are utility windoids: they float above the document tier, never
            take the active state, and hide with the application when the
            desktop is clicked (shell/windows.js gates their hidden on
-           appActive alone). A windoid bar shows no title text (the kit's
+           appActive — and, for the atlas strip, on prefs.showRing too). A
+           windoid bar shows no title text (the kit's
            11px bar has no title patch); the heading still names the window
            for assistive tech. DOCUMENT windows are not here: one
            exists per open document, cloned from #tpl-document-window by the
@@ -183,6 +194,27 @@
           </vf-container>
         </div>
         <sm-status-line kind="build" slot="status"></sm-status-line>
+      </vf-window>
+
+      <!-- The 3D Sprite Atlas: the active document's model rendered
+           ORTHOGRAPHICALLY from a ring of evenly stepped yaw angles at one
+           elevation — the rotation set an engine consumes — as a strip of
+           thumbnails, one 70px cell per view on the kit's gray-25 paper
+           (the same `pattern` grammar as the Sprite View), under a two-row
+           controls strip (views / elev / from / scale — the same settings
+           File → Export Sprite Atlas… edits, live) and over a status line
+           reading the frame size. Toggleable: View → 3D Sprite Atlas shows
+           it (hidden every load), the close box hides it — the ONE windoid
+           that keeps the kit's close box. FIXED-size: movable, no grow box;
+           shell/windows.js sets its height to RING_HEIGHT and its width to
+           ringWidthFor(views) — one cell per view + rules + borders, floored
+           at the strip's width (RING_MIN_WIDTH) — re-fitting live as the
+           view count changes (fitRing). The placement docks it on the bottom
+           margin, left-aligned with the document window, and shortens the
+           doc box to clear it only while it is shown (shell/layout.js). -->
+      <vf-window id="win-ring" variant="utility" heading="3D Sprite Atlas" movable flush>
+        <sm-ring-view pattern="gray-25"></sm-ring-view>
+        <sm-status-line kind="ring" slot="status"></sm-status-line>
       </vf-window>
 
       <!-- The floating Tools palette: utility tier — floats above the
@@ -411,12 +443,13 @@
         <vf-button id="btn-storage-ok" slot="buttons" variant="default">OK</vf-button>
       </vf-dialog>
 
-      <!-- The two export configurators (PARKED): non-functional previews of
-           the future exporters — every form field disabled, the default
-           Export button inert — so the menu grammar can stand before the
-           exporters exist. Cancel (and the close box) is the only live
-           control in each. Unlike Download (the document .png verbatim —
-           the source), these will DERIVE artifacts from the built model. -->
+      <!-- The export configurators. Export 3D Model… is PARKED: a
+           non-functional preview of the future exporter — every form field
+           disabled, the default Export button inert — so the menu grammar
+           can stand before the exporter exists; Cancel (and the close box)
+           is its only live control. Export Sprite Atlas… below is LIVE.
+           Unlike Download (the document .png verbatim — the source), both
+           DERIVE artifacts from the built model. -->
       <vf-dialog
         id="dlg-export-model"
         heading="Export 3D Model"
@@ -458,29 +491,38 @@
         </vf-button>
       </vf-dialog>
 
-      <!-- Export Sprite Atlas: an atlas of orthographic renders of the 3D
-           model stepped around it — a configurable view count (the angle
-           step), the camera's elevation, and the first view's offset angle,
-           for whatever spin set a target engine wants. -->
+      <!-- Export Sprite Atlas: the 3D Sprite Atlas windoid's settings as a
+           form — the view count (any n is a 360/n step; the readout beside
+           it says the step), the camera's elevation, the first view's
+           offset angle, and the px-per-voxel scale — over a readout of the
+           frame and sheet the settings produce. The fields are bound LIVE
+           to the ring slice (shell/menus.js): a change here moves the
+           windoid's strip behind the modal at once, and Cancel doesn't
+           revert — the settings are non-destructive and the strip IS the
+           preview (not the Colors dialog's pending model). Export saves
+           exactly the pixels the strip shows (the same rendered sheet) as
+           «slug»-atlas.png with a sprite-machine:ring text chunk; it's
+           enabled whenever a model exists. Arithmetic: 20 (bar + band) + 16
+           pad + five 25px rows (the kit's stepper-tall number field sets
+           the pitch; the readout row matches) with 12 between (173) + the
+           44 footer + 16 + 5 = 274, rounded up to the 300 the kit's own
+           footer measure lands on (the parked 3-row form was 230). -->
       <vf-dialog
         id="dlg-export-atlas"
         heading="Export Sprite Atlas"
         closable
         width="360"
-        height="230"
+        height="300"
       >
         <vf-stack width="312" gap="12">
           <vf-stack fill-width direction="row" gap="8" place="start">
             <vf-stack pad="4 0 0">
               <vf-label width="80" for="atlas-views">Views:</vf-label>
             </vf-stack>
-            <vf-select id="atlas-views" value="8" disabled>
-              <vf-option value="4">4 (90° step)</vf-option>
-              <vf-option value="6">6 (60° step)</vf-option>
-              <vf-option value="8" selected>8 (45° step)</vf-option>
-              <vf-option value="12">12 (30° step)</vf-option>
-              <vf-option value="16">16 (22.5° step)</vf-option>
-            </vf-select>
+            <vf-number-field id="atlas-views" min="1" max="16" step="1"></vf-number-field>
+            <vf-stack pad="4 0 0">
+              <vf-label id="atlas-step"></vf-label>
+            </vf-stack>
           </vf-stack>
           <vf-stack fill-width direction="row" gap="8" place="start">
             <vf-stack pad="4 0 0">
@@ -491,8 +533,6 @@
               min="0"
               max="90"
               step="1"
-              value="30"
-              disabled
             ></vf-number-field>
             <vf-stack pad="4 0 0">
               <vf-label>° above horizon</vf-label>
@@ -507,11 +547,26 @@
               min="0"
               max="359"
               step="1"
-              value="0"
-              disabled
             ></vf-number-field>
             <vf-stack pad="4 0 0">
               <vf-label>° from front</vf-label>
+            </vf-stack>
+          </vf-stack>
+          <vf-stack fill-width direction="row" gap="8" place="start">
+            <vf-stack pad="4 0 0">
+              <vf-label width="80" for="atlas-scale">Scale:</vf-label>
+            </vf-stack>
+            <vf-number-field id="atlas-scale" min="1" max="8" step="1"></vf-number-field>
+            <vf-stack pad="4 0 0">
+              <vf-label>px per voxel</vf-label>
+            </vf-stack>
+          </vf-stack>
+          <vf-stack fill-width direction="row" gap="8" place="start">
+            <vf-stack pad="4 0 0">
+              <vf-label width="80">Sheet:</vf-label>
+            </vf-stack>
+            <vf-stack pad="4 0 0">
+              <vf-label id="atlas-dims"></vf-label>
             </vf-stack>
           </vf-stack>
         </vf-stack>

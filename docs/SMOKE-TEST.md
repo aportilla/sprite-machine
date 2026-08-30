@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 234 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 260 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -26,9 +26,10 @@ browser, `http://localhost:5173/`.
 - [ ] **Reactivation restores the arrangement**: drag the Tools palette
       somewhere odd, click the desktop (all three windoids hide), then click
       the document window — all three come back, Tools where you put it.
-- [ ] **Windoids are non-closeable**: none of the three windoid bars shows a
-      close box, and no menu item hides them — they're up whenever a
-      document window is active.
+- [ ] **Windoids are non-closeable**: none of the three permanent windoid
+      bars (Tools, Sprite View, 3D View) shows a close box, and no menu
+      item hides them — they're up whenever a document window is active.
+      The 3D Sprite Atlas is the one exception (its own items below).
 - [ ] **Icon click is a Finder click**: a single click on any icon
       deactivates the app and selects the icon; a double-click opens it and
       the app comes back, windoids included.
@@ -167,9 +168,17 @@ browser, `http://localhost:5173/`.
 - [ ] **Download round-trip**: File → Download downloads `«name».png`; drop
       the file back onto the desktop — a NEW window opens with pixels AND
       title restored (the metadata lives in the PNG's text chunks).
-- [ ] **Parked export dialogs**: File → Export 3D Model… and File → Export
-      Sprite Atlas… each raise their configurator with every form field
-      disabled and Export inert; Cancel (or the close box) dismisses.
+- [ ] **The parked export dialog**: File → Export 3D Model… raises its
+      configurator with every form field disabled and Export inert; Cancel
+      (or the close box) dismisses.
+- [ ] **The export file**: with the Car open, File → Export Sprite Atlas…
+      → Export saves `car-atlas.png` — `views·F × F` px (`276 × 69` at
+      the defaults), transparent outside the sprite; open it — the strip's
+      pixels exactly, the car centered in every frame at one size; a PNG
+      chunk inspector shows its `sprite-machine:ring` text chunk naming the
+      settings, the frame, the anchor and the yaw list beside `Title`
+      (`Car atlas`) and `Software`. Export is live with the strip hidden
+      too, and the Finder role greys it with the rest.
 - [ ] **beforeunload guard**: with unsaved changes in ANY open document,
       reload the tab — the browser warns.
 
@@ -278,6 +287,42 @@ browser, `http://localhost:5173/`.
       window's top toggle live — the model stops spinning / re-meshes
       immediately (Settings… in the menu stays disabled, a parked
       placeholder).
+- [ ] **The 3D Sprite Atlas, by eye**: with the Car open, View → 3D Sprite
+      Atlas — a windoid lands under the document window, left-aligned with
+      it, on the bottom margin: a two-row strip (`views` / `elev` over
+      `from` / `scale`) over four cells on the gray-25 paper — the Car
+      from the front, its right, the back, its left, all at one size and
+      centered — and a status line reading `4 × 69 px`. The front view's
+      shading reads like the 3D View's default framing (roof brightest),
+      and **every angle is lit the same way** (the light rides with the
+      camera — the flank facing you is always the lit one). The dot bar
+      carries a close box; its click hides the windoid and unchecks the
+      item; the item re-shows it where it was, on top of the other
+      windoids. (Raise another windoid over it first and the close box's
+      first click only raises it — the kit's raise re-insert cancels that
+      press's click, the standing windoid-press kit ask; the second click
+      closes.)
+- [ ] **Settings are live, both ways**: step `views` to 8 — the windoid
+      widens to the right (its left edge holds), eight cells at a 45°
+      step; `elev` 0 — pure side views; 90 — plan views; `from` 45 — the
+      ring rotates; `scale` 2 — the frames double (the status reads
+      `8 × 137 px`), the thumbnails stay the cell size. Draw a stroke —
+      every cell follows at frame rate. File → Export Sprite Atlas… reads
+      the same numbers (and the step, the frame and the sheet); change one
+      there — the strip follows behind the modal; Cancel keeps it.
+- [ ] **The frame never breathes**: with the Cube open, step `from` 0 → 45
+      → 90 — the cube's silhouette changes, the cells don't; step `views`
+      — same; draw on it — same.
+- [ ] **Arrange makes room**: with the strip shown, View → Arrange Windows
+      shortens the document window to clear it (a gap between); hide the
+      strip and Arrange again — the document takes the height back. The
+      zoom box stops above a shown strip and runs to the bottom margin
+      with it hidden. Toggling the strip on never moves a window already
+      open.
+- [ ] **A resize keeps it docked**: shrink the browser — the strip stays
+      on the bottom margin at the document's left; grow it back — exactly
+      home. A desktop click hides it with the other windoids (the View
+      item stays checked, greyed); clicking the document brings it back.
 - [ ] **The 3D View can't degenerate**: grow-box-shrink it as far as it
       goes — the drag stops at the strip's width (both checkboxes stay
       whole) and at a height that keeps a real patch of canvas under the

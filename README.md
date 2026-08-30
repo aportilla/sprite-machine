@@ -44,10 +44,13 @@ The app is a **System 7 virtual desktop**, drawn end to end with the
 [`vintage-frames`](https://github.com/aportilla/vintage-frames) web component
 kit: a menu bar, an options strip, one movable **document window per open
 document** (the pixel canvas — several documents can be open at
-once), and three floating **utility windoids** that serve whichever document
-is active — the **Tools palette**, the **Full Sprite View** (the face
-picker over the whole atlas as a clickable face-tile grid, live), and the
-**3D View** — plus documents
+once), and floating **utility windoids** that serve whichever document
+is active — three permanent ones, the **Tools palette**, the **Full Sprite
+View** (the face picker over the whole atlas as a clickable face-tile grid,
+live), and the **3D View**, plus the toggleable **3D Sprite Atlas** (View
+→ 3D Sprite Atlas: the model rendered orthographically from a ring of
+angles, the rotation set an engine consumes — and what File → Export Sprite
+Atlas… saves) — plus documents
 that live as **files on the desktop**, saved in the browser and reopened by
 double-clicking their icons. Clicking the desktop is "switching to the Finder": the application
 deactivates, its windoids hide, and the menus fall back to the desktop's
@@ -428,13 +431,17 @@ pixels landing like a mount fill (no undo entry) — its **ants standing at
 phase 0** (no ticker, so the shot stays byte-identical across runs) — the
 stepper, face picker, dialog, swatch pick, hover preview, rect drag, fill click,
 and selection marquee / move
-can't be driven headlessly. Five shell-era params round the set out:
+can't be driven headlessly. Six shell-era params round the set out:
 `?fresh=1` boots with **storage ignored** (no desktop-state restore, no
 `?file` resolution, no saved-doc icons — a bare desktop now, every icon
 being a saved doc — no first-boot seeding, no About box greet, and no
 state writes — deterministic
 captures on a machine with saved docs) and `?hide=<window>[,<window>]`
-(`document|tools|sprite|stage`) hides windows a capture needs out of frame,
+(`document|tools|sprite|stage|ring`) hides windows a capture needs out of frame,
+`?ring=<views>[,<elevation>[,<offset>[,<scale>]]]` shows the **3D Sprite
+Atlas** windoid (View → 3D Sprite Atlas, which boots hidden) with those
+settings — `?ring=4` the default set, `?ring=8,30,45,2` eight views at 30°
+from 45° at 2 px per voxel; a missing trailing field keeps its default —
 and `?now=<when>` (an ISO date-time like `2026-08-24T19:27`, read as local
 time, or epoch milliseconds) **freezes the menu bar clock** at that instant —
 a live clock would otherwise make every shot with the bar in frame differ by
@@ -557,14 +564,22 @@ strip's clamp bounds, and the Undo/Redo enablement.
   doc prompts for a name), _Duplicate_ ⌘D (the stored copy opens in its own
   window), _Rename…_, _Download_ ⇧⌘E (the document `.png` verbatim — the
   downloaded atlas IS the source format, hence Download rather than Export,
-  and no ellipsis: it acts immediately), _Export 3D Model…_ and _Export
-  Sprite Atlas…_ (the two **parked export configurators** — dialogs
-  previewing the future exporters with every form field disabled and the
-  Export button inert, Cancel the only live control: a model-format form,
-  and the sprite-atlas form — view count / angle step, camera elevation,
-  first-angle offset — for rendering the 3D model into an atlas of
-  orthographic views for a target engine), and _Properties…_ (name, atlas
-  dims, the tile-size stepper — all of the active document).
+  and no ellipsis: it acts immediately), _Export 3D Model…_ (the one
+  **parked export configurator** — a dialog previewing the future exporter
+  with every form field disabled and the Export button inert, Cancel the
+  only live control), _Export Sprite Atlas…_ (**live**: the 3D Sprite
+  Atlas windoid's four settings as a form — views, elevation, first angle,
+  scale — over a readout of the frame and sheet they produce; the fields
+  are bound to the same slice the windoid's strip edits, so a change here
+  moves the strip behind the modal at once and Cancel reverts nothing — the
+  strip IS the preview; **Export** saves exactly the pixels the strip shows,
+  the whole sheet as `«slug»-atlas.png` — `car-atlas.png` — with a `Title`
+  (`«name» atlas`), the `Software` marker and a **`sprite-machine:ring`**
+  text chunk carrying the settings, the frame size, the yaw list and the
+  engine **anchor** (where the lattice floor's center lands in every frame,
+  the feet-row); enabled whenever a model exists, the windoid shown or not —
+  see the 3D Sprite Atlas under [Windows](#windows)), and _Properties…_
+  (name, atlas dims, the tile-size stepper — all of the active document).
 - **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (the ACTIVE document's history;
   disabled until it has something — which also hands the key back to a
   focused field's native undo), _Pick Color…_ ⌘K (the 168-color dialog —
@@ -577,7 +592,11 @@ strip's clamp bounds, and the Undo/Redo enablement.
   rules** — see [Drawing editor](#drawing-editor); **off every load**, the
   item unchecked, and the pick flips `prefs.showGuides` so every open
   document window's rules appear or clear together; document-scoped, so it
-  greys with the desktop focused),
+  greys with the desktop focused), _3D Sprite Atlas_ (the same toggle
+  shape over `prefs.showRing`: shows and hides the **3D Sprite Atlas**
+  windoid — see [Windows](#windows) — off every load; the windoid's own
+  close box is the same uncheck, MacPaint's palettes closing from their box
+  and coming back from the menu; document-scoped),
   _Arrange Windows_ (the boot placement re-run on the
   **current** raster: the windoids back to the rail at their placed sizes,
   every open document window onto the doc box at its size, cascaded in
@@ -585,9 +604,9 @@ strip's clamp bounds, and the Undo/Redo enablement.
   the arrangement back after moving things around or resizing the browser;
   greyed with no document window open — nothing on screen to arrange — and
   otherwise live in both roles, so from the Finder role with a document
-  open it re-rails the hidden windoids for the next open). The
-  windoids need no toggles: they're permanent, up whenever a document
-  window is active.
+  open it re-rails the hidden windoids for the next open). The three
+  permanent windoids need no toggles: they're up whenever a document
+  window is active; the 3D Sprite Atlas is the one exception.
 - **The clock** — System 7.5's menu bar clock at the bar's right end
   (`shell/clock.js` over a kit `vf-label` slotted after the last menu): the
   time in the bar's own Chicago (`7:27 PM`), ticking on the minute, its em
@@ -641,7 +660,8 @@ Patterns control panel (document tier, not a document — see
   palette**, the **Full Sprite View**, and the **3D View** — static markup,
   **permanently open**: persistent panels with no close box and no menu
   toggle, always on screen for the active document (only the desktop's
-  deactivation hides them). They float above every document window, never
+  deactivation hides them) — and the **3D Sprite Atlas**, the one
+  toggleable windoid (below). They float above every document window, never
   take the active state (clicking the 3D View can't deactivate the window
   you're drawing in), show the kit's slim 11px dot bar (no title text, no
   close box — the heading still names the window for assistive tech), and
@@ -691,6 +711,64 @@ Patterns control panel (document tier, not a document — see
   any boot geometry alike): width at the controls strip's content width so
   the checkboxes can never be clipped, height at enough canvas under the
   strip to still read as a view.
+- **The 3D Sprite Atlas** (`sm-ring-view`, `#win-ring` — "ring" is the
+  feature's code name throughout the source: the model rendered from a
+  **ring** of yaw angles) — the active document's model rendered
+  **orthographically** from a ring of evenly stepped yaws at one
+  elevation, the way an engine consumes a pre-rendered rotation set, as a
+  **horizontal strip of thumbnails**: one 70px cell per view on the kit's
+  `gray-25` paper (the Sprite View's cell size and pattern grammar),
+  under a **two-row controls strip** of four labeled number fields —
+  `views` (1–16, a 360/n step), `elev` (0–90° above the horizon), `from`
+  (the first view's yaw, 0–359° from the front) and `scale` (1–8 px per
+  voxel) — and over a status line reading `views × F px` (the full
+  readout — frame, sheet, elevation, first angle, scale — on its tooltip).
+  Defaults: four views at a 90° step, 45° up, from the front, 1 px per
+  voxel. **Yaw runs front → right → back → left** (yaw 0 puts the camera
+  on `+z`, the FRONT toward it; positive yaw walks it toward `+x`). Every
+  frame is a **square of the lattice's envelope**, not the content's: the
+  `nx×nz` footprint's bounding circle swept up the height, so the whole
+  voxel box fits at every yaw and the frame never changes size between
+  angles, strokes or first-angle offsets — a sprite can't jitter in an
+  animation (loose at yaw 0, the margin transparent; the Car at 40³ and
+  45° is 69 px). The model is centered on the lattice's center, and the
+  lattice floor's center lands on the **same row in every frame** — the
+  engine anchor the export writes out. The **lights ride with the camera**
+  (the stage's ambient + key + fill, re-posed per yaw in the camera's own
+  frame): in an engine the camera and the sun are fixed and the object
+  turns, so every angle is lit the same way; no ground plane, no shadow in
+  a sprite. No antialiasing and no smoothing anywhere in the copy chain —
+  a 1-px-per-voxel sprite is pixel art at the source's resolution — and the
+  renderer clears transparent, so the margin is paper in the windoid and
+  transparency in the file. It has its **own THREE world on an offscreen
+  canvas** (`scene/ring-renderer.js`, made lazily on the first render — a
+  strip never shown costs no GL context) fed the rebuilder's mesh through
+  one `onMesh` seam (a shared-geometry clone — the rebuilder stays the
+  pipeline's only consumer), renders the whole strip into **one sheet
+  canvas** that the cells slice with `drawImage` and Export encodes
+  verbatim, and renders **only while shown** (`scene/ring.js`: a change
+  behind a hidden windoid marks the sheet dirty, the show renders it; shown,
+  at most one render per animation frame, so a stroke follows at the Sprite
+  View's cost class). The settings are app-level and session-only (the
+  `ring` slice — the prefs discipline; per-document persistence in a PNG
+  chunk is the planned follow-up), and the windoid is **toggleable**: View →
+  3D Sprite Atlas shows it (hidden every load) and its **close box** — the
+  kit's, kept on this one windoid — hides it, one flag both ways
+  (`prefs.showRing`); a show brings it to the front of the windoid band. It
+  is a **fixed-size picture frame** like the Sprite View, turned sideways:
+  `RING_HEIGHT` tall, `ringWidthFor(views)` wide — one cell per view with
+  the grid's rules and the frame's borders, floored at the strip's content
+  width (`RING_MIN_WIDTH`) — re-fitting live as the count changes, growing
+  rightward from where it sits. The placement **docks it on the bottom
+  margin, left-aligned with the document window**, and — only while it is
+  shown — takes its band out of the vacancy so a fresh open, Arrange
+  Windows and the zoom box all land the document clear of it (toggling it
+  on never moves an existing window: System 7 didn't rearrange your windows
+  when you showed a palette — Arrange does). Its edges make it a fixed point
+  of the resize rule **without touching the frame's bands**: the left edge
+  in the left band, the bottom in the bottom band, and a fixed-size box
+  resolves each axis by its lone strut — so a resize lands it exactly where
+  Arrange would, at any view count. `?ring=…` shows it for captures.
 
 Positions/sizes come from a **smart placement** computed against the live
 raster (`shell/layout.js`, pure): the Tools palette top-left; the Full
@@ -1032,6 +1110,15 @@ the no-op guards, and a full-tile flood that can't overflow the stack).
 (the bounds helpers, Shift's axis lock, lift → clear → composite as an
 identity, the transparency rule, per-texel clipping that can never wrap a
 right-edge overflow onto the next row, and off-tile-and-back reversibility).
+`test/ring.test.mjs` pins the 3D Sprite Atlas's geometry (`lib/ring.js`:
+the yaw ring, the lattice envelope — the footprint circle swept up the
+height, bounded by the sphere — the square frame at `scale` px per voxel
+holding it at every yaw, the camera direction and true up vector — unit,
+perpendicular, well defined straight down — and the yaw-independent
+anchor), and `test/ring-state.test.mjs` its settings slice (the defaults,
+every setter's clamp / rounding / NaN no-op / silence on an unchanged value,
+the offset's normalization, the sheet channel by reference, and the
+export's metadata chunks round-tripping).
 `test/palette.test.mjs` pins the editor's
 168-color palette: 168 entries in a 21×8 grid, all colors AND names distinct,
 valid `#rrggbb`, `packed` derived from `css`, the layout corners (the
@@ -1068,7 +1155,11 @@ the smart placement — the one-column rail (the sprite windoid's fixed
 rest of the height on any raster), the document box top-left beside Tools
 with exactly the cascade's room at its right and bottom (every slot inside
 the vacancy, the last flush with its edges), tiny rasters degrading
-gracefully — the document-window cascade (first free slot, a freed slot
+gracefully — the 3D Sprite Atlas's box (`ringWidthFor`: one cell per view
+floored at the strip; docked on the bottom margin at the doc box's left;
+shown, it shortens the doc box so every cascade slot clears it and stops
+the zoom box above it; hidden, the placement is exactly as before) — the
+document-window cascade (first free slot, a freed slot
 reused, a full cascade wrapping) — the panel placement (`centeredBox`:
 centered in the open area below the strip, its top-left floored at the
 reserve on a tiny raster) — the raster-derived
@@ -1082,7 +1173,8 @@ options strip with the rail-sized top/right bands, the icons' below the
 bare menu bar, uniform), no ratchet across a wiggle — and the test that
 licenses one rule for everything: **the placement is a fixed point**, every
 placed windoid re-pinning onto any other raster exactly where
-`initialPlacement` puts it there, with the rail's edges still struts
+`initialPlacement` puts it there — the bottom-docked atlas strip included,
+at four views and at sixteen — with the rail's edges still struts
 after a 2px lattice snap; `tools/drive.mjs` drives the real thing over
 CDP, where a viewport change fires a true `resize`, and imports the pure
 module as its oracle for the exact expected geometry).
@@ -1112,6 +1204,8 @@ src/lib/
   colorize.js     depth-aware first-hit surface coloring + palette snap
   faces.js        surface voxels -> quads: greedy-merged or culled (pure)
   guides.js       editor alignment guides: per-face cross-axis extent (pure)
+  ring.js         the 3D Sprite Atlas's geometry: the yaw ring, the lattice envelope + square frame,
+                  the camera pose (direction + true up), the sheet, the engine anchor (pure)
   rect.js         editor rect tool: rounded-rectangle rasterization, per-row runs (pure)
   fill.js         editor fill tool: contiguous flood + global color replace (pure)
   select.js       editor selection tool: bounds helpers, the axis lock, lift / clear / composite —
@@ -1146,6 +1240,11 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
                       flag — one palette, one ink, however many documents are open
   prefs.js            lowpoly / autoRotate (the render toggles; the 3D View's controls strip writes them)
                       + showGuides (the canvas's extent rules; View → Guides writes it, off by default)
+                      + showRing (the 3D Sprite Atlas windoid; View → 3D Sprite Atlas and its close
+                      box write it, off by default)
+  ring.js             the 3D Sprite Atlas's settings (views / elevation / offset / scale — app-level,
+                      session-only, clamped setters) + the SHEET CHANNEL (the rendered sheet, by
+                      reference, the doc's onLive shape) + ringMetaChunks (the export's text chunks)
   build.js            dims / voxels / tris / warnings / error — written by the rebuilder (+ the loaders'
                       errors); the stats read by the 3D View's status tooltip, warnings/error recorded only
   files.js            the document LIBRARY: listing + availability + per-document storage ops
@@ -1163,18 +1262,31 @@ src/scene/
   stage.js        renderer, camera + orbit controls, lights, ground, framing, on-demand render loop, resize
   rebuilder.js    the pipeline's ONLY consumer: follows the ACTIVE document (change+live channels,
                   re-wired per activation) + prefs -> buildVoxels -> mesh swap -> build stats;
-                  a window switch re-frames the camera (a new subject)
+                  a window switch re-frames the camera (a new subject); hands every mesh (and
+                  null before a dispose) to one outside consumer through the onMesh seam
+  ring-renderer.js  the 3D Sprite Atlas's own THREE world on an offscreen canvas: a shared-geometry
+                  clone of the rebuilder's mesh, an orthographic camera posed per yaw (lib/ring.js),
+                  the light rig riding in the camera's frame, N frames rendered into ONE sheet canvas
+  ring.js         the follower around it (the renderer made lazily on the first render): the onMesh
+                  subject, a render per setting change or rebuild — at most one per frame, and only
+                  while the windoid is shown (hidden: dirty, the show renders) — published on the
+                  ring slice's sheet channel; Export's renderSheet()
 src/shell/        the desktop's behavior modules (imperative wiring over the index.html skeleton)
   layout.js       the window + icon arithmetic (pure, Node-tested): initialPlacement (the smart
                   boot/open arrangement from the raster — the ONLY source of window geometry;
-                  none persists) + cascadeFrom (the document windows' first-free-slot
+                  none persists; the atlas strip docked at the bottom, the doc box shortened
+                  only while it is shown) + cascadeFrom (the document windows' first-free-slot
                   cascade) + spriteHeightFor (the fixed-size
-                  Sprite View windoid: picker-block width, atlas-ratio height) + iconDefault
+                  Sprite View windoid: picker-block width, atlas-ratio height) + ringWidthFor
+                  (the fixed-size 3D Sprite Atlas windoid: one cell per view, RING_HEIGHT tall,
+                  floored at its strip) + iconDefault
                   (the raster-derived icon lattice) + pinOf/pinTo (the nine-slice pin across raster
                   resizes — struts in the outer bands, springs in the middle — framed per tier:
                   WINDOW_FRAME below the options strip with the rail-sized top/right bands,
                   ICON_FRAME below the menu bar, uniform)
-  windows.js      the two window regimes: windoid visibility (appActive <-> hidden; non-closeable), and
+  windows.js      the two window regimes: windoid visibility (appActive <-> hidden; non-closeable —
+                  but for the 3D Sprite Atlas: appActive AND prefs.showRing, its close box the
+                  uncheck, fitRing its width-follows-the-view-count sizing), and
                   the document-window reconciler (template clone per context, the doc box
                   cascaded — never a restored geometry, title sync, close-box routing); the vf-activate wire into
                   shell.appActive + workspace.activeKey; boot clamp + the resize rule (every window
@@ -1189,7 +1301,9 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   every dialog flow (About — the boot greeting too, its version + date
                   lines stamped at wire-up from vite.config.js's define — / Settings / New
                   Document (templates + tile size) / Open / name prompt / Properties /
-                  unsaved-changes / storage notice); the quit cascade
+                  unsaved-changes / storage notice / Export Sprite Atlas — the ring slice's
+                  settings as a live form, Export = the strip's sheet as «slug»-atlas.png with
+                  the ring chunk); the quit cascade
   icons.js        the icon layer: one vf-icon per saved doc (nothing else), generated front-tile art,
                   open/rename wiring, open ghosts, raster-derived placement + boot clamp + the
                   resize re-pin (below the menu bar), the Finder wire (icon presses deactivate; the
@@ -1237,8 +1351,8 @@ src/
                        drag preview / the selection's marching ants
     sm-face-picker.js, sm-tool-strip.js, sm-tool-options.js
                        presentational leaves: props down, bubbling sm-* events up, no store imports
-    sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-stage-controls.js, sm-status-line.js,
-    sm-color-picker.js, sm-desktop-patterns.js
+    sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-ring-view.js, sm-stage-controls.js,
+    sm-status-line.js, sm-color-picker.js, sm-desktop-patterns.js
                        connected chrome: the options strip (a kit vf-container band: current-ink
                        swatch + options, no tool name; hidden while the desktop is focused;
                        bounds from the active document) / the Tools palette body / the
@@ -1246,10 +1360,14 @@ src/
                        face-tile vf-grid, both -> workspace.setFace on the ACTIVE key —
                        tile picks fire on the press, the selected tile ringed in
                        --sm-select red — the cells live canvases following the active
-                       document) / the 3D View's controls
+                       document) / the 3D Sprite Atlas body (the two-row settings strip ->
+                       the ring slice, over one patterned cell per view painted from the
+                       sheet channel) / the 3D View's controls
                        strip (the rotate + smooth checkboxes -> prefs) / the windows' status
                        readouts (tile = the window's edited face; build = the 3D View's fixed
-                       name, the build stats riding its tooltip; the Sprite View carries none) /
+                       name, the build stats riding its tooltip; ring = the atlas's
+                       `views × F px`, the full readout on its tooltip; the Sprite View
+                       carries none) /
                        the app-level Colors dialog (in index.html's dialog set, rendered into its
                        LIGHT DOM on purpose: the kit's page-drawn cursor stays above a modal only
                        when it can observe the vf-dialog's `open` flip, and its observer sees the
@@ -1258,10 +1376,12 @@ src/
                        the 13×3 grid of every kit pattern over Set Desktop Pattern: a pending
                        selection picked on the press, committed through shell.setDesktopPattern)
     ui-bits.js         shared caption + warning-row template helpers (+ the warn row's styles,
-                       a css export its consumers compose into their own `static styles`)
+                       a css export its consumers compose into their own `static styles`) and
+                       the `pattern` attribute's parse the two patterned-cell views share
     base-styles.js     the shared border-box reset every component composes first (box-sizing
                        doesn't inherit across shadow boundaries)
-  image-io.js     File/URL/bytes <-> ImageData codecs, PNG downloads, generated icon art (browser)
+  image-io.js     File/URL/bytes <-> ImageData codecs, a canvas -> PNG bytes, PNG downloads,
+                  generated icon art (browser)
   icons.js        registers the Adobe Spectrum workflow <sp-icon-*> tool-cell + warning glyphs, written literally in the component templates (color via currentColor, size via --mod-icon-size; no sp-theme)
 ```
 
@@ -1388,10 +1508,16 @@ only when the tile's IDENTITY actually changes.
   snapshot. Controlled by a session checkbox in the strip, the fill tool's
   "on all faces" idiom. The single-face move is written so nothing about it
   changes shape for this (see `#applyMove` in `sm-draw-canvas.js`).
-- **Export** — the two File → Export items (3D Model, Sprite Atlas) are
-  parked configurator dialogs, forms only: the merged mesh is glTF-ready
-  (`GLTFExporter`) for the model exporter, and the sprite-atlas exporter
-  will render the model orthographically at a stepped ring of angles (the
-  dialog's view count / elevation / first-angle offset) into one atlas
-  image for engines that consume pre-rendered rotation sets. File →
-  Download stays the source path (the document `.png` verbatim).
+- **Export** — File → Export 3D Model… is a parked configurator dialog, a
+  form only: the merged mesh is glTF-ready (`GLTFExporter`), and the
+  `onMesh` seam the 3D Sprite Atlas added already hands every mesh to a
+  consumer outside the stage. File → Export Sprite Atlas… is live (see
+  [Windows](#windows)); its follow-ups: per-document settings in a
+  `sprite-machine:ring` chunk on the document itself (the transforms
+  chunk's idiom — the export chunk already has the JSON shape), a drop
+  shadow in the sprite (a `ShadowMaterial` ground, consistent across the
+  ring under the camera-relative key), elevation presets for isometric
+  engines (30 / 35.264 / 45 / 60), a scrolling strip at a fixed width if
+  wide rings on small rasters prove annoying, and per-frame padding /
+  power-of-two frames for engines that want them. File → Download stays
+  the source path (the document `.png` verbatim).

@@ -2,9 +2,13 @@
 // Menu + dialog wiring for the desktop shell: vf-menu-select → store/file
 // actions, checkmark + enabled sync, and every dialog flow (About, Open, the
 // shared name prompt, Properties, the unsaved-changes alert, the
-// storage-unavailable notice, the two parked export configurators —
-// Export 3D Model… / Export Sprite Atlas…, dummy forms whose only live
-// control is Cancel; File → Download is the real source path meanwhile).
+// storage-unavailable notice, the parked Export 3D Model… configurator — a
+// dummy form whose only live control is Cancel — and the LIVE Export Sprite
+// Atlas… dialog: the 3D Sprite Atlas windoid's settings as a form, bound
+// two-way to the ring slice (a change moves the strip behind the modal at
+// once; Cancel doesn't revert — the strip IS the preview), whose Export
+// saves the strip's exact sheet as «slug»-atlas.png with the ring's
+// metadata chunk. File → Download is the source path.
 // Behavior only — the markup lives in
 // index.html, the aesthetics in the kit. (Settings… is parked: the render
 // toggles moved to the 3D View's controls strip, and the emptied item sits
@@ -37,18 +41,25 @@ import { session } from '../state/session.js';
 import { prefs } from '../state/prefs.js';
 import { build } from '../state/build.js';
 import { shell } from '../state/shell.js';
-import { files, UNTITLED, docFilename } from '../state/files.js';
+import { ring, ringMetaChunks, RING_MAX_VIEWS, RING_MAX_SCALE } from '../state/ring.js';
+import { files, UNTITLED, docFilename, ringFilename } from '../state/files.js';
 import { workspace, followActive } from '../state/workspace.js';
 import { TILE_MIN, TILE_MAX, clampTile } from '../lib/atlas.js';
 import { SAMPLES } from '../lib/sprite-data.js';
+import { ringFrame, ringSheet, ringAnchor, ringYaws } from '../lib/ring.js';
+import { setTextChunks } from '../lib/png-chunks.js';
 import { loadSample, loadBlank } from '../loaders.js';
-import { downloadPngBytes } from '../image-io.js';
+import { downloadPngBytes, canvasToPngBytes } from '../image-io.js';
 
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
  * @param {ReturnType<typeof import('./windows.js').initWindows>} windows
- * @param {{patterns: ReturnType<typeof import('./patterns.js').initPatterns>}} panels
- *   The panel windows a menu item opens (the Desktop Patterns control panel).
+ * @param {{
+ *   patterns: ReturnType<typeof import('./patterns.js').initPatterns>,
+ *   ring: ReturnType<typeof import('../scene/ring.js').initRing>,
+ * }} panels
+ *   The panel windows a menu item opens (the Desktop Patterns control panel)
+ *   and the 3D Sprite Atlas's renderer follower (Export renders through it).
  */
 export function initMenus(desktop, windows, panels) {
   const $ = (sel) => {
@@ -93,10 +104,9 @@ export function initMenus(desktop, windows, panels) {
   on($('#btn-about-ok'), 'click', () => dlgAbout.close());
   on($('#btn-storage-ok'), 'click', () => dlgStorage.close());
   on($('#btn-props-ok'), 'click', () => dlgProps.close());
-  // The export configurators are PARKED (dummy forms, Export disabled in the
-  // markup) — Cancel is each dialog's only live control.
+  // The Export 3D Model… configurator is PARKED (a dummy form, Export
+  // disabled in the markup) — Cancel is its only live control.
   on($('#btn-export-model-cancel'), 'click', () => dlgExportModel.close());
-  on($('#btn-export-atlas-cancel'), 'click', () => dlgExportAtlas.close());
 
   // The one name-prompt dialog, two uses (first save / rename): resolves the
   // committed name, or null on Cancel/Escape — the vf-close event is the
@@ -402,6 +412,100 @@ export function initMenus(desktop, windows, panels) {
     }
   });
 
+  // --- the Export Sprite Atlas dialog ----------------------------------------
+  // The 3D Sprite Atlas windoid's settings as a form, bound LIVE to the ring
+  // slice: each field's vf-change is the matching setter (a change moves the
+  // strip behind the modal at once), and while the dialog is open the slice
+  // re-seeds the fields (a strip edit behind the modal shows up here) and
+  // the readout re-derives from the build's dims. Cancel and the close box
+  // just close — nothing to revert, the settings are non-destructive and the
+  // strip IS the preview. Export is enabled whenever a model exists (the
+  // build slice has dims), shown or not: the follower renders on demand.
+  const atlasViews = $('#atlas-views');
+  const atlasStep = $('#atlas-step');
+  const atlasElevation = $('#atlas-elevation');
+  const atlasOffset = $('#atlas-offset');
+  const atlasScale = $('#atlas-scale');
+  const atlasDims = $('#atlas-dims');
+  const btnExportAtlasOk = $('#btn-export-atlas-ok');
+  atlasViews.min = 1;
+  atlasViews.max = RING_MAX_VIEWS;
+  atlasScale.min = 1;
+  atlasScale.max = RING_MAX_SCALE;
+  const seedRingDialog = () => {
+    const st = ring.get();
+    atlasViews.value = String(st.views);
+    atlasElevation.value = String(st.elevation);
+    atlasOffset.value = String(st.offset);
+    atlasScale.value = String(st.scale);
+    const step = 360 / st.views;
+    atlasStep.textContent = `${Number.isInteger(step) ? step : step.toFixed(1)}° step`;
+    const dims = build.get().dims;
+    if (dims) {
+      const { px } = ringFrame(dims, st.elevation, st.scale);
+      const sheet = ringSheet(st.views, px);
+      atlasDims.textContent = `frame ${px} × ${px} px · sheet ${sheet.width} × ${sheet.height} px`;
+    } else {
+      atlasDims.textContent = '—';
+    }
+    btnExportAtlasOk.disabled = !dims;
+  };
+  const syncRingDialog = () => {
+    if (dlgExportAtlas.open) seedRingDialog();
+  };
+  function showRingDialog() {
+    seedRingDialog();
+    dlgExportAtlas.show();
+  }
+  teardown.push(ring.subscribe(syncRingDialog), build.subscribe(syncRingDialog));
+  // A NaN (the field mid-edit) is each setter's own no-op; live() bindings
+  // aren't in play here (plain markup), so the slice re-seeds the field on
+  // its next change — a clamped entry reads back clamped.
+  on(atlasViews, 'vf-change', (e) => {
+    ring.setViews(e.detail.valueAsNumber);
+    syncRingDialog();
+  });
+  on(atlasElevation, 'vf-change', (e) => {
+    ring.setElevation(e.detail.valueAsNumber);
+    syncRingDialog();
+  });
+  on(atlasOffset, 'vf-change', (e) => {
+    ring.setOffset(e.detail.valueAsNumber);
+    syncRingDialog();
+  });
+  on(atlasScale, 'vf-change', (e) => {
+    ring.setScale(e.detail.valueAsNumber);
+    syncRingDialog();
+  });
+  on($('#btn-export-atlas-cancel'), 'click', () => dlgExportAtlas.close());
+  // Export = the strip's sheet: the follower renders the whole strip now
+  // (whether or not the windoid is shown), the canvas becomes PNG bytes, and
+  // the ring's metadata chunk — the settings, the frame, the anchor, the yaw
+  // list — rides beside the Title and Software chunks. Failures land on the
+  // build slice like Download's.
+  on(btnExportAtlasOk, 'click', async () => {
+    const ctx = workspace.active();
+    const dims = build.get().dims;
+    if (!ctx || !dims) return;
+    try {
+      const canvas = panels.ring.renderSheet();
+      const st = ring.get();
+      const { px } = ringFrame(dims, st.elevation, st.scale);
+      const bytes = setTextChunks(
+        await canvasToPngBytes(canvas),
+        ringMetaChunks(ctx.name, st, {
+          frame: px,
+          anchor: ringAnchor(dims, st.elevation, st.scale, px),
+          yaws: ringYaws(st.views, st.offset),
+        })
+      );
+      downloadPngBytes(bytes, ringFilename(ctx.name));
+      dlgExportAtlas.close();
+    } catch (err) {
+      build.setError(`Export failed: ${err.message}`);
+    }
+  });
+
   // --- menus ------------------------------------------------------------------
   on($('#menu-app'), 'vf-menu-select', (e) => {
     if (modalOpen()) return;
@@ -490,7 +594,7 @@ export function initMenus(desktop, windows, panels) {
         dlgExportModel.show();
         break;
       case 'export-atlas':
-        dlgExportAtlas.show();
+        showRingDialog();
         break;
       case 'properties':
         dlgProps.show();
@@ -526,9 +630,16 @@ export function initMenus(desktop, windows, panels) {
     switch (menuDetail(e).value) {
       case 'guides':
         // The extent rules over every document canvas: a toggle on the
-        // prefs slice (off by default); syncGuides below mirrors it back
+        // prefs slice (off by default); syncView below mirrors it back
         // as the item's checkmark.
         prefs.setShowGuides(!prefs.get().showGuides);
+        break;
+      case 'ring':
+        // The 3D Sprite Atlas windoid: the same toggle shape (off every
+        // load); shell/windows.js shows and hides the windoid off the
+        // flag, and its close box clears it — one truth, mirrored back as
+        // the checkmark.
+        prefs.setShowRing(!prefs.get().showRing);
         break;
       case 'arrange':
         // The boot placement re-run on the current raster — windoids and
@@ -585,6 +696,7 @@ export function initMenus(desktop, windows, panels) {
     'properties',
     'pick-color',
     'guides',
+    'ring',
     'tool-select',
     'tool-pencil',
     'tool-rect',
@@ -629,12 +741,15 @@ export function initMenus(desktop, windows, panels) {
   teardown.push(session.subscribe(syncTools));
   syncTools();
 
-  // The View menu's Guides checkmark mirrors the prefs slice — Guides ↔
-  // showGuides: a pick toggles the slice, the check follows it (boots
-  // unchecked, the slice's default).
+  // The View menu's checkmarks mirror the prefs slice — Guides ↔
+  // showGuides, 3D Sprite Atlas ↔ showRing: a pick toggles the slice, the
+  // check follows it (both boot unchecked, the slice's defaults; the
+  // windoid's close box lands here through the same flag).
   const itemGuides = $('vf-menu-item[value="guides"]');
+  const itemRing = $('vf-menu-item[value="ring"]');
   const syncView = () => {
     itemGuides.checked = prefs.get().showGuides;
+    itemRing.checked = prefs.get().showRing;
   };
   teardown.push(prefs.subscribe(syncView));
   syncView();

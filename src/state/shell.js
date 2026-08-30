@@ -10,9 +10,12 @@
 // open document (the workspace), so their visibility is existence, not a
 // flag here.
 //
-// The three UTILITY windows (Tools palette, 3D View, Sprite View) are
+// Three of the UTILITY windows (Tools palette, 3D View, Sprite View) are
 // PERMANENT chrome: no close box, no menu toggle — `appActive` alone decides
-// whether they're on screen. They belong to the application, so they hide as
+// whether they're on screen. The fourth, the 3D Sprite Atlas, is the one
+// exception: it hides with the application like the rest AND behind its own
+// toggle (prefs.showRing — View → 3D Sprite Atlas, its close box). They
+// belong to the application, so they hide as
 // a set while the desktop is focused and return with it. `appActive` is
 // transient session state MIRRORING the desktop's own activation truth
 // (desktop.activeWindow): shell/windows.js seeds it by READING that truth at
@@ -26,10 +29,11 @@
 
 import { createStore } from './store.js';
 
-/** The utility (windoid) windows, by shell id — permanent chrome (their
- *  geometry persists; their visibility is appActive's alone); document
- *  windows are workspace-managed. */
-export const WINDOW_IDS = ['tools', 'sprite', 'stage'];
+/** The utility (windoid) windows, by shell id — the three permanent ones
+ *  (visibility appActive's alone) and the toggleable 3D Sprite Atlas
+ *  (`ring`: appActive AND prefs.showRing); document windows are
+ *  workspace-managed. */
+export const WINDOW_IDS = ['tools', 'sprite', 'stage', 'ring'];
 
 /** The desktop pattern a desktop boots on — the kit's own default, the
  *  classic 50% dither (vintage-frames docs/PATTERNS.md). */

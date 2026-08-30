@@ -1,11 +1,20 @@
 // ---------------------------------------------------------------------------
 // Window plumbing for the desktop shell — two kinds of window, two regimes:
 //
-//   UTILITY WINDOIDS (Tools palette, Full Sprite View, 3D View): static
-//   markup in index.html, permanent chrome — no close box (closable is set
-//   false here) and no menu toggle; visibility = appActive alone (a desktop
-//   click hides the palettes, clicking back into a document returns them).
-//   They hide, never unmount — canvas identity survives.
+//   UTILITY WINDOIDS (Tools palette, Full Sprite View, 3D View, 3D Sprite
+//   Atlas): static markup in index.html. The first three are permanent
+//   chrome — no close box (closable is set false here) and no menu toggle;
+//   visibility = appActive alone (a desktop click hides the palettes,
+//   clicking back into a document returns them). The 3D Sprite Atlas is the
+//   one TOGGLEABLE windoid: it keeps the kit's close box, and its visibility
+//   is appActive AND prefs.showRing — View → 3D Sprite Atlas flips the
+//   flag, the close box (routed below) clears it, and a show brings it to
+//   the front of the windoid band (a palette you asked for comes up on top
+//   — and its close box is then the topmost windoid's, so the kit's raise
+//   re-insert never cancels the click). Its size is a derivation like the
+//   Sprite View's (fitRing: RING_HEIGHT tall, ringWidthFor(views) wide,
+//   re-fit live as the view count changes). They hide, never unmount —
+//   canvas identity survives.
 //
 //   DOCUMENT WINDOWS: one per open document, reconciled from the workspace
 //   slice (the syncDocIcons pattern lifted to windows): a context appearing
@@ -82,6 +91,8 @@
 
 import { snapSys, systemPxQuantum, VfWindow } from 'vintage-frames';
 import { shell, WINDOW_IDS } from '../state/shell.js';
+import { prefs } from '../state/prefs.js';
+import { ring } from '../state/ring.js';
 import { workspace, followActive } from '../state/workspace.js';
 import {
   cascadeFrom,
@@ -90,6 +101,8 @@ import {
   pinOf,
   pinTo,
   spriteHeightFor,
+  ringWidthFor,
+  RING_HEIGHT,
   SPRITE_WIDTH,
   TOP_RESERVE,
   WINDOW_FRAME,
@@ -166,13 +179,21 @@ export function initWindows(desktop, { hide = [] } = {}) {
     byId[id] = /** @type {VfWindow} */ (desktop.querySelector(`#win-${id}`));
   }
   // The smart arrangement, computed from the live raster (shell/layout.js):
-  // Tools top-left, the sprite/stage rail right. The Tools palette's
-  // content-hugging size stays authored in index.html and feeds the math.
+  // Tools top-left, the sprite/stage rail right, the 3D Sprite Atlas strip
+  // docked at the bottom — the doc box giving up the strip's band only
+  // while the strip is SHOWN. The Tools palette's content-hugging size
+  // stays authored in index.html and feeds the math.
+  const ringShown = () => prefs.get().showRing;
   const smartLayout = () =>
-    initialPlacement(desktop.width, desktop.height, {
-      width: byId.tools.width ?? 0,
-      height: byId.tools.height ?? 0,
-    });
+    initialPlacement(
+      desktop.width,
+      desktop.height,
+      {
+        width: byId.tools.width ?? 0,
+        height: byId.tools.height ?? 0,
+      },
+      { ringViews: ring.get().views, ringShown: ringShown() }
+    );
 
   // --- the Full Sprite View's fixed size ---------------------------------------
   // The windoid is a fixed-size picture frame — no grow box (not `resizable`
@@ -189,6 +210,17 @@ export function initWindows(desktop, { hide = [] } = {}) {
   const fitSprite = () => {
     byId.sprite.width = SPRITE_WIDTH;
     byId.sprite.height = spriteHeightFor(SPRITE_WIDTH, spriteRatio());
+  };
+  // --- the 3D Sprite Atlas's fixed size ------------------------------------------
+  // The same picture-frame rule turned sideways: RING_HEIGHT tall, one cell
+  // per view wide (ringWidthFor — floored at the controls strip). Never
+  // authored truth: applied at placement and re-derived as the view count
+  // changes. A width write on a non-resizable window is no "touch" for the
+  // pin cache (it compares position only), so the left edge holds through a
+  // view-count change and the strip grows rightward from where it sits.
+  const fitRing = () => {
+    byId.ring.width = ringWidthFor(ring.get().views);
+    byId.ring.height = RING_HEIGHT;
   };
   /** Per-window nine-slice pin across raster resizes: the unrounded pin
    *  (shell/layout.js) plus the geometry this path last applied — a
@@ -213,9 +245,10 @@ export function initWindows(desktop, { hide = [] } = {}) {
       byId[id].width = Math.max(byId[id].width ?? 0, STAGE_MIN_WIDTH);
       byId[id].height = Math.max(byId[id].height ?? 0, STAGE_MIN_HEIGHT);
     }
-    // The sprite windoid's size is never authored truth — it is always
-    // the fixed derivation.
+    // The sprite and ring windoids' sizes are never authored truth — they
+    // are always the fixed derivations.
     if (id === 'sprite') fitSprite();
+    if (id === 'ring') fitRing();
     clampWindow(desktop, byId[id]);
     pins.delete(byId[id]);
   };
@@ -251,10 +284,12 @@ export function initWindows(desktop, { hide = [] } = {}) {
     pins.delete(win);
   };
   for (const id of WINDOW_IDS) {
-    // Non-closeable by design: the windoids are permanent chrome, on screen
+    // Non-closeable by design: the permanent windoids are on screen
     // whenever the application is. `closable` defaults true and markup can't
-    // express the off state (a boolean attribute), so it's set here.
-    byId[id].closable = false;
+    // express the off state (a boolean attribute), so it's set here. The 3D
+    // Sprite Atlas is the exception — its close box IS its toggle's uncheck
+    // (onClose below), so the kit's default stands.
+    if (id !== 'ring') byId[id].closable = false;
   }
   placeUtility();
   // The grow box enforces only the kit's general 80×54 floor, so a drag could
@@ -286,17 +321,36 @@ export function initWindows(desktop, { hide = [] } = {}) {
     })
   );
 
+  // The view count changes the ring's width: re-fit, guarded on the
+  // computed width so a settings change that leaves it (elevation, scale)
+  // writes nothing (the sprite refit's idiom).
+  unsubs.push(
+    ring.subscribe(() => {
+      if ((byId.ring.width ?? 0) !== ringWidthFor(ring.get().views)) fitRing();
+    })
+  );
+
   const hiddenAtBoot = new Set(hide.filter((id) => id !== 'document'));
   const hideDocs = hide.includes('document');
 
   // --- utility visibility: appActive -> hidden ---------------------------------
   // A windoid belongs to the application, so it is on screen exactly while
-  // the app is active (?hide= keeps one out of frame for captures).
+  // the app is active (?hide= keeps one out of frame for captures); the 3D
+  // Sprite Atlas needs its own toggle on as well, and a show (the flag
+  // flipping it onto the screen) raises it to the front of the windoid
+  // band — see the header.
+  let ringWasShown = false;
   const syncUtility = () => {
     const { appActive } = shell.get();
-    for (const id of WINDOW_IDS) byId[id].hidden = !appActive || hiddenAtBoot.has(id);
+    for (const id of WINDOW_IDS) {
+      const shown = appActive && !hiddenAtBoot.has(id) && (id !== 'ring' || ringShown());
+      byId[id].hidden = !shown;
+    }
+    const ringNow = !byId.ring.hidden;
+    if (ringNow && !ringWasShown) desktop.bringToFront(byId.ring);
+    ringWasShown = ringNow;
   };
-  unsubs.push(shell.subscribe(syncUtility));
+  unsubs.push(shell.subscribe(syncUtility), prefs.subscribe(syncUtility));
   syncUtility();
 
   // --- document windows: the reconciler ----------------------------------------
@@ -424,9 +478,10 @@ export function initWindows(desktop, { hide = [] } = {}) {
 
   // --- close boxes ------------------------------------------------------------
   // A window's close box fires vf-close on the window itself (dialog closes
-  // have a non-window target and pass through). Only document windows carry
-  // one — the windoids are non-closeable — and it routes through the
-  // dirty-checking flow menus.js injects.
+  // have a non-window target and pass through). Document windows carry one
+  // — it routes through the dirty-checking flow menus.js injects — and so
+  // does the 3D Sprite Atlas windoid alone among the windoids: its close is
+  // the View menu's uncheck, one truth (prefs.showRing).
   /** A resizable window's size floor — the 3D View's own, the kit's for
    *  the rest — applied on the re-pin itself (shell/layout.js pinTo), so
    *  onStageResize never has a correction to make after this path (one
@@ -617,6 +672,10 @@ export function initWindows(desktop, { hide = [] } = {}) {
   const onClose = (e) => {
     const t = e.target;
     if (!(t instanceof VfWindow)) return;
+    if (t === byId.ring) {
+      prefs.setShowRing(false);
+      return;
+    }
     const key = keyOf(t);
     if (key != null) api.onDocumentClose?.(key);
   };
@@ -664,10 +723,14 @@ export function initWindows(desktop, { hide = [] } = {}) {
   const onZoom = (e) => {
     const win = e.target;
     if (!(win instanceof VfWindow) || keyOf(win) == null) return;
-    const z = zoomedBox(desktop.width, desktop.height, {
-      left: win.left ?? 0,
-      top: win.top ?? 0,
-    });
+    // A shown 3D Sprite Atlas strip is a boundary the zoom respects (the
+    // doc box leaves it the same room).
+    const z = zoomedBox(
+      desktop.width,
+      desktop.height,
+      { left: win.left ?? 0, top: win.top ?? 0 },
+      { ringShown: ringShown() }
+    );
     if (win.width === z.width && win.height === z.height) {
       const back = zoomMemory.get(win) ?? smartLayout().doc;
       zoomMemory.delete(win);

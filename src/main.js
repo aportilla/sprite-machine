@@ -14,11 +14,14 @@ import { SAMPLES } from './lib/sprite-data.js';
 import { PALETTE_168 } from './lib/constants.js';
 import { session } from './state/session.js';
 import { prefs } from './state/prefs.js';
+import { ring } from './state/ring.js';
 import { files } from './state/files.js';
 import { workspace } from './state/workspace.js';
 import { parseBootParams } from './boot/params.js';
 import { createStage } from './scene/stage.js';
 import { initRebuilder } from './scene/rebuilder.js';
+import { createRingRenderer } from './scene/ring-renderer.js';
+import { initRing } from './scene/ring.js';
 import { loadSample, seedDefaultDocs } from './loaders.js';
 import { initDropTarget } from './drop-target.js';
 import { initShortcuts } from './shortcuts.js';
@@ -42,6 +45,7 @@ import './components/sm-desktop-patterns.js'; // registers <sm-desktop-patterns>
 import './components/sm-options-bar.js'; // registers <sm-options-bar>
 import './components/sm-tools-panel.js'; // registers <sm-tools-panel>
 import './components/sm-atlas-view.js'; // registers <sm-atlas-view>
+import './components/sm-ring-view.js'; // registers <sm-ring-view>
 import './components/sm-status-line.js'; // registers <sm-status-line>
 import './components/sm-stage-controls.js'; // registers <sm-stage-controls>
 
@@ -58,6 +62,16 @@ const boot = parseBootParams(location.search, {
 if (boot.lowpoly != null) prefs.setLowpoly(boot.lowpoly);
 if (boot.rotate === false) prefs.setAutoRotate(false);
 if (boot.guides) prefs.setShowGuides(true); // the extent rules are off by default
+if (boot.ring) {
+  // ?ring=<views>[,<elevation>[,<offset>[,<scale>]]]: the 3D Sprite Atlas
+  // windoid shown (it boots hidden) with its settings seeded — the slice's
+  // own clamps apply.
+  prefs.setShowRing(true);
+  ring.setViews(boot.ring.views);
+  ring.setElevation(boot.ring.elevation);
+  ring.setOffset(boot.ring.offset);
+  ring.setScale(boot.ring.scale);
+}
 // The on-mount hook order, preserved: pencil size, then pick (so ?palette
 // reflects it and ?fill fills with it), then the dialog, then rect, then
 // fill, then select (the last tool seed wins the session's one tool).
@@ -139,7 +153,12 @@ const windows = initWindows(desktop, { hide: boot.hide });
 // render; and the Desktop Patterns control panel's owner (its menu item
 // routes through menus.js).
 const patterns = initPatterns(desktop, windows, { saved: dstate.desktopPattern() });
-const menus = initMenus(desktop, windows, { patterns });
+// The 3D Sprite Atlas: the follower (scene/ring.js) that makes its offscreen
+// renderer on the first render — wired here, ahead of the menus, because
+// File → Export Sprite Atlas… renders through it; the rebuilder below hands
+// it every mesh through the onMesh seam.
+const ringFollow = initRing(createRingRenderer);
+const menus = initMenus(desktop, windows, { patterns, ring: ringFollow });
 const icons = initIcons(desktop, {
   actions: menus.actions,
   savedPos: dstate.iconPos,
@@ -169,7 +188,11 @@ const stage = createStage(
   /** @type {HTMLCanvasElement} */ (document.getElementById('viewport')),
   { cam: boot.cam }
 );
-const rebuilder = initRebuilder(stage, { flat: boot.flat, diag: boot.diag });
+const rebuilder = initRebuilder(stage, {
+  flat: boot.flat,
+  diag: boot.diag,
+  onMesh: ringFollow.setSubject,
+});
 
 const disposeDrop = initDropTarget({
   // A drop opens a new document window; surface + activate it.
@@ -199,6 +222,7 @@ if (hot) {
   hot.dispose(() => {
     stage.dispose();
     rebuilder.dispose();
+    ringFollow.dispose();
     disposeShortcuts();
     disposeDrop();
     windows.dispose();

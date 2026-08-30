@@ -52,7 +52,14 @@
 // ---------------------------------------------------------------------------
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
 import { join } from 'node:path';
 // The desktop's pure resize arithmetic — dependency-free ESM, so the browser
 // resize section computes its exact expectations from the same function the
@@ -65,11 +72,25 @@ import {
   ICON_CELL,
   zoomedBox,
   centeredBox,
+  ringWidthFor,
+  RING_HEIGHT,
+  RING_MIN_WIDTH,
+  CASCADE_STEP,
+  CASCADE_SLOTS,
 } from '../src/shell/layout.js';
+// The 3D Sprite Atlas's geometry and the document format's chunk reader —
+// pure ESM too, the oracles for the atlas section's frame sizes and its
+// exported file.
+import { ringFrame, ringSheet } from '../src/lib/ring.js';
+import { readTextChunks } from '../src/lib/png-chunks.js';
 
 const APP_PORT = process.argv[2] || '5173';
 const DBG_PORT = +(process.env.DRIVE_DEBUG_PORT || 9333);
 const DEADLINE = +(process.env.DRIVE_DEADLINE || 240); // watchdog seconds
+// A directory to keep the files the run downloads (the atlas export) under
+// their suggested names — for an eye on the exported pixels; the run's own
+// copies die with its temp dir.
+const KEEP_DOWNLOADS = process.env.DRIVE_KEEP_DOWNLOADS || '';
 const CHROME =
   process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const ROOT = '/tmp/cr-cap'; // shared with capture.sh so its `clean` reaps us too
@@ -147,6 +168,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let ws;
 let nextId = 1;
 const pending = new Map();
+// Downloads the page starts (Browser.setDownloadBehavior with events on):
+// guid -> { name, state } — the atlas export section waits on a completed
+// one and reads the file back out of the run's temp dir.
+const downloads = new Map();
+// When the main frame last navigated: the readiness waits below hold until
+// the page has been quiet for a moment past its predicate (see them).
+let lastNavAt = 0;
 
 function send(method, params = {}) {
   const id = nextId++;
@@ -356,6 +384,23 @@ const PROBE = `(() => {${DEEP}
   for (const m of buildStats.matchAll(/(grid|voxels|tris) ([^·]+)/g)) {
     stats[m[1]] = m[2].trim();
   }
+  // The 3D Sprite Atlas's status line: "4 × 69 px" on the line, the full
+  // readout ("frame 69×69 px · sheet 276×69 px · 45° · from 0° · 1×") on its
+  // title tooltip — parsed back by the numbers' positions, never the words.
+  const ringStatus = (() => {
+    const el = __q('sm-status-line[kind="ring"]');
+    const lb = el && el.shadowRoot ? el.shadowRoot.querySelector('vf-label') : null;
+    const t = (lb && lb.getAttribute('title')) || '';
+    const nums = (t.match(/[0-9]+/g) || []).map(Number);
+    if (nums.length < 7) return null;
+    return {
+      frame: nums[0] + '×' + nums[1],
+      sheet: nums[2] + '×' + nums[3],
+      elevation: nums[4],
+      offset: nums[5],
+      scale: nums[6],
+    };
+  })();
   // The sprite windoid carries NO status line — its status slot is empty, so
   // the kit draws no bottom bar (.status.empty): null when the strip is
   // absent or empty, its text if one ever comes back.
@@ -426,6 +471,7 @@ const PROBE = `(() => {${DEEP}
     buildLine,
     buildStats,
     atlasStatus,
+    ringStatus,
     stats,
     voxels: +(stats.voxels || 0),
     docIcons: __qa('vf-icon').filter((i) => (i.dataset.key || '').startsWith('doc:'))
@@ -436,6 +482,9 @@ const PROBE = `(() => {${DEEP}
       sprite: !__q('#win-sprite').hidden,
       stage: !__q('#win-stage').hidden,
     },
+    // The toggleable windoid, apart from the four always-open windows above
+    // (it boots hidden — View → 3D Sprite Atlas shows it).
+    ringShown: !__q('#win-ring').hidden,
     // How many document windows are open (one per open document).
     docWindows: [...document.querySelectorAll('vf-window')].filter((w) =>
       w.id.startsWith('win-doc-')).length,
@@ -460,10 +509,14 @@ const PROBE = `(() => {${DEEP}
       arrange: !__q('vf-menu-item[value="arrange"]').disabled,
       toolPencil: !__q('vf-menu-item[value="tool-pencil"]').disabled,
       guides: !__q('vf-menu-item[value="guides"]').disabled,
+      ring: !__q('vf-menu-item[value="ring"]').disabled,
+      exportAtlas: !__q('vf-menu-item[value="export-atlas"]').disabled,
     },
     menuChecks: {
       // View → Guides: the extent rules' toggle, checkmark off prefs.
       guides: !!__q('vf-menu-item[value="guides"]').checked,
+      // View → 3D Sprite Atlas: the windoid's toggle, the same slice.
+      ring: !!__q('vf-menu-item[value="ring"]').checked,
       // The Tools menu's checked tool item, sans its 'tool-' prefix. Exactly
       // one must be checked (the sticky mode) — any other count reads '!N',
       // so a stuck double-check fails the tool checks instead of hiding.
@@ -550,6 +603,15 @@ const hex = ([r, g, b]) =>
 // a same-URL navigation could return on the old page and the next probe
 // land on the new one mid-boot (icons 0, no greet: a flake seen 3 runs in
 // 5 on the plain-reload greet check). A fresh document carries no stamp.
+// AND both waits hold for a QUIET window past the predicate: a same-URL
+// Page.navigate lands as TWO main-frame navigations in headless Chrome,
+// the second a beat after the first, and a predicate that came true on the
+// first page — stamped, probed — reads a mid-boot second page (the same
+// flake, seen again once the plain boot got faster). The wait ends only
+// when the predicate holds AND the main frame has not navigated for
+// NAV_QUIET ms, so the second navigation is always the one waited for.
+const NAV_QUIET = 700;
+const quiet = () => Date.now() - lastNavAt >= NAV_QUIET;
 const APP_READY = `(() => {${DEEP}
   if (window.__stamp) return false;
   const build = __q('sm-status-line[kind="build"]');
@@ -560,7 +622,7 @@ const APP_READY = `(() => {${DEEP}
 
 async function waitForApp() {
   for (let i = 0; i < 100; i++) {
-    if (await evaluate(APP_READY).catch(() => false)) break;
+    if (quiet() && (await evaluate(APP_READY).catch(() => false))) break;
     await sleep(200);
   }
   await sleep(400);
@@ -584,7 +646,7 @@ const GREET_READY = `(() => {${DEEP}
 })()`;
 async function waitForGreet() {
   for (let i = 0; i < 100; i++) {
-    if (await evaluate(GREET_READY).catch(() => false)) break;
+    if (quiet() && (await evaluate(GREET_READY).catch(() => false))) break;
     await sleep(200);
   }
   await sleep(400);
@@ -633,6 +695,7 @@ async function main() {
       return;
     }
     if (msg.method === 'Page.frameNavigated' && !msg.params.frame.parentId) {
+      lastNavAt = Date.now();
       console.log('  ..   [navigated]', msg.params.frame.url);
     }
     if (msg.method === 'Page.javascriptDialogOpening') {
@@ -640,6 +703,17 @@ async function main() {
       // freshPage once a stroke has landed; unanswered it wedges navigation
       // forever in headless. Accept and move on.
       send('Page.handleJavaScriptDialog', { accept: true });
+    }
+    if (msg.method === 'Browser.downloadWillBegin') {
+      downloads.set(msg.params.guid, {
+        guid: msg.params.guid,
+        name: msg.params.suggestedFilename,
+        state: 'begun',
+      });
+    }
+    if (msg.method === 'Browser.downloadProgress') {
+      const d = downloads.get(msg.params.guid);
+      if (d) d.state = msg.params.state;
     }
     if (msg.method === 'Runtime.exceptionThrown') {
       const d = msg.params.exceptionDetails;
@@ -1670,6 +1744,19 @@ async function main() {
     windoidMenuItems.length === 0,
     JSON.stringify(windoidMenuItems)
   );
+  // …the 3D Sprite Atlas being the one exception on both counts: it keeps
+  // the kit's close box, and View → 3D Sprite Atlas toggles it (the atlas
+  // section drives both).
+  const ringExceptions = await evaluate(
+    `(() => {${DEEP} return {
+        closeBox: !!__q('#win-ring').shadowRoot.querySelector('[part="close-box"]'),
+        item: !!__q('vf-menu-item[value="ring"]') }; })()`
+  );
+  check(
+    'the 3D Sprite Atlas windoid is the exception: a close box and a View item',
+    ringExceptions.closeBox === true && ringExceptions.item === true,
+    JSON.stringify(ringExceptions)
+  );
   s = await probe();
   check(
     'View → Arrange Windows is live with a document open',
@@ -2361,6 +2448,373 @@ async function main() {
   // desktop, the close box removes the window and the application returns;
   // the pattern rides desktop-state across a reload. The section ends back
   // on the dither, so the profile's later sections boot on the default.
+  // --- the 3D Sprite Atlas -------------------------------------------------------
+  // The toggleable windoid: View → 3D Sprite Atlas shows it (it boots
+  // hidden, the item unchecked) and its close box hides it; the placement
+  // docks it on the bottom margin at the document's left (shell/layout.js
+  // is the oracle: RING_HEIGHT tall, ringWidthFor(views) wide); its width
+  // follows the view count live; File → Export Sprite Atlas… edits the same
+  // settings behind the modal; the export is the strip's exact sheet with
+  // the ring's metadata chunk; it hides with the application and a resize
+  // keeps it docked. The frame sizes come from lib/ring.js over the Car's
+  // 40³ lattice. The desktop-click spot is the focus section's bareSpot.
+  section('3D sprite atlas');
+  await freshPage();
+  s = await probe();
+  check(
+    'the 3D Sprite Atlas boots hidden: the View item unchecked (and live), no windoid',
+    s.ringShown === false && s.menuChecks.ring === false && s.menuEnabled.ring === true,
+    JSON.stringify({
+      shown: s.ringShown,
+      checked: s.menuChecks.ring,
+      live: s.menuEnabled.ring,
+    })
+  );
+  const ringBox = () =>
+    evaluate(
+      `(() => {${DEEP} const w = __q('#win-ring'); const d = __q('#desktop'); const doc = __doc();
+        const f = __q('.ring-views');
+        return { left: w.left, top: w.top, w: w.width, h: w.height, dw: d.width, dh: d.height,
+          docLeft: doc.left, docTop: doc.top, docH: doc.height,
+          cells: __qa('.ring-cell').length, views: f ? +f.value : null }; })()`
+    );
+  const cellPixels = () =>
+    evaluate(
+      `(() => {${DEEP} return __qa('.ring-cell canvas').map((c) => {
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        let n = 0; let hash = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] === 255) n++;
+          hash = (hash * 31 + d[i] + d[i + 1] * 3 + d[i + 2] * 7 + d[i + 3] * 11) >>> 0;
+        }
+        return { w: c.width, h: c.height, opaque: n, hash }; }); })()`
+    );
+  const DIMS = { nx: TILE, ny: TILE, nz: TILE };
+  const F4 = ringFrame(DIMS, 45, 1).px;
+  await pickMenu('#menu-view', 'ring');
+  s = await probe();
+  let rb = await ringBox();
+  check(
+    'View → 3D Sprite Atlas shows the windoid and checks the item',
+    s.ringShown === true && s.menuChecks.ring === true,
+    JSON.stringify({ shown: s.ringShown, checked: s.menuChecks.ring })
+  );
+  check(
+    '…docked on the bottom margin, left-aligned with the document, at its fixed size, four cells',
+    rb.left === rb.docLeft &&
+      rb.top === rb.dh - 8 - RING_HEIGHT &&
+      rb.w === ringWidthFor(4) &&
+      rb.h === RING_HEIGHT &&
+      rb.cells === 4 &&
+      rb.views === 4,
+    JSON.stringify({
+      rb,
+      want: { top: rb.dh - 8 - RING_HEIGHT, w: ringWidthFor(4), h: RING_HEIGHT },
+    })
+  );
+  // The strip's content width IS the windoid's width floor (shell/layout.js
+  // RING_MIN_WIDTH restates it; a strip change must re-measure).
+  const stripWidth = await evaluate(
+    `(() => {${DEEP} const c = __q('sm-ring-view').shadowRoot.querySelector('.controls');
+      const r = c.getBoundingClientRect();
+      const right = Math.max(...[...c.children].map((e) => e.getBoundingClientRect().right));
+      return Math.ceil(right - r.left + parseFloat(getComputedStyle(c).paddingRight)); })()`
+  );
+  check(
+    "the strip's content width + the borders is the width floor (RING_MIN_WIDTH — re-measure on a strip change)",
+    stripWidth + 2 === RING_MIN_WIDTH,
+    `${stripWidth} + 2 vs ${RING_MIN_WIDTH}`
+  );
+  await sleep(400);
+  let cells = await cellPixels();
+  check(
+    "every cell holds a rendered frame of the model at the frame's native size, each facing its own",
+    cells.length === 4 &&
+      cells.every((c) => c.w === F4 && c.h === F4 && c.opaque > 0) &&
+      new Set(cells.map((c) => c.hash)).size === 4,
+    JSON.stringify({ F: F4, cells })
+  );
+  check(
+    "the status line's tooltip reads the frame and the sheet",
+    !!s.ringStatus &&
+      s.ringStatus.frame === `${F4}×${F4}` &&
+      s.ringStatus.sheet === `${ringSheet(4, F4).width}×${F4}` &&
+      s.ringStatus.elevation === 45 &&
+      s.ringStatus.offset === 0 &&
+      s.ringStatus.scale === 1,
+    JSON.stringify(s.ringStatus)
+  );
+  // The strip's views stepper ▲ (the properties section's recipe — autorepeat
+  // can land more than one step, so assert direction): the windoid widens to
+  // the right, its left edge holding.
+  const ringStepper = await evaluate(
+    `(() => {${DEEP} const st = __q('.ring-views')
+        .shadowRoot.querySelector('[part="stepper"]').getBoundingClientRect();
+      return { x: st.left + st.width / 2, y: st.top + st.height * 0.25 }; })()`
+  );
+  const ringLeft0 = rb.left;
+  await click(ringStepper.x, ringStepper.y);
+  await sleep(600);
+  rb = await ringBox();
+  check(
+    "the strip's views stepper adds cells and widens the windoid rightward (its left edge holds)",
+    rb.cells > 4 &&
+      rb.cells === rb.views &&
+      rb.w === ringWidthFor(rb.cells) &&
+      rb.left === ringLeft0 &&
+      rb.h === RING_HEIGHT,
+    JSON.stringify({ rb, ringLeft0 })
+  );
+  cells = await cellPixels();
+  check(
+    '…and every new cell renders',
+    cells.length === rb.cells && cells.every((c) => c.w === F4 && c.opaque > 0),
+    JSON.stringify(cells)
+  );
+  // File → Export Sprite Atlas…: the dialog reads the strip's settings, and
+  // edits them LIVE (the readouts are parsed by their numbers' positions).
+  const ringDialog = () =>
+    evaluate(
+      `(() => {${DEEP} const nums = (el) => (el.textContent.match(/[0-9]+/g) || []).map(Number);
+        return {
+          open: __q('#dlg-export-atlas').open,
+          views: __q('#atlas-views').value, elevation: __q('#atlas-elevation').value,
+          offset: __q('#atlas-offset').value, scale: __q('#atlas-scale').value,
+          step: nums(__q('#atlas-step')), dims: nums(__q('#atlas-dims')),
+          exportEnabled: !__q('#btn-export-atlas-ok').disabled }; })()`
+    );
+  await pickMenu('#menu-file', 'export-atlas');
+  let dlg = await ringDialog();
+  check(
+    'File → Export Sprite Atlas… opens seeded from the strip, Export enabled (a model exists)',
+    dlg.open === true &&
+      dlg.views === String(rb.cells) &&
+      dlg.elevation === '45' &&
+      dlg.offset === '0' &&
+      dlg.scale === '1' &&
+      dlg.exportEnabled === true,
+    JSON.stringify(dlg)
+  );
+  check(
+    '…its readouts derive the step, the frame and the sheet from the same numbers',
+    dlg.step[0] === 360 / rb.cells &&
+      JSON.stringify(dlg.dims) ===
+        JSON.stringify([F4, F4, ringSheet(rb.cells, F4).width, F4]),
+    JSON.stringify({ step: dlg.step, dims: dlg.dims, cells: rb.cells })
+  );
+  await evaluate(
+    `(() => {${DEEP} __q('#atlas-views').shadowRoot.querySelector('input').focus(); })()`
+  );
+  await keyPress('Backspace');
+  await keyPress('Backspace');
+  await typeText('8');
+  await keyPress('Enter');
+  await sleep(600);
+  rb = await ringBox();
+  dlg = await ringDialog();
+  check(
+    'a view count typed in the dialog moves the strip behind the modal at once (live, not pending)',
+    rb.cells === 8 &&
+      rb.w === ringWidthFor(8) &&
+      dlg.views === '8' &&
+      dlg.step[0] === 45 &&
+      dlg.dims[2] === ringSheet(8, F4).width,
+    JSON.stringify({ rb, dlg })
+  );
+  const atlasCancel = await centreOf('#btn-export-atlas-cancel');
+  await click(atlasCancel.x, atlasCancel.y);
+  await sleep(300);
+  rb = await ringBox();
+  dlg = await ringDialog();
+  check(
+    'Cancel closes the dialog and keeps the setting (nothing pending to revert)',
+    dlg.open === false && rb.cells === 8 && rb.views === 8,
+    JSON.stringify({ open: dlg.open, cells: rb.cells, views: rb.views })
+  );
+  // Export = the strip's sheet: the download lands in the run's temp dir
+  // (Browser.setDownloadBehavior names it by guid), and the file's IHDR and
+  // text chunks are read back — the sheet's size, the ring's metadata.
+  await send('Browser.setDownloadBehavior', {
+    behavior: 'allowAndName',
+    downloadPath: userDir,
+    eventsEnabled: true,
+  });
+  downloads.clear();
+  await pickMenu('#menu-file', 'export-atlas');
+  const atlasExport = await centreOf('#btn-export-atlas-ok');
+  await click(atlasExport.x, atlasExport.y);
+  let exported = null;
+  for (let i = 0; i < 50 && !exported; i++) {
+    await sleep(100);
+    exported = [...downloads.values()].find((d) => d.state === 'completed') || null;
+  }
+  dlg = await ringDialog();
+  check('Export closes the dialog', dlg.open === false);
+  check(
+    'the export download completes (Browser.setDownloadBehavior)',
+    !!exported,
+    JSON.stringify([...downloads.values()])
+  );
+  if (exported) {
+    const file = join(userDir, exported.guid);
+    const bytes = new Uint8Array(readFileSync(file));
+    const u32 = (o) =>
+      ((bytes[o] << 24) | (bytes[o + 1] << 16) | (bytes[o + 2] << 8) | bytes[o + 3]) >>>
+      0;
+    const ihdr = { w: u32(16), h: u32(20) };
+    const meta = readTextChunks(bytes);
+    let ringMeta = null;
+    try {
+      ringMeta = JSON.parse(meta['sprite-machine:ring'] || 'null');
+    } catch {}
+    check(
+      'the exported file is the sheet: views·F × F px, named «slug»-atlas.png',
+      ihdr.w === ringSheet(8, F4).width &&
+        ihdr.h === F4 &&
+        /-atlas\.png$/.test(exported.name),
+      JSON.stringify({ ihdr, want: ringSheet(8, F4), name: exported.name })
+    );
+    check(
+      '…carrying the sprite-machine:ring chunk (settings, frame, anchor, yaws) beside Title and Software',
+      !!ringMeta &&
+        ringMeta.views === 8 &&
+        ringMeta.elevation === 45 &&
+        ringMeta.frame === F4 &&
+        ringMeta.yaws.length === 8 &&
+        ringMeta.yaws[1] === 45 &&
+        typeof ringMeta.anchor.y === 'number' &&
+        typeof meta.Title === 'string' &&
+        typeof meta.Software === 'string',
+      JSON.stringify({ ringMeta, Title: meta.Title, Software: meta.Software })
+    );
+    if (KEEP_DOWNLOADS) {
+      mkdirSync(KEEP_DOWNLOADS, { recursive: true });
+      copyFileSync(file, join(KEEP_DOWNLOADS, exported.name));
+    }
+  }
+  // The close box — the kit's, kept on this one windoid — is the View
+  // item's uncheck; the item brings it back where it was, cells intact.
+  const ringClose = await evaluate(
+    `(() => {${DEEP} const r = __q('#win-ring').shadowRoot
+        .querySelector('[part="close-box"]').getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`
+  );
+  const ringPos = { left: rb.left, top: rb.top };
+  await click(ringClose.x, ringClose.y);
+  await sleep(300);
+  s = await probe();
+  check(
+    "the windoid's close box hides it and unchecks the View item",
+    s.ringShown === false && s.menuChecks.ring === false,
+    JSON.stringify({ shown: s.ringShown, checked: s.menuChecks.ring })
+  );
+  await pickMenu('#menu-view', 'ring');
+  s = await probe();
+  rb = await ringBox();
+  check(
+    'View → 3D Sprite Atlas brings it back where it was, eight cells',
+    s.ringShown === true &&
+      rb.cells === 8 &&
+      rb.left === ringPos.left &&
+      rb.top === ringPos.top &&
+      rb.w === ringWidthFor(8),
+    JSON.stringify({ rb, ringPos })
+  );
+  // It hides with the application like every windoid (the item stays
+  // checked — greyed, document-scoped) and returns with it.
+  const ringBare = await bareSpot();
+  check(
+    'found a bare patch of desktop beside the strip',
+    !!ringBare,
+    JSON.stringify(ringBare)
+  );
+  await click(ringBare.x, ringBare.y);
+  await sleep(300);
+  s = await probe();
+  check(
+    'a desktop click hides the atlas windoid with the application (its item checked, greyed)',
+    s.ringShown === false && s.menuChecks.ring === true && s.menuEnabled.ring === false,
+    JSON.stringify({
+      shown: s.ringShown,
+      checked: s.menuChecks.ring,
+      live: s.menuEnabled.ring,
+    })
+  );
+  const ringDocBar = await evaluate(
+    `(() => {${DEEP} const r = __doc().getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + 9 }; })()`
+  );
+  await click(ringDocBar.x, ringDocBar.y);
+  await sleep(300);
+  s = await probe();
+  check('…and clicking the document brings it back', s.ringShown === true);
+  // Arrange makes room: the doc box gives up the strip's band while it is
+  // shown — its bottom plus the cascade room lands a gap above the strip.
+  await pickMenu('#menu-view', 'arrange');
+  rb = await ringBox();
+  const room = (CASCADE_SLOTS - 1) * CASCADE_STEP;
+  check(
+    "View → Arrange Windows shortens the document to clear the strip (bottom + the cascade room = the strip's top − 8)",
+    rb.docTop + rb.docH + room === rb.top - 8 &&
+      rb.left === rb.docLeft &&
+      rb.top === rb.dh - 8 - RING_HEIGHT,
+    JSON.stringify({ rb, room })
+  );
+  // A browser resize keeps it docked: a fixed-size box whose left edge is a
+  // near strut and bottom edge a far strut lands where the placement puts
+  // it on every raster, and round-trips.
+  const ringMetrics = (width, height) =>
+    send('Emulation.setDeviceMetricsOverride', {
+      width,
+      height,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+  const docked = (r) =>
+    r.left === r.docLeft &&
+    r.top + r.h === r.dh - 8 &&
+    r.w === ringWidthFor(8) &&
+    r.h === RING_HEIGHT;
+  await ringMetrics(780, 640);
+  await sleep(400);
+  let rr = await ringBox();
+  check(
+    "a browser shrink keeps the strip docked: the document's left, the bottom margin, its size",
+    docked(rr),
+    JSON.stringify(rr)
+  );
+  await ringMetrics(1000, 850);
+  await sleep(400);
+  rr = await ringBox();
+  check(
+    '…and a grow back too (a bottom-docked fixed-size box round-trips)',
+    docked(rr),
+    JSON.stringify(rr)
+  );
+  await send('Emulation.clearDeviceMetricsOverride');
+  await sleep(300);
+  // The capture hook: ?ring=<views>,<elevation>,<offset>,<scale> boots the
+  // windoid shown with those settings.
+  await send('Page.navigate', { url: `${URL}&ring=6,30,45,2` });
+  await waitForApp();
+  await sleep(400);
+  s = await probe();
+  rb = await ringBox();
+  const F6 = ringFrame(DIMS, 30, 2).px;
+  check(
+    '?ring=6,30,45,2 boots the windoid shown: six views at 30°, from 45°, 2 px per voxel',
+    s.ringShown === true &&
+      s.menuChecks.ring === true &&
+      rb.cells === 6 &&
+      rb.w === ringWidthFor(6) &&
+      !!s.ringStatus &&
+      s.ringStatus.elevation === 30 &&
+      s.ringStatus.offset === 45 &&
+      s.ringStatus.scale === 2 &&
+      s.ringStatus.frame === `${F6}×${F6}`,
+    JSON.stringify({ shown: s.ringShown, rb, status: s.ringStatus, F6 })
+  );
+
   section('desktop patterns');
   await freshPage();
   const patternsProbe = () =>

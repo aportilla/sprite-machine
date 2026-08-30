@@ -49,7 +49,7 @@
 // is exact at every density. Unset, the cells stay plain white.
 // ---------------------------------------------------------------------------
 
-import { PatternFillController, vfPatternFill, parsePattern } from 'vintage-frames';
+import { PatternFillController, vfPatternFill } from 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { createRef, ref } from 'lit/directives/ref.js';
@@ -59,6 +59,7 @@ import { DEFAULT_ATLAS_LAYOUT } from '../lib/atlas.js';
 import { ATLAS_GRID } from '../shell/layout.js';
 import './sm-face-picker.js'; // registers <sm-face-picker>
 import { baseStyles } from './base-styles.js';
+import { parsePatternAttr } from './ui-bits.js';
 
 // The face-picker row order: mirror pairs, so flipping between a pair for
 // reference is one step.
@@ -170,7 +171,7 @@ export class SmAtlasView extends LitElement {
   #cellH = ATLAS_GRID.cell; // square until a live tile says otherwise
   /** `pattern`, resolved through the kit's grammar; null paints nothing. */
   #pattern = null;
-  #warnedPattern = false;
+  #patternWarn = { warned: false };
 
   constructor() {
     super();
@@ -196,14 +197,7 @@ export class SmAtlasView extends LitElement {
 
   willUpdate(changed) {
     if (!changed.has('pattern')) return;
-    this.#pattern = parsePattern(this.pattern);
-    if (this.#pattern === null && this.pattern?.trim() && !this.#warnedPattern) {
-      this.#warnedPattern = true; // the kit's posture: say it once, paint nothing
-      console.warn(
-        `sm-atlas-view: unknown pattern "${this.pattern}" — a vintage-frames ` +
-          'library name (docs/PATTERNS.md) or sixteen hex digits. Painting nothing.'
-      );
-    }
+    this.#pattern = parsePatternAttr('sm-atlas-view', this.pattern, this.#patternWarn);
   }
 
   connectedCallback() {

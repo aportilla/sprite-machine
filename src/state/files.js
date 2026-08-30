@@ -33,14 +33,21 @@ export const SOFTWARE = 'sprite-machine 1';
 // unconventional sheets; editor-authored docs never need it).
 const TRANSFORMS_KEY = 'sprite-machine:transforms';
 
-/** "Cargo Ship" -> "cargo-ship.png" (the export filename). */
-export const docFilename = (name) => {
+/** "Cargo Ship" -> "cargo-ship" (the filename slug both downloads share). */
+const slugOf = (name) => {
   const slug = (name || UNTITLED)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  return `${slug || UNTITLED}.png`;
+  return slug || UNTITLED;
 };
+
+/** "Cargo Ship" -> "cargo-ship.png" (File → Download's filename). */
+export const docFilename = (name) => `${slugOf(name)}.png`;
+
+/** "Cargo Ship" -> "cargo-ship-atlas.png" (File → Export Sprite Atlas…'s
+ *  filename: the same slug, `-atlas` before the extension). */
+export const ringFilename = (name) => `${slugOf(name)}-atlas.png`;
 
 /**
  * @param {{

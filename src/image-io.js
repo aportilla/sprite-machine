@@ -58,6 +58,20 @@ export async function bytesToImageData(bytes) {
   return bitmapToImageData(await createImageBitmap(new Blob([bytes])));
 }
 
+// A canvas's pixels as finished PNG bytes (the 3D Sprite Atlas export: the
+// rendered sheet canvas straight to a file, ready for chunk surgery).
+export function canvasToPngBytes(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        reject(new Error('canvas toBlob returned null'));
+        return;
+      }
+      resolve(new Uint8Array(await blob.arrayBuffer()));
+    }, 'image/png');
+  });
+}
+
 export const downloadPngBytes = (bytes, filename) =>
   downloadBlob(new Blob([bytes], { type: 'image/png' }), filename);
 
