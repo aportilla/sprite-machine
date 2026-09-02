@@ -18,6 +18,7 @@
 
 import { brushBounds } from '../lib/brush.js';
 import { roundedRectRows } from '../lib/rect.js';
+import { antsRuns } from '../lib/ants.js';
 
 /** `scale` is whole system px per texel; `sysW`/`sysH` the layer in system px.
  *  @typedef {{tileW:number, tileH:number, scale:number, sysW:number, sysH:number}} OverlayView */
@@ -136,35 +137,36 @@ export function drawRectPreview(g, v, bounds, radius, ink, erasing) {
 }
 
 // The selection tool's marching ants — MacPaint's 1-bit border: black and
-// white dashes alternating along a 1-system-px line on the selection's
-// outermost texel rows/columns (the haloBox alignment: half a px in, so the
-// stroke covers exactly the edge pixels), readable on any art. The dash walks
-// the perimeter continuously — strokeRect is one path, with the classic seam
-// at the start corner — as `phase` grows; a bounds hanging off the tile clips
-// at the canvas edge. ANTS_DASH is the on/off run in system px (an 8px
-// period, so a phase of 0..7 covers one cycle).
-export const ANTS_DASH = 4;
+// white dashes alternating along a 1-system-px ring on the selection's
+// outermost texel rows/columns, readable on any art, walking the perimeter
+// continuously as `phase` grows (the classic seam at the start corner). The
+// ring is FILLED, never stroked: `antsRuns` (src/lib/ants.js, pure) emits the
+// clockwise walk as same-ink runs on whole system px, and a rect on whole
+// coordinates cannot be anti-aliased — a dashed stroke sits its dash
+// boundaries on half pixels and grays every dash's end px. A bounds hanging
+// off the tile clips at the canvas edge.
 
 /** @param {CanvasRenderingContext2D} g @param {OverlayView} v
  *  @param {{x0:number,y0:number,x1:number,y1:number}|null} bounds  the CURRENT
  *    (translated) selection; null clears the layer
- *  @param {number} phase  0..7, advanced by the canvas's ticker */
+ *  @param {number} phase  0..ANTS_PERIOD−1, advanced by the canvas's ticker */
 export function drawMarchingAnts(g, v, bounds, phase) {
   g.clearRect(0, 0, v.sysW, v.sysH);
   if (!bounds) return;
   const s = v.scale;
-  const x = bounds.x0 * s + 0.5;
-  const y = bounds.y0 * s + 0.5;
-  const w = (bounds.x1 - bounds.x0 + 1) * s - 1;
-  const h = (bounds.y1 - bounds.y0 + 1) * s - 1;
-  g.lineWidth = 1;
-  g.setLineDash([]);
-  g.strokeStyle = '#fff';
-  g.strokeRect(x, y, w, h); // the white half of the 1-bit ants
-  g.setLineDash([ANTS_DASH, ANTS_DASH]);
-  g.lineDashOffset = -phase; // a growing offset marches the dashes
-  g.strokeStyle = '#000';
-  g.strokeRect(x, y, w, h); // the black half over it
-  g.setLineDash([]);
-  g.lineDashOffset = 0;
+  const runs = antsRuns(
+    {
+      x: bounds.x0 * s,
+      y: bounds.y0 * s,
+      w: (bounds.x1 - bounds.x0 + 1) * s,
+      h: (bounds.y1 - bounds.y0 + 1) * s,
+    },
+    phase
+  );
+  for (const black of [false, true]) {
+    g.fillStyle = black ? '#000' : '#fff';
+    g.beginPath();
+    for (const r of runs) if (r.black === black) g.rect(r.x, r.y, r.w, r.h);
+    g.fill();
+  }
 }

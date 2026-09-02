@@ -410,6 +410,18 @@ ants drawn there would be wiped by the next move. Give them their own layer:
   path), with the classic seam at the start corner. Bounds off the tile clip
   at the canvas edge.
 
+  > **As built (2026-09-02):** the stroked painter above grayed every dash
+  > end — a 1px stroke sits on half-pixel centers and the dash pattern is
+  > measured along the path from its start, so each dash boundary lands
+  > mid-pixel and anti-aliases to 50% gray over the white underlay (the
+  > corners likewise, at the miter). Replaced by whole-pixel FILLS: the ring
+  > is a clockwise walk emitted as same-ink runs by the pure `antsRuns` in
+  > `src/lib/ants.js` (`ANTS_DASH` / `ANTS_PERIOD` live there now;
+  > `test/ants.test.mjs` pins the walk, the cycle, the march and the seam),
+  > and `drawMarchingAnts` fills them in two batched paths — 1-bit by
+  > construction, in every browser. `drive.mjs` reads the layer back
+  > mid-march and checks every painted px is pure black or pure white.
+
 - **Ticker:** `#antsPhase` (0–7), `#antsTimer` (`setInterval`, `ANTS_MS = 100`
   — tune by eye; MacPaint's were brisk). `#startAnts()`: no-op if running, or
   if `prefersReducedMotion()` (import from `'vintage-frames'`) or the

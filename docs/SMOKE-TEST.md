@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 257 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 258 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -87,9 +87,11 @@ browser, `http://localhost:5173/`.
       treatment; eyedropper shows the 1-cell outline.
 - [ ] **Marching ants**: S, drag a box — a 1px black/white dashed border
       marches around it (briskly, continuously, one seam at the start
-      corner); it stays up while you hover, moves with the float, and clips
-      at the canvas edge when the float is pushed off. Shrink the document
-      window: the ants re-fit with the texel size.
+      corner); zoom the browser in — every px of it is pure black or pure
+      white, no gray at a dash end or a corner, at any phase; it stays up
+      while you hover, moves with the float, and clips at the canvas edge
+      when the float is pushed off. Shrink the document window: the ants
+      re-fit with the texel size.
 - [ ] **The cursor flips**: the kit's crosshair outside the selection, the
       arrow inside it and throughout a move; the crosshair returns on drop
       (a frame late with the pointer still — the kit re-hit-tests on the

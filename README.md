@@ -226,7 +226,13 @@ template — see [UI layer: Lit](#ui-layer-lit).
   out on the canvas and it takes the **marching ants** — a 1-system-px
   black/white dashed border on the selection's outermost texels, walking the
   perimeter briskly (its own topmost canvas layer, so no hover painter can
-  wipe it; it stands still under the OS's reduce-motion preference) — with
+  wipe it; it stands still under the OS's reduce-motion preference), and
+  **1-bit by construction**: the ring is a clockwise pixel walk emitted as
+  black and white **runs on whole system px** (`src/lib/ants.js`, pure,
+  Node-tested — four on, four off, a phase step marching them one px
+  forward, the classic seam at the start corner) that the painter fills,
+  never a dashed stroke — a stroke's dashes are measured along a path that
+  starts on a half pixel, so every dash end anti-aliases to gray — with
   the kit's **arrow** over the selection and the crosshair outside; **drag
   inside** the box and the selected pixels **move** with the pointer,
   leaving transparency behind (the sprite's "white" IS transparency — there

@@ -586,6 +586,24 @@ const layerIsEmpty = (sel) =>
     return true;
   })()`);
 
+// The inks on a layer: how many of its painted px are pure black, pure white
+// (both at full alpha), or anything else — a 1-bit layer's "other" is zero.
+const layerInks = (sel) =>
+  evaluate(`(() => {${DEEP}
+    const c = __qd('${sel}');
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    const n = { black: 0, white: 0, other: 0 };
+    for (let i = 0; i < d.length; i += 4) {
+      const a = d[i + 3];
+      if (a === 0) continue;
+      const v = d[i] + d[i + 1] + d[i + 2];
+      if (a === 255 && v === 0) n.black++;
+      else if (a === 255 && v === 765) n.white++;
+      else n.other++;
+    }
+    return n;
+  })()`);
+
 // The viewport rect of an element, and its centre — how a click finds a control.
 const centreOf = (sel) =>
   evaluate(`(() => {${DEEP}
@@ -1312,6 +1330,16 @@ async function main() {
   await sleep(150);
   s = await probe();
   check('a marquee drag puts the ants up', await antsUp());
+  // The ants are 1-bit BY CONSTRUCTION (src/lib/ants.js fills whole-px runs;
+  // the stroked dashes they replaced grayed every dash end): every painted px
+  // of the layer is pure black or pure white at full alpha, both inks present
+  // — read mid-march, whatever phase the ticker is at.
+  const antsInks = await layerInks('.editor-canvas-select');
+  check(
+    'the ants are 1-bit: every painted px pure black or pure white',
+    antsInks.other === 0 && antsInks.black > 0 && antsInks.white > 0,
+    JSON.stringify(antsInks)
+  );
   // The readout carries the marquee's numbers in order: left 30, top 4, then
   // 5 × 5 (a value-shape check, not copy).
   check(

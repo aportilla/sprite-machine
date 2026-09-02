@@ -93,6 +93,7 @@ import {
   translateBounds,
   constrainAxis,
 } from '../lib/select.js';
+import { ANTS_PERIOD } from '../lib/ants.js';
 import {
   drawGuides,
   drawCursorOutline,
@@ -108,7 +109,8 @@ import { baseStyles } from './base-styles.js';
 const MIRROR_ALPHA = 0.22;
 
 // The marching ants' step: one system px of dash travel per tick. Brisk, the
-// way MacPaint's were; an 8px dash period makes eight ticks one cycle.
+// way MacPaint's were; the ANTS_PERIOD-px dash cycle makes eight ticks one
+// cycle.
 const ANTS_MS = 100;
 
 // The bare-letter tool keys (shortcuts.js's map) — mid-gesture, any of them
@@ -1348,7 +1350,7 @@ export class SmDrawCanvas extends LitElement {
     if (this.#antsTimer != null) return;
     if (this.#antsStatic || prefersReducedMotion()) return;
     this.#antsTimer = setInterval(() => {
-      this.#antsPhase = (this.#antsPhase + 1) & 7;
+      this.#antsPhase = (this.#antsPhase + 1) % ANTS_PERIOD;
       this.#drawAnts();
     }, ANTS_MS);
   }
