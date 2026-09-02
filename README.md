@@ -179,13 +179,9 @@ template — see [UI layer: Lit](#ui-layer-lit).
   open-source **Adobe Spectrum _workflow_** set (`rect-select` / `draw` /
   `rectangle` / `color-fill` / `erase` / `sampler`) in a frameless `vf-grid` lattice run
   flush to the windoid's edge — no inner padding, the cells sharing the
-  window frame's own black line. A cell **picks on the press**, not the
-  click — System 7's tool palettes act on mouse-down (the cell inverts the
-  instant the button goes down and the tool is live before it comes back
-  up), and the windoid rule the face picker states below demands it: the
-  desktop raises a pressed windoid by re-inserting its node, which cancels
-  that press's click, so a click-driven cell would swallow the first pick
-  after any other windoid was raised over the palette. The **options
+  window frame's own black line. A cell picks on the **click** — a windoid
+  control like any other, no press-driven bridge (see [Windows](#windows):
+  the kit lets a click land in the windoid that same press is raising). The **options
   strip** (a kit-drawn band under the menu bar — a `vf-container` in the
   kit's own grammar, `pattern="white" rule="bottom"`: white paper over one
   row of ink, the menu bar's anatomy, no drop shadow — so its rule and every
@@ -336,12 +332,9 @@ template — see [UI layer: Lit](#ui-layer-lit).
   selection — the picker, like every utility windoid, shows the active
   one's), laid out as mirror pairs
   (`left`/`right`, `front`/`back`, `top`/`bottom`)
-  so you can flip between a pair for reference. A pick fires on the
-  **press**, not the click — the System 7 palette feel, and a hard
-  requirement in a windoid: raising one re-inserts its node at the end of
-  the press (the desktop keeps DOM order in step with z-order), which
-  cancels that press's click, so a click-driven pick would swallow the
-  first pick after any other windoid was raised. Each icon is a **21×26 pixel-art**
+  so you can flip between a pair for reference. A pick is an ordinary
+  **click** on the radio or its icon (see [Windows](#windows) for why no
+  windoid control needs a press-driven bridge). Each icon is a **21×26 pixel-art**
   isometric cube (`src/assets/faces/`, wired up inside `sm-face-picker.js` — the one
   component that renders and styles them): the three
   quads the view shows (`front`, `left`, `top`) fill **solid red**, and their hidden
@@ -666,7 +659,15 @@ Patterns control panel (document tier, not a document — see
   take the active state (clicking the 3D View can't deactivate the window
   you're drawing in), show the kit's slim 11px dot bar (no title text, no
   close box — the heading still names the window for assistive tech), and
-  hide as a set whenever the application deactivates, returning with it. The
+  hide as a set whenever the application deactivates, returning with it.
+  Every control in a windoid acts on the ordinary **click** — no
+  press-driven bridges anywhere: raising a windoid re-inserts its node
+  (the desktop keeps DOM order in step with z-order), and the kit does
+  that in a task **after** the press's click has landed (vintage-frames
+  0.5.4 — Chrome drops a click whose mousedown node left the tree, and the
+  re-insert used to run at pointerup, which cost a control in a windoid
+  behind another windoid its first click; the app's pointerdown picks that
+  once dodged it are gone). The
   3D windoid stays `resizable` — its canvas re-fits via its own
   ResizeObserver, so the grow box works for free. The **Full Sprite
   View** (`sm-atlas-view`) hosts the **face picker** strip across its top
@@ -682,8 +683,8 @@ Patterns control panel (document tier, not a document — see
   dropping the attribute gives plain white cells back). The grid
   follows the ACTIVE document's **live channel**, so it tracks strokes at
   rAF rate (the second live subscriber ever, after the rebuilder), and it
-  is a **picking surface**: pressing a tile selects that face — on the
-  press, the windoid rule — with the picker radios and the edit canvas
+  is a **picking surface**: clicking a tile selects that face, with the
+  picker radios and the edit canvas
   following, and the selected tile **stroked in the face art's red**
   (`--sm-select`, `#ff4f4f`, an inset ring over the tile's edge); the
   windoid carries **no status strip** (its status slot stays empty, so
@@ -699,12 +700,7 @@ Patterns control panel (document tier, not a document — see
   hosts a **controls strip** across its top — the two render toggles as
   checkboxes, **rotate** (auto-spin) and **smooth** (the low-poly wedge
   pass), writing the prefs slice live (`sm-stage-controls`; these lived in
-  Settings… before), each flipping on the **press** — the windoid rule
-  again: a click-driven toggle needed a second click whenever another
-  windoid had been raised over the 3D View, the raise cancelling that
-  press's click; the click that does follow a press is cancelled by the
-  strip so the kit can't flip the box back, while Space on a focused box
-  still toggles through the kit — over the THREE canvas in a **kit pattern well**
+  Settings… before) — over the THREE canvas in a **kit pattern well**
   (`#stage-well`, a `vf-container pattern="gray-25"` taking the column's
   slack): the renderer clears **transparent** (`alpha: true`, no scene
   background), so the model and its shadow composite over the 1-bit
@@ -867,12 +863,10 @@ fill is the kit's own: the well and each cell are `vf-container
 pattern="…"` boxes at declared sizes (222×160 and 16×16), so the rasters
 are exact and 1-bit at every density — the well framed by the kit's
 `rule` on all four edges. The semantics are the Colors dialog's: opening
-seeds the **pending** pattern from the desktop's current one; **pressing**
+seeds the **pending** pattern from the desktop's current one; **clicking**
 a cell selects it — the well previews it and a ring marks the cell (1px
 black over the edge, 1px white inside it, so it reads on `black` and
-`white` alike) on the pointer **down**, the windoid press rule, since a
-press that raises this window from behind a document window re-inserts
-its node and cancels the click — while the desktop stays as it was; only
+`white` alike) — while the desktop stays as it was; only
 **Set Desktop Pattern** commits, through the shell slice's one setter
 (`shell.desktopPattern` → `shell/patterns.js` writes it onto
 `vf-desktop`'s `pattern`, the kit's whole-screen raster repainting under
@@ -1373,7 +1367,7 @@ src/
                        bounds from the active document) / the Tools palette body / the
                        Sprite View body (the face-picker strip over the clickable 3×2
                        face-tile vf-grid, both -> workspace.setFace on the ACTIVE key —
-                       tile picks fire on the press, the selected tile ringed in
+                       the selected tile ringed in
                        --sm-select red — the cells live canvases following the active
                        document) / the 3D Sprite Atlas body (the two-row settings strip ->
                        the ring slice, over one patterned cell per view painted from the
@@ -1389,7 +1383,7 @@ src/
                        light DOM alone — a shadow-rooted dialog would open above the cursor) /
                        the Desktop Patterns panel's body (the kit-patterned preview well over
                        the 13×3 grid of every kit pattern over Set Desktop Pattern: a pending
-                       selection picked on the press, committed through shell.setDesktopPattern)
+                       selection picked by click, committed through shell.setDesktopPattern)
     ui-bits.js         shared caption + warning-row template helpers (+ the warn row's styles,
                        a css export its consumers compose into their own `static styles`) and
                        the `pattern` attribute's parse the two patterned-cell views share

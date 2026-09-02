@@ -14,10 +14,12 @@ never composited, so nothing is left to the browser's clear timing; (4) the
 lights are scene children re-posed per yaw at fixed offsets in the camera's
 frame rather than camera children — the same effect, without depending on
 the camera's matrix update; (5) a show **brings the windoid to the front**
-of the windoid band (`syncUtility`): the kit's raise re-inserts a
-non-topmost windoid at gesture end, which cancels that press's click — the
-standing windoid-press kit ask — so the close box only works first-click
-on the topmost windoid, and a freshly shown palette should be that anyway;
+of the windoid band (`syncUtility`) — a freshly shown palette comes up on
+top (this began as a bridge: the kit's raise re-inserted a non-topmost
+windoid at gesture end, cancelling that press's click, so the close box
+only worked first-click on the topmost windoid; vintage-frames 0.5.4 moved
+the re-insert into a task after the click, and the front-on-show stays as
+behavior);
 (6) `ringMetaChunks` is a standalone export of `state/ring.js`, not an
 instance method; (7) the probe keeps `windows` as the four always-open
 windows and reports the toggleable one as `ringShown` (the boot section's

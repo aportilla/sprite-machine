@@ -9,9 +9,8 @@
 //   one TOGGLEABLE windoid: it keeps the kit's close box, and its visibility
 //   is appActive AND prefs.showRing — View → 3D Sprite Atlas flips the
 //   flag, the close box (routed below) clears it, and a show brings it to
-//   the front of the windoid band (a palette you asked for comes up on top
-//   — and its close box is then the topmost windoid's, so the kit's raise
-//   re-insert never cancels the click). Its size is a derivation like the
+//   the front of the windoid band (a palette you asked for comes up on
+//   top). Its size is a derivation like the
 //   Sprite View's (fitRing: RING_HEIGHT tall, ringWidthFor(views) wide,
 //   re-fit live as the view count changes). They hide, never unmount —
 //   canvas identity survives.
@@ -405,13 +404,11 @@ export function initWindows(desktop, { hide = [] } = {}) {
     desktop.append(win); // upgrades + slots in; the kit activates the newcomer
     clampWindow(desktop, win);
     byKey.set(ctx.key, { win, editor });
-    // Settle the light-DOM order NOW (no pointer gesture is in flight at a
-    // programmatic open): a document window appended after the static
-    // windoids leaves DOM order ≠ z-order, and the kit's deferred sync would
-    // otherwise run at the END of the user's next press — re-inserting the
-    // windoid nodes mid-gesture, which cancels the click being made (a
-    // palette press would swallow). bringToFront also makes the newcomer the
-    // active window through the kit's one funnel.
+    // Settle the light-DOM order: a document window appended after the
+    // static windoids leaves DOM order ≠ z-order, and bringToFront asks the
+    // kit to sync it (a task, once no pointer is down) rather than leaving
+    // it to the user's next gesture. bringToFront also makes the newcomer
+    // the active window through the kit's one funnel.
     desktop.bringToFront(win);
   }
 

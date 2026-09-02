@@ -6,10 +6,11 @@
 // 3×2 vf-grid holding one face tile per cell, in the sheet's own
 // arrangement (DEFAULT_ATLAS_LAYOUT), each cell a live canvas of that
 // face's slice drawn nearest-neighbor. The grid is a PICKING SURFACE too:
-// pressing a tile selects that face — on the POINTERDOWN, the same windoid
-// press rule as the picker radios (the desktop's raise re-insert cancels a
-// press's click) — and the selected tile is stroked with a red ring
-// (--sm-select, the face-picker art's own #ff4f4f) laid over its edge.
+// clicking a tile selects that face — an ordinary click, like the picker
+// radios (sm-tool-strip's header: no windoid control needs a press-driven
+// bridge since the kit's 0.5.4 re-insert lands after the click) — and the
+// selected tile is stroked with a red ring (--sm-select, the face-picker
+// art's own #ff4f4f) laid over its edge.
 //
 // The windoid is FIXED-size — no grow box: shell/windows.js pins its width
 // to the atlas grid block (SPRITE_WIDTH in shell/layout.js — cols ×
@@ -266,7 +267,6 @@ export class SmAtlasView extends LitElement {
                 title=${f}
                 aria-label=${`${f} face`}
                 aria-pressed=${f === face ? 'true' : 'false'}
-                @pointerdown=${(e) => this.#onCellPress(e, f)}
                 @click=${() => this.#pick(f)}
               >
                 <canvas ${ref(this.#cellCanvas.get(f))}></canvas>
@@ -286,16 +286,8 @@ export class SmAtlasView extends LitElement {
     this.#pick(e.detail.face);
   };
 
-  // A tile pick fires on the PRESS, not the click — the same rule as the
-  // picker radios above (see sm-face-picker: the desktop's raise re-insert
-  // cancels a windoid press's click). The button's @click stays as the
-  // keyboard path (Enter/Space) and is a no-op right after a press — every
-  // path guards on the face actually changing.
-  #onCellPress(e, f) {
-    if (e.button !== 0) return;
-    this.#pick(f);
-  }
-
+  // Guards on the face actually changing, so a click on the selected tile
+  // is a no-op.
   #pick(face) {
     const active = workspace.active();
     if (active && face !== active.face) workspace.setFace(active.key, face);

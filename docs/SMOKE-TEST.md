@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 257 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 255 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -266,8 +266,8 @@ browser, `http://localhost:5173/`.
       as the desktop's own); the 13×3 grid shows all 38 kit patterns at
       two repeats each, the last well empty, and the current one ringed
       (1px black outside, 1px white inside — visible on `black` and on
-      `white` alike). Press a cell: the ring moves and the well previews
-      on the mouse DOWN, the desktop unchanged; Set Desktop Pattern
+      `white` alike). Click a cell: the ring moves and the well previews,
+      the desktop unchanged; Set Desktop Pattern
       repaints the desktop under every window and icon. Close without
       Set after picking another cell —
       the desktop keeps what was set, and the next open seeds from it.
@@ -287,11 +287,10 @@ browser, `http://localhost:5173/`.
 - [ ] **3D View controls strip**: the rotate / smooth checkboxes across the
       window's top toggle live — the model stops spinning / re-meshes
       immediately (Settings… in the menu stays disabled, a parked
-      placeholder). They flip on the press, and ONCE per click: click the
-      Tools palette (or any other windoid) first, then a checkbox — it must
-      flip on that first click, never need a second; with the 3D View
-      already in front, a click still flips it exactly once; Space on a
-      focused box toggles it too.
+      placeholder). One click, always: click the Tools palette (or any
+      other windoid) first, then a checkbox — it flips on that first click
+      (the 3D View comes forward under it), never needs a second; Space on
+      a focused box toggles it too.
 - [ ] **The 3D Sprite Atlas, by eye**: with the Car open, View → 3D Sprite
       Atlas — a windoid lands under the document window, left-aligned with
       it, on the bottom margin: a two-row strip (`views` / `elev` over

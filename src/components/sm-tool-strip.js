@@ -6,16 +6,17 @@
 // sibling sticky modes — the eraser, eyedropper and selection select like any
 // other tool. The selection leads, as MacPaint's palette did.
 //
-// A cell picks on the PRESS, not the click — System 7's tool palettes act on
-// mouse-down (the cell inverts the instant the button goes down, and the
-// tool is live before it comes back up), and the windoid rule demands it:
-// the desktop raises a pressed windoid by re-inserting its node at the end
-// of the press, which cancels that press's click, so a click-driven pick
-// would swallow the first pick whenever another windoid had been raised
-// over the palette. The button's @click stays as the keyboard path
-// (Enter/Space) and is a no-op right after a press — every path guards on
-// the tool actually changing. The same rule as sm-face-picker / the atlas
-// tiles in sm-atlas-view / the 3D View's checkboxes in sm-stage-controls.
+// A cell picks on the CLICK — a windoid control like any other. The desktop
+// raises a pressed windoid by re-inserting its node (DOM order tracks
+// z-order), and vintage-frames 0.5.4 does that in a task AFTER the press's
+// click has landed: Chrome drops a click whose mousedown node left the tree
+// before the click was dispatched, and the kit once moved the node at
+// pointerup — so the first click in a windoid behind another windoid was
+// swallowed, and every windoid control here carried a press-driven bridge
+// (a pointerdown pick). Those are retired with 0.5.4 — here, in
+// sm-face-picker, sm-atlas-view, sm-stage-controls and sm-desktop-patterns
+// alike. The pick guards on the tool actually changing, so a click on the
+// current cell is a no-op.
 //
 // Shadow DOM; `:host { display: contents }`, so the strip sits in the rail
 // directly.
@@ -93,7 +94,6 @@ export class SmToolStrip extends LitElement {
         title=${title}
         aria-label=${name}
         aria-pressed=${active ? 'true' : 'false'}
-        @pointerdown=${(e) => this.#onCellPress(e, tool)}
         @click=${() => this.#pickTool(tool)}
       >
         ${glyph}
@@ -155,16 +155,7 @@ export class SmToolStrip extends LitElement {
     `;
   }
 
-  // The press path (see the header): the primary button only — a right
-  // button is no pick, and the kit's windoid drag never starts from a cell.
-  #onCellPress(e, tool) {
-    if (e.button !== 0) return;
-    this.#pickTool(tool);
-  }
-
-  // Idempotent, so the click that follows a press (when the desktop doesn't
-  // cancel it — the palette already frontmost) is a no-op rather than a
-  // second dispatch; the keyboard's click is the one that lands here live.
+  // Idempotent: a click on the current cell dispatches nothing.
   #pickTool(tool) {
     if (tool === this.tool) return;
     this.dispatchEvent(

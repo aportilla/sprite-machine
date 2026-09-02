@@ -16,12 +16,12 @@
 // untouched), and only Set Desktop Pattern commits, through the shell
 // slice's one setter (shell/patterns.js writes it onto the desktop and
 // desktop-state.js persists it). Closing the window discards a selection
-// never set. A cell picks on the PRESS — the app's windoid rule: the
-// desktop raises a pressed background window by re-inserting its node at
-// gesture end, which cancels that press's click, and this panel sits in
-// the document tier where a press on it from behind a document window (or
-// from the Finder) is exactly such a raise; the button's @click stays as
-// the keyboard path (Enter/Space), a no-op right after a press.
+// never set. A cell picks on the CLICK: the desktop raises a pressed
+// background window by re-inserting its node, and vintage-frames 0.5.4
+// does that in a task after the press's click has landed, so a click on
+// this panel from behind a document window — exactly such a raise — acts
+// like any other (the press-driven bridge is retired, with the windoids';
+// see sm-tool-strip's header).
 //
 // Every fill is the kit's own: the well and each cell are `vf-container
 // pattern="…"` boxes at DECLARED sizes, so the rasters are exact — 1-bit
@@ -124,7 +124,6 @@ export class SmDesktopPatterns extends LitElement {
                 title=${name}
                 aria-label=${`${name} pattern`}
                 aria-pressed=${name === pending ? 'true' : 'false'}
-                @pointerdown=${(e) => this.#onCellPress(e, name)}
                 @click=${() => this.#pick(name)}
               >
                 <vf-container
@@ -142,12 +141,6 @@ export class SmDesktopPatterns extends LitElement {
         </vf-button>
       </vf-stack>
     `;
-  }
-
-  // Primary button only — a right-press is no pick, the atlas view's rule.
-  #onCellPress(e, name) {
-    if (e.button !== 0) return;
-    this.#pick(name);
   }
 
   #pick(name) {

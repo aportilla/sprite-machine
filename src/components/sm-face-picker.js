@@ -143,7 +143,6 @@ export class SmFacePicker extends LitElement {
                 gap="0"
                 place="center"
                 title=${f}
-                @pointerdown=${(e) => this.#onCellPress(e, f)}
                 @click=${(e) => this.#onCellClick(e, f)}
               >
                 ${this.#icon(f)}
@@ -161,21 +160,10 @@ export class SmFacePicker extends LitElement {
     if (f && f !== this.selected) this.#emit(f);
   };
 
-  // A pick fires on the PRESS, not the click — the System 7 palette feel
-  // (tool palettes act on mouse-down), and a hard requirement now that this
-  // picker lives in a windoid: raising a windoid makes the desktop re-insert
-  // its node at the end of the press, which cancels that press's click — a
-  // click-driven pick would swallow the first pick after any other windoid
-  // was raised. The click/vf-change handlers stay as the keyboard path and
-  // are no-ops after this (every path guards on `f !== this.selected`).
-  #onCellPress(e, f) {
-    if (e.button !== 0) return;
-    if (f !== this.selected) this.#emit(f);
-  }
-
-  // The cube icon is a click target too (and the keyboard/assistive path
-  // still lands real clicks); the radio's own click routes through the
-  // group's vf-change, so skip it here to avoid a double switch.
+  // The cube icon is a click target too; the radio's own click routes
+  // through the group's vf-change, so skip it here to avoid a double
+  // switch. A plain click, no press-driven bridge — see sm-tool-strip's
+  // header for the windoid raise and the kit's task-deferred re-insert.
   #onCellClick(e, f) {
     if (/** @type {Element} */ (e.target).closest?.('vf-radio')) return;
     if (f !== this.selected) this.#emit(f);

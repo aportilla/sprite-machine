@@ -2121,8 +2121,8 @@ async function main() {
   await raise('#win-sprite');
   // The raise re-inserts the windoid's node at the end of the band (the
   // kit's own z-order discipline — its contract, not pinned here); that it
-  // happened is the precondition the tool-cell press below folds in, since
-  // that press is only the swallowed-click case with the palette BEHIND.
+  // happened is the precondition the tool-cell click below folds in, since
+  // that click only proves anything with the palette BEHIND.
   const spriteRaised =
     spriteMoved &&
     (await evaluate(
@@ -2153,18 +2153,15 @@ async function main() {
     Math.abs(fill.cw - fill.bw) < 1 && Math.abs(fill.ch - fill.bh) < 1,
     JSON.stringify(fill)
   );
-  // The atlas grid is a picking surface too: pressing a face tile selects
-  // that face — on the PRESS, like the picker radios above it (the raise
-  // re-insert swallows a windoid click) — and the selection ring strokes
-  // exactly the picked tile.
+  // The atlas grid is a picking surface too: clicking a face tile selects
+  // that face, and the selection ring strokes exactly the picked tile.
   s = await probe();
   const gridTarget = s.face === 'back' ? 'front' : 'back';
   const gridCell = await centreOf(`.atlas-cell[data-face="${gridTarget}"]`);
-  await mouse('mousePressed', gridCell.x, gridCell.y);
-  await mouse('mouseReleased', gridCell.x, gridCell.y);
+  await click(gridCell.x, gridCell.y);
   await sleep(200);
   s = await probe();
-  check('pressing an atlas grid tile selects that face', s.face === gridTarget, s.face);
+  check('clicking an atlas grid tile selects that face', s.face === gridTarget, s.face);
   check(
     'the picker radios follow the atlas pick',
     s.checkedRadio === gridTarget,
@@ -2184,29 +2181,22 @@ async function main() {
     ringOn === gridTarget,
     ringOn
   );
-  // The Tools palette's cells pick on the PRESS too — System 7's palettes
-  // act on mouse-down, and the same windoid rule demands it. The sprite
-  // windoid was just raised over the palette, so this press is exactly the
-  // swallowed case: it raises the palette (its node re-inserted at the end
-  // of the press, the click cancelled). Probed BETWEEN the press and the
-  // release, so the switch is provably the press's; again after the
-  // release, so any click that does survive is provably a no-op (no second
-  // dispatch, nothing toggling back); and the DOM order after is folded in,
-  // so the run proves it exercised the raise and not a palette already
-  // frontmost — without pinning the raise itself (the kit's).
+  // A windoid control acts on the ordinary CLICK — no press-driven bridge
+  // anywhere in the app since vintage-frames 0.5.4 syncs the light-DOM
+  // order in a task AFTER a press's click has landed (the kit used to
+  // re-insert a raised window's node at pointerup, between the release and
+  // its click, and Chrome drops a click whose mousedown node left the
+  // tree — so the first click in a windoid behind another windoid was
+  // swallowed). The sprite windoid was just raised over the palette, so
+  // this ONE click is that case: it raises the palette, and the pick must
+  // land anyway. The DOM order after is folded in (the sync lands within
+  // the sleep), so the run proves it exercised the raise and not a palette
+  // already frontmost — without pinning the raise itself (the kit's).
   s = await probe();
-  const pressTool = s.drawTool === 'fill' ? 'pencil' : 'fill';
-  const toolCell = await centreOf(`.editor-tool[aria-label="${pressTool}"]`);
-  await mouse('mousePressed', toolCell.x, toolCell.y);
-  await sleep(100);
-  s = await probe();
-  check(
-    'pressing a tool cell selects that tool on the press, the palette not frontmost',
-    spriteRaised && s.drawTool === pressTool && s.menuChecks.tool === pressTool,
-    JSON.stringify({ spriteRaised, strip: s.drawTool, menu: s.menuChecks.tool })
-  );
-  await mouse('mouseReleased', toolCell.x, toolCell.y, { buttons: 0 });
-  await sleep(100);
+  const clickTool = s.drawTool === 'fill' ? 'pencil' : 'fill';
+  const toolCell = await centreOf(`.editor-tool[aria-label="${clickTool}"]`);
+  await click(toolCell.x, toolCell.y);
+  await sleep(200);
   s = await probe();
   const toolsRaised = await evaluate(
     `(() => {${DEEP}
@@ -2215,38 +2205,35 @@ async function main() {
     })()`
   );
   check(
-    '…and the release leaves it selected (the press having raised the palette — the swallowed-click case)',
-    toolsRaised === true && s.drawTool === pressTool,
-    JSON.stringify({ toolsRaised, tool: s.drawTool })
+    'one click on a tool cell selects that tool, the palette not frontmost (the click survives the raise)',
+    spriteRaised &&
+      toolsRaised === true &&
+      s.drawTool === clickTool &&
+      s.menuChecks.tool === clickTool,
+    JSON.stringify({
+      spriteRaised,
+      toolsRaised,
+      strip: s.drawTool,
+      menu: s.menuChecks.tool,
+    })
   );
-  // The 3D View's checkboxes flip on the PRESS too (sm-stage-controls): a
-  // checkbox acts on the release in System 7, but a click-driven toggle here
-  // needed a SECOND click whenever another windoid had been raised over the
-  // 3D View — the swallowed-click case, and after boot the common one (the
-  // Tools palette boots topmost). The palette was just raised, so the 3D
-  // View is behind it: this press is exactly that case. Probed between the
-  // press and the release (the flip is provably the press's) and after it
-  // (the raise having cancelled the click, nothing flips back); the model's
-  // tri count is the app-level witness that the pref reached the pipeline
-  // (smooth is the wedge pass over the car's slopes). Then, with the 3D
-  // View frontmost, a whole click — the one the desktop lets live — flips it
-  // exactly once (the strip cancels that click's activation, so the kit
-  // can't toggle it back), and Space on the focused box toggles it through
-  // the kit's own keyboard path, never cancelled. Four flips: the pref ends
-  // where it began.
+  // The 3D View's checkboxes (sm-stage-controls) are the kit's own
+  // click-driven toggles, and the bug this pins was theirs: a checkbox in a
+  // windoid needed a SECOND click whenever another windoid had been raised
+  // over the 3D View — after boot the common case (the Tools palette boots
+  // topmost). The palette was just raised, so the 3D View is behind it:
+  // this ONE click is exactly that case, and it must flip the box — the
+  // model's tri count the app-level witness that the pref reached the
+  // pipeline (smooth is the wedge pass over the car's slopes), the DOM
+  // order after folded in (the raise happened; the click survived it).
+  // Then a second click, the 3D View frontmost, flips it back — once — and
+  // Space on the focused box toggles it through the keyboard path. The
+  // pref ends where it began.
   s = await probe();
   const smoothBefore = s.stageToggles.smooth;
   const trisBefore = s.stats.tris;
   const smoothBox = await centreOf('#stage-smooth');
-  await mouse('mousePressed', smoothBox.x, smoothBox.y);
-  await sleep(100);
-  s = await probe();
-  check(
-    'pressing a 3D View checkbox flips it on the press, the 3D View not frontmost',
-    s.stageToggles.smooth === !smoothBefore,
-    JSON.stringify({ before: smoothBefore, pressed: s.stageToggles.smooth })
-  );
-  await mouse('mouseReleased', smoothBox.x, smoothBox.y, { buttons: 0 });
+  await click(smoothBox.x, smoothBox.y);
   await sleep(400);
   s = await probe();
   const stageRaised = await evaluate(
@@ -2256,12 +2243,13 @@ async function main() {
     })()`
   );
   check(
-    '…and the release leaves it flipped, the model re-meshed (the press having raised the 3D View)',
+    'one click on a 3D View checkbox flips it, the 3D View not frontmost (re-meshed, the windoid raised)',
     stageRaised === true &&
       s.stageToggles.smooth === !smoothBefore &&
       s.stats.tris !== trisBefore,
     JSON.stringify({
       stageRaised,
+      before: smoothBefore,
       smooth: s.stageToggles.smooth,
       tris: [trisBefore, s.stats.tris],
     })
@@ -2270,7 +2258,7 @@ async function main() {
   await sleep(400);
   s = await probe();
   check(
-    'a click on the frontmost 3D View flips it once — back — never twice',
+    'a second click, the 3D View frontmost, flips it back — once, never twice',
     s.stageToggles.smooth === smoothBefore && s.stats.tris === trisBefore,
     JSON.stringify({ smooth: s.stageToggles.smooth, tris: [trisBefore, s.stats.tris] })
   );
@@ -2278,7 +2266,7 @@ async function main() {
   await sleep(400);
   s = await probe();
   check(
-    "Space on the focused checkbox toggles it (the keyboard path stays the kit's)",
+    'Space on the focused checkbox toggles it (the keyboard path)',
     s.stageToggles.smooth === !smoothBefore && s.stats.tris !== trisBefore,
     JSON.stringify({ smooth: s.stageToggles.smooth, tris: [trisBefore, s.stats.tris] })
   );
@@ -2561,7 +2549,7 @@ async function main() {
   // per document (the System 7 cascade).
   // --- desktop: the Desktop Patterns control panel ------------------------------
   // Sprite Machine → Desktop Patterns opens a document-tier window — the
-  // Finder's: the application deactivates while it's front. A cell press
+  // Finder's: the application deactivates while it's front. A cell click
   // previews (the well + the ring), Set Desktop Pattern commits onto the
   // desktop, the close box removes the window and the application returns;
   // the pattern rides desktop-state across a reload. The section ends back
@@ -3012,26 +3000,23 @@ async function main() {
       JSON.stringify(pp.ringed) === '["gray-50"]',
     JSON.stringify({ well: pp.well, cells: pp.cells, ringed: pp.ringed })
   );
-  // A cell picks on the PRESS (the windoid rule): probe between the press
-  // and the release. The desktop is untouched until Set.
+  // A cell picks on the click. The desktop is untouched until Set.
   const cellCentre = (name) =>
     evaluate(`(() => {${DEEP}
       const r = __q('.cell[title="${name}"]').getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     })()`);
   const bricks = await cellCentre('bricks');
-  await mouse('mousePressed', bricks.x, bricks.y);
+  await click(bricks.x, bricks.y);
   await sleep(100);
   pp = await patternsProbe();
   check(
-    'pressing a cell previews it in the well and rings it — on the press, the desktop untouched',
+    'clicking a cell previews it in the well and rings it — the desktop untouched',
     pp.well === 'bricks' &&
       JSON.stringify(pp.ringed) === '["bricks"]' &&
       pp.desktop === 'gray-50',
     JSON.stringify({ well: pp.well, ringed: pp.ringed, desktop: pp.desktop })
   );
-  await mouse('mouseReleased', bricks.x, bricks.y, { buttons: 0 });
-  await sleep(100);
   const setBtn = await centreOf('.set');
   await click(setBtn.x, setBtn.y);
   await sleep(400);
