@@ -699,7 +699,12 @@ Patterns control panel (document tier, not a document — see
   hosts a **controls strip** across its top — the two render toggles as
   checkboxes, **rotate** (auto-spin) and **smooth** (the low-poly wedge
   pass), writing the prefs slice live (`sm-stage-controls`; these lived in
-  Settings… before) — over the THREE canvas in a **kit pattern well**
+  Settings… before), each flipping on the **press** — the windoid rule
+  again: a click-driven toggle needed a second click whenever another
+  windoid had been raised over the 3D View, the raise cancelling that
+  press's click; the click that does follow a press is cancelled by the
+  strip so the kit can't flip the box back, while Space on a focused box
+  still toggles through the kit — over the THREE canvas in a **kit pattern well**
   (`#stage-well`, a `vf-container pattern="gray-25"` taking the column's
   slack): the renderer clears **transparent** (`alpha: true`, no scene
   background), so the model and its shadow composite over the 1-bit

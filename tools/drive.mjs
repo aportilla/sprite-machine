@@ -201,6 +201,7 @@ const NAMED_KEYS = {
   Shift: { key: 'Shift', code: 'ShiftLeft', vk: 16, text: '' },
   Enter: { key: 'Enter', code: 'Enter', vk: 13, text: '\r' },
   Backspace: { key: 'Backspace', code: 'Backspace', vk: 8, text: '' },
+  Space: { key: ' ', code: 'Space', vk: 32, text: ' ' },
 };
 
 // A key descriptor: named keys from the table, or any single printable char.
@@ -485,6 +486,12 @@ const PROBE = `(() => {${DEEP}
     // The toggleable windoid, apart from the four always-open windows above
     // (it boots hidden — View → 3D Sprite Atlas shows it).
     ringShown: !__q('#win-ring').hidden,
+    // The 3D View's two render toggles, read as the strip's own checked
+    // bindings (live() off prefs — the app's statement of the slice).
+    stageToggles: {
+      rotate: !!__q('#stage-rotate')?.checked,
+      smooth: !!__q('#stage-smooth')?.checked,
+    },
     // How many document windows are open (one per open document).
     docWindows: [...document.querySelectorAll('vf-window')].filter((w) =>
       w.id.startsWith('win-doc-')).length,
@@ -2212,6 +2219,71 @@ async function main() {
     toolsRaised === true && s.drawTool === pressTool,
     JSON.stringify({ toolsRaised, tool: s.drawTool })
   );
+  // The 3D View's checkboxes flip on the PRESS too (sm-stage-controls): a
+  // checkbox acts on the release in System 7, but a click-driven toggle here
+  // needed a SECOND click whenever another windoid had been raised over the
+  // 3D View — the swallowed-click case, and after boot the common one (the
+  // Tools palette boots topmost). The palette was just raised, so the 3D
+  // View is behind it: this press is exactly that case. Probed between the
+  // press and the release (the flip is provably the press's) and after it
+  // (the raise having cancelled the click, nothing flips back); the model's
+  // tri count is the app-level witness that the pref reached the pipeline
+  // (smooth is the wedge pass over the car's slopes). Then, with the 3D
+  // View frontmost, a whole click — the one the desktop lets live — flips it
+  // exactly once (the strip cancels that click's activation, so the kit
+  // can't toggle it back), and Space on the focused box toggles it through
+  // the kit's own keyboard path, never cancelled. Four flips: the pref ends
+  // where it began.
+  s = await probe();
+  const smoothBefore = s.stageToggles.smooth;
+  const trisBefore = s.stats.tris;
+  const smoothBox = await centreOf('#stage-smooth');
+  await mouse('mousePressed', smoothBox.x, smoothBox.y);
+  await sleep(100);
+  s = await probe();
+  check(
+    'pressing a 3D View checkbox flips it on the press, the 3D View not frontmost',
+    s.stageToggles.smooth === !smoothBefore,
+    JSON.stringify({ before: smoothBefore, pressed: s.stageToggles.smooth })
+  );
+  await mouse('mouseReleased', smoothBox.x, smoothBox.y, { buttons: 0 });
+  await sleep(400);
+  s = await probe();
+  const stageRaised = await evaluate(
+    `(() => {${DEEP}
+      const ids = [...document.querySelectorAll('vf-window')].map((w) => w.id);
+      return ids.indexOf('win-stage') > ids.indexOf('win-tools');
+    })()`
+  );
+  check(
+    '…and the release leaves it flipped, the model re-meshed (the press having raised the 3D View)',
+    stageRaised === true &&
+      s.stageToggles.smooth === !smoothBefore &&
+      s.stats.tris !== trisBefore,
+    JSON.stringify({
+      stageRaised,
+      smooth: s.stageToggles.smooth,
+      tris: [trisBefore, s.stats.tris],
+    })
+  );
+  await click(smoothBox.x, smoothBox.y);
+  await sleep(400);
+  s = await probe();
+  check(
+    'a click on the frontmost 3D View flips it once — back — never twice',
+    s.stageToggles.smooth === smoothBefore && s.stats.tris === trisBefore,
+    JSON.stringify({ smooth: s.stageToggles.smooth, tris: [trisBefore, s.stats.tris] })
+  );
+  await keyPress('Space');
+  await sleep(400);
+  s = await probe();
+  check(
+    "Space on the focused checkbox toggles it (the keyboard path stays the kit's)",
+    s.stageToggles.smooth === !smoothBefore && s.stats.tris !== trisBefore,
+    JSON.stringify({ smooth: s.stageToggles.smooth, tris: [trisBefore, s.stats.tris] })
+  );
+  await keyPress('Space');
+  await sleep(400);
   // The document window was dragged +40/+24 above, which tucks its grow box
   // under the stage windoid (the utility tier floats over the document
   // tier). Pull it left first so the grow press lands on the box, not the

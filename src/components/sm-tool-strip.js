@@ -15,7 +15,7 @@
 // over the palette. The button's @click stays as the keyboard path
 // (Enter/Space) and is a no-op right after a press — every path guards on
 // the tool actually changing. The same rule as sm-face-picker / the atlas
-// tiles in sm-atlas-view.
+// tiles in sm-atlas-view / the 3D View's checkboxes in sm-stage-controls.
 //
 // Shadow DOM; `:host { display: contents }`, so the strip sits in the rail
 // directly.
