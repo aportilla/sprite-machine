@@ -2192,10 +2192,24 @@ async function main() {
   // land anyway. The DOM order after is folded in (the sync lands within
   // the sleep), so the run proves it exercised the raise and not a palette
   // already frontmost — without pinning the raise itself (the kit's).
+  // The Tools palette's cells are the one exception, by design: a cell
+  // picks on the PRESS — System 7's palettes act on mouse-down, the feel
+  // the user wants — so this is probed BETWEEN the press and the release
+  // (the switch is provably the press's), and again after the release,
+  // when the click lands (the kit's 0.5.4 re-insert runs after it) and
+  // must be a no-op — nothing toggling, the tool still selected.
   s = await probe();
-  const clickTool = s.drawTool === 'fill' ? 'pencil' : 'fill';
-  const toolCell = await centreOf(`.editor-tool[aria-label="${clickTool}"]`);
-  await click(toolCell.x, toolCell.y);
+  const pressTool = s.drawTool === 'fill' ? 'pencil' : 'fill';
+  const toolCell = await centreOf(`.editor-tool[aria-label="${pressTool}"]`);
+  await mouse('mousePressed', toolCell.x, toolCell.y);
+  await sleep(100);
+  s = await probe();
+  check(
+    'a tool cell picks on the PRESS (the palette feel), the palette not frontmost',
+    spriteRaised && s.drawTool === pressTool && s.menuChecks.tool === pressTool,
+    JSON.stringify({ spriteRaised, strip: s.drawTool, menu: s.menuChecks.tool })
+  );
+  await mouse('mouseReleased', toolCell.x, toolCell.y, { buttons: 0 });
   await sleep(200);
   s = await probe();
   const toolsRaised = await evaluate(
@@ -2205,17 +2219,9 @@ async function main() {
     })()`
   );
   check(
-    'one click on a tool cell selects that tool, the palette not frontmost (the click survives the raise)',
-    spriteRaised &&
-      toolsRaised === true &&
-      s.drawTool === clickTool &&
-      s.menuChecks.tool === clickTool,
-    JSON.stringify({
-      spriteRaised,
-      toolsRaised,
-      strip: s.drawTool,
-      menu: s.menuChecks.tool,
-    })
+    '…and the release (its click a no-op) leaves it selected, the palette raised',
+    toolsRaised === true && s.drawTool === pressTool,
+    JSON.stringify({ toolsRaised, tool: s.drawTool })
   );
   // The 3D View's checkboxes (sm-stage-controls) are the kit's own
   // click-driven toggles, and the bug this pins was theirs: a checkbox in a

@@ -179,9 +179,11 @@ template — see [UI layer: Lit](#ui-layer-lit).
   open-source **Adobe Spectrum _workflow_** set (`rect-select` / `draw` /
   `rectangle` / `color-fill` / `erase` / `sampler`) in a frameless `vf-grid` lattice run
   flush to the windoid's edge — no inner padding, the cells sharing the
-  window frame's own black line. A cell picks on the **click** — a windoid
-  control like any other, no press-driven bridge (see [Windows](#windows):
-  the kit lets a click land in the windoid that same press is raising). The **options
+  window frame's own black line. A cell **picks on the press**, not the
+  click — System 7's tool palettes act on mouse-down: the cell inverts the
+  instant the button goes down and the tool is live before it comes back
+  up. That is feel, not a bridge (see [Windows](#windows)): the click that
+  follows lands, and is a no-op on the tool already current. The **options
   strip** (a kit-drawn band under the menu bar — a `vf-container` in the
   kit's own grammar, `pattern="white" rule="bottom"`: white paper over one
   row of ink, the menu bar's anatomy, no drop shadow — so its rule and every
@@ -660,14 +662,15 @@ Patterns control panel (document tier, not a document — see
   you're drawing in), show the kit's slim 11px dot bar (no title text, no
   close box — the heading still names the window for assistive tech), and
   hide as a set whenever the application deactivates, returning with it.
-  Every control in a windoid acts on the ordinary **click** — no
-  press-driven bridges anywhere: raising a windoid re-inserts its node
+  A control in a windoid acts on the ordinary **click** unless mouse-down
+  is the authentic feel (the Tools palette's cells, and only those) — no
+  press-driven _bridges_ anywhere: raising a windoid re-inserts its node
   (the desktop keeps DOM order in step with z-order), and the kit does
   that in a task **after** the press's click has landed (vintage-frames
   0.5.4 — Chrome drops a click whose mousedown node left the tree, and the
   re-insert used to run at pointerup, which cost a control in a windoid
-  behind another windoid its first click; the app's pointerdown picks that
-  once dodged it are gone). The
+  behind another windoid its first click; the pointerdown picks the app
+  once carried to dodge it are gone). The
   3D windoid stays `resizable` — its canvas re-fits via its own
   ResizeObserver, so the grow box works for free. The **Full Sprite
   View** (`sm-atlas-view`) hosts the **face picker** strip across its top
