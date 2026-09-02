@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 260 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 253 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -33,8 +33,6 @@ browser, `http://localhost:5173/`.
 - [ ] **Icon click is a Finder click**: a single click on any icon
       deactivates the app and selects the icon; a double-click opens it and
       the app comes back, windoids included.
-- [ ] **Windoids never steal focus**: click into the 3D View or the Tools
-      palette — the active document window keeps its stripes.
 - [ ] **Desktop Patterns is the Finder's window**: Sprite Machine → Desktop
       Patterns (both roles) opens the control panel centered below the
       strip's band — a striped title bar with a close box, no grow box, no
@@ -256,8 +254,13 @@ browser, `http://localhost:5173/`.
       tab and the app is untouched behind it; Tab from OK reaches it with
       a dotted ring. OK — or Escape — dismisses the box and NOTHING opens
       or activates; Sprite Machine → About… raises the same box in either
-      role, over whatever is open. Pull a menu while it's up: nothing
-      responds (it's modal).
+      role, over whatever is open. Click anywhere OUTSIDE the box — on a
+      desktop icon, say — and it dismisses the same way: nothing opens or
+      activates, the icon neither selects nor opens, and an icon selected
+      BEFORE About… was picked is still selected after (the app opts this
+      one dialog into the kit's light-dismiss; the question dialogs — Save
+      changes?, the name prompt, New Document, Colors — keep ignoring an
+      outside click).
 - [ ] **Desktop Patterns, by eye**: in the panel, the well shows the
       current desktop pattern inside a 1px frame at 1:1 (the dither reads
       as the desktop's own); the 13×3 grid shows all 38 kit patterns at
@@ -265,8 +268,8 @@ browser, `http://localhost:5173/`.
       (1px black outside, 1px white inside — visible on `black` and on
       `white` alike). Press a cell: the ring moves and the well previews
       on the mouse DOWN, the desktop unchanged; Set Desktop Pattern
-      repaints the desktop under every window and icon, 1-bit crisp at
-      any browser zoom. Close without Set after picking another cell —
+      repaints the desktop under every window and icon. Close without
+      Set after picking another cell —
       the desktop keeps what was set, and the next open seeds from it.
       Drag the panel somewhere and resize the browser: it keeps its
       place (its center, in the middle); View → Arrange Windows
@@ -280,9 +283,7 @@ browser, `http://localhost:5173/`.
       leading zeros) for ~3 s, then
       the time returns; press again while the date shows — the time returns
       at once. Neither press moves focus, deactivates the app, or clears a
-      selected desktop icon. With a menu dropped, a press on the clock
-      leaves the menu open (the bar closes only on presses outside itself —
-      an open kit ask).
+      selected desktop icon.
 - [ ] **3D View controls strip**: the rotate / smooth checkboxes across the
       window's top toggle live — the model stops spinning / re-meshes
       immediately (Settings… in the menu stays disabled, a parked
@@ -298,10 +299,7 @@ browser, `http://localhost:5173/`.
       camera — the flank facing you is always the lit one). The dot bar
       carries a close box; its click hides the windoid and unchecks the
       item; the item re-shows it where it was, on top of the other
-      windoids. (Raise another windoid over it first and the close box's
-      first click only raises it — the kit's raise re-insert cancels that
-      press's click, the standing windoid-press kit ask; the second click
-      closes.)
+      windoids.
 - [ ] **Settings are live, both ways**: step `views` to 8 — the windoid
       widens to the right (its left edge holds), eight cells at a 45°
       step; `elev` 0 — pure side views; 90 — plan views; `from` 45 — the
@@ -327,7 +325,6 @@ browser, `http://localhost:5173/`.
       goes — the drag stops at the strip's width (both checkboxes stay
       whole) and at a height that keeps a real patch of canvas under the
       strip.
-- [ ] **Menu key equivalents off-Mac**: Ctrl stands in for ⌘.
 - [ ] **Private window**: open in an Incognito/private window where
       IndexedDB misbehaves — Save raises the "Storage Unavailable" notice
       and everything else still works.

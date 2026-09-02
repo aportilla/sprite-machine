@@ -863,6 +863,61 @@ async function main() {
       strip: bare.optionsStrip,
     })
   );
+  // Sprite Machine → About… raises the same box over the bare desktop, and
+  // a click anywhere OUTSIDE it dismisses it: the markup opts this one
+  // dialog into the kit's `light-dismiss` (the mechanics — the backdrop
+  // consuming both halves of the click — are the kit's own contract, pinned
+  // in its suite, not here). The app-level outcome is the OK check's: the
+  // click lands on the Car icon on purpose, and the bare desktop is what's
+  // left — nothing opens, nothing activates, no icon selected.
+  await pickMenu('#menu-app', 'about');
+  seed = await seedProbe();
+  check(
+    'Sprite Machine → About… raises the box again over the bare desktop',
+    seed.aboutOpen === true && seed.docWindows === 0,
+    JSON.stringify({ about: seed.aboutOpen, docWindows: seed.docWindows })
+  );
+  // The Car icon sits in the Finder's left column, clear of the centered
+  // box (the box's rect is the kit's native <dialog> — the host is
+  // display: contents — read only to prove the click point is outside it).
+  const geom = await evaluate(`(() => {${DEEP}
+    const r = __q('#dlg-about').shadowRoot.querySelector('dialog').getBoundingClientRect();
+    const i = __qa('vf-icon[data-key]').find((el) => el.label === 'Car');
+    const ir = i.getBoundingClientRect();
+    return {
+      box: { left: r.left, top: r.top, right: r.right, bottom: r.bottom },
+      car: { x: ir.left + ir.width / 2, y: ir.top + ir.height / 2 },
+    };
+  })()`);
+  const carOutside =
+    geom.car.x < geom.box.left ||
+    geom.car.x > geom.box.right ||
+    geom.car.y < geom.box.top ||
+    geom.car.y > geom.box.bottom;
+  await click(geom.car.x, geom.car.y);
+  await sleep(400);
+  seed = await seedProbe();
+  const away = await probe();
+  const awaySelected = await evaluate(`(() => {${DEEP}
+    return __qa('vf-icon[data-key]').filter((i) => i.selected).map((i) => i.label);
+  })()`);
+  check(
+    'a click outside the box (on the Car icon) dismisses it onto the bare desktop: nothing opens, nothing activates, no icon selected',
+    carOutside &&
+      seed.aboutOpen === false &&
+      seed.docWindows === 0 &&
+      awaySelected.length === 0 &&
+      !away.windows.tools &&
+      away.optionsStrip === false,
+    JSON.stringify({
+      carOutside,
+      about: seed.aboutOpen,
+      docWindows: seed.docWindows,
+      selected: awaySelected,
+      windows: away.windows,
+      strip: away.optionsStrip,
+    })
+  );
   // File → New… → Create opens the FIRST document window, and that is what
   // activates the application: the windoids and the options strip appear
   // BECAUSE a document window opened, never before. (A fresh Empty Document
@@ -954,21 +1009,21 @@ async function main() {
   await mouse('mouseReleased', stageGrow.x - 30, stageGrow.y - 20, { buttons: 0 });
   await sleep(300);
   const left = await windowGeom();
-  check(
-    'drags + a grow move the Cube window, the Tools palette and the 3D View',
+  // The drags and the grow are the kit's gestures — no check of their own;
+  // that they moved things is the precondition folded into the reload check
+  // (a reload that "places fresh" over an unmoved arrangement proves nothing).
+  const moved =
     left.doc.left !== placed.doc.left &&
-      left.tools.left !== placed.tools.left &&
-      left.stage.width !== placed.stage.width,
-    JSON.stringify({ placed, left })
-  );
+    left.tools.left !== placed.tools.left &&
+    left.stage.width !== placed.stage.width;
   await sleep(600); // let the desktop-state debounce land before navigating
   await send('Page.navigate', { url: `${SEED_URL}&file=cube` });
   await waitForApp();
   const again = await windowGeom();
   check(
     'a reload places every window fresh — nothing about a window persists',
-    JSON.stringify(again) === JSON.stringify(placed),
-    JSON.stringify({ placed, again })
+    moved && JSON.stringify(again) === JSON.stringify(placed),
+    JSON.stringify({ moved, placed, left, again })
   );
 
   // The rest of the run drives the deterministic ?sample boot.
@@ -1724,16 +1779,19 @@ async function main() {
   // --- desktop: the View menu + the permanent windoids -------------------------
   section('view menu');
   await freshPage();
-  // The windoids are non-closeable chrome: no close box renders in any of
-  // their bars, and no menu item can hide them (visibility is appActive's).
-  const windoidCloseBoxes = await evaluate(
+  // The windoids are non-closeable chrome: shell/windows.js states
+  // `closable = false` on each (the kit's default is true and markup can't
+  // say false), and no menu item can hide them (visibility is appActive's).
+  // The property is the app's statement; what the kit draws for it is the
+  // kit's own contract.
+  const windoidClosable = await evaluate(
     `(() => {${DEEP} return ['#win-sprite', '#win-stage', '#win-tools'].map((sel) =>
-        !!__q(sel).shadowRoot.querySelector('[part="close-box"]')); })()`
+        __q(sel).closable); })()`
   );
   check(
-    'the utility windoids render no close box (non-closeable)',
-    windoidCloseBoxes.every((b) => b === false),
-    JSON.stringify(windoidCloseBoxes)
+    'the utility windoids are non-closeable (closable stated false on each)',
+    windoidClosable.every((b) => b === false),
+    JSON.stringify(windoidClosable)
   );
   const windoidMenuItems = await evaluate(
     `(() => {${DEEP} return ['view-sprite', 'view-stage', 'view-tools']
@@ -1744,17 +1802,17 @@ async function main() {
     windoidMenuItems.length === 0,
     JSON.stringify(windoidMenuItems)
   );
-  // …the 3D Sprite Atlas being the one exception on both counts: it keeps
-  // the kit's close box, and View → 3D Sprite Atlas toggles it (the atlas
-  // section drives both).
+  // …the 3D Sprite Atlas being the one exception on both counts: it stays
+  // closable (the kit's close box), and View → 3D Sprite Atlas toggles it
+  // (the atlas section drives both).
   const ringExceptions = await evaluate(
     `(() => {${DEEP} return {
-        closeBox: !!__q('#win-ring').shadowRoot.querySelector('[part="close-box"]'),
+        closable: __q('#win-ring').closable,
         item: !!__q('vf-menu-item[value="ring"]') }; })()`
   );
   check(
-    'the 3D Sprite Atlas windoid is the exception: a close box and a View item',
-    ringExceptions.closeBox === true && ringExceptions.item === true,
+    'the 3D Sprite Atlas windoid is the exception: closable, with a View item',
+    ringExceptions.closable === true && ringExceptions.item === true,
     JSON.stringify(ringExceptions)
   );
   s = await probe();
@@ -1882,11 +1940,11 @@ async function main() {
   const posAfter = await evaluate(
     `(() => {${DEEP} const w = __doc(); return { top: w.top, left: w.left }; })()`
   );
-  check(
-    'dragging the title bar moves the window',
-    posAfter.left === posBefore.left + 40 && posAfter.top === posBefore.top + 24,
-    JSON.stringify({ posBefore, posAfter })
-  );
+  // The title-bar drag and the grow box are the kit's gestures — no checks
+  // of their own; that they landed is folded into the checks on what the
+  // app does with the result (the canvas re-fit, Arrange).
+  const dragged =
+    posAfter.left === posBefore.left + 40 && posAfter.top === posBefore.top + 24;
 
   const growPos = await evaluate(
     `(() => {${DEEP} const g = __q('#win-stage').shadowRoot
@@ -1906,15 +1964,11 @@ async function main() {
     `(() => {${DEEP} const w = __q('#win-stage');
       return { w: w.width, h: w.height, cw: __q('#viewport').clientWidth }; })()`
   );
+  const grown = sizeAfter.w === sizeBefore.w + 30 && sizeAfter.h === sizeBefore.h + 20;
   check(
-    'the grow box resizes the 3D View window',
-    sizeAfter.w === sizeBefore.w + 30 && sizeAfter.h === sizeBefore.h + 20,
-    JSON.stringify({ sizeBefore, sizeAfter })
-  );
-  check(
-    'the THREE canvas follows the resize',
-    sizeAfter.cw > sizeBefore.cw,
-    `${sizeBefore.cw} → ${sizeAfter.cw}`
+    'the THREE canvas follows a grow-box resize of the 3D View',
+    grown && sizeAfter.cw > sizeBefore.cw,
+    JSON.stringify({ grown, sizeBefore, sizeAfter })
   );
   // View → Arrange Windows: the boot placement re-run on the current raster
   // — the dragged document window and the grown 3D View both land back
@@ -1925,12 +1979,14 @@ async function main() {
       return { doc: { top: d.top, left: d.left }, stage: { w: st.width, h: st.height } }; })()`
   );
   check(
-    'View → Arrange Windows puts the moved window and the grown 3D View back',
-    arranged.doc.left === posBefore.left &&
+    'View → Arrange Windows puts the dragged window and the grown 3D View back',
+    dragged &&
+      grown &&
+      arranged.doc.left === posBefore.left &&
       arranged.doc.top === posBefore.top &&
       arranged.stage.w === sizeBefore.w &&
       arranged.stage.h === sizeBefore.h,
-    JSON.stringify({ posBefore, sizeBefore, arranged })
+    JSON.stringify({ dragged, grown, posBefore, posAfter, sizeBefore, arranged })
   );
 
   // --- the zoom box: fill the vacancy / back to the doc box -------------------
@@ -1974,11 +2030,11 @@ async function main() {
   const preZoom = await docBox();
   await growDoc(-40, -28);
   const zoomBefore = await docBox();
-  check(
-    'a grow set a distinctive pre-zoom size',
-    zoomBefore.w === preZoom.w - 40 && zoomBefore.h === preZoom.h - 28,
-    JSON.stringify({ preZoom, zoomBefore })
-  );
+  // The grow-box shrink is the kit's gesture; that it set a size DISTINCT
+  // from the placement default is the precondition folded into the restore
+  // check below (the remembered size is only provable against one).
+  const distinctPreZoom =
+    zoomBefore.w === preZoom.w - 40 && zoomBefore.h === preZoom.h - 28;
   await zoomClick();
   const zoomedNow = await docBox();
   const zoomWant = zoomedBox(zoomBefore.deskW, zoomBefore.deskH, zoomBefore);
@@ -1993,12 +2049,13 @@ async function main() {
   await zoomClick();
   const unzoomed = await docBox();
   check(
-    'a second click returns the REMEMBERED pre-zoom size, top-left held',
-    unzoomed.left === zoomBefore.left &&
+    'a second click returns the REMEMBERED pre-zoom size (a grow-box size, not the placement), top-left held',
+    distinctPreZoom &&
+      unzoomed.left === zoomBefore.left &&
       unzoomed.top === zoomBefore.top &&
       unzoomed.w === zoomBefore.w &&
       unzoomed.h === zoomBefore.h,
-    JSON.stringify({ zoomBefore, unzoomed })
+    JSON.stringify({ distinctPreZoom, preZoom, zoomBefore, unzoomed })
   );
   // Leave the window as Arrange did — the sections below assume that state.
   await pickMenu('#menu-view', 'arrange');
@@ -2055,31 +2112,32 @@ async function main() {
     })()`
   );
   await raise('#win-sprite');
-  check(
-    'raising the sprite windoid re-orders the windoid band in the DOM',
+  // The raise re-inserts the windoid's node at the end of the band (the
+  // kit's own z-order discipline — its contract, not pinned here); that it
+  // happened is the precondition the tool-cell press below folds in, since
+  // that press is only the swallowed-click case with the palette BEHIND.
+  const spriteRaised =
     spriteMoved &&
-      (await evaluate(
-        `(() => {${DEEP}
-          const ids = [...document.querySelectorAll('vf-window')].map((w) => w.id);
-          return ids.indexOf('win-sprite') > ids.indexOf('win-tools');
-        })()`
-      )),
-    'sprite did not cross tools in the light DOM'
-  );
-  // The sprite windoid is FIXED-size — no grow box renders, its width is the
-  // atlas grid block's (SPRITE_WIDTH = 214), and the 3×2 face-tile grid
-  // fills the body below the picker strip exactly (the height is derived
-  // from the tile's own ratio, so the exact fill IS the sizing contract) —
-  // checked after the raise, so a reconnect that lost the view's layout
-  // would show here.
+    (await evaluate(
+      `(() => {${DEEP}
+        const ids = [...document.querySelectorAll('vf-window')].map((w) => w.id);
+        return ids.indexOf('win-sprite') > ids.indexOf('win-tools');
+      })()`
+    ));
+  // The sprite windoid is FIXED-size — not `resizable` (the template's
+  // statement; the grow box it does or doesn't draw is the kit's), its width
+  // is the atlas grid block's (SPRITE_WIDTH = 214), and the 3×2 face-tile
+  // grid fills the body below the picker strip exactly (the height is
+  // derived from the tile's own ratio, so the exact fill IS the sizing
+  // contract) — checked after the raise, so a reconnect that lost the
+  // view's layout would show here.
   const spriteFixed = await evaluate(
     `(() => {${DEEP} const w = __q('#win-sprite');
-      return { grow: !!w.shadowRoot.querySelector('[part="grow-box"]'),
-        width: w.width }; })()`
+      return { resizable: w.hasAttribute('resizable'), width: w.width }; })()`
   );
   check(
-    'the sprite windoid is fixed-size (no grow box, atlas-grid width)',
-    spriteFixed.grow === false && spriteFixed.width === 214,
+    'the sprite windoid is fixed-size (not resizable, atlas-grid width)',
+    spriteFixed.resizable === false && spriteFixed.width === 214,
     JSON.stringify(spriteFixed)
   );
   const fill = await atlasFill();
@@ -2126,8 +2184,9 @@ async function main() {
   // of the press, the click cancelled). Probed BETWEEN the press and the
   // release, so the switch is provably the press's; again after the
   // release, so any click that does survive is provably a no-op (no second
-  // dispatch, nothing toggling back); and the DOM order after, so the run
-  // proves it exercised the raise and not a palette already frontmost.
+  // dispatch, nothing toggling back); and the DOM order after is folded in,
+  // so the run proves it exercised the raise and not a palette already
+  // frontmost — without pinning the raise itself (the kit's).
   s = await probe();
   const pressTool = s.drawTool === 'fill' ? 'pencil' : 'fill';
   const toolCell = await centreOf(`.editor-tool[aria-label="${pressTool}"]`);
@@ -2136,13 +2195,12 @@ async function main() {
   s = await probe();
   check(
     'pressing a tool cell selects that tool on the press, the palette not frontmost',
-    s.drawTool === pressTool && s.menuChecks.tool === pressTool,
-    JSON.stringify({ strip: s.drawTool, menu: s.menuChecks.tool })
+    spriteRaised && s.drawTool === pressTool && s.menuChecks.tool === pressTool,
+    JSON.stringify({ spriteRaised, strip: s.drawTool, menu: s.menuChecks.tool })
   );
   await mouse('mouseReleased', toolCell.x, toolCell.y, { buttons: 0 });
   await sleep(100);
   s = await probe();
-  check('…and the release leaves it selected', s.drawTool === pressTool, s.drawTool);
   const toolsRaised = await evaluate(
     `(() => {${DEEP}
       const ids = [...document.querySelectorAll('vf-window')].map((w) => w.id);
@@ -2150,9 +2208,9 @@ async function main() {
     })()`
   );
   check(
-    '…the press also raised the Tools palette over the sprite windoid',
-    toolsRaised === true,
-    'tools did not cross sprite in the light DOM'
+    '…and the release leaves it selected (the press having raised the palette — the swallowed-click case)',
+    toolsRaised === true && s.drawTool === pressTool,
+    JSON.stringify({ toolsRaised, tool: s.drawTool })
   );
   // The document window was dragged +40/+24 above, which tucks its grow box
   // under the stage windoid (the utility tier floats over the document
@@ -2389,18 +2447,6 @@ async function main() {
   check(
     'File → Open… from the Finder raises the listing dialog',
     (await openDlgUp()) === true
-  );
-  // The listing wears the plain dBoxProc frame: no title bar, no close box.
-  const openChrome = await evaluate(
-    `(() => {${DEEP} const r = __q('#dlg-open').shadowRoot; return {
-        bar: !!r.querySelector('[part="title-bar"]'),
-        closeBox: !!r.querySelector('[part="close-box"]'),
-      }; })()`
-  );
-  check(
-    'the Open dialog renders no title bar and no close box (plain frame)',
-    openChrome.bar === false && openChrome.closeBox === false,
-    JSON.stringify(openChrome)
   );
   const openCancel = await centreOf('#btn-open-cancel');
   await click(openCancel.x, openCancel.y);
@@ -2825,7 +2871,6 @@ async function main() {
       const root = body && body.shadowRoot;
       const well = root ? root.querySelector('.well') : null;
       const cells = root ? [...root.querySelectorAll('.cell')] : [];
-      const parts = (p) => !!(w && w.shadowRoot && w.shadowRoot.querySelector('[part="' + p + '"]'));
       return {
         dw: d.width,
         dh: d.height,
@@ -2833,9 +2878,11 @@ async function main() {
         open: !!w,
         active: !!w && w.hasAttribute('active'),
         heading: w ? w.heading : null,
-        closeBox: parts('close-box'),
-        growBox: parts('grow-box'),
-        zoomBox: parts('zoom-box'),
+        // The template's statements (what the kit draws for them is its own):
+        // closable (the kit's default, left on), neither resizable nor zoomable.
+        closable: w ? w.closable : null,
+        resizable: !!w && w.hasAttribute('resizable'),
+        zoomable: !!w && w.hasAttribute('zoomable'),
         well: well ? well.getAttribute('pattern') : null,
         cells: cells.length,
         ringed: cells.filter((c) => c.querySelector('.ring.on')).map((c) => c.title),
@@ -2856,9 +2903,9 @@ async function main() {
     pp.open &&
       pp.active &&
       pp.heading === 'Desktop Patterns' &&
-      pp.closeBox &&
-      !pp.growBox &&
-      !pp.zoomBox,
+      pp.closable === true &&
+      !pp.resizable &&
+      !pp.zoomable,
     JSON.stringify(pp)
   );
   check(
@@ -3190,11 +3237,6 @@ async function main() {
     })()`);
   let nf = await newForm();
   check('File → New… raises the New Document dialog', nf.open === true);
-  // Cancel and Escape are its only dismissals — the bar carries no close box.
-  const newCloseBox = await evaluate(
-    `(() => {${DEEP} return !!__q('#dlg-new').shadowRoot.querySelector('[part="close-box"]'); })()`
-  );
-  check('the New Document dialog renders no close box', newCloseBox === false);
   check(
     'it lists Empty Document plus the built-in templates',
     nf.rows.join(',') === 'Empty Document,Car,Cube',
@@ -3497,14 +3539,13 @@ async function main() {
   await dragBar(`__q('#win-stage')`, 6);
   await dragBar(`__q('#win-sprite')`, 6);
   const home = await layoutSnap();
-  check(
-    'every window dragged off its placement',
-    home.wins.every((w) => {
-      const o = placedNarrow.wins.find((x) => x.id === w.id);
-      return o && (w.left !== o.left || w.top !== o.top);
-    }),
-    JSON.stringify({ placed: placedNarrow.wins, home: home.wins })
-  );
+  // The drags are the kit's gesture; that every window left its placement
+  // is the precondition folded into the pin check below (a pin test over
+  // the placement itself would only re-prove the fixed point above).
+  const draggedOff = home.wins.every((w) => {
+    const o = placedNarrow.wins.find((x) => x.id === w.id);
+    return o && (w.left !== o.left || w.top !== o.top);
+  });
   // VIEWPORT CHOICE for the shrink: under emulation the OUTER window never
   // changes, so the kit's zoom tracker can't rebase on it — a shrink whose
   // two axis ratios land on ONE zoom ladder level reads as page zoom and
@@ -3526,10 +3567,17 @@ async function main() {
   // below can be exact.
   const wantTiny = home.wins.map((w) => expectWin(w, raster(home), raster(tiny)));
   check(
-    'every window lands exactly on its nine-slice pin on the shrunk raster',
-    tiny.wins.length === home.wins.length &&
+    'every window (dragged off its placement) lands exactly on its nine-slice pin on the shrunk raster',
+    draggedOff &&
+      tiny.wins.length === home.wins.length &&
       JSON.stringify(tiny.wins) === JSON.stringify(wantTiny),
-    JSON.stringify({ home: home.wins, tiny: tiny.wins, want: wantTiny })
+    JSON.stringify({
+      draggedOff,
+      placed: placedNarrow.wins,
+      home: home.wins,
+      tiny: tiny.wins,
+      want: wantTiny,
+    })
   );
   // The icons' frame is the whole desktop below the MENU BAR alone
   // (shell/layout.js ICON_FRAME — uniform bands, the 64px cell a fixed

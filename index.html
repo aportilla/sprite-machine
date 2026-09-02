@@ -250,9 +250,18 @@
       <!-- ============================ Dialogs =========================== -->
       <!-- The About box: the classic launch splash, and Sprite Machine →
            About… — one dialog, and the BOOT GREETING (main.js parks a load
-           with no document to open on it; OK or Escape leaves the bare
-           desktop). The plain dBoxProc frame (no bar, no close box — `label`
-           names it for assistive tech), the application's 32×32 icon
+           with no document to open on it; OK, Escape, or a click anywhere
+           OUTSIDE the box leaves the bare desktop). The click-away is the
+           kit's own `light-dismiss` (vintage-frames 0.5.3), opted into on
+           this one dialog: a splash dismisses on a click away, while System
+           7's modal boxes refused an outside click — and the question
+           dialogs below still do (a stray click must never answer "Save
+           changes?"). The kit consumes the click, so nothing beneath
+           reacts: an icon under the pointer neither selects nor opens, and
+           a Finder selection survives (shell/icons.js's chrome-press bridge
+           already covers a press on any vf-dialog). The plain dBoxProc
+           frame (no bar, no close box —
+           `label` names it for assistive tech), the application's 32×32 icon
            (src/assets/sprite-machine-icon.png, shown through vf-img at 1:1 —
            a plain <img src> Vite resolves: served as-is in dev, inlined as a
            data URI at build, being under its asset inline limit) beside the
@@ -277,6 +286,7 @@
         id="dlg-about"
         frame="plain"
         label="About Sprite Machine"
+        light-dismiss
         width="464"
         height="198"
       >

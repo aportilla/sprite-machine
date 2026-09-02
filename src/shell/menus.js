@@ -94,7 +94,11 @@ export function initMenus(desktop, windows, panels) {
 
   // The About box — Sprite Machine → About…, and the BOOT GREETING (main.js
   // parks a load with no document to open on it: the classic launch splash;
-  // OK or Escape leaves the bare desktop, nothing activates). The copy is
+  // OK, Escape, or a click anywhere outside the box leaves the bare desktop,
+  // nothing activates). The click-away is the kit's own `light-dismiss` —
+  // the markup's attribute on this one dialog, so nothing here listens for
+  // it (its vf-close arrives with reason 'outside', should a click-away ever
+  // need telling from OK; the box holds no pending state). The copy is
   // the markup's; the version and date lines are BUILD facts (vite.config.js
   // `define`: package.json's version, HEAD's commit date), written once here
   // so the markup never carries a stale number.

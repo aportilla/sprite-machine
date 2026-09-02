@@ -62,7 +62,8 @@ anything you saved yourself; they're created once and never come back (any
 persisted state, even an emptied desktop, suppresses the seeding). Every
 load **boots to the About box** — the classic launch splash: the icon, the
 version, the blurb, the same dialog as Sprite Machine → About… (see
-[The About box](#the-about-box)); OK it and the bare desktop is yours,
+[The About box](#the-about-box)); OK it — or click anywhere outside it —
+and the bare desktop is yours,
 File → New…, an icon's double-click or File → Open… the ways in — unless
 the URL names a saved
 document (**`?file=Cube`**, or the bare fragment **`#Cube`**;
@@ -518,7 +519,7 @@ window the desktop's active window?**
   **boot begins in this state too**: until the first document window opens
   (a `?file` load, File → New…'s Create, a drop), nothing has activated —
   an About-greeted load shows the Finder grammar with the windoids hidden,
-  and OK leaves it so (the splash opens nothing).
+  and OK — or a click away — leaves it so (the splash opens nothing).
   A windoid is on screen _because_ a document window is, never before.
 
 ### Documents are windows
@@ -892,9 +893,18 @@ opens it over the boot document for captures.
 
 **Sprite Machine → About…** — and every load the URL gives no document to
 open (the top of this README): the classic launch splash, System 7's
-About box on the plain dBoxProc frame (no bar, no close box; OK or Escape
-dismisses it onto whatever was there — at boot, the bare desktop in the
-Finder role, nothing opened and nothing activated). The application's
+About box on the plain dBoxProc frame (no bar, no close box; OK, Escape,
+or a **click anywhere outside the box** dismisses it onto whatever was
+there — at boot, the bare desktop in the Finder role, nothing opened and
+nothing activated). The click-away is the kit's own **`light-dismiss`**
+(vintage-frames 0.5.3), an opt-in the markup states on this one dialog:
+a splash dismisses on a click away, while System 7's modal boxes refused
+an outside click, and every question dialog here still does (a stray
+click must never answer "Save changes?"). The kit consumes the click, so
+nothing beneath reacts — a desktop icon under the pointer neither selects
+nor opens, and a Finder selection survives — and nothing here listens
+for the close (it arrives as `vf-close` with reason `outside`; the box
+holds no pending state). The application's
 **32×32 icon** (`src/assets/sprite-machine-icon.png`, through the kit's
 `vf-img` at 1:1 — one image pixel one system px) sits beside three lines
 — **Sprite Machine** in the display face, then **version N** with the

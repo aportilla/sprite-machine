@@ -243,7 +243,8 @@ if (hot) {
 // The boot is URL-DRIVEN: ?file=<name> (or a bare #<name> fragment) opens
 // that SAVED document; any other load greets with the About box — the
 // classic launch splash (the same dialog as Sprite Machine → About…): OK it
-// and the bare desktop is yours (File → New…, an icon, File → Open…).
+// — or click anywhere outside it — and the bare desktop is yours (File →
+// New…, an icon, File → Open…).
 // Three boots, in precedence order:
 //   1. TEST (?fresh or an explicit ?sample): the named sample opens as an
 //      untitled from in-memory data, storage untouched beyond a background
