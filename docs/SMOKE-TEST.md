@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 256 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 257 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -155,8 +155,10 @@ browser, `http://localhost:5173/`.
       cell inverts and the Tools menu's checkmark moves before the button
       comes up (MacPaint's palette feel); releasing changes nothing more.
       Click the Sprite View first, then press a cell — same, on the first
-      press. Every other windoid control (the face picker, the atlas
-      tiles, the 3D View's checkboxes) acts on the release, System 7's
+      press. The Sprite View's face tiles share the feel: press a tile and
+      hold — the ring moves, the picker radio and the canvas switch before
+      the button comes up. Every other windoid control (the face picker's
+      radios, the 3D View's checkboxes) acts on the release, System 7's
       rule for buttons and checkboxes.
 
 ## File flows

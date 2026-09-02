@@ -8,8 +8,8 @@
 //
 // A cell picks on the PRESS, not the click — System 7's tool palettes act
 // on mouse-down: the cell inverts the instant the button goes down, and
-// the tool is live before it comes back up. That is FEEL, and it is the
-// one press-driven control left in the app — not a bridge. The bridge
+// the tool is live before it comes back up. That is FEEL — shared by the
+// Sprite View's face tiles (sm-atlas-view) — not a bridge. The bridge
 // history: the desktop raises a pressed windoid by re-inserting its node
 // (DOM order tracks z-order), and through vintage-frames 0.5.3 it did so
 // at pointerup, between a press's release and its click — Chrome drops a
@@ -17,8 +17,8 @@
 // windoid behind another windoid was swallowed and every windoid control
 // carried a pointerdown pick to dodge it. 0.5.4 runs the re-insert in a
 // task AFTER the click lands, and those bridges are retired (sm-face-picker,
-// sm-atlas-view, sm-stage-controls, sm-desktop-patterns: plain clicks).
-// Here the press stays for its own sake; the click that follows it always
+// sm-stage-controls, sm-desktop-patterns: plain clicks). Here — and on the
+// face tiles — the press stays for its own sake; the click that follows it always
 // lands now and is a no-op on the tool already current (#pickTool guards
 // on the tool changing), and it is also the keyboard path (Enter/Space).
 //

@@ -663,7 +663,8 @@ Patterns control panel (document tier, not a document — see
   close box — the heading still names the window for assistive tech), and
   hide as a set whenever the application deactivates, returning with it.
   A control in a windoid acts on the ordinary **click** unless mouse-down
-  is the authentic feel (the Tools palette's cells, and only those) — no
+  is the authentic feel (the Tools palette's cells and the Sprite View's
+  face tiles) — no
   press-driven _bridges_ anywhere: raising a windoid re-inserts its node
   (the desktop keeps DOM order in step with z-order), and the kit does
   that in a task **after** the press's click has landed (vintage-frames
@@ -686,8 +687,9 @@ Patterns control panel (document tier, not a document — see
   dropping the attribute gives plain white cells back). The grid
   follows the ACTIVE document's **live channel**, so it tracks strokes at
   rAF rate (the second live subscriber ever, after the rebuilder), and it
-  is a **picking surface**: clicking a tile selects that face, with the
-  picker radios and the edit canvas
+  is a **picking surface**: pressing a tile selects that face — on the
+  press, the Tools palette's mouse-down feel — with the picker radios and
+  the edit canvas
   following, and the selected tile **stroked in the face art's red**
   (`--sm-select`, `#ff4f4f`, an inset ring over the tile's edge); the
   windoid carries **no status strip** (its status slot stays empty, so
@@ -1370,7 +1372,7 @@ src/
                        bounds from the active document) / the Tools palette body / the
                        Sprite View body (the face-picker strip over the clickable 3×2
                        face-tile vf-grid, both -> workspace.setFace on the ACTIVE key —
-                       the selected tile ringed in
+                       tile picks fire on the press, the selected tile ringed in
                        --sm-select red — the cells live canvases following the active
                        document) / the 3D Sprite Atlas body (the two-row settings strip ->
                        the ring slice, over one patterned cell per view painted from the

@@ -2153,15 +2153,31 @@ async function main() {
     Math.abs(fill.cw - fill.bw) < 1 && Math.abs(fill.ch - fill.bh) < 1,
     JSON.stringify(fill)
   );
-  // The atlas grid is a picking surface too: clicking a face tile selects
-  // that face, and the selection ring strokes exactly the picked tile.
+  // The atlas grid is a picking surface too: pressing a face tile selects
+  // that face — on the PRESS, the Tools palette's mouse-down feel (probed
+  // between the press and the release, so the switch is provably the
+  // press's; the release's click, landing under the kit's 0.5.4 timing,
+  // must be a no-op) — and the selection ring strokes exactly the picked
+  // tile.
   s = await probe();
   const gridTarget = s.face === 'back' ? 'front' : 'back';
   const gridCell = await centreOf(`.atlas-cell[data-face="${gridTarget}"]`);
-  await click(gridCell.x, gridCell.y);
+  await mouse('mousePressed', gridCell.x, gridCell.y);
   await sleep(200);
   s = await probe();
-  check('clicking an atlas grid tile selects that face', s.face === gridTarget, s.face);
+  check(
+    'an atlas grid tile picks on the PRESS (the palette feel)',
+    s.face === gridTarget,
+    s.face
+  );
+  await mouse('mouseReleased', gridCell.x, gridCell.y, { buttons: 0 });
+  await sleep(200);
+  s = await probe();
+  check(
+    '…and the release (its click a no-op) leaves that face selected',
+    s.face === gridTarget,
+    s.face
+  );
   check(
     'the picker radios follow the atlas pick',
     s.checkedRadio === gridTarget,

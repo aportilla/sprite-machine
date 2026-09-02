@@ -6,11 +6,12 @@
 // 3×2 vf-grid holding one face tile per cell, in the sheet's own
 // arrangement (DEFAULT_ATLAS_LAYOUT), each cell a live canvas of that
 // face's slice drawn nearest-neighbor. The grid is a PICKING SURFACE too:
-// clicking a tile selects that face — an ordinary click, like the picker
-// radios (sm-tool-strip's header: no windoid control needs a press-driven
-// bridge since the kit's 0.5.4 re-insert lands after the click) — and the
-// selected tile is stroked with a red ring (--sm-select, the face-picker
-// art's own #ff4f4f) laid over its edge.
+// pressing a tile selects that face — on the POINTERDOWN, the Tools
+// palette's mouse-down feel (sm-tool-strip's header: feel, not a bridge —
+// the kit's 0.5.4 re-insert lands after the click, so the click that
+// follows a press is simply a no-op on the face already selected) — and
+// the selected tile is stroked with a red ring (--sm-select, the
+// face-picker art's own #ff4f4f) laid over its edge.
 //
 // The windoid is FIXED-size — no grow box: shell/windows.js pins its width
 // to the atlas grid block (SPRITE_WIDTH in shell/layout.js — cols ×
@@ -267,6 +268,7 @@ export class SmAtlasView extends LitElement {
                 title=${f}
                 aria-label=${`${f} face`}
                 aria-pressed=${f === face ? 'true' : 'false'}
+                @pointerdown=${(e) => this.#onCellPress(e, f)}
                 @click=${() => this.#pick(f)}
               >
                 <canvas ${ref(this.#cellCanvas.get(f))}></canvas>
@@ -286,8 +288,16 @@ export class SmAtlasView extends LitElement {
     this.#pick(e.detail.face);
   };
 
-  // Guards on the face actually changing, so a click on the selected tile
-  // is a no-op.
+  // The press path (see the header): the primary button only — a right
+  // button is no pick, and the kit's windoid drag never starts from a tile.
+  #onCellPress(e, f) {
+    if (e.button !== 0) return;
+    this.#pick(f);
+  }
+
+  // Guards on the face actually changing, so the click that follows a
+  // press — and a click on the selected tile — is a no-op; the keyboard's
+  // click (Enter/Space on the button) is the one that lands live.
   #pick(face) {
     const active = workspace.active();
     if (active && face !== active.face) workspace.setFace(active.key, face);
