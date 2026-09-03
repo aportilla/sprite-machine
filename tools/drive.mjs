@@ -2706,19 +2706,28 @@ async function main() {
         // kit's properties in system px: the controls strip in the window's
         // HEADER slot (vintage-frames 0.6.1; sm-ring-controls) at the
         // markup's header-height (pinned to layout.js's RING_STRIP so the
-        // two can't drift), the header part's live box, the row's grid in
-        // flow (no top/left — sm-ring-view), a cell's declared box and
-        // pattern. (A comment inside the evaluate string: no backticks.)
+        // two can't drift), the header part's live box, the body's PAPER in
+        // flow (no top/left — sm-ring-view: a vf-container pattern FILLING
+        // the body's width, no declared width of its own, the tile tall —
+        // its live width read back), the grid inside it and its rules, a
+        // cell's declared box and that it names no pattern of its own. (A
+        // comment inside the evaluate string: no backticks.)
         const hdr = w.shadowRoot.querySelector('[part="header"]');
         const hr = hdr ? hdr.getBoundingClientRect() : null;
-        const grid = __q('sm-ring-view').shadowRoot.querySelector('.ring-grid');
+        const view = __q('sm-ring-view');
+        const paper = view.shadowRoot.querySelector('.ring-paper');
+        const grid = view.shadowRoot.querySelector('.ring-grid');
         const ditl = {
           controls: __q('sm-ring-controls').getAttribute('slot'),
           headerH: w.headerHeight,
           header: hr ? { w: Math.round(hr.width), h: Math.round(hr.height) } : null,
-          grid: { top: grid.top ?? null, left: grid.left ?? null },
+          paper: paper ? { top: paper.top ?? null, left: paper.left ?? null,
+            fill: paper.hasAttribute('fill-width'), w: paper.width ?? null, h: paper.height,
+            live: Math.round(paper.getBoundingClientRect().width),
+            pattern: paper.getAttribute('pattern') } : null,
+          grid: { top: grid.top ?? null, left: grid.left ?? null, rules: grid.rules },
           cell: cell ? { w: cell.width, h: cell.height, pattern: cell.getAttribute('pattern') } : null,
-          hostPattern: __q('sm-ring-view').getAttribute('pattern'),
+          hostPattern: view.getAttribute('pattern'),
         };
         return { left: w.left, top: w.top, w: w.width, h: w.height, dw: d.width, dh: d.height,
           docLeft: doc.left, docTop: doc.top, docH: doc.height,
@@ -2763,7 +2772,7 @@ async function main() {
     JSON.stringify({ shown: s.ringShown, checked: s.menuChecks.ring })
   );
   check(
-    "…docked on the bottom margin, left-aligned with the document — the tile's height, the seeded row's width — four cells at the default size",
+    "…docked on the bottom margin, left-aligned with the document — the tile's height, the seeded row's width (floored at the strip) — four cells at the default size",
     rb.left === rb.docLeft &&
       rb.top === rb.dh - 8 - ringHeightFor(S0) &&
       rb.w === ringWidthFor(4, S0) &&
@@ -2802,10 +2811,15 @@ async function main() {
   // The windoid is a DITL (the numbers shell/layout.js's): the controls
   // strip is the window's HEADER — slotted there, at the header height the
   // shell states (RING_STRIP: the controls' box over the rule), the live
-  // header spanning the window inside its borders; the row's grid is in
-  // flow, so the row IS the scroll range (the kit sizes its plane to it)
-  // and the viewport's height is exactly the tile (nothing overflows down);
-  // a cell is the tile's declared box on the host's pattern.
+  // header spanning the window inside its borders; the body's PAPER is in
+  // flow — a kit pattern box FILLING the body's width (no declared width;
+  // the kit measures the filled axis for its raster), the tile tall,
+  // wearing the host's pattern — as wide as the plane, so it covers the
+  // scroll range: the row's width or the viewport's, whichever is wider
+  // (the kit sizes its plane to the grid inside the paper) — under a
+  // viewport exactly the tile tall (nothing overflows down); the grid
+  // inside it draws no rules; a cell is the tile's declared box naming no
+  // pattern of its own (the paper is the body's, not the cells').
   const ditlDeclared = (r, n, size) => {
     const d = r.ditl;
     return (
@@ -2814,19 +2828,28 @@ async function main() {
       !!d.header &&
       d.header.h === RING_STRIP &&
       d.header.w === r.w - 2 &&
+      !!d.paper &&
+      d.paper.top === null &&
+      d.paper.left === null &&
+      d.paper.fill === true &&
+      d.paper.w === null &&
+      d.paper.h === size &&
+      d.paper.live === Math.max(r.clientW, ringRowWidth(n, size)) &&
+      d.paper.pattern === d.hostPattern &&
       d.grid.top === null &&
       d.grid.left === null &&
+      d.grid.rules === 'none' &&
       r.scrollW === Math.max(r.clientW, ringRowWidth(n, size)) &&
       r.clientH === size &&
       r.scrollH === r.clientH &&
       !!d.cell &&
       d.cell.w === size &&
       d.cell.h === size &&
-      d.cell.pattern === d.hostPattern
+      d.cell.pattern === null
     );
   };
   check(
-    "the windoid is a DITL: the controls strip is the window's header at RING_STRIP, the row's grid in flow is the scroll range under a viewport exactly the tile tall, a cell is the tile's box on the host's pattern",
+    "the windoid is a DITL: the controls strip is the window's header at RING_STRIP, the body's paper in flow — the host's pattern filling the body's width, the tile tall — covers the scroll range under a viewport exactly the tile tall, the grid draws no rules, a cell is the tile's bare box",
     ditlDeclared(rb, 4, S0),
     JSON.stringify({ ditl: rb.ditl, clientW: rb.clientW, clientH: rb.clientH })
   );

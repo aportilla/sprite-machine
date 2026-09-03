@@ -78,7 +78,28 @@ header is what the strip really is, so the app took the header and no
 bridge remains. The drive reads the slot and the header height back,
 checks the DITL against the live glyphs inside the header, and grows a
 window past its row to see the header span it; the layout suite pins the
-arithmetic. ·
+arithmetic. **(7) No rules, one sheet of paper** (2026-09-03, the user's
+call: _"remove the grid rules… just none is ok"_ and _"remove the pattern
+bg from each independent item and just give the grid the 'dots' pattern
+bg"_): the row's `vf-grid` is `rules="none"` — the tiles butt, so
+`ringRowWidth` is `n · size` (the `n − 1` rules gone from the arithmetic;
+the layout suite and the drive's oracle follow) — and the cells wear no
+pattern: each is a `vf-stack` at the tile's declared size (the kit's
+layout box, which paints nothing by contract — a bare `vf-container`
+would paint the desktop's ink, kit ask #6), and the whole BODY is ONE
+`vf-container pattern="dots"` — `fill-width`, the tile tall: the user's
+next call, _"i'd like the dots to go all the way across"_, so the paper is
+the body's, spanning the scroll plane past the last tile and under a
+scrolled row (a first cut declared it at the row's size); the kit measures
+the filled axis for the raster, its own contract — with the grid's
+`--vf-surface` cleared to `transparent` (the kit's documented knob for
+what is behind the cells) so the paper shows through — the app-side
+bridge for **kit ask #11**, a window body's paper as a kit pattern
+([kit-asks-body-pattern.md](kit-asks-body-pattern.md)). A consequence:
+four default 64s make a 256 row, two px under the strip's 258, so the
+default width seeds at `RING_MIN_WIDTH` with two px of paper right of the
+last tile (the natural row at 64 used to clear the floor by one px through
+its three rules). ·
 **Planned:** 2026-09-02 on `e37ea05` (the 1-bit ants). **Depends on:**
 vintage-frames **0.5.5** — `flush` passing through `vf-window[scrollbars]`
 to the built-in scroll area's viewport, and the corner cell reserved on a

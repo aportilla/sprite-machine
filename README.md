@@ -745,10 +745,20 @@ Patterns control panel (document tier, not a document — see
   **orthographically** from a ring of evenly stepped yaws at one
   elevation, the way an engine consumes a pre-rendered rotation set, as a
   **row of tiles**: one cell per view, each the **tile at 1:1** — `size`
-  system px square, one image pixel per system pixel — on the kit's
-  `gray-25` paper (the Sprite View's pattern grammar; here each cell is a
-  `vf-container pattern` at the tile's declared size, the Desktop
-  Patterns panel's element), under a **two-row controls strip** of four
+  system px square, one image pixel per system pixel — butted, no rules
+  between (`rules="none"` on the grid), on **one sheet** of the kit's
+  `dots` paper that runs across the whole body (the Sprite View's
+  pattern grammar, but the body's rather than the cells': a
+  `vf-container pattern` under the grid, filling the body's width —
+  `fill-width`, the kit's own fill, so it spans the scroll plane past
+  the last tile and under a scrolled row — and the tile tall; the
+  Desktop Patterns panel's element, its raster measured on the filled
+  axis by the kit's own contract; each cell a `vf-stack` at the tile's
+  declared size, the kit's box that paints nothing, so a frame's
+  transparent margin reads as the same unbroken paper; the app-side
+  bridge for kit ask #11, a window body's paper as a kit pattern —
+  [docs/kit-asks-body-pattern.md](docs/kit-asks-body-pattern.md)),
+  under a **two-row controls strip** of four
   labeled number fields — `views` (1–16, a 360/n step), `elev` (0–90°
   above the horizon), `from` (the first view's yaw, 0–359° from the
   front) and `size` (the tile's edge in px, 2–255). The strip is the
@@ -767,12 +777,17 @@ Patterns control panel (document tier, not a document — see
   columns, 6 gaps, the kit's 74 × 25 number field. That arithmetic IS the
   header's height (`RING_STRIP` = 62 + the rule) and the windoid's width
   floor (`RING_MIN_WIDTH` = 258 + the borders) — derivations, not
-  measurements. The body is the row alone (`sm-ring-view`): a `vf-grid`
-  in flow at the plane's origin — the kit sizes its scrolled plane to
-  in-flow content that cannot wrap, so the row IS the scroll range — each
-  cell a `vf-container pattern` at the tile's declared size (the Desktop
-  Patterns panel's element). Nothing in the windoid is measured or
-  flexed, and neither component styles layout. No
+  measurements. The body is the row alone (`sm-ring-view`): the paper
+  container in flow at the plane's origin, as wide as the plane — the
+  kit sizes its scrolled plane to in-flow content that cannot wrap, and
+  a filled box contributes its content's width, so the row IS the scroll
+  range and the paper covers all of it — holding the `vf-grid` with its
+  surface token cleared (the kit's own knob for what is behind the
+  cells, `--vf-surface`) so the paper shows through, each cell a
+  `vf-stack` at the tile's declared size. Nothing in the windoid is
+  flexed, nothing but the paper's filled axis is measured — by the kit,
+  for its raster — and neither component styles layout beyond that one
+  token. No
   status line: the windoid's bottom edge is the kit's **horizontal scroll
   rail** (below). Defaults: four views at a 90° step, 45° up, from the
   front, 64 px tiles. **Yaw runs front → right → back → left** (yaw 0
@@ -829,8 +844,10 @@ Patterns control panel (document tier, not a document — see
   than the markup because the bound moves with the tile), so the window
   **resizes on the horizontal axis alone**; its **width is the user's** —
   seeded by the placement with the natural row (`ringWidthFor(views,
-size)`: one cell per view with the grid's rules and the frame's
-  borders, capped at the vacant middle so a fresh strip never runs under
+size)`: one cell per view, butted, plus the frame's borders, floored at
+  the strip — the default four 64s sit two px under it, so the default
+  row seeds at the floor with two px of paper right of the last tile —
+  and capped at the vacant middle so a fresh strip never runs under
   the rail), moved by the grow box within the rect's `min-width` (the
   controls' DITL plus the borders, `RING_MIN_WIDTH`) — and a row that
   outgrows it **scrolls under the rail** while the header holds still
@@ -1470,9 +1487,11 @@ src/
                        the window's HEADER slot: the two-row settings strip as a DITL —
                        the captions and fields placed at the top/left shell/layout.js's
                        RING_FIELDS states against the header's corner -> the ring slice)
-                       and its body (sm-ring-view: the row's vf-grid in flow, one
-                       vf-container pattern cell per view painted 1:1 from the sheet
-                       channel) / the 3D View's controls (sm-stage-controls, in the
+                       and its body (sm-ring-view: the body's paper — a vf-container
+                       pattern filling the body's width, the tile tall — holding a
+                       rules="none" vf-grid in flow, one bare vf-stack cell per view
+                       painted 1:1 from the sheet channel) / the 3D View's controls
+                       (sm-stage-controls, in the
                        window's HEADER slot: the rotate + smooth checkboxes in a kit row
                        stack -> prefs) / the windows' status
                        readouts (tile = the window's edited face; build = the 3D View's fixed

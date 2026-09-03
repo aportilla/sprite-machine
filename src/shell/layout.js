@@ -295,7 +295,10 @@ export const RING_STRIP = RING_FIELDS.box.height + 1;
 export const RING_CHROME = { w: 2, h: 12 + 2 + RING_STRIP + 15 };
 // The windoid's width FLOOR (the grow box's declared min-width, and the
 // placement's floor): the controls' box plus the 2 borders, so the header
-// never clips a field. Four cells at the default 64 (261) just clear it.
+// never clips a field. Four cells at the default 64 (256 + the borders =
+// 258) fall two px short of it, so the default row seeds AT the floor, two
+// px of the body's paper right of the last tile — a fifth view or a grow
+// covers it. (With the grid's rules, the natural row cleared it by one.)
 export const RING_MIN_WIDTH = RING_FIELDS.box.width + RING_CHROME.w;
 
 /** The 3D Sprite Atlas windoid's height for a tile size: the chrome over
@@ -305,14 +308,15 @@ export function ringHeightFor(size) {
   return RING_CHROME.h + Math.max(1, Math.floor(size));
 }
 
-/** The ring ROW's own width: n cells of `size` with the grid's n−1 rules
- *  between (frameless — the windoid frame is its perimeter). The scroll
- *  range: the kit sizes its scrolled plane to sm-ring-view's in-flow
- *  grid. */
+/** The ring ROW's own width: n cells of `size`, butted — the grid draws no
+ *  rules (`rules="none"`; the windoid frame is its perimeter). The scroll
+ *  range: the kit sizes its scrolled plane to the grid inside sm-ring-view's
+ *  in-flow paper (the paper itself fills the plane — this width or the
+ *  viewport's, whichever is wider). */
 export function ringRowWidth(views, size) {
   const n = Math.max(1, Math.floor(views));
   const s = Math.max(1, Math.floor(size));
-  return n * s + (n - 1);
+  return n * s;
 }
 
 /** A ring's NATURAL width: the row with the frame's borders, floored at the

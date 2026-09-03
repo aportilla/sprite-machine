@@ -46,7 +46,9 @@ and the row scrolling under the kit's rail; `RING_HEIGHT` is
 `ringHeightFor(size)`, and the pin treats the box as mixed (a fixed
 height, a resizable width). Decisions 3 and 6 below and §9's A are
 superseded; the rest of this document stands as the record of the first
-build. ·
+build — and its as-built note 7 (2026-09-03) drops the grid's rules and
+puts the row on one sheet of `dots` paper, so §3G's `pattern="gray-25"`
+per cell is the first build's too. ·
 **Planned:** 2026-08-29 on `9897f50` (dithered paper) · **Depends on:**
 nothing outside this repo — no kit change (see §3F: the kit's utility
 window already carries an optional close box).

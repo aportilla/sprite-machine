@@ -313,7 +313,12 @@ browser, `http://localhost:5173/`.
 - [ ] **The 3D Sprite Atlas, by eye**: with the Car open, View → 3D Sprite
       Atlas — a windoid lands under the document window, left-aligned with
       it, on the bottom margin: a two-row strip (`views` / `elev` over
-      `from` / `size`) over four 64-px tiles on the gray-25 paper — the
+      `from` / `size`) over four 64-px tiles butted on ONE sheet of the
+      kit's dots paper that runs across the whole body — no rules between
+      the tiles, no seam in the dots where one tile ends (the paper is the
+      body's, not a pattern per cell), and the dots continue past the last
+      tile to the frame (at the default the row is two px narrower than
+      the strip's floor, so two px of paper show there) — the
       Car from the front, its right, the back, its left, all at one size
       and centered, each tile shown 1:1 (zoom the browser: a tile is a
       whole count of device px, never a resample) — and, where a status
@@ -331,17 +336,22 @@ browser, `http://localhost:5173/`.
       press the arrows, wheel sideways: the tiles scroll while the
       controls strip — the window's header, its white paper and its rule
       — does not move at all. Grow the window wider than the row: the
-      rail idles again, white to the right of the last tile, the header
-      spanning the window as ever.
+      rail idles again, the dots running on to the right of the last tile
+      (the paper is the body's, as wide as the window), the header
+      spanning the window as ever. Step `views` past the window and
+      scroll: the dots run under the whole row, never ending short of it.
 - [ ] **The strip is a DITL**: zoom the browser to 200% — every caption
       (`views` / `elev` / `from` / `size`) stays crisp on whole pixels, each
       right-aligned against its field, its baseline on the field's digits'
       baseline; the four fields sit in two columns, the rule under the
-      header is one system px, and the cells' paper is 1-bit. Nothing in
-      the windoid is measured or flexed: the strip is the window's header
+      header is one system px, and the body's paper is 1-bit, its dots in
+      phase across every tile edge (set `size` to 70 — not a multiple of
+      the pattern's 8 — and the dots still run unbroken under the row).
+      Nothing in the windoid is flexed: the strip is the window's header
       band (vintage-frames 0.6.1) with the controls placed in it at stated
-      system px, and the row and every cell are kit boxes at stated
-      system px.
+      system px, the row and every cell are kit boxes at stated system px,
+      and the paper fills the body's width (the kit's own fill, its raster
+      measured by the kit).
 - [ ] **Size moves the height, the grow box moves the width**: drag the
       windoid up off the bottom margin, then set `size` to 128 — the tiles
       double and the windoid grows DOWN from where it sits (its dot bar

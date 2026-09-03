@@ -192,16 +192,17 @@ test('ring sizing: the height derives from the tile size, the width seeds from t
   assert.equal(ringHeightFor(64), RING_CHROME.h + 64);
   assert.equal(ringHeightFor(255), RING_CHROME.h + 255);
   assert.equal(ringHeightFor(0), RING_CHROME.h + 1, 'never a zero row');
-  // The row's own width — the plane the view declares to the kit's scroll
-  // area: n cells of size + n−1 rules, no perimeter (frameless).
-  assert.equal(ringRowWidth(4, 64), 4 * 64 + 3);
+  // The row's own width — the paper the view declares to the kit's scroll
+  // area: n cells of size, butted (rules="none"), no perimeter.
+  assert.equal(ringRowWidth(4, 64), 4 * 64);
   assert.equal(ringRowWidth(1, 128), 128);
   assert.equal(ringRowWidth(0, 64), 64, 'never fewer than one cell');
   // The natural row: the row + 2 borders, floored at the strip (a short
-  // ring never clips the controls).
-  assert.equal(ringWidthFor(4, 64), Math.max(RING_MIN_WIDTH, 4 * 64 + 3 + 2));
-  assert.equal(ringWidthFor(4, 70), Math.max(RING_MIN_WIDTH, 4 * 70 + 3 + 2));
-  assert.equal(ringWidthFor(16, 255), 16 * 255 + 15 + 2);
+  // ring never clips the controls — the default four 64s among them, two
+  // px under the floor now that no rules pad the row).
+  assert.equal(ringWidthFor(4, 64), Math.max(RING_MIN_WIDTH, 4 * 64 + 2));
+  assert.equal(ringWidthFor(4, 70), Math.max(RING_MIN_WIDTH, 4 * 70 + 2));
+  assert.equal(ringWidthFor(16, 255), 16 * 255 + 2);
   assert.equal(ringWidthFor(1, 128), RING_MIN_WIDTH, 'a short ring floors at the strip');
   assert.equal(ringWidthFor(0, 64), RING_MIN_WIDTH, 'never fewer than one cell');
   // The layout's default size mirrors the slice's (one truth, restated for
