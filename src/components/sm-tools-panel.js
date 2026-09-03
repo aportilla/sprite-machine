@@ -17,10 +17,11 @@ export class SmToolsPanel extends LitElement {
   static styles = [
     baseStyles,
     css`
-      /* No inner padding: the tool cells run flush to the windoid's frame —
-       the strip's frameless grid shares the window's own black line (the
-       kit's desk-accessory composition: vf-grid[frameless] inside
-       vf-window[flush]). */
+      /* No inner padding: the tool cells run to the windoid's frame — the
+       strip's frameless grid shares the window's own black line (the kit's
+       desk-accessory composition: vf-grid[frameless] in a vf-window body,
+       which carries no inset of its own — vintage-frames 0.6.0; the
+       flush attribute that used to say so is retired). */
       :host {
         display: flex;
         flex-direction: column;

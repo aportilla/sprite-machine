@@ -95,9 +95,10 @@ sm-color-picker {
   border: calc(var(--vf-scale, 1) * 1px) solid var(--sm-black);
 }
 
-/* The 3D View window's (flush) body: the controls strip over the pattern
-   well holding the THREE canvas (sm-stage-controls draws itself; this
-   wrapper is layout only). */
+/* The 3D View window's body (it runs to the frame — a vf-window body
+   carries no inset of its own): the controls strip over the pattern well
+   holding the THREE canvas (sm-stage-controls draws itself; this wrapper
+   is layout only). */
 .stage-body {
   display: flex;
   flex-direction: column;

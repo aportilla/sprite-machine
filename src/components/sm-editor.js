@@ -58,7 +58,8 @@ export class SmEditor extends LitElement {
       }
       /* The artwork well: the white ground the pixel canvas centers in — full
          bleed, running edge to edge from the title bar down to the status
-         strip (the window is flush, so it meets the frame's own black line).
+         strip (a window body carries no inset of its own — vintage-frames
+         0.6.0 — so it meets the frame's own black line).
          The canvas box inside it carries its own paper — the kit's 50%
          dither, the transparency indicator. */
       .editor-drawbox {

@@ -50,9 +50,9 @@ export class SmToolStrip extends LitElement {
         display: contents;
       }
       /* Tool cells inside the vf-grid strip: plain buttons that fill their cell
-       (the grid draws the internal lattice; it's frameless — the flush
-       windoid's own frame is the strip's outer border); the selected tool
-       inverts. */
+       (the grid draws the internal lattice; it's frameless — the windoid's
+       own frame is the strip's outer border, the body running to it with
+       no inset of its own); the selected tool inverts. */
       .editor-toolstrip .editor-tool {
         place-self: stretch;
         display: flex;

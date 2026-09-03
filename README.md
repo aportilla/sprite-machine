@@ -773,10 +773,14 @@ Patterns control panel (document tier, not a document — see
   and its **close box** — the kit's, kept on this one windoid — hides it,
   one flag both ways (`prefs.showRing`); a show brings it to the front of
   the windoid band. It is the **classic scrolling document window turned
-  windoid** (`resizable scrollbars="horizontal" flush` — vintage-frames
-  0.5.5: the rail on the frame's bottom edge, the viewport flush to the
-  frame, and, the status slot being empty, the rail's corner cell reserved
-  for the grow box): its **height is a derivation**, `ringHeightFor(size)`
+  windoid** (`resizable scrollbars="horizontal"` — vintage-frames 0.5.5:
+  the rail on the frame's bottom edge and, the status slot being empty,
+  the rail's corner cell reserved for the grow box; the viewport runs to
+  the frame's edge, since a window body or a scroll viewport carries **no
+  inset of its own** — 0.6.0, which retired the `flush` attribute every
+  window here used to set; an inset is the content's, a `vf-stack pad`,
+  and the Desktop Patterns panel is the one window that states one): its
+  **height is a derivation**, `ringHeightFor(size)`
   — the chrome over one row of tile-size cells — re-fit as the size
   changes and **declared to the grow box as the kit's size rect**
   (vintage-frames 0.5.6: `min-height` = `max-height` locks the axis, the
@@ -911,7 +915,10 @@ onto the desktop before its first render — a corrupt value is ignored
 through the kit's own `parsePattern`, never warned about. The window
 itself is a fixed-size `vf-window` (`heading="Desktop Patterns" movable`,
 248×304 — index.html's `#tpl-patterns-window` states the arithmetic; no
-grow box, no zoom box) cloned per open and **removed by its close box**
+grow box, no zoom box; its body a `vf-stack pad="12"`, the content's own
+12px inset, since a window body carries none of its own — vintage-frames
+0.6.0 — and this is the one window whose content wants one) cloned per
+open and **removed by its close box**
 (existence IS visibility, the document windows' discipline; a second pick
 while it's open just brings it forward — one panel, ever), placed by
 `centeredBox` in `shell/layout.js` (centered in the open area below the

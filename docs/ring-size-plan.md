@@ -26,7 +26,16 @@ and `min-height` = `max-height` = `ringHeightFor(size)` (re-declared on
 every size change, since the bound moves — which is why it is stated from
 the shell and not authored in the markup), the `vf-resize` re-assertion
 is gone, and the 3D View's floor is declared the same way in place of its
-own correction handler. The drive pins the declaration. ·
+own correction handler. The drive pins the declaration. **(5)
+vintage-frames 0.6.0** (applied 2026-09-03 —
+[upgrade-vintage-frames-0.6.0.md](upgrade-vintage-frames-0.6.0.md)):
+`flush` no longer exists — a window body and a scroll-area viewport carry
+no inset of their own, so the composition decision 8 asked for is the
+default; the markup drops the attribute, the drive's composition check
+drops the pin on it, nothing else moves. The same release shipped kit asks
+#7–#9 ([kit-asks-scroll-rail.md](kit-asks-scroll-rail.md)): the rail
+survives the desktop's raise re-insert, tracks the row's width as cells
+come and go, and never rubber-bands. ·
 **Planned:** 2026-09-02 on `e37ea05` (the 1-bit ants). **Depends on:**
 vintage-frames **0.5.5** — `flush` passing through `vf-window[scrollbars]`
 to the built-in scroll area's viewport, and the corner cell reserved on a

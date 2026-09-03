@@ -2635,9 +2635,11 @@ async function main() {
           cell: cell ? Math.round(cell.getBoundingClientRect().width) : null,
           scrollW: vp ? vp.scrollWidth : null, clientW: vp ? vp.clientWidth : null,
           // The windoid's composition — the app's own statement, not the
-          // kit's rendering: the rail's axis, the grow box, flush, no status,
-          // and the grow box's declared size rect (the kit's min/max per axis).
-          scrollbars: w.getAttribute('scrollbars'), resizable: !!w.resizable, flush: !!w.flush,
+          // kit's rendering: the rail's axis, the grow box, no status, and
+          // the grow box's declared size rect (the kit's min/max per axis).
+          // (No flush attribute: vintage-frames 0.6.0 retired it — a body
+          // runs to the frame by default.)
+          scrollbars: w.getAttribute('scrollbars'), resizable: !!w.resizable,
           status: !!w.querySelector('[slot="status"]'),
           minW: w.minWidth, maxW: w.maxWidth, minH: w.minHeight, maxH: w.maxHeight }; })()`
     );
@@ -2683,15 +2685,11 @@ async function main() {
     })
   );
   check(
-    "the windoid is the scrolling document window turned windoid: a horizontal rail, a grow box, flush, no status strip (the kit's corner cell rides on that)",
-    rb.scrollbars === 'horizontal' &&
-      rb.resizable === true &&
-      rb.flush === true &&
-      rb.status === false,
+    "the windoid is the scrolling document window turned windoid: a horizontal rail, a grow box, no status strip (the kit's corner cell rides on that)",
+    rb.scrollbars === 'horizontal' && rb.resizable === true && rb.status === false,
     JSON.stringify({
       scrollbars: rb.scrollbars,
       resizable: rb.resizable,
-      flush: rb.flush,
       status: rb.status,
     })
   );
@@ -3114,6 +3112,10 @@ async function main() {
         closable: w ? w.closable : null,
         resizable: !!w && w.hasAttribute('resizable'),
         zoomable: !!w && w.hasAttribute('zoomable'),
+        // The inset is the CONTENT's — a vf-stack pad wrapping the body
+        // (vintage-frames 0.6.0: a window body carries none of its own).
+        pad: w && body && body.parentElement.localName === 'vf-stack'
+          ? body.parentElement.getAttribute('pad') : null,
         well: well ? well.getAttribute('pattern') : null,
         cells: cells.length,
         ringed: cells.filter((c) => c.querySelector('.ring.on')).map((c) => c.title),
@@ -3138,6 +3140,11 @@ async function main() {
       !pp.resizable &&
       !pp.zoomable,
     JSON.stringify(pp)
+  );
+  check(
+    "…its 12px inset is the content's own: the body wrapped in a vf-stack pad (a 0.6.0 window body carries none)",
+    pp.pad === '12',
+    JSON.stringify({ pad: pp.pad })
   );
   check(
     "…it is the Finder's window: the application deactivates (windoids + strip hide, doc-scoped menus grey)",

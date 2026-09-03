@@ -144,21 +144,19 @@
            reconciler in shell/windows.js and appended as a direct child of
            the desktop (its stacking manager only sees direct vf-window
            children). -->
-      <!-- The Full Sprite View's flush body (sm-atlas-view) holds the FACE
+      <!-- The Full Sprite View's body (sm-atlas-view) holds the FACE
            PICKER strip across its top (the six cube-view radios, serving
-           the ACTIVE document) over the live whole-atlas canvas. The
+           the ACTIVE document) over the live whole-atlas canvas. The body
+           runs to the frame: a vf-window body carries no inset of its own
+           (vintage-frames 0.6.0 — an inset is the content's, stated with a
+           vf-stack pad; the `flush` attribute the windows used to set is
+           retired). The
            windoid is FIXED-size — movable but not resizable (no grow box):
            shell/windows.js sizes it to the picker block's width and derives
            its height from the active atlas's ratio, so the atlas exactly
            fills the body below the strip (fitSprite — SPRITE_WIDTH /
            SPRITE_CHROME in shell/layout.js). -->
-      <vf-window
-        id="win-sprite"
-        variant="utility"
-        heading="Full Sprite View"
-        movable
-        flush
-      >
+      <vf-window id="win-sprite" variant="utility" heading="Full Sprite View" movable>
         <!-- No status strip: an empty status slot draws no bottom bar (the
              kit's .status.empty), so the atlas runs down to the frame.
              `pattern` paints a kit 1-bit pattern behind each face tile (a
@@ -168,7 +166,7 @@
         <sm-atlas-view pattern="gray-25"></sm-atlas-view>
       </vf-window>
 
-      <!-- The 3D View's flush body is a page-layout column (.stage-body):
+      <!-- The 3D View's body is a page-layout column (.stage-body):
            the controls strip (the two render toggles — rotate / smooth)
            over the THREE canvas. shell/windows.js floors this windoid's
            width at the strip's content width so a grow-box shrink can't
@@ -179,14 +177,7 @@
            over the kit's pattern, not a flat gray. `pattern` is the kit
            grammar (a library name or sixteen hex digits); drop it for a
            bare white well. -->
-      <vf-window
-        id="win-stage"
-        variant="utility"
-        heading="3D View"
-        movable
-        resizable
-        flush
-      >
+      <vf-window id="win-stage" variant="utility" heading="3D View" movable resizable>
         <div class="stage-body">
           <sm-stage-controls></sm-stage-controls>
           <vf-container id="stage-well" fill-width pattern="gray-25">
@@ -210,8 +201,10 @@
            windoid: `scrollbars="horizontal"` puts the kit's rail on the
            frame's bottom edge where a status strip would be (none here —
            the empty status slot is what lets the kit reserve the rail's
-           corner cell for the grow box), `flush` runs the body to the frame
-           and the rail, and `resizable` gives it the grow box — on the
+           corner cell for the grow box), the body runs to the frame and
+           the rail (a window body and a scroll viewport carry no inset of
+           their own — vintage-frames 0.6.0 retired `flush`), and
+           `resizable` gives it the grow box — on the
            HORIZONTAL axis alone, through the kit's size rect (the Patterns
            strip's idiom: min-height = max-height locks the axis), declared
            from shell/windows.js rather than authored here because the
@@ -229,7 +222,6 @@
         movable
         resizable
         scrollbars="horizontal"
-        flush
       >
         <sm-ring-view pattern="gray-25"></sm-ring-view>
       </vf-window>
@@ -246,7 +238,6 @@
         variant="utility"
         heading="Tools"
         movable
-        flush
         width="30"
         height="187"
       >
@@ -619,7 +610,7 @@
          face readout their DocContext BEFORE appending the clone to the
          desktop. Inert markup — a <template> renders nothing here. -->
     <template id="tpl-document-window">
-      <vf-window heading="untitled" movable resizable zoomable flush>
+      <vf-window heading="untitled" movable resizable zoomable>
         <sm-editor></sm-editor>
         <sm-status-line kind="tile" slot="status"></sm-status-line>
       </vf-window>
@@ -636,12 +627,17 @@
          body's 222-wide column — the preview well (222×160, the kit's rule
          framing it) over the 13×3 chooser of 16px cells (13×16 + 12 rules +
          2 frame = 222 wide, 3×16 + 2 + 2 = 52 tall) over the default button
-         (20 + its 4px ring margins), two 10px gaps between — plus the 12px
-         body padding, the 18px title bar and the 1px borders: 248 × 304
+         (20 + its 4px ring margins), two 10px gaps between — plus the
+         stack's 12px pad (the content's own inset: a vf-window body carries
+         none since vintage-frames 0.6.0, and this is the one window whose
+         content wants one — the stack paints nothing and takes no role),
+         the 18px title bar and the 1px borders: 248 × 304
          (sm-desktop-patterns.js states the well and grid). -->
     <template id="tpl-patterns-window">
       <vf-window heading="Desktop Patterns" movable width="248" height="304">
-        <sm-desktop-patterns></sm-desktop-patterns>
+        <vf-stack pad="12">
+          <sm-desktop-patterns></sm-desktop-patterns>
+        </vf-stack>
       </vf-window>
     </template>
 

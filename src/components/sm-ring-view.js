@@ -11,23 +11,30 @@
 // reads as paper.
 //
 // THE BODY SCROLLS. The windoid is a `vf-window scrollbars="horizontal"
-// flush resizable`: the kit renders this whole element inside its built-in
+// resizable`: the kit renders this whole element inside its built-in
 // scroll area (the rail on the frame's bottom edge, the grow box in the
-// corner cell, the viewport flush to the frame — vintage-frames 0.5.5), so
+// corner cell — vintage-frames 0.5.5; the viewport runs to the frame's
+// edge, a body or viewport carrying no inset of its own since 0.6.0, which
+// retired the `flush` attribute), so
 // a row wider than the window scrolls under the rail, and the user sizes
 // the window's WIDTH with the grow box (shell/windows.js declares the kit's
 // size rect: min-width at the strip, min-height = max-height =
 // ringHeightFor(size) — the chrome over one row of cells — so the window
 // resizes on the horizontal axis alone). Two
 // consequences for the layout here: the host is as wide as the row
-// (`width: max-content`, never narrower than the viewport), so the strip's
+// (`width: max-content`, never narrower than the viewport — 0.6.0 sizes
+// the kit's scrolled plane to its content itself, so this restates what
+// the kit does; redundant, not wrong, and the app's own word on the
+// sticky's containing block), so the strip's
 // paper and rule span the whole scrollable band; and the strip's FIELD
 // GROUP is `position: sticky; left: 0`, so the controls hold at the
 // viewport's left while the row scrolls under them (nothing between the
 // group and the kit's viewport may clip — an `overflow: hidden` ancestor
 // would become the sticky's scroll container and pin it to nothing). The
 // row sits top-left; the viewport's white fills what a wider window leaves
-// to its right.
+// to its right. The rail is wholly the kit's: it survives the desktop's
+// raise re-insert, tracks the row's width as cells come and go, and never
+// rubber-bands (0.6.0 — docs/kit-asks-scroll-rail.md; no bridge here).
 //
 // A CONNECTED chrome component. Two things drive the TEMPLATE: the ring
 // slice (the cell count and size, the fields' live() values, the cells' yaw

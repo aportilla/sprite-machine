@@ -38,7 +38,9 @@ became **`size`** (the tile's edge in px, 2–255, the lattice envelope fit
 to it — px per voxel is derived now), the cells show the tile at 1:1, the
 status line is gone and the windoid is the **scrolling document window
 turned windoid** — `resizable scrollbars="horizontal" flush` on
-vintage-frames 0.5.5, resizing on the horizontal axis alone (the app
+vintage-frames 0.5.5 (0.6.0 retired `flush`: a body runs to the frame by
+default, so the markup is `resizable scrollbars="horizontal"` now — the
+ring-size plan's as-built note 5), resizing on the horizontal axis alone (the app
 re-asserts `ringHeightFor(size)` under the grow box), its width the user's
 and the row scrolling under the kit's rail; `RING_HEIGHT` is
 `ringHeightFor(size)`, and the pin treats the box as mixed (a fixed
