@@ -74,8 +74,16 @@ import {
   centeredBox,
   initialPlacement,
   ringWidthFor,
+  ringRowWidth,
   ringHeightFor,
   RING_MIN_WIDTH,
+  RING_STRIP,
+  RING_FIELD,
+  RING_FIELDS,
+  SPRITE_STRIP,
+  SPRITE_PICKER,
+  SPRITE_PICKER_AT,
+  STAGE_STRIP,
   CASCADE_STEP,
   CASCADE_SLOTS,
 } from '../src/shell/layout.js';
@@ -2113,11 +2121,13 @@ async function main() {
     await mouse('mouseReleased', g.x + dx, g.y + dy, { buttons: 0 });
     await sleep(300);
   };
+  // The grid against the window's BODY part (the header holds the picker
+  // now — vintage-frames 0.6.1 — so the body is the grid's box exactly).
   const atlasFill = () =>
     evaluate(
       `(() => {${DEEP} const sr = __q('sm-atlas-view').shadowRoot;
         const g = sr.querySelector('vf-grid').getBoundingClientRect();
-        const b = sr.querySelector('.atlas-box').getBoundingClientRect();
+        const b = __q('#win-sprite').shadowRoot.querySelector('[part="body"]').getBoundingClientRect();
         return { cw: g.width, ch: g.height, bw: b.width, bh: b.height }; })()`
     );
   const drawWidth = () =>
@@ -2161,9 +2171,75 @@ async function main() {
   );
   const fill = await atlasFill();
   check(
-    'the atlas grid exactly fills the sprite windoid below the picker strip',
+    'the atlas grid exactly fills the sprite windoid body below the header',
     Math.abs(fill.cw - fill.bw) < 1 && Math.abs(fill.ch - fill.bh) < 1,
     JSON.stringify(fill)
+  );
+  // The two permanent windoids' controls strips are the windows' HEADERS
+  // (vintage-frames 0.6.1, `slot="header"`), their heights authored in the
+  // markup as `header-height` and pinned here to layout.js's numbers so
+  // the markup and the chrome arithmetic can't drift — the app's
+  // composition, read back as the kit's properties: the Sprite View's face picker in a placed
+  // container at the DITL's rectangle (SPRITE_PICKER_AT / SPRITE_PICKER,
+  // its live box the same), the 3D View's checkbox row in its header, the
+  // pattern well filling the body under it.
+  const headers = await evaluate(
+    `(() => {${DEEP}
+      const ws = __q('#win-sprite'); const wst = __q('#win-stage');
+      const rect = (el) => { const r = el.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; };
+      const rel = (el, base) => { const a = el.getBoundingClientRect(); const b = base.getBoundingClientRect();
+        return { left: Math.round(a.left - b.left), top: Math.round(a.top - b.top), w: Math.round(a.width), h: Math.round(a.height) }; };
+      const sh = ws.shadowRoot.querySelector('[part="header"]');
+      const picker = __q('sm-atlas-controls').shadowRoot.querySelector('.picker');
+      // The box's own paper (kit ask #6's bridge — a bare container paints
+      // the desktop's raster): the blank pattern declared, and the raster
+      // it paints written on ITS box, not inherited from the desktop.
+      const pickerBox = picker.shadowRoot.querySelector('.box');
+      const ownRaster = !!pickerBox && pickerBox.style.getPropertyValue('--_vf-pattern-image') !== '';
+      const th = wst.shadowRoot.querySelector('[part="header"]');
+      const body = wst.shadowRoot.querySelector('[part="body"]');
+      const well = __q('#stage-well');
+      return {
+        sprite: { slot: __q('sm-atlas-controls').getAttribute('slot'), headerH: ws.headerHeight,
+          header: rect(sh), picker: { left: picker.left, top: picker.top, w: picker.width, h: picker.height,
+            pattern: picker.getAttribute('pattern'), ownRaster },
+          pickerLive: rel(picker, sh), radios: __qa('vf-radio').length },
+        stage: { slot: __q('sm-stage-controls').getAttribute('slot'), headerH: wst.headerHeight,
+          header: rect(th), checks: [...__q('sm-stage-controls').shadowRoot.querySelectorAll('vf-checkbox')]
+            .map((c) => rel(c, th)), well: rect(well), body: rect(body) },
+      }; })()`
+  );
+  check(
+    "the Sprite View's face picker is the window's header: slotted there at SPRITE_STRIP, the picker block placed at the DITL's rectangle on its own white paper (kit ask #6's bridge), its live box the same",
+    headers.sprite.slot === 'header' &&
+      headers.sprite.picker.pattern === 'white' &&
+      headers.sprite.picker.ownRaster === true &&
+      headers.sprite.headerH === SPRITE_STRIP &&
+      headers.sprite.header.h === SPRITE_STRIP &&
+      headers.sprite.header.w === spriteFixed.width - 2 &&
+      headers.sprite.picker.left === SPRITE_PICKER_AT.left &&
+      headers.sprite.picker.top === SPRITE_PICKER_AT.top &&
+      headers.sprite.picker.w === SPRITE_PICKER.width &&
+      headers.sprite.picker.h === SPRITE_PICKER.height &&
+      headers.sprite.pickerLive.left === SPRITE_PICKER_AT.left &&
+      headers.sprite.pickerLive.top === SPRITE_PICKER_AT.top &&
+      headers.sprite.pickerLive.w === SPRITE_PICKER.width &&
+      headers.sprite.pickerLive.h === SPRITE_PICKER.height &&
+      headers.sprite.radios === 6,
+    JSON.stringify(headers.sprite)
+  );
+  check(
+    "the 3D View's checkbox row is the window's header: slotted there at STAGE_STRIP, both boxes inside it, the pattern well filling the body",
+    headers.stage.slot === 'header' &&
+      headers.stage.headerH === STAGE_STRIP &&
+      headers.stage.header.h === STAGE_STRIP &&
+      headers.stage.checks.length === 2 &&
+      headers.stage.checks.every(
+        (c) => c.top >= 0 && c.top + c.h <= STAGE_STRIP - 1 && c.left >= 0
+      ) &&
+      headers.stage.well.w === headers.stage.body.w &&
+      headers.stage.well.h === headers.stage.body.h,
+    JSON.stringify(headers.stage)
   );
   // The atlas grid is a picking surface too: pressing a face tile selects
   // that face — on the PRESS, the Tools palette's mouse-down feel (probed
@@ -2626,6 +2702,24 @@ async function main() {
         // the window's own shadow): the row's overflow is what puts the rail
         // to work.
         const vp = __q('[part="viewport"]', w.shadowRoot);
+        // The windoid's DITL — the app's own statements, read back as the
+        // kit's properties in system px: the controls strip in the window's
+        // HEADER slot (vintage-frames 0.6.1; sm-ring-controls) at the
+        // markup's header-height (pinned to layout.js's RING_STRIP so the
+        // two can't drift), the header part's live box, the row's grid in
+        // flow (no top/left — sm-ring-view), a cell's declared box and
+        // pattern. (A comment inside the evaluate string: no backticks.)
+        const hdr = w.shadowRoot.querySelector('[part="header"]');
+        const hr = hdr ? hdr.getBoundingClientRect() : null;
+        const grid = __q('sm-ring-view').shadowRoot.querySelector('.ring-grid');
+        const ditl = {
+          controls: __q('sm-ring-controls').getAttribute('slot'),
+          headerH: w.headerHeight,
+          header: hr ? { w: Math.round(hr.width), h: Math.round(hr.height) } : null,
+          grid: { top: grid.top ?? null, left: grid.left ?? null },
+          cell: cell ? { w: cell.width, h: cell.height, pattern: cell.getAttribute('pattern') } : null,
+          hostPattern: __q('sm-ring-view').getAttribute('pattern'),
+        };
         return { left: w.left, top: w.top, w: w.width, h: w.height, dw: d.width, dh: d.height,
           docLeft: doc.left, docTop: doc.top, docH: doc.height,
           toolsW: t.width, toolsH: t.height,
@@ -2633,6 +2727,8 @@ async function main() {
           views: num('.ring-views'), elev: num('.ring-elev'), offset: num('.ring-offset'),
           size: num('.ring-size'),
           cell: cell ? Math.round(cell.getBoundingClientRect().width) : null,
+          ditl,
+          scrollH: vp ? vp.scrollHeight : null, clientH: vp ? vp.clientHeight : null,
           scrollW: vp ? vp.scrollWidth : null, clientW: vp ? vp.clientWidth : null,
           // The windoid's composition — the app's own statement, not the
           // kit's rendering: the rail's axis, the grow box, no status, and
@@ -2703,16 +2799,69 @@ async function main() {
     rectDeclared(rb, ringHeightFor(S0)),
     JSON.stringify({ minW: rb.minW, maxW: rb.maxW, minH: rb.minH, maxH: rb.maxH })
   );
-  // The strip's field group IS the windoid's width floor (shell/layout.js
-  // RING_MIN_WIDTH restates it; a strip change must re-measure).
-  const stripWidth = await evaluate(
-    `(() => {${DEEP} const f = __q('sm-ring-view').shadowRoot.querySelector('.fields');
-      return Math.ceil(f.getBoundingClientRect().width); })()`
+  // The windoid is a DITL (the numbers shell/layout.js's): the controls
+  // strip is the window's HEADER — slotted there, at the header height the
+  // shell states (RING_STRIP: the controls' box over the rule), the live
+  // header spanning the window inside its borders; the row's grid is in
+  // flow, so the row IS the scroll range (the kit sizes its plane to it)
+  // and the viewport's height is exactly the tile (nothing overflows down);
+  // a cell is the tile's declared box on the host's pattern.
+  const ditlDeclared = (r, n, size) => {
+    const d = r.ditl;
+    return (
+      d.controls === 'header' &&
+      d.headerH === RING_STRIP &&
+      !!d.header &&
+      d.header.h === RING_STRIP &&
+      d.header.w === r.w - 2 &&
+      d.grid.top === null &&
+      d.grid.left === null &&
+      r.scrollW === Math.max(r.clientW, ringRowWidth(n, size)) &&
+      r.clientH === size &&
+      r.scrollH === r.clientH &&
+      !!d.cell &&
+      d.cell.w === size &&
+      d.cell.h === size &&
+      d.cell.pattern === d.hostPattern
+    );
+  };
+  check(
+    "the windoid is a DITL: the controls strip is the window's header at RING_STRIP, the row's grid in flow is the scroll range under a viewport exactly the tile tall, a cell is the tile's box on the host's pattern",
+    ditlDeclared(rb, 4, S0),
+    JSON.stringify({ ditl: rb.ditl, clientW: rb.clientW, clientH: rb.clientH })
+  );
+  // The declared columns against the LIVE glyphs (the kit's rule: a caption
+  // wider than its column overflows rather than reflowing — the number is
+  // the column): every caption's text inside its column, every item inside
+  // the controls' box at the header's corner (RING_FIELDS.box — the width
+  // floor's own number), the fields at the kit's 74 × 25, the captions on
+  // whole px.
+  const ditlFit = await evaluate(
+    `(() => {${DEEP} const c = __q('sm-ring-controls').shadowRoot;
+      const f = __q('#win-ring').shadowRoot.querySelector('[part="header"]').getBoundingClientRect();
+      const box = ${JSON.stringify(RING_FIELDS.box)};
+      const inside = (r) => r.left >= f.left - 0.5 && r.right <= f.left + box.width + 0.5 &&
+        r.top >= f.top - 0.5 && r.bottom <= f.top + box.height + 0.5;
+      const labels = [...c.querySelectorAll('vf-label')].map((l) => {
+        const h = l.getBoundingClientRect();
+        const t = l.shadowRoot.querySelector('[part="label"]').getBoundingClientRect();
+        return { col: Math.round(h.width), glyphs: +t.width.toFixed(2),
+          fits: t.left >= h.left - 0.5 && t.right <= h.right + 0.5 && inside(h),
+          whole: Number.isInteger(h.top - f.top) && Number.isInteger(h.left - f.left) }; });
+      const fields = [...c.querySelectorAll('vf-number-field')].map((n) => {
+        const r = n.getBoundingClientRect();
+        return { w: Math.round(r.width), h: Math.round(r.height), fits: inside(r) }; });
+      return { labels, fields }; })()`
   );
   check(
-    "the strip's field group + the borders is the width floor (RING_MIN_WIDTH — re-measure on a strip change)",
-    stripWidth + 2 === RING_MIN_WIDTH,
-    `${stripWidth} + 2 vs ${RING_MIN_WIDTH}`
+    "…and the DITL fits the live glyphs: every caption inside its column and the controls' box on whole px, every field inside the box at the kit's field size",
+    ditlFit.labels.length === 4 &&
+      ditlFit.labels.every((l) => l.fits && l.whole) &&
+      ditlFit.fields.length === 4 &&
+      ditlFit.fields.every(
+        (f) => f.fits && f.w === RING_FIELD.width && f.h === RING_FIELD.height
+      ),
+    JSON.stringify(ditlFit)
   );
   await sleep(400);
   let cells = await cellPixels();
@@ -2754,6 +2903,11 @@ async function main() {
       rb.scrollW > rb.clientW,
     JSON.stringify({ rb, ringLeft0, ringW0 })
   );
+  check(
+    "…the row's own width is the scroll range (the in-flow grid sizes the kit's plane), the header untouched",
+    ditlDeclared(rb, rb.cells, S0),
+    JSON.stringify({ ditl: rb.ditl, scrollW: rb.scrollW, clientW: rb.clientW })
+  );
   cells = await cellPixels();
   check(
     '…and every new cell renders',
@@ -2789,6 +2943,11 @@ async function main() {
     '…and the declared rect follows the new height (the lock moves with the tile)',
     rectDeclared(rb, ringHeightFor(128)),
     JSON.stringify({ minW: rb.minW, maxW: rb.maxW, minH: rb.minH, maxH: rb.maxH })
+  );
+  check(
+    "…as do the cells' declared boxes and the viewport's height under the header",
+    ditlDeclared(rb, rb.cells, 128),
+    JSON.stringify({ ditl: rb.ditl, clientH: rb.clientH })
   );
   // The grow box moves the WIDTH alone — the kit clamps the drag into the
   // declared rect: a +30/+20 drag lands +30/0, the viewport widening with
@@ -3086,8 +3245,28 @@ async function main() {
       rb.w === ringWidthFor(6, 100) &&
       rb.cell === 100 &&
       cells.length === 6 &&
-      cells.every((c) => c.w === 100 && c.h === 100 && c.opaque > 0),
+      cells.every((c) => c.w === 100 && c.h === 100 && c.opaque > 0) &&
+      ditlDeclared(rb, 6, 100),
     JSON.stringify({ shown: s.ringShown, rb, cells })
+  );
+  // A window WIDER than its row: the header is window chrome and spans
+  // the window at any width, white to the right of the last tile below
+  // it, the rail idle.
+  gp = await ringGrow();
+  await mouse('mousePressed', gp.x, gp.y);
+  await mouse('mouseMoved', gp.x + 20, gp.y, { buttons: 1 });
+  await mouse('mouseMoved', gp.x + 40, gp.y, { buttons: 1 });
+  await mouse('mouseReleased', gp.x + 40, gp.y, { buttons: 0 });
+  await sleep(400);
+  rb = await ringBox();
+  check(
+    'grown wider than its row, the header spans the window and the rail idles',
+    rb.w === ringWidthFor(6, 100) + 40 &&
+      rb.clientW > ringRowWidth(6, 100) &&
+      rb.ditl.header.w === rb.w - 2 &&
+      rb.scrollW === rb.clientW &&
+      ditlDeclared(rb, 6, 100),
+    JSON.stringify({ rb })
   );
 
   section('desktop patterns');

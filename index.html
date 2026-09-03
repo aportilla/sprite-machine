@@ -144,19 +144,37 @@
            reconciler in shell/windows.js and appended as a direct child of
            the desktop (its stacking manager only sees direct vf-window
            children). -->
-      <!-- The Full Sprite View's body (sm-atlas-view) holds the FACE
-           PICKER strip across its top (the six cube-view radios, serving
-           the ACTIVE document) over the live whole-atlas canvas. The body
-           runs to the frame: a vf-window body carries no inset of its own
+      <!-- Every windoid's controls strip is the window's HEADER
+           (vintage-frames 0.6.1 — `slot="header"`: the Finder window's
+           header line, a white band over a 1px rule between the title bar
+           and the body across the whole window, a positioning anchor for
+           what is placed in it; `header-height` counts its rule and is
+           AUTHORED here, the kit's grammar — the same number as
+           shell/layout.js's arithmetic (STAGE_STRIP, SPRITE_STRIP,
+           RING_STRIP), which tools/drive.mjs pins the markup against so
+           the two can't drift). The body below it runs to the
+           frame: a vf-window body carries no inset of its own
            (vintage-frames 0.6.0 — an inset is the content's, stated with a
            vf-stack pad; the `flush` attribute the windows used to set is
-           retired). The
+           retired). -->
+      <!-- The Full Sprite View: the FACE PICKER (the six cube-view radios,
+           serving the ACTIVE document) in the header — sm-atlas-controls
+           places the picker block at the DITL's rectangle, SPRITE_PICKER_AT
+           — over the live whole-atlas grid, the body (sm-atlas-view). The
            windoid is FIXED-size — movable but not resizable (no grow box):
-           shell/windows.js sizes it to the picker block's width and derives
-           its height from the active atlas's ratio, so the atlas exactly
-           fills the body below the strip (fitSprite — SPRITE_WIDTH /
-           SPRITE_CHROME in shell/layout.js). -->
-      <vf-window id="win-sprite" variant="utility" heading="Full Sprite View" movable>
+           shell/windows.js sizes it to the atlas grid block's width and
+           derives its height from the active atlas's ratio plus the chrome,
+           the header included, so the atlas exactly fills the body
+           (fitSprite — SPRITE_WIDTH / SPRITE_STRIP / SPRITE_CHROME in
+           shell/layout.js). -->
+      <vf-window
+        id="win-sprite"
+        variant="utility"
+        heading="Full Sprite View"
+        movable
+        header-height="62"
+      >
+        <sm-atlas-controls slot="header"></sm-atlas-controls>
         <!-- No status strip: an empty status slot draws no bottom bar (the
              kit's .status.empty), so the atlas runs down to the frame.
              `pattern` paints a kit 1-bit pattern behind each face tile (a
@@ -166,24 +184,29 @@
         <sm-atlas-view pattern="gray-25"></sm-atlas-view>
       </vf-window>
 
-      <!-- The 3D View's body is a page-layout column (.stage-body):
-           the controls strip (the two render toggles — rotate / smooth)
-           over the THREE canvas. shell/windows.js floors this windoid's
+      <!-- The 3D View: the controls strip (the two render toggles — rotate
+           / smooth, a kit row stack in sm-stage-controls) in the header,
+           STAGE_STRIP tall, over the THREE canvas in a kit vf-container that
+           fills the body (`fill-width fill-height`) and paints a 1-bit
+           pattern as its background: the THREE scene renders with a
+           TRANSPARENT clear (scene/stage.js), so the model — and its shadow
+           — composite over the kit's pattern, not a flat gray. `pattern` is
+           the kit grammar (a library name or sixteen hex digits); drop it
+           for a bare white well. shell/windows.js floors this windoid's
            width at the strip's content width so a grow-box shrink can't
-           clip the checkboxes. The canvas sits in a kit vf-container that
-           takes the column's slack (style.css) and paints a 1-bit pattern
-           as its background: the THREE scene renders with a TRANSPARENT
-           clear (scene/stage.js), so the model — and its shadow — composite
-           over the kit's pattern, not a flat gray. `pattern` is the kit
-           grammar (a library name or sixteen hex digits); drop it for a
-           bare white well. -->
-      <vf-window id="win-stage" variant="utility" heading="3D View" movable resizable>
-        <div class="stage-body">
-          <sm-stage-controls></sm-stage-controls>
-          <vf-container id="stage-well" fill-width pattern="gray-25">
-            <canvas id="viewport"></canvas>
-          </vf-container>
-        </div>
+           clip the checkboxes. -->
+      <vf-window
+        id="win-stage"
+        variant="utility"
+        heading="3D View"
+        movable
+        resizable
+        header-height="24"
+      >
+        <sm-stage-controls slot="header"></sm-stage-controls>
+        <vf-container id="stage-well" fill-width fill-height pattern="gray-25">
+          <canvas id="viewport"></canvas>
+        </vf-container>
         <sm-status-line kind="build" slot="status"></sm-status-line>
       </vf-window>
 
@@ -210,11 +233,23 @@
            from shell/windows.js rather than authored here because the
            bound moves: min-height = max-height = ringHeightFor(size) (the
            chrome over one row of cells, re-declared as the size changes)
-           and min-width = the strip's RING_MIN_WIDTH; the row scrolls
+           and min-width = the controls' RING_MIN_WIDTH; the row scrolls
            under the rail past it. The placement seeds the width with the natural
            row (capped at the vacant middle), docks it on the bottom margin,
            left-aligned with the document window, and shortens the doc box
-           to clear it only while it is shown (shell/layout.js). -->
+           to clear it only while it is shown (shell/layout.js). The
+           controls strip is the window's HEADER (vintage-frames 0.6.1 —
+           `slot="header"`: the Finder window's header line, a white band
+           over a 1px rule between the title bar and the body, outside the
+           scroll area, so the controls hold while the row scrolls under
+           them; `header-height` authored below = RING_STRIP, the DITL's 62
+           over the rule in shell/layout.js, which the drive pins it
+           against), its four
+           captions and fields placed at the DITL's rectangles against the
+           header's corner (sm-ring-controls.js). The body is the row alone
+           (sm-ring-view.js): a vf-grid in flow at the plane's origin —
+           the kit sizes its scrolled plane to it — each cell a
+           vf-container pattern at the tile's declared size. -->
       <vf-window
         id="win-ring"
         variant="utility"
@@ -222,7 +257,9 @@
         movable
         resizable
         scrollbars="horizontal"
+        header-height="63"
       >
+        <sm-ring-controls slot="header"></sm-ring-controls>
         <sm-ring-view pattern="gray-25"></sm-ring-view>
       </vf-window>
 

@@ -35,12 +35,52 @@ default; the markup drops the attribute, the drive's composition check
 drops the pin on it, nothing else moves. The same release shipped kit asks
 #7–#9 ([kit-asks-scroll-rail.md](kit-asks-scroll-rail.md)): the rail
 survives the desktop's raise re-insert, tracks the row's width as cells
-come and go, and never rubber-bands. ·
+come and go, and never rubber-bands. **(6) The controls strip is the
+window's HEADER, and a DITL** (2026-09-03, vintage-frames **0.6.1**): the
+strip no longer lays itself out with flex and scaled `calc()`. It is
+`<sm-ring-controls slot="header">` — the kit's new header slot, a white
+band over a 1px rule between the title bar and the body, across the
+whole window and outside the scroll area, so the controls hold while the
+row scrolls under them by construction — placing the four captions
+(`vf-label`, declared column widths, right-aligned) and fields at the
+`top`/`left` a new `RING_FIELDS` DITL in `shell/layout.js` states,
+against the header's own corner (rows at 4 and 33, a caption 4 below its
+row — where the baselines meet — an 8 inset, 40 and 36 caption columns,
+6 gaps, the kit's 74 × 25 number field: 3.5em of the 16px display em +
+the 3px gap + the 15px stepper). `header-height="63"` is authored on the
+window in `index.html`, the kit's grammar (a first cut stated it from
+`shell/windows.js`; the user wants the markup to say it, as the kit's
+docs do) — the same 63 as `RING_STRIP` (the DITL's 62 over the rule) the
+chrome arithmetic always counted, so `ringHeightFor` is untouched and
+the drive pins the attribute to the constant. The body is
+the row alone: `<sm-ring-view>`'s `vf-grid` in flow at the plane's origin
+(the kit sizes its scrolled plane to it, so the row IS the scroll range
+and the viewport is exactly the tile tall), each cell a `vf-container
+pattern` at the tile's declared size (the app's per-cell
+`PatternFillController` pool is gone — the kit's element paints it). The
+DITL's arithmetic reproduces note 1's measured 258 exactly, so
+`RING_STRIP` and `RING_MIN_WIDTH` (258 + the borders) are derivations
+now, not measurements — and the captions land on whole px (8 and 37
+below the header's top, where the flex centering had put them at 8.5).
+Neither component styles layout: the captions' `text-align: right` and
+the number field's own em token are the whole stylesheet share. Built
+earlier the same day on 0.6.0 as a body-only DITL — a `vf-container`
+band declaring the row's width with `min-width: 100%`, a sticky
+`vf-container` field group inside it, the grid placed at (0, 63) — the
+app-side bridge for **kit ask #10**
+([kit-asks-fixed-child.md](kit-asks-fixed-child.md), a `fixed` child):
+0.6.1 shipped `fixed` as asked and the header slot beside it, and the
+header is what the strip really is, so the app took the header and no
+bridge remains. The drive reads the slot and the header height back,
+checks the DITL against the live glyphs inside the header, and grows a
+window past its row to see the header span it; the layout suite pins the
+arithmetic. ·
 **Planned:** 2026-09-02 on `e37ea05` (the 1-bit ants). **Depends on:**
 vintage-frames **0.5.5** — `flush` passing through `vf-window[scrollbars]`
 to the built-in scroll area's viewport, and the corner cell reserved on a
 single-axis rail of a `resizable` window (both shipped in the kit's
-`4b07587`) — and, as built, **0.5.6** for the size rect. Read
+`4b07587`) — and, as built, **0.5.6** for the size rect and **0.6.1** for
+the header slot (note 6). Read
 [the atlas plan](sprite-atlas-plan.md) first — this is a revision of §1's
 decisions 3 and 6 and §9's decision A, not a new feature.
 

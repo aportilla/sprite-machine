@@ -40,9 +40,17 @@
 //   spriteHeightFor() is the Sprite View windoid's sizing rule: the windoid
 //   is a fixed-size picture frame — no grow box — its width the atlas
 //   grid's (ATLAS_GRID: the 3×2 lattice of face tiles) and its height
-//   derived through the tile's own ratio plus the fixed chrome, so the
-//   grid exactly fills the body below the picker strip (windows.js
-//   re-derives the height on document switches and structural changes).
+//   derived through the tile's own ratio plus the fixed chrome — the
+//   picker's header (SPRITE_STRIP) included — so the grid exactly fills the
+//   body below the header (windows.js re-derives the height on document
+//   switches and structural changes).
+//
+//   RING_FIELDS is the 3D Sprite Atlas controls strip's DITL — the
+//   controls' extent and every caption's and field's rectangle in whole
+//   system px, from which the strip's height (RING_STRIP — the window's
+//   header, vintage-frames 0.6.1) and the windoid's width floor
+//   (RING_MIN_WIDTH) derive; sm-ring-controls.js places the items from it
+//   against the header's corner, so nothing about the strip is measured.
 //
 //   ringHeightFor() / ringWidthFor() are the 3D Sprite Atlas windoid's — the
 //   Sprite View's picture-frame idea turned sideways and half let go: its
@@ -142,16 +150,37 @@ export const CASCADE_SLOTS = 5;
 const CASCADE_ROOM = (CASCADE_SLOTS - 1) * CASCADE_STEP;
 const DOC_MIN = 220; // the doc box's floor on a raster too small for the room
 
+// --- the windoids' HEADERS -----------------------------------------------------
+// Every windoid's controls strip is the window's HEADER (vintage-frames
+// 0.6.1's `slot="header"`: a white band over a 1px rule between the title
+// bar and the body, across the whole window, a positioning anchor for what
+// is placed in it; `header-height` counts its rule, as every kit bar does).
+// index.html AUTHORS each height as `header-height` — the kit's grammar,
+// the way it authors the Tools palette's box — and these are the same
+// numbers as the arithmetic they enter; tools/drive.mjs pins the markup
+// against them so the two can't drift.
+//
+// The 3D View's: the kit's 20px checkbox row (rotate / smooth, a row stack
+// in sm-stage-controls) centered in the 23 over the rule — 24.
+export const STAGE_STRIP = 24;
+// The Full Sprite View's: the FACE PICKER block — six 21px cube icons with
+// 12px gaps (186) over the kit's 19px radio row under the 26px icons (45),
+// sm-face-picker's own art — placed SPRITE_PICKER_PAD in from the header's
+// top and as far above its rule: 8 + 45 + 8 over the rule = 62.
+export const SPRITE_PICKER = { width: 186, height: 45 };
+const SPRITE_PICKER_PAD = 8;
+export const SPRITE_STRIP =
+  SPRITE_PICKER_PAD + SPRITE_PICKER.height + SPRITE_PICKER_PAD + 1;
+
 // --- the Full Sprite View windoid's fixed size --------------------------------
 // The windoid is a fixed-size picture frame — no grow box: the ATLAS GRID
 // block sets its width, and its height is DERIVED so the grid exactly fills
-// the body below the picker strip. All system px, measured at scale 1 — if
-// the atlas grid, the picker strip or the window chrome changes, re-measure:
+// the body below the header. All system px — if the atlas grid, the picker
+// or the window chrome changes, re-derive:
 //   width chrome: the frame's two 1px side borders;
-//   height chrome: 12 dot bar + 2 borders + 62 picker strip (26 icon + ~19
-//   radio + 2×8 pad + 1 rule) = 76 — no status strip (the slot is empty,
-//   so the kit draws no bottom bar).
-export const SPRITE_CHROME = { w: 2, h: 76 };
+//   height chrome: 12 dot bar + 2 borders + SPRITE_STRIP header = 76 — no
+//   status strip (the slot is empty, so the kit draws no bottom bar).
+export const SPRITE_CHROME = { w: 2, h: 12 + 2 + SPRITE_STRIP };
 // The atlas grid — sm-atlas-view's frameless 3×2 vf-grid of face tiles
 // (the sheet's own arrangement), `cell` system px wide per cell with 1px
 // rules between and the windoid frame as its perimeter. The cell WIDTH is
@@ -163,6 +192,13 @@ export const ATLAS_GRID = { cols: 3, rows: 2, cell: 70 };
 // edge (the 210px face-picker block centers in the strip above with a
 // pixel of slack each side).
 export const SPRITE_WIDTH = 214;
+// The picker block's rectangle in the header (sm-atlas-controls places it):
+// centered across the header's interior — (212 − 186) / 2 = 13, whole by
+// the fixed width — and the pad down from its top.
+export const SPRITE_PICKER_AT = {
+  left: (SPRITE_WIDTH - SPRITE_CHROME.w - SPRITE_PICKER.width) / 2,
+  top: SPRITE_PICKER_PAD,
+};
 // A square tile's height : width — the ratio the sizing rule defaults to
 // before a document is open (a live document's real tile wins; only the
 // ?tile=WxH shear hook produces a non-square one).
@@ -190,29 +226,77 @@ export const ICON_CELL = 64;
 // --- the 3D Sprite Atlas windoid's derived size ---------------------------------
 // The Sprite View's picture-frame rule turned sideways: one row of cells,
 // each the ring's TILE SIZE square (the tile at 1:1 — one image px per
-// system px), under the controls strip and over the kit's horizontal scroll
-// rail (vf-window scrollbars="horizontal": the rail on the frame's bottom
-// edge, 15 px inside the frame, the corner cell holding the grow box). All
-// system px, measured at scale 1 — if the strip, the rail or the window
-// chrome changes, re-measure:
+// system px), under the controls strip — the window's HEADER (vintage-frames
+// 0.6.1's `slot="header"`: a white band over a 1px rule between the title
+// bar and the body, outside the scroll area) — and over the kit's
+// horizontal scroll rail (vf-window scrollbars="horizontal": the rail on
+// the frame's bottom edge, 15 px inside the frame, the corner cell holding
+// the grow box). All system px — if the rail or the window chrome changes,
+// re-measure:
 //   width chrome: the frame's two 1px side borders;
-//   height chrome: 12 dot bar + 2 borders + RING_STRIP controls strip + 15
-//   rail = 92.
-// The controls strip is TWO rows (views / elev over from / size — four
-// labeled number fields don't fit one row at a four-cell width): 4 pad + 25
-// (the kit's stepper-tall number field) + 4 + 25 + 4 pad over a 1px rule =
-// 63 (sm-ring-view.js states the same box).
-export const RING_STRIP = 63;
+//   height chrome: 12 dot bar + 2 borders + RING_STRIP header + 15 rail =
+//   92.
+//
+// The controls strip is a DITL: placed kit items, every rectangle stated
+// here in whole system px against the header's corner (its positioning
+// anchor), the way a dialog resource stated its items. sm-ring-controls.js
+// places the items from these numbers and nothing in it is measured — so
+// the controls' extent is arithmetic, and with it the header's height and
+// the windoid's width floor. Two rows of caption + field pairs, views /
+// elev over from / size (four labeled fields don't fit one row at a
+// four-cell width):
+//   the kit's number field is 74 × 25 — its input at 3.5em of the display
+//   face's 16px em (56), its 3px gap and the 15px little-arrows stepper,
+//   whose 25 is the host's height — and a caption's line box is the
+//   display face's 16 (the kit's own metrics, stated once here);
+//   down: the rows sit RING_ROW_PAD in from the header's top, as far
+//   apart, as far above its rule — 4 + 25 + 4 + 25 + 4 = 62 — over the
+//   header's 1px rule, 63 (header-height counts its rule, as every kit bar
+//   does); a caption's top is its row's + (25 − 16) / 2 floored, 4,
+//   which is also where the baselines meet: the caption's 12px ascent lands
+//   16 below the row, the field's text (a 16px em on the well's 20px line,
+//   the well 1 + 1 inside the host) at 1 + 1 + 2 + 12 = 16;
+//   across: an 8px inset, a 40px caption column ("views" measures 40 in
+//   Chicago 12, "from" 32), a 6px gap, the field, a 6px gap, a 36px caption
+//   column ("elev" and "size" measure 28 — the extra 8, the captions
+//   right-aligned in their columns, is the room between a field and the
+//   next caption), a 6px gap, the field, an 8px inset — 8 + 40 + 6 + 74 +
+//   6 + 36 + 6 + 74 + 8 = 258.
+// A caption wider than its column overflows rather than reflowing (the
+// kit's rule: the number is the column), so drive.mjs checks every item
+// against the live glyphs — inside its column, inside the controls' box at
+// the header's corner.
+export const RING_FIELD = { width: 74, height: 25 };
+export const RING_CAPTION_HEIGHT = 16;
+const RING_INSET = 8;
+const RING_ROW_PAD = 4;
+const RING_GAP = 6;
+const RING_CAPTION_WIDTHS = [40, 36];
+const ringRowTop = (i) => RING_ROW_PAD + i * (RING_FIELD.height + RING_ROW_PAD);
+const ringCaption0 = RING_INSET;
+const ringField0 = ringCaption0 + RING_CAPTION_WIDTHS[0] + RING_GAP;
+const ringCaption1 = ringField0 + RING_FIELD.width + RING_GAP;
+const ringField1 = ringCaption1 + RING_CAPTION_WIDTHS[1] + RING_GAP;
+/** The strip's DITL: the controls' box (the header's interior); each row's
+ *  field top; a caption's top below its row's; and per column the caption's
+ *  left and width and the field's left. */
+export const RING_FIELDS = {
+  box: { width: ringField1 + RING_FIELD.width + RING_INSET, height: ringRowTop(2) },
+  rows: [ringRowTop(0), ringRowTop(1)],
+  captionDy: Math.floor((RING_FIELD.height - RING_CAPTION_HEIGHT) / 2),
+  cols: [
+    { caption: ringCaption0, width: RING_CAPTION_WIDTHS[0], field: ringField0 },
+    { caption: ringCaption1, width: RING_CAPTION_WIDTHS[1], field: ringField1 },
+  ],
+};
+// The strip: the controls over the header's 1px rule — the window's
+// `header-height`, authored in index.html (the drive pins it to this).
+export const RING_STRIP = RING_FIELDS.box.height + 1;
 export const RING_CHROME = { w: 2, h: 12 + 2 + RING_STRIP + 15 };
-// The strip's content width — the windoid's width FLOOR (the grow box's
-// declared min-width, and the placement's floor): the wider of its two
-// rows (a caption, a
-// stepper-tall number field at 3.5em, a caption, a field — 242) plus the
-// field group's 8px side padding (258), plus the 2 borders. Measured on
-// sm-ring-view at scale 1 (re-measure if its fields or captions change;
-// drive.mjs pins this number against the live element). Four cells at the
-// default 64 (261) just clear it.
-export const RING_MIN_WIDTH = 260;
+// The windoid's width FLOOR (the grow box's declared min-width, and the
+// placement's floor): the controls' box plus the 2 borders, so the header
+// never clips a field. Four cells at the default 64 (261) just clear it.
+export const RING_MIN_WIDTH = RING_FIELDS.box.width + RING_CHROME.w;
 
 /** The 3D Sprite Atlas windoid's height for a tile size: the chrome over
  *  one row of size-px cells — a derivation windows.js applies and declares
@@ -221,13 +305,21 @@ export function ringHeightFor(size) {
   return RING_CHROME.h + Math.max(1, Math.floor(size));
 }
 
-/** A ring's NATURAL width: n cells of `size` with the grid's n−1 rules and
- *  the frame's borders, floored at the strip — the placement's seed for the
- *  windoid's width (the user's from there; a wider row scrolls). */
-export function ringWidthFor(views, size) {
+/** The ring ROW's own width: n cells of `size` with the grid's n−1 rules
+ *  between (frameless — the windoid frame is its perimeter). The scroll
+ *  range: the kit sizes its scrolled plane to sm-ring-view's in-flow
+ *  grid. */
+export function ringRowWidth(views, size) {
   const n = Math.max(1, Math.floor(views));
   const s = Math.max(1, Math.floor(size));
-  return Math.max(RING_MIN_WIDTH, n * s + (n - 1) + RING_CHROME.w);
+  return n * s + (n - 1);
+}
+
+/** A ring's NATURAL width: the row with the frame's borders, floored at the
+ *  strip — the placement's seed for the windoid's width (the user's from
+ *  there; a wider row scrolls). */
+export function ringWidthFor(views, size) {
+  return Math.max(RING_MIN_WIDTH, ringRowWidth(views, size) + RING_CHROME.w);
 }
 
 /**

@@ -1,25 +1,25 @@
 // ---------------------------------------------------------------------------
-// <sm-atlas-view> — the Full Sprite View window's body: the FACE PICKER
-// strip across the top (the six cube-view radios, moved here from the
-// document window — one app-level picker serving the ACTIVE document, the
-// way the options strip serves one tool), over the ATLAS GRID — a formal
-// 3×2 vf-grid holding one face tile per cell, in the sheet's own
+// <sm-atlas-view> — the Full Sprite View window's body: the ATLAS GRID alone
+// — a formal 3×2 vf-grid holding one face tile per cell, in the sheet's own
 // arrangement (DEFAULT_ATLAS_LAYOUT), each cell a live canvas of that
-// face's slice drawn nearest-neighbor. The grid is a PICKING SURFACE too:
-// pressing a tile selects that face — on the POINTERDOWN, the Tools
-// palette's mouse-down feel (sm-tool-strip's header: feel, not a bridge —
-// the kit's 0.5.4 re-insert lands after the click, so the click that
-// follows a press is simply a no-op on the face already selected) — and
-// the selected tile is stroked with a red ring (--sm-select, the
-// face-picker art's own #ff4f4f) laid over its edge.
+// face's slice drawn nearest-neighbor, in flow at the body's corner. The
+// face picker over it is <sm-atlas-controls>, in the window's HEADER
+// (vintage-frames 0.6.1) — the band over the body — so the body is the
+// sheet and nothing else. The grid is a PICKING SURFACE too: pressing a
+// tile selects that face — on the POINTERDOWN, the Tools palette's
+// mouse-down feel (sm-tool-strip's header: feel, not a bridge — the kit's
+// 0.5.4 re-insert lands after the click, so the click that follows a press
+// is simply a no-op on the face already selected) — and the selected tile
+// is stroked with a red ring (--sm-select, the face-picker art's own
+// #ff4f4f) laid over its edge.
 //
 // The windoid is FIXED-size — no grow box: shell/windows.js pins its width
 // to the atlas grid block (SPRITE_WIDTH in shell/layout.js — cols ×
 // ATLAS_GRID.cell + interior rules + borders) and derives its height from
-// the active TILE's ratio (square tiles ⇒ square cells), so the grid fills
-// the body below the strip exactly — no margins; the .atlas-box centering +
-// clip is the safety net for degenerate cases (no active document, a
-// mid-refit frame).
+// the active TILE's ratio (square tiles ⇒ square cells) plus the chrome
+// (the header included), so the grid fills the body exactly — no margins,
+// nothing centered, nothing clipped but by the body itself. The host is
+// `display: contents`.
 //
 // A CONNECTED component that FOLLOWS THE ACTIVE DOCUMENT (the utility
 // windows serve the active document only): followActive re-wires it across
@@ -30,14 +30,14 @@
 //     (blit-then-notify), so tracking a stroke is one sliced putImageData
 //     pass per frame — the second live subscriber ever, after the rebuilder,
 //     and the same cost class.
-// The picker and the ring read the active context's face off the workspace
-// store (a StoreController re-renders on any workspace change — a face
-// switch, an activation) and a pick — strip or grid — routes through
-// workspace.setFace on the ACTIVE key. With no active document the cells
-// just keep their last pixels — the windoid is hidden whenever the
-// application is inactive, so nothing stale ever shows. Each cell canvas
-// keeps a native tile-resolution backing store (CSS scales it crisp to the
-// fixed cell).
+// The ring reads the active context's face off the workspace store (a
+// StoreController re-renders on any workspace change — a face switch, an
+// activation) and a tile press routes through workspace.setFace on the
+// ACTIVE key, the same action the header's picker fires. With no active
+// document the cells just keep their last pixels — the windoid is hidden
+// whenever the application is inactive, so nothing stale ever shows. Each
+// cell canvas keeps a native tile-resolution backing store (CSS scales it
+// crisp to the fixed cell).
 //
 // THE CELLS WEAR A PATTERN: `pattern` (a kit library name — gray-25, dots,
 // bricks, … — or sixteen hex digits, the kit's own attribute grammar) paints
@@ -48,7 +48,9 @@
 // `vf-container pattern="…"` does — one controller per cell, sized from the
 // cell's DECLARED geometry (ATLAS_GRID.cell × the derived cell height, the
 // same numbers the vf-grid lays out), so nothing is measured and the raster
-// is exact at every density. Unset, the cells stay plain white.
+// is exact at every density. (A cell is a pressable <button>, so the fill
+// rides the button rather than a container.) Unset, the cells stay plain
+// white.
 // ---------------------------------------------------------------------------
 
 import { PatternFillController, vfPatternFill } from 'vintage-frames';
@@ -59,13 +61,8 @@ import { workspace, followActive } from '../state/workspace.js';
 import { StoreController } from '../state/store-controller.js';
 import { DEFAULT_ATLAS_LAYOUT } from '../lib/atlas.js';
 import { ATLAS_GRID } from '../shell/layout.js';
-import './sm-face-picker.js'; // registers <sm-face-picker>
 import { baseStyles } from './base-styles.js';
 import { parsePatternAttr } from './ui-bits.js';
-
-// The face-picker row order: mirror pairs, so flipping between a pair for
-// reference is one step.
-const FACES = ['left', 'right', 'front', 'back', 'top', 'bottom'];
 
 // The grid's cells: the sheet's own row-major arrangement, each face with
 // its layout cell — the paint offsets into the canonical atlas.
@@ -84,37 +81,9 @@ export class SmAtlasView extends LitElement {
     baseStyles,
     vfPatternFill,
     css`
+      /* No box of its own: the grid sits at the body's corner. */
       :host {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-      }
-      /* The picker strip: the status strip's grammar upside down (a white
-         band over a 1px black rule), like the 3D View's controls strip.
-         Every metric rides --vf-scale (the kit's layout contract — and the
-         windoid's fixed geometry is system-px arithmetic, so an unscaled
-         padding would break the SPRITE_CHROME math at any scale but 1).
-         The windoid's fixed width is the atlas grid's, two system px wider
-         than the picker block — the centering absorbs that slack. */
-      .picker-strip {
-        flex: none;
-        display: flex;
-        justify-content: center;
-        padding: calc(var(--vf-scale, 1) * 8px) calc(var(--vf-scale, 1) * 12px);
-        border-bottom: calc(var(--vf-scale, 1) * 1px) solid var(--vf-black, #000);
-        background: var(--vf-white, #fff);
-        overflow: hidden;
-      }
-      /* The atlas box: what the strip leaves of the column. The windoid's
-         derived geometry makes the fixed-size grid fill it exactly; the
-         centering + clip only ever matter in the degenerate cases. */
-      .atlas-box {
-        flex: 1;
-        min-height: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden;
+        display: contents;
       }
       /* A grid cell IS its face tile: a bare button filling the well edge to
          edge (the grid's 1px rules are the only lines between tiles — it's
@@ -179,9 +148,8 @@ export class SmAtlasView extends LitElement {
     super();
     /** @type {string|null} the `pattern` attribute, verbatim (see willUpdate) */
     this.pattern = null;
-    // The picker's and the ring's share: re-render on any workspace change (a
-    // face switch, an activation) — the pixels themselves ride the doc
-    // channels below.
+    // The ring's share: re-render on any workspace change (a face switch,
+    // an activation) — the pixels themselves ride the doc channels below.
     new StoreController(this, workspace.store);
     // One kit pattern fill per cell, on the cell's own box (the button), at
     // the cell's DECLARED size — the grid lays the cells out from these same
@@ -236,57 +204,41 @@ export class SmAtlasView extends LitElement {
     const active = workspace.active();
     const face = active?.face ?? '';
     return html`
-      <div class="picker-strip">
-        <sm-face-picker
-          .faces=${FACES}
-          .selected=${face}
-          @sm-select-face=${this.#onSelectFace}
-        ></sm-face-picker>
-      </div>
-      <div class="atlas-box">
-        <vf-grid
-          class="atlas-grid"
-          columns=${ATLAS_GRID.cols}
-          rows=${ATLAS_GRID.rows}
-          cell-width=${ATLAS_GRID.cell}
-          cell-height=${this.#cellH}
-          frameless
-          role="group"
-          aria-label="sprite atlas"
-        >
-          ${GRID_CELLS.map(
-            ({ face: f }) => html`
-              <button
-                ${ref(this.#cellBox.get(f))}
-                type="button"
-                class=${classMap({
-                  'atlas-cell': true,
-                  'vf-pattern-fill': true,
-                  'vf-patterned': !!this.#pattern,
-                })}
-                data-face=${f}
-                title=${f}
-                aria-label=${`${f} face`}
-                aria-pressed=${f === face ? 'true' : 'false'}
-                @pointerdown=${(e) => this.#onCellPress(e, f)}
-                @click=${() => this.#pick(f)}
-              >
-                <canvas ${ref(this.#cellCanvas.get(f))}></canvas>
-                <span class=${classMap({ 'atlas-ring': true, on: f === face })}></span>
-              </button>
-            `
-          )}
-        </vf-grid>
-      </div>
+      <vf-grid
+        class="atlas-grid"
+        columns=${ATLAS_GRID.cols}
+        rows=${ATLAS_GRID.rows}
+        cell-width=${ATLAS_GRID.cell}
+        cell-height=${this.#cellH}
+        frameless
+        role="group"
+        aria-label="sprite atlas"
+      >
+        ${GRID_CELLS.map(
+          ({ face: f }) => html`
+            <button
+              ${ref(this.#cellBox.get(f))}
+              type="button"
+              class=${classMap({
+                'atlas-cell': true,
+                'vf-pattern-fill': true,
+                'vf-patterned': !!this.#pattern,
+              })}
+              data-face=${f}
+              title=${f}
+              aria-label=${`${f} face`}
+              aria-pressed=${f === face ? 'true' : 'false'}
+              @pointerdown=${(e) => this.#onCellPress(e, f)}
+              @click=${() => this.#pick(f)}
+            >
+              <canvas ${ref(this.#cellCanvas.get(f))}></canvas>
+              <span class=${classMap({ 'atlas-ring': true, on: f === face })}></span>
+            </button>
+          `
+        )}
+      </vf-grid>
     `;
   }
-
-  // A pick — from the picker strip or an atlas tile — switches the ACTIVE
-  // document's edited face (the windoid serves whichever document is active,
-  // like every utility window).
-  #onSelectFace = (e) => {
-    this.#pick(e.detail.face);
-  };
 
   // The press path (see the header): the primary button only — a right
   // button is no pick, and the kit's windoid drag never starts from a tile.

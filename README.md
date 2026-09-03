@@ -88,7 +88,7 @@ beside "rotate"); greedy meshing is always on.
 Sprites are hard pixel art — every texel is fully opaque or fully
 transparent — and every face with no view of its own is mirror-filled from
 its opposite at render time. The **face picker** (six pixel-art cube icons
-over radio buttons, the strip across the Full Sprite View windoid's top)
+over radio buttons, the Full Sprite View windoid's header)
 switches which of the six you're editing (a
 mirror-derived face reads empty — an honest view of the sheet) — see
 [Drawing editor](#drawing-editor).
@@ -335,7 +335,7 @@ template — see [UI layer: Lit](#ui-layer-lit).
   wedge. `test/palette.test.mjs` pins the exact set. Every stroke is
   hard-pixel: fully opaque or fully erased, never anti-aliased.
 - **Face picker** — six **cube-view icons** over a radio row (a `vf-radio-group`)
-  in the strip across the **Full Sprite View windoid's** top switch which face
+  in the **Full Sprite View windoid's** header switch which face
   the **active document's** window edits (each document keeps its own
   selection — the picker, like every utility windoid, shows the active
   one's), laid out as mirror pairs
@@ -679,10 +679,22 @@ Patterns control panel (document tier, not a document — see
   behind another windoid its first click; the pointerdown picks the app
   once carried to dodge it are gone). The
   3D windoid stays `resizable` — its canvas re-fits via its own
-  ResizeObserver, so the grow box works for free. The **Full Sprite
-  View** (`sm-atlas-view`) hosts the **face picker** strip across its top
-  (the six cube-view radios — see the Drawing-editor bullet) over the
-  **atlas grid** — a formal 3×2 `vf-grid` holding one face tile per cell
+  ResizeObserver, so the grow box works for free. Every windoid's controls
+  strip is the window's **header** (`slot="header"` — vintage-frames
+  0.6.1: the Finder window's header line, a white band over a 1px rule
+  between the title bar and the body, a positioning anchor; its
+  `header-height` authored on the window in `index.html`, the kit's
+  grammar, at the same number the chrome arithmetic in `shell/layout.js`
+  carries — `STAGE_STRIP`, `SPRITE_STRIP`, `RING_STRIP` — which the drive
+  pins the markup against). The **Full Sprite
+  View** carries the **face picker** in its header (`sm-atlas-controls`:
+  the six cube-view radios — see the Drawing-editor bullet — in a placed
+  `vf-container` at the picker block's rectangle, `SPRITE_PICKER_AT`,
+  centered across the fixed header, declaring `pattern="white"` for the
+  paper a bare container would otherwise inherit from the desktop — kit
+  ask #6's bridge, the draw canvas's;
+  [docs/kit-asks-pattern-paper.md](docs/kit-asks-pattern-paper.md)) over the
+  **atlas grid**, its body (`sm-atlas-view`) — a formal 3×2 `vf-grid` holding one face tile per cell
   in the sheet's own arrangement, each cell a live canvas of that face's
   slice drawn nearest-neighbor, the grid's 1px rules the only lines
   between (frameless — the windoid frame is its perimeter), every cell
@@ -703,17 +715,19 @@ Patterns control panel (document tier, not a document — see
   The windoid is a **fixed-size picture frame** — movable but not
   resizable, no grow box: its width is the atlas grid block's
   (`SPRITE_WIDTH` = 3 cells + rules + borders, the narrower picker block
-  centering in the strip), and its height is derived through the active
-  tile's own ratio plus the fixed chrome (`spriteHeightFor` in
-  `shell/layout.js`, applied by `fitSprite` in `shell/windows.js`), so
-  the grid exactly fills the body below the strip — no margins — at boot
-  and across document switches and tile resizes; the **3D View**
-  hosts a **controls strip** across its top — the two render toggles as
-  checkboxes, **rotate** (auto-spin) and **smooth** (the low-poly wedge
-  pass), writing the prefs slice live (`sm-stage-controls`; these lived in
-  Settings… before) — over the THREE canvas in a **kit pattern well**
-  (`#stage-well`, a `vf-container pattern="gray-25"` taking the column's
-  slack): the renderer clears **transparent** (`alpha: true`, no scene
+  centered in the header), and its height is derived through the active
+  tile's own ratio plus the fixed chrome, the header's `SPRITE_STRIP`
+  included (`spriteHeightFor` in `shell/layout.js`, applied by
+  `fitSprite` in `shell/windows.js`), so the grid exactly fills the body
+  below the header — no margins — at boot and across document switches
+  and tile resizes; the **3D View** carries its **controls strip** in its
+  header (`STAGE_STRIP` tall) — the two render toggles as checkboxes,
+  **rotate** (auto-spin) and **smooth** (the low-poly wedge pass), a kit
+  row stack writing the prefs slice live (`sm-stage-controls`; these
+  lived in Settings… before) — over the THREE canvas in a **kit pattern
+  well** (`#stage-well`, a `vf-container pattern="gray-25"` filling the
+  body by its own `fill-width fill-height`): the renderer clears
+  **transparent** (`alpha: true`, no scene
   background), so the model and its shadow composite over the 1-bit
   pattern rather than a flat gray — the same pattern the Sprite View's
   cells wear, both the kit's own fill; its status strip reading the fixed
@@ -732,10 +746,33 @@ Patterns control panel (document tier, not a document — see
   elevation, the way an engine consumes a pre-rendered rotation set, as a
   **row of tiles**: one cell per view, each the **tile at 1:1** — `size`
   system px square, one image pixel per system pixel — on the kit's
-  `gray-25` paper (the Sprite View's pattern grammar), under a **two-row
-  controls strip** of four labeled number fields — `views` (1–16, a 360/n
-  step), `elev` (0–90° above the horizon), `from` (the first view's yaw,
-  0–359° from the front) and `size` (the tile's edge in px, 2–255). No
+  `gray-25` paper (the Sprite View's pattern grammar; here each cell is a
+  `vf-container pattern` at the tile's declared size, the Desktop
+  Patterns panel's element), under a **two-row controls strip** of four
+  labeled number fields — `views` (1–16, a 360/n step), `elev` (0–90°
+  above the horizon), `from` (the first view's yaw, 0–359° from the
+  front) and `size` (the tile's edge in px, 2–255). The strip is the
+  window's **header** (`slot="header"` — vintage-frames 0.6.1: the Finder
+  window's header line, a white band over a 1px rule between the title
+  bar and the body across the whole window, outside the scroll area, so
+  the controls hold while the row scrolls under them by construction;
+  `header-height="63"` authored in `index.html`, `RING_STRIP` in
+  `shell/layout.js` the same number), and it is a **DITL** (`sm-ring-controls`):
+  the four captions (`vf-label`, a declared column width each,
+  right-aligned so a caption hugs its field) and the four fields sit at
+  the top/left `RING_FIELDS` in `shell/layout.js` states, against the
+  header's own corner, in whole system px the kit writes as live
+  `calc()` — two rows 4 in and 4 apart, a caption dropped 4 below its row
+  (where its baseline meets the field's), an 8 inset, 40 and 36 caption
+  columns, 6 gaps, the kit's 74 × 25 number field. That arithmetic IS the
+  header's height (`RING_STRIP` = 62 + the rule) and the windoid's width
+  floor (`RING_MIN_WIDTH` = 258 + the borders) — derivations, not
+  measurements. The body is the row alone (`sm-ring-view`): a `vf-grid`
+  in flow at the plane's origin — the kit sizes its scrolled plane to
+  in-flow content that cannot wrap, so the row IS the scroll range — each
+  cell a `vf-container pattern` at the tile's declared size (the Desktop
+  Patterns panel's element). Nothing in the windoid is measured or
+  flexed, and neither component styles layout. No
   status line: the windoid's bottom edge is the kit's **horizontal scroll
   rail** (below). Defaults: four views at a 90° step, 45° up, from the
   front, 64 px tiles. **Yaw runs front → right → back → left** (yaw 0
@@ -791,10 +828,10 @@ Patterns control panel (document tier, not a document — see
 size)`: one cell per view with the grid's rules and the frame's
   borders, capped at the vacant middle so a fresh strip never runs under
   the rail), moved by the grow box within the rect's `min-width` (the
-  controls strip's content width, `RING_MIN_WIDTH`) — and a row that
-  outgrows it **scrolls under the rail** (the strip's field group is
-  `position: sticky`, so the controls hold at the left while the cells
-  scroll beneath them; the view count no longer touches the window). The
+  controls' DITL plus the borders, `RING_MIN_WIDTH`) — and a row that
+  outgrows it **scrolls under the rail** while the header holds still
+  above it (window chrome, outside the scroll area; the view count no
+  longer touches the window). The
   placement **docks it on the bottom margin, left-aligned with the
   document window**, and — only while it is shown — takes its band (the
   tile's own height) out of the vacancy so a fresh open, Arrange Windows
@@ -1332,10 +1369,14 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   none persists; the atlas strip docked at the bottom, the doc box shortened
                   only while it is shown) + cascadeFrom (the document windows' first-free-slot
                   cascade) + spriteHeightFor (the fixed-size
-                  Sprite View windoid: picker-block width, atlas-ratio height) + ringHeightFor /
-                  ringWidthFor (the 3D Sprite Atlas windoid: a derived height — the chrome over
-                  one row of tile-size cells — and a seeded, user-owned width: the natural row
-                  floored at its strip, capped at the vacancy) + iconDefault
+                  Sprite View windoid: picker-block width, atlas-ratio height) + RING_FIELDS
+                  (the 3D Sprite Atlas strip's DITL: the controls' box, rows, caption
+                  columns and field lefts in whole system px against the window header's
+                  corner — RING_STRIP, the header's height, and RING_MIN_WIDTH derive from
+                  it) + ringHeightFor / ringRowWidth / ringWidthFor (the windoid:
+                  a derived height — the chrome over one row of tile-size cells — the row's
+                  own width, and a seeded, user-owned width: the row floored at its strip,
+                  capped at the vacancy) + iconDefault
                   (the raster-derived icon lattice) + pinOf/pinTo (the nine-slice pin across raster
                   resizes — struts in the outer bands, springs in the middle — framed per tier:
                   WINDOW_FRAME below the options strip with the rail-sized top/right bands,
@@ -1409,20 +1450,27 @@ src/
                        drag preview / the selection's marching ants
     sm-face-picker.js, sm-tool-strip.js, sm-tool-options.js
                        presentational leaves: props down, bubbling sm-* events up, no store imports
-    sm-options-bar.js, sm-tools-panel.js, sm-atlas-view.js, sm-ring-view.js, sm-stage-controls.js,
-    sm-status-line.js, sm-color-picker.js, sm-desktop-patterns.js
+    sm-options-bar.js, sm-tools-panel.js, sm-atlas-controls.js, sm-atlas-view.js,
+    sm-ring-controls.js, sm-ring-view.js, sm-stage-controls.js, sm-status-line.js,
+    sm-color-picker.js, sm-desktop-patterns.js
                        connected chrome: the options strip (a kit vf-container band: current-ink
                        swatch + options, no tool name; hidden while the desktop is focused;
                        bounds from the active document) / the Tools palette body / the
-                       Sprite View body (the face-picker strip over the clickable 3×2
-                       face-tile vf-grid, both -> workspace.setFace on the ACTIVE key —
+                       Sprite View's controls (sm-atlas-controls, in the window's HEADER
+                       slot: the face picker in a placed vf-container at the DITL's
+                       rectangle, SPRITE_PICKER_AT -> workspace.setFace on the ACTIVE key)
+                       and its body (sm-atlas-view: the clickable 3×2 face-tile vf-grid —
                        tile picks fire on the press, the selected tile ringed in
                        --sm-select red — the cells live canvases following the active
-                       document) / the 3D Sprite Atlas body (the two-row settings strip ->
-                       the ring slice — its field group sticky at the left of the kit's
-                       scrolling viewport — over one patterned tile-size cell per view
-                       painted 1:1 from the sheet channel) / the 3D View's controls
-                       strip (the rotate + smooth checkboxes -> prefs) / the windows' status
+                       document) / the 3D Sprite Atlas's controls (sm-ring-controls, in
+                       the window's HEADER slot: the two-row settings strip as a DITL —
+                       the captions and fields placed at the top/left shell/layout.js's
+                       RING_FIELDS states against the header's corner -> the ring slice)
+                       and its body (sm-ring-view: the row's vf-grid in flow, one
+                       vf-container pattern cell per view painted 1:1 from the sheet
+                       channel) / the 3D View's controls (sm-stage-controls, in the
+                       window's HEADER slot: the rotate + smooth checkboxes in a kit row
+                       stack -> prefs) / the windows' status
                        readouts (tile = the window's edited face; build = the 3D View's fixed
                        name, the build stats riding its tooltip; the Sprite View and the
                        3D Sprite Atlas carry none) /

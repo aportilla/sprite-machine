@@ -45,6 +45,8 @@ import './components/sm-desktop-patterns.js'; // registers <sm-desktop-patterns>
 import './components/sm-options-bar.js'; // registers <sm-options-bar>
 import './components/sm-tools-panel.js'; // registers <sm-tools-panel>
 import './components/sm-atlas-view.js'; // registers <sm-atlas-view>
+import './components/sm-atlas-controls.js'; // registers <sm-atlas-controls>
+import './components/sm-ring-controls.js'; // registers <sm-ring-controls>
 import './components/sm-ring-view.js'; // registers <sm-ring-view>
 import './components/sm-status-line.js'; // registers <sm-status-line>
 import './components/sm-stage-controls.js'; // registers <sm-stage-controls>

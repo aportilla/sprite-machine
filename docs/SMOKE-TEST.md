@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 265 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 271 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -295,13 +295,21 @@ browser, `http://localhost:5173/`.
       the time returns; press again while the date shows — the time returns
       at once. Neither press moves focus, deactivates the app, or clears a
       selected desktop icon.
-- [ ] **3D View controls strip**: the rotate / smooth checkboxes across the
-      window's top toggle live — the model stops spinning / re-meshes
-      immediately (Settings… in the menu stays disabled, a parked
-      placeholder). One click, always: click the Tools palette (or any
-      other windoid) first, then a checkbox — it flips on that first click
-      (the 3D View comes forward under it), never needs a second; Space on
-      a focused box toggles it too.
+- [ ] **3D View controls strip**: the rotate / smooth checkboxes in the
+      window's header (the white band under the dot bar) toggle live — the
+      model stops spinning / re-meshes immediately (Settings… in the menu
+      stays disabled, a parked placeholder). One click, always: click the
+      Tools palette (or any other windoid) first, then a checkbox — it
+      flips on that first click (the 3D View comes forward under it),
+      never needs a second; Space on a focused box toggles it too.
+- [ ] **Every windoid's controls are its header**: the Sprite View's six
+      cube icons and radios, the 3D View's two checkboxes and the atlas's
+      four fields each sit in the window's header band — white paper over
+      one rule, directly under the dot bar — with the body (the face
+      grid, the pattern well, the tile row) starting at the rule. Zoom
+      the browser to 200%: each rule is one system px, the picker block is
+      centered with a pixel of slack each side, and the checkboxes sit on
+      whole pixels.
 - [ ] **The 3D Sprite Atlas, by eye**: with the Car open, View → 3D Sprite
       Atlas — a windoid lands under the document window, left-aligned with
       it, on the bottom margin: a two-row strip (`views` / `elev` over
@@ -317,13 +325,23 @@ browser, `http://localhost:5173/`.
       facing you is always the lit one). The dot bar carries a close box;
       its click hides the windoid and unchecks the item; the item re-shows
       it where it was, on top of the other windoids.
-- [ ] **The row scrolls, the strip holds**: step `views` to 8 — the
+- [ ] **The row scrolls, the header holds**: step `views` to 8 — the
       windoid does NOT widen; the row runs past its right edge and the
       rail comes alive (the dither trough, the thumb). Drag the thumb,
-      press the arrows, wheel sideways: the tiles scroll under the strip
-      while the four fields stay put at the left. Grow the window wider
-      than the row: the rail idles again, white to the right of the last
-      tile.
+      press the arrows, wheel sideways: the tiles scroll while the
+      controls strip — the window's header, its white paper and its rule
+      — does not move at all. Grow the window wider than the row: the
+      rail idles again, white to the right of the last tile, the header
+      spanning the window as ever.
+- [ ] **The strip is a DITL**: zoom the browser to 200% — every caption
+      (`views` / `elev` / `from` / `size`) stays crisp on whole pixels, each
+      right-aligned against its field, its baseline on the field's digits'
+      baseline; the four fields sit in two columns, the rule under the
+      header is one system px, and the cells' paper is 1-bit. Nothing in
+      the windoid is measured or flexed: the strip is the window's header
+      band (vintage-frames 0.6.1) with the controls placed in it at stated
+      system px, and the row and every cell are kit boxes at stated
+      system px.
 - [ ] **Size moves the height, the grow box moves the width**: set `size`
       to 128 — the tiles double, the windoid grows UP (its bottom stays on
       the margin, its width holds); 255 — the same, taller still; 2 — a

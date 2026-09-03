@@ -238,7 +238,9 @@ it also cuts scroll chaining out of every kit scroller, which on a desktop
 that does not scroll costs nothing. The other way out — the tiles bounce
 and the strip does not — needs a **non-scrolling header slot** on
 `vf-window`, the status strip's mirror on the top edge; a real feature,
-not asked for here.
+not asked for here. (It shipped in **0.6.1** all the same, beside kit ask
+#10's `fixed` — [kit-asks-fixed-child.md](kit-asks-fixed-child.md) — and
+the atlas strip lives in it now.)
 
 **The app-side bridge, if wanted before the release** (the viewport part
 is exported through `vf-window`, 835): one rule in `src/style.css`,

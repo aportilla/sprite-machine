@@ -120,12 +120,13 @@ import {
 // kit's size rect (vintage-frames 0.5.6: `min-width` / `min-height` bound
 // the drag per axis, the way GrowWindow took the app's rectangle), so no
 // correction ever runs after a vf-resize.
-// WIDTH: the controls strip across its top (sm-stage-controls — the rotate /
+// WIDTH: the controls strip in its header (sm-stage-controls — the rotate /
 // smooth checkboxes) must never be clipped: its measured content width, 159
 // (8 pad + the two checkboxes 61 + 68 + the 14 gap + 8 pad) + the frame's
 // 1px borders, rounded up a hair — if the strip's contents change,
 // re-measure and re-pin. HEIGHT: the fixed chrome (12 dot bar + 2 borders +
-// 24 strip + 15 status = 53) plus enough canvas to still read as a view.
+// the STAGE_STRIP header + 15 status = 53) plus enough canvas to still
+// read as a view.
 const STAGE_MIN_WIDTH = 164;
 const STAGE_MIN_HEIGHT = 160;
 // The kit's own grow floor (vf-window's MIN_WIDTH × MIN_HEIGHT — not
@@ -238,7 +239,11 @@ export function initWindows(desktop, { hide = [] } = {}) {
   const floorRingWidth = () => {
     if ((byId.ring.width ?? 0) < RING_MIN_WIDTH) byId.ring.width = RING_MIN_WIDTH;
   };
-  /** The rect, restated whenever the height derivation moves. */
+  /** The rect, restated whenever the height derivation moves. (The
+   *  window's header height — the controls strip, RING_STRIP — is authored
+   *  in the markup as `header-height`, the kit's grammar; the chrome
+   *  arithmetic ringHeightFor counts the same 63, and the drive pins the
+   *  two against each other.) */
   const declareRingRect = (h) => {
     byId.ring.minWidth = RING_MIN_WIDTH;
     byId.ring.minHeight = h;
@@ -336,7 +341,10 @@ export function initWindows(desktop, { hide = [] } = {}) {
   // The 3D View's floor, declared to its grow box as the kit's size rect:
   // the drag stops there on its own (the kit's general 80×54 would let it
   // shrink under the strip). The ring's rect rides fitRing above — its
-  // height bound moves with the tile size.
+  // height bound moves with the tile size. (Every windoid's header height
+  // — its controls strip's band — is authored in the markup as
+  // `header-height`, the kit's grammar; layout.js keeps the same numbers
+  // for the chrome arithmetic, and the drive pins the two.)
   byId.stage.minWidth = STAGE_MIN_WIDTH;
   byId.stage.minHeight = STAGE_MIN_HEIGHT;
   placeUtility();

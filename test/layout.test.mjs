@@ -18,13 +18,21 @@ import {
   pinTo,
   spriteHeightFor,
   SPRITE_CHROME,
+  SPRITE_STRIP,
+  SPRITE_PICKER,
+  SPRITE_PICKER_AT,
+  STAGE_STRIP,
   SPRITE_WIDTH,
   ATLAS_GRID,
   ringWidthFor,
+  ringRowWidth,
   ringHeightFor,
   RING_CHROME,
   RING_STRIP,
   RING_MIN_WIDTH,
+  RING_FIELD,
+  RING_FIELDS,
+  RING_CAPTION_HEIGHT,
   TOP_RESERVE,
   MENU_BAR,
   ICON_CELL,
@@ -63,6 +71,22 @@ test('placement: the sprite/stage rail is one right-flush column, sprite fixed',
   assert.ok(p.sprite.top > TOP_RESERVE);
   assert.equal(p.stage.top, p.sprite.top + p.sprite.height + 8);
   assert.equal(p.stage.top + p.stage.height, H - 8);
+});
+
+test("the windoids' headers: the picker's band and the checkbox row, rule included", () => {
+  // The Sprite View's header holds the face picker block — six 21px cubes
+  // with 12px gaps over the kit's 19px radio row under the 26px icons —
+  // 8 in from the top and 8 above the rule; the chrome counts it.
+  assert.deepEqual(SPRITE_PICKER, { width: 6 * 21 + 5 * 12, height: 26 + 19 });
+  assert.equal(SPRITE_STRIP, 8 + SPRITE_PICKER.height + 8 + 1);
+  assert.equal(SPRITE_STRIP, 62);
+  assert.deepEqual(SPRITE_CHROME, { w: 2, h: 12 + 2 + SPRITE_STRIP });
+  // The block centers across the fixed header's interior on whole px.
+  assert.equal(SPRITE_PICKER_AT.left, (SPRITE_WIDTH - 2 - SPRITE_PICKER.width) / 2);
+  assert.ok(Number.isInteger(SPRITE_PICKER_AT.left));
+  assert.equal(SPRITE_PICKER_AT.top, 8);
+  // The 3D View's header: the kit's 20px checkbox row over the rule.
+  assert.equal(STAGE_STRIP, 24);
 });
 
 test('sprite sizing: height derives from width through the tile ratio + chrome', () => {
@@ -120,6 +144,46 @@ test('placement: the document box sits top-left beside Tools, leaving the cascad
   assert.equal(last.top + p.doc.height, y1);
 });
 
+test("ring strip: the controls are a DITL whose arithmetic is the header's height and the width floor", () => {
+  // The kit's metrics, stated once: a 74 × 25 number field, a 16px caption.
+  assert.deepEqual(RING_FIELD, { width: 74, height: 25 });
+  assert.equal(RING_CAPTION_HEIGHT, 16);
+  const { box, rows, cols, captionDy } = RING_FIELDS;
+  // Down: two rows 4 in from the top, 4 apart, 4 above the bottom.
+  assert.deepEqual(rows, [4, 4 + 25 + 4]);
+  assert.equal(box.height, 4 + 25 + 4 + 25 + 4);
+  // A caption drops (25 − 16) / 2 floored below its row — where the
+  // baselines meet (the caption's 12px ascent at 16 below the row; the
+  // field's text at 1 + 1 + 2 + 12).
+  assert.equal(captionDy, 4);
+  assert.equal(captionDy + 12, 1 + 1 + 2 + 12);
+  // Across: inset, caption, gap, field, gap, caption, gap, field, inset.
+  assert.equal(cols[0].caption, 8);
+  assert.equal(cols[0].field, cols[0].caption + cols[0].width + 6);
+  assert.equal(cols[1].caption, cols[0].field + RING_FIELD.width + 6);
+  assert.equal(cols[1].field, cols[1].caption + cols[1].width + 6);
+  assert.equal(box.width, cols[1].field + RING_FIELD.width + 8);
+  // Every item inside the box, in whole system px.
+  for (const c of cols) {
+    assert.ok(c.caption + c.width <= box.width);
+    assert.ok(c.field + RING_FIELD.width <= box.width);
+    for (const v of [c.caption, c.width, c.field]) assert.ok(Number.isInteger(v));
+  }
+  for (const r of rows) {
+    assert.ok(r + RING_FIELD.height <= box.height);
+    assert.ok(r + captionDy + RING_CAPTION_HEIGHT <= box.height);
+  }
+  // The DITL reproduces the strip as it was first measured (the plan's
+  // as-built 258 × 62 — ring-size-plan.md): the strip is the controls over
+  // the header's rule (the window's header-height, rule included), the
+  // floor the controls plus the borders.
+  assert.deepEqual(box, { width: 258, height: 62 });
+  assert.equal(RING_STRIP, box.height + 1);
+  assert.equal(RING_STRIP, 63);
+  assert.equal(RING_MIN_WIDTH, box.width + RING_CHROME.w);
+  assert.equal(RING_MIN_WIDTH, 260);
+});
+
 test('ring sizing: the height derives from the tile size, the width seeds from the row, both floored', () => {
   // The chrome: the two side borders; 12 dot bar + 2 borders + the two-row
   // strip + the kit's horizontal rail (15 px inside the frame) over one row
@@ -128,8 +192,13 @@ test('ring sizing: the height derives from the tile size, the width seeds from t
   assert.equal(ringHeightFor(64), RING_CHROME.h + 64);
   assert.equal(ringHeightFor(255), RING_CHROME.h + 255);
   assert.equal(ringHeightFor(0), RING_CHROME.h + 1, 'never a zero row');
-  // The natural row: n cells of size + n−1 rules + 2 borders, floored at
-  // the strip's content width (a short ring never clips the controls).
+  // The row's own width — the plane the view declares to the kit's scroll
+  // area: n cells of size + n−1 rules, no perimeter (frameless).
+  assert.equal(ringRowWidth(4, 64), 4 * 64 + 3);
+  assert.equal(ringRowWidth(1, 128), 128);
+  assert.equal(ringRowWidth(0, 64), 64, 'never fewer than one cell');
+  // The natural row: the row + 2 borders, floored at the strip (a short
+  // ring never clips the controls).
   assert.equal(ringWidthFor(4, 64), Math.max(RING_MIN_WIDTH, 4 * 64 + 3 + 2));
   assert.equal(ringWidthFor(4, 70), Math.max(RING_MIN_WIDTH, 4 * 70 + 3 + 2));
   assert.equal(ringWidthFor(16, 255), 16 * 255 + 15 + 2);

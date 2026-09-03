@@ -1,10 +1,18 @@
 // ---------------------------------------------------------------------------
-// <sm-stage-controls> — the 3D View windoid's controls strip: the two render
-// toggles as checkboxes — 'rotate' (the loop's auto-spin) and 'smooth' (the
-// low-poly wedge pass) — in a band across the top of the view, under the
-// windoid's dot bar. Settings… used to hold these; keeping them on the
-// window they change is the standing preference for persistent in-flow
-// controls over popups (the menu item stays, parked disabled).
+// <sm-stage-controls> — the 3D View windoid's controls strip, slotted into
+// the window's HEADER (`slot="header"` — vintage-frames 0.6.1: a white band
+// over a 1px rule between the title bar and the body, across the whole
+// window; `header-height` authored in index.html = STAGE_STRIP, the drive
+// pinning the two): the
+// two render toggles as checkboxes — 'rotate' (the loop's auto-spin) and
+// 'smooth' (the low-poly wedge pass) — in a kit row stack, 8px in from the
+// header's sides with 14 between, centered on the header's 23 rows by the
+// stack's own whole-pixel centering (`fill-height`, a row's default cross
+// alignment). Settings… used to hold these; keeping them on the window they
+// change is the standing preference for persistent in-flow controls over
+// popups (the menu item stays, parked disabled). The host is `display:
+// contents`; nothing here is styled — the header is the kit's band, the
+// row the kit's stack.
 //
 // The toggles act on the CLICK — the kit's own checkbox activation, on the
 // release like System 7's. A windoid control needs no press-driven bridge:
@@ -15,13 +23,8 @@
 // sm-tool-strip's header).
 //
 // A CONNECTED chrome component: prefs drives it (live() bindings, so a
-// re-render can't skip a re-sync) and each toggle is a prefs action. `:host`
-// IS the strip — a real box at the top of the windoid body's flex column
-// (index.html's .stage-body): the status strip's grammar upside down (a
-// white band over a 1px black rule), every metric riding --vf-scale, with
-// the THREE canvas flexing below it (the stage's ResizeObserver watches the
-// canvas box, so the render buffer re-fits around the strip for free). The
-// windoid's STAGE_MIN_WIDTH in shell/windows.js is pinned to this strip's
+// re-render can't skip a re-sync) and each toggle is a prefs action. The
+// windoid's STAGE_MIN_WIDTH in shell/windows.js is pinned to this row's
 // content width — grow it and re-measure (see the note there).
 // ---------------------------------------------------------------------------
 
@@ -37,16 +40,7 @@ export class SmStageControls extends LitElement {
     baseStyles,
     css`
       :host {
-        flex: none;
-        display: flex;
-        align-items: center;
-        gap: calc(var(--vf-scale, 1) * 14px);
-        height: calc(var(--vf-scale, 1) * 24px);
-        border-bottom: calc(var(--vf-scale, 1) * 1px) solid var(--vf-black, #000);
-        background: var(--vf-white, #fff);
-        padding-inline: calc(var(--vf-scale, 1) * 8px);
-        white-space: nowrap;
-        overflow: hidden;
+        display: contents;
       }
     `,
   ];
@@ -59,20 +53,22 @@ export class SmStageControls extends LitElement {
   render() {
     const p = prefs.get();
     return html`
-      <vf-checkbox
-        id="stage-rotate"
-        .checked=${live(p.autoRotate)}
-        title="spin the model automatically"
-        @vf-change=${(e) => prefs.setAutoRotate(e.detail.checked)}
-        >rotate</vf-checkbox
-      >
-      <vf-checkbox
-        id="stage-smooth"
-        .checked=${live(p.lowpoly)}
-        title="smooth slopes: additive 45° wedges over same-color staircases"
-        @vf-change=${(e) => prefs.setLowpoly(e.detail.checked)}
-        >smooth</vf-checkbox
-      >
+      <vf-stack direction="row" gap="14" pad="0 8" fill-height>
+        <vf-checkbox
+          id="stage-rotate"
+          .checked=${live(p.autoRotate)}
+          title="spin the model automatically"
+          @vf-change=${(e) => prefs.setAutoRotate(e.detail.checked)}
+          >rotate</vf-checkbox
+        >
+        <vf-checkbox
+          id="stage-smooth"
+          .checked=${live(p.lowpoly)}
+          title="smooth slopes: additive 45° wedges over same-color staircases"
+          @vf-change=${(e) => prefs.setLowpoly(e.detail.checked)}
+          >smooth</vf-checkbox
+        >
+      </vf-stack>
     `;
   }
 }

@@ -95,25 +95,13 @@ sm-color-picker {
   border: calc(var(--vf-scale, 1) * 1px) solid var(--sm-black);
 }
 
-/* The 3D View window's body (it runs to the frame — a vf-window body
-   carries no inset of its own): the controls strip over the pattern well
-   holding the THREE canvas (sm-stage-controls draws itself; this wrapper
-   is layout only). */
-.stage-body {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-/* The pattern well (a kit vf-container, its `pattern` the backdrop) takes
-   what the controls strip leaves of the column — the one size the kit
-   can't state for it, since the windoid's grow box sets it. The kit
-   measures the undeclared height for its raster. */
-#stage-well {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-/* The THREE canvas fills the well. No background of its own: the renderer
-   clears transparent (scene/stage.js), so the well's pattern shows through
+/* The 3D View's pattern well (a kit vf-container, its `pattern` the
+   backdrop) fills the window body by its own `fill-width fill-height` —
+   the one size the kit can't state for it, since the windoid's grow box
+   sets it; the kit measures the undeclared box for its raster. The
+   controls strip above it is the window's header (index.html). The THREE
+   canvas fills the well. No background of its own: the renderer clears
+   transparent (scene/stage.js), so the well's pattern shows through
    behind the model. */
 #viewport {
   width: 100%;
