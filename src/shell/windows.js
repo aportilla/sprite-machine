@@ -230,12 +230,17 @@ export function initWindows(desktop, { hide = [] } = {}) {
   // min-width — the strip's content width, RING_MIN_WIDTH (the kit's own
   // grow floor is a general 80) — and floorRingWidth guards the
   // programmatic writers the rect doesn't bound (the rect bounds the
-  // gesture only). Two writers, two anchors: fitRing holds the TOP (a
-  // placement wrote it), while a tile-size change (refitRingHeight) holds
-  // the BOTTOM — the strip is bottom-docked, so a bigger tile grows the
-  // window UP rather than off the raster's bottom edge, the top floored at
-  // the reserve so the bar stays grabbable (a move, so the pin re-reads:
-  // the bottom is still its far strut).
+  // gesture only). ONE writer, one anchor: fitRing writes the height and
+  // nothing else. A size change never moves the top-left — the bar stays
+  // where the placement or your drag put it and the BOTTOM edge is what
+  // moves, a bigger tile growing the window down from where it sits (the
+  // Sprite View's rule: its height moves under a document switch, and that
+  // is no move). So a strip docked on the bottom margin grows past the
+  // raster's bottom at a big tile — accepted, the user's call: the pin
+  // keeps it hanging by the same amount across a resize (reversibility
+  // over visibility, the rule's own contract), a drag or Arrange brings it
+  // back. (A first cut held the bottom edge instead, growing the window up
+  // with the top floored at the reserve — a second writer; retired.)
   const floorRingWidth = () => {
     if ((byId.ring.width ?? 0) < RING_MIN_WIDTH) byId.ring.width = RING_MIN_WIDTH;
   };
@@ -252,19 +257,6 @@ export function initWindows(desktop, { hide = [] } = {}) {
   const fitRing = () => {
     const h = ringHeightFor(ring.get().size);
     byId.ring.height = h;
-    declareRingRect(h);
-    floorRingWidth();
-  };
-  const refitRingHeight = () => {
-    const win = byId.ring;
-    const h = ringHeightFor(ring.get().size);
-    const prev = win.height ?? h;
-    if (h !== prev) {
-      const k = systemPxQuantum(win);
-      const minTop = Math.ceil(TOP_RESERVE / k) * k;
-      win.top = Math.max(minTop, snapSys((win.top ?? minTop) + prev - h, win));
-      win.height = h;
-    }
     declareRingRect(h);
     floorRingWidth();
   };
@@ -366,14 +358,14 @@ export function initWindows(desktop, { hide = [] } = {}) {
     })
   );
 
-  // The tile size changes the ring's height: re-fit with the bottom edge
-  // held, guarded on the computed height so a settings change that leaves
-  // it (views, elevation, offset) writes nothing (the sprite refit's
-  // idiom). The view count no longer touches the window — a longer row
-  // scrolls under the rail.
+  // The tile size changes the ring's height: re-fit — the top-left held,
+  // the bottom edge the one that moves (see fitRing) — guarded on the
+  // computed height so a settings change that leaves it (views, elevation,
+  // offset) writes nothing (the sprite refit's idiom). The view count no
+  // longer touches the window — a longer row scrolls under the rail.
   unsubs.push(
     ring.subscribe(() => {
-      if ((byId.ring.height ?? 0) !== ringHeightFor(ring.get().size)) refitRingHeight();
+      if ((byId.ring.height ?? 0) !== ringHeightFor(ring.get().size)) fitRing();
     })
   );
 
@@ -542,8 +534,10 @@ export function initWindows(desktop, { hide = [] } = {}) {
         : { width: KIT_MIN_WIDTH, height: KIT_MIN_HEIGHT };
   /** The pin's policy: a fixed-size box passes its live size, a resizable
    *  one its floor — and the 3D Sprite Atlas both, per axis: its height is
-   *  a derivation (fixed — the bottom strut holds, the top follows), its
-   *  width the user's (resizable, floored at the strip). */
+   *  a derivation (fixed — resolved through the anchor rule from the pin
+   *  read where the window sits: docked by the placement, the bottom strut
+   *  holds and the top follows), its width the user's (resizable, floored
+   *  at the strip). */
   const policyOf = (win, cur) =>
     win === byId.ring
       ? { size: { height: cur.height }, min: { width: RING_MIN_WIDTH } }
@@ -562,15 +556,16 @@ export function initWindows(desktop, { hide = [] } = {}) {
     let rec = pins.get(win);
     // Moved or resized since this path last wrote it (a non-resizable
     // window compares position only: the Sprite View's height is the
-    // fixed derivation, re-fit on document switches, never a touch — and
-    // the ring compares its width alone: a grow is a touch, its height
-    // refit on a tile-size change is not) — or never pinned: read the pin
-    // from where it sits, on the raster it sat on.
+    // fixed derivation, re-fit on document switches, never a touch — its
+    // pin is all struts and the anchor rule holds the near edge, so the
+    // old pin still describes it. The ring's height refit on a tile-size
+    // change IS a touch: the top-left held and the bottom edge moved, so a
+    // pin read with the bottom a strut at the old offset would re-dock the
+    // bottom on the next event and jump the bar — the box is re-read where
+    // it sits) — or never pinned: read the pin from where it sits, on the
+    // raster it sat on.
     const sized =
-      !!rec &&
-      (win === byId.ring
-        ? rec.width !== cur.width
-        : win.resizable && (rec.width !== cur.width || rec.height !== cur.height));
+      !!rec && win.resizable && (rec.width !== cur.width || rec.height !== cur.height);
     const moved = !rec || rec.left !== cur.left || rec.top !== cur.top || sized;
     if (moved) rec = { pin: pinOf(cur, before, WINDOW_FRAME) };
     const g = pinTo(rec.pin, after, WINDOW_FRAME, policyOf(win, cur));

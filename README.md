@@ -819,7 +819,11 @@ Patterns control panel (document tier, not a document — see
   and the Desktop Patterns panel is the one window that states one): its
   **height is a derivation**, `ringHeightFor(size)`
   — the chrome over one row of tile-size cells — re-fit as the size
-  changes and **declared to the grow box as the kit's size rect**
+  changes with the **top-left held** (only the bottom edge moves: a bigger
+  tile grows the window down from where its bar sits, never up or
+  sideways — so a strip left docked on the bottom margin grows past it at
+  a big tile; drag it up, or Arrange re-docks it) and **declared to the
+  grow box as the kit's size rect**
   (vintage-frames 0.5.6: `min-height` = `max-height` locks the axis, the
   kit's own Patterns-strip idiom, stated from `shell/windows.js` rather
   than the markup because the bound moves with the tile), so the window

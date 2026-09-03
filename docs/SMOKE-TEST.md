@@ -342,12 +342,16 @@ browser, `http://localhost:5173/`.
       band (vintage-frames 0.6.1) with the controls placed in it at stated
       system px, and the row and every cell are kit boxes at stated
       system px.
-- [ ] **Size moves the height, the grow box moves the width**: set `size`
-      to 128 — the tiles double, the windoid grows UP (its bottom stays on
-      the margin, its width holds); 255 — the same, taller still; 2 — a
-      row of dots. Drag the grow box down-right: the window widens and
-      does NOT get taller (the height is the tile's); drag it far left —
-      it stops at the strip's width, the fields never clipped.
+- [ ] **Size moves the height, the grow box moves the width**: drag the
+      windoid up off the bottom margin, then set `size` to 128 — the tiles
+      double and the windoid grows DOWN from where it sits (its dot bar
+      does not move a pixel, its width holds); 255 — the same, taller
+      still (left on the margin it would grow past the raster's bottom —
+      a size change never moves the bar; drag it up or Arrange); 2 — a
+      row of dots, the bar still where it was. Drag the grow box
+      down-right: the window widens and does NOT get taller (the height is
+      the tile's); drag it far left — it stops at the strip's width, the
+      fields never clipped.
 - [ ] **Settings are live, both ways**: `elev` 0 — pure side views; 90 —
       plan views; `from` 45 — the ring rotates. Draw a stroke — every tile
       follows at frame rate. File → Export Sprite Atlas… reads the same

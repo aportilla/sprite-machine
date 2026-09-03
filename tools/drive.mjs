@@ -2914,9 +2914,28 @@ async function main() {
     cells.length === rb.cells && cells.every((c) => c.w === F0 && c.opaque > 0),
     JSON.stringify(cells)
   );
+  // Drag the windoid up by its dot bar first (the kit's gesture — no check
+  // of its own): a size change holds the windoid's TOP-LEFT and moves its
+  // bottom edge alone, so the placed windoid, docked on the bottom margin,
+  // would carry its rail and grow box below the raster at 128 — up here the
+  // grow box stays reachable for the drags below, and the held top reads
+  // as the user's position, not the placement's.
+  const ringTopPlaced = rb.top;
+  const ringBar = await evaluate(
+    `(() => {${DEEP} const r = __q('#win-ring').getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + 6 }; })()`
+  );
+  await mouse('mousePressed', ringBar.x, ringBar.y);
+  await mouse('mouseMoved', ringBar.x, ringBar.y - 60, { buttons: 1 });
+  await mouse('mouseMoved', ringBar.x, ringBar.y - 120, { buttons: 1 });
+  await mouse('mouseReleased', ringBar.x, ringBar.y - 120, { buttons: 0 });
+  await sleep(300);
+  rb = await ringBox();
+  const ringTop0 = rb.top;
   // The size field: the tile's edge. Typed to 128, the windoid's HEIGHT
-  // follows (the chrome over one row of 128-px cells), its bottom stays on
-  // the margin, its width holds, and every cell — backing and box — is 128.
+  // follows (the chrome over one row of 128-px cells) with its top-left
+  // held — the bottom edge is what moves — its width holds, and every cell
+  // — backing and box — is 128.
   await evaluate(
     `(() => {${DEEP} __q('.ring-size').shadowRoot.querySelector('input').focus(); })()`
   );
@@ -2928,16 +2947,16 @@ async function main() {
   rb = await ringBox();
   cells = await cellPixels();
   check(
-    "a tile size typed in the strip re-derives the windoid's height (still docked, the width held) and re-sizes every cell 1:1",
+    "a tile size typed in the strip re-derives the windoid's height with its top-left held (the bottom edge moves, the width holds) and re-sizes every cell 1:1",
     rb.size === 128 &&
       rb.h === ringHeightFor(128) &&
-      rb.top === rb.dh - 8 - rb.h &&
-      rb.w === ringW0 &&
+      rb.top === ringTop0 &&
       rb.left === ringLeft0 &&
+      rb.w === ringW0 &&
       rb.cell === 128 &&
       cells.length === rb.cells &&
       cells.every((c) => c.w === 128 && c.h === 128 && c.opaque > 0),
-    JSON.stringify({ rb, cells })
+    JSON.stringify({ rb, cells, ringTop0, ringTopPlaced })
   );
   check(
     '…and the declared rect follows the new height (the lock moves with the tile)',

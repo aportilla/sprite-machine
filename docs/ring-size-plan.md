@@ -5,11 +5,15 @@
 **As built, where the code departs from the text below:** (1) the strip's
 field group measures **258** with the shorter `size` caption, so
 `RING_MIN_WIDTH` is **260** — four 64-px cells (261) clear it by a pixel;
-(2) a tile-size change holds the windoid's **bottom** edge (the strip is
-bottom-docked, so a bigger tile grows the window up rather than off the
-raster), the top floored at the reserve — a second writer beside the
-top-holding placement/grow-box path (`refitRingHeight` vs `fitRing` in
-`shell/windows.js`); (3) the drive reads the row's overflow through the
+(2) a tile-size change holds the windoid's **top-left** and moves its
+bottom edge alone — one writer, `fitRing` in `shell/windows.js`, for the
+placement and the size change alike (revised 2026-09-03: the first day's
+build held the **bottom** edge instead, the strip being bottom-docked, so a
+bigger tile grew the window up rather than off the raster, the top floored
+at the reserve — a second writer, `refitRingHeight`; the user's call is
+that a size change never moves the bar, so a strip left on the bottom
+margin grows past the raster at a big tile, and a drag or Arrange brings
+it back); (3) the drive reads the row's overflow through the
 kit's exported `viewport` part, the app's content overflow rather than the
 kit's rail state. **A gotcha for the next reader:** a dev server that was
 already up on 5173 keeps serving its pre-bundled 0.5.4 kit after the
