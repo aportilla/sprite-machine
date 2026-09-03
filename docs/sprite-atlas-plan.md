@@ -32,7 +32,19 @@ headless Chrome; the stamp guard alone still let a probe read the second
 page mid-boot on the plain-reload greet check). The fixed-point
 argument in §3F holds on every tested raster; on one shorter than the top
 band + the strip (~430 px) the strip's top edge reads as a top strut too
-and the near edge wins — noted in `layout.js`'s header, accepted. ·
+and the near edge wins — noted in `layout.js`'s header, accepted. **(9)
+Revised 2026-09-02** — [the ring-size plan](ring-size-plan.md): `scale`
+became **`size`** (the tile's edge in px, 2–255, the lattice envelope fit
+to it — px per voxel is derived now), the cells show the tile at 1:1, the
+status line is gone and the windoid is the **scrolling document window
+turned windoid** — `resizable scrollbars="horizontal" flush` on
+vintage-frames 0.5.5, resizing on the horizontal axis alone (the app
+re-asserts `ringHeightFor(size)` under the grow box), its width the user's
+and the row scrolling under the kit's rail; `RING_HEIGHT` is
+`ringHeightFor(size)`, and the pin treats the box as mixed (a fixed
+height, a resizable width). Decisions 3 and 6 below and §9's A are
+superseded; the rest of this document stands as the record of the first
+build. ·
 **Planned:** 2026-08-29 on `9897f50` (dithered paper) · **Depends on:**
 nothing outside this repo — no kit change (see §3F: the kit's utility
 window already carries an optional close box).

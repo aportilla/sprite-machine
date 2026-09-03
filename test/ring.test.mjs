@@ -67,27 +67,36 @@ test('ringEnvelope: the footprint circle swept up the height', () => {
   }
 });
 
-test('ringFrame: a square that always holds the envelope, scale px per voxel', () => {
-  for (const [e, scale] of [
-    [0, 1],
-    [30, 1],
-    [45, 1],
-    [45, 2],
-    [60, 3],
-    [90, 8],
+test("ringFrame: the tile IS the frame; the envelope's larger extent fills it, the scale derived", () => {
+  for (const [e, size] of [
+    [0, 64],
+    [30, 2],
+    [45, 64],
+    [45, 128],
+    [60, 200],
+    [90, 255],
   ]) {
-    const { px, half } = ringFrame(CAR, e, scale);
+    const { px, half, scale } = ringFrame(CAR, e, size);
     const env = ringEnvelope(CAR, e);
-    assert.equal(px, Math.ceil(Math.max(env.width, env.height) * scale));
-    assert.ok(near(2 * half * scale, px), 'half puts exactly scale px on a voxel');
+    const span = Math.max(env.width, env.height);
+    assert.equal(px, size, 'the frame is the tile');
+    assert.ok(
+      near(2 * half, span),
+      "half is the envelope's larger half — it fills the tile"
+    );
+    assert.ok(near(scale * span, px), 'scale px per voxel spans the tile exactly');
     assert.ok(
       env.width / 2 <= half + 1e-9 && env.height / 2 <= half + 1e-9,
       'the box fits'
     );
   }
-  // The worked numbers: 69 at scale 1, 137 at scale 2.
-  assert.equal(ringFrame(CAR, 45, 1).px, 69);
-  assert.equal(ringFrame(CAR, 45, 2).px, 137);
+  // The worked numbers: the Car's envelope is 68.28 tall at 45°, so a 64
+  // tile holds it at 0.937 px per voxel, and a 137 tile at just over 2 (the
+  // old "scale 2" frame).
+  assert.ok(near(ringFrame(CAR, 45, 64).scale, 64 / 68.2843, 1e-4));
+  assert.ok(ringFrame(CAR, 45, 137).scale > 2);
+  // Never a zero frame (the slice clamps first; this is the last guard).
+  assert.equal(ringFrame(CAR, 45, 0).px, 1);
   // The frame is the same for every yaw and offset: the API takes neither
   // (a guard against a future "tight per-yaw" regression).
   assert.equal(ringFrame.length, 3);
@@ -126,18 +135,22 @@ test('ringCenter: the lattice center — X/Z centered, Y from 0', () => {
 });
 
 test('ringAnchor: the floor center, yaw-independent by arity', () => {
-  const F = ringFrame(CAR, 0, 1).px;
-  // e = 0: the feet sit ny/2 straight below the center.
-  assert.deepEqual(ringAnchor(CAR, 0, 1, F), { x: F / 2, y: F / 2 + CAR.ny / 2 });
+  const S = 64;
+  // e = 0: the feet sit ny/2 voxels straight below the center, at the
+  // frame's derived scale (the envelope's larger extent spans the tile).
+  const { scale: s0 } = ringFrame(CAR, 0, S);
+  const a0 = ringAnchor(CAR, 0, S);
+  assert.ok(near(a0.x, S / 2) && near(a0.y, S / 2 + (CAR.ny / 2) * s0));
   // e = 90: looking straight down, the floor center IS the frame center.
-  const F90 = ringFrame(CAR, 90, 1).px;
-  const a90 = ringAnchor(CAR, 90, 1, F90);
-  assert.ok(near(a90.x, F90 / 2) && near(a90.y, F90 / 2, 1e-9));
-  // The worked number: 45°, scale 1 → 34.5 + 14.14.
-  const a45 = ringAnchor(CAR, 45, 1, 69);
-  assert.ok(near(a45.x, 34.5) && near(a45.y, 34.5 + 20 * Math.SQRT1_2, 1e-9));
-  // Scale multiplies the drop.
-  const a2 = ringAnchor(CAR, 45, 2, 137);
-  assert.ok(near(a2.y - 137 / 2, 2 * (a45.y - 34.5)));
-  assert.equal(ringAnchor.length, 4, 'no yaw in the signature');
+  const a90 = ringAnchor(CAR, 90, S);
+  assert.ok(near(a90.x, S / 2) && near(a90.y, S / 2, 1e-9));
+  // The worked number: 45° in a 69 tile (the old 1-px-per-voxel frame, now
+  // 69 / 68.28 px per voxel) → 34.5 + 14.14 × that.
+  const a45 = ringAnchor(CAR, 45, 69);
+  const { scale: s45 } = ringFrame(CAR, 45, 69);
+  assert.ok(near(a45.x, 34.5) && near(a45.y, 34.5 + 20 * Math.SQRT1_2 * s45, 1e-9));
+  // Doubling the tile doubles the drop.
+  const a2 = ringAnchor(CAR, 45, 138);
+  assert.ok(near(a2.y - 69, 2 * (a45.y - 34.5)));
+  assert.equal(ringAnchor.length, 3, 'no yaw in the signature');
 });

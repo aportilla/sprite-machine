@@ -21,7 +21,7 @@ import {
   SPRITE_WIDTH,
   ATLAS_GRID,
   ringWidthFor,
-  RING_HEIGHT,
+  ringHeightFor,
   RING_CHROME,
   RING_STRIP,
   RING_MIN_WIDTH,
@@ -32,6 +32,7 @@ import {
   WINDOW_FRAME,
   ICON_FRAME,
 } from '../src/shell/layout.js';
+import { RING_DEFAULTS } from '../src/state/ring.js';
 
 const TOOLS = { width: 30, height: 187 };
 // The capture tool's raster (1000×850 CSS at DSF 1, minus the 10px bezel).
@@ -119,34 +120,57 @@ test('placement: the document box sits top-left beside Tools, leaving the cascad
   assert.equal(last.top + p.doc.height, y1);
 });
 
-test('ring sizing: one cell per view with the rules and borders, floored at the strip', () => {
+test('ring sizing: the height derives from the tile size, the width seeds from the row, both floored', () => {
   // The chrome: the two side borders; 12 dot bar + 2 borders + the two-row
-  // strip + 15 status over one row of cells.
+  // strip + the kit's horizontal rail (15 px inside the frame) over one row
+  // of size-px cells.
   assert.deepEqual(RING_CHROME, { w: 2, h: 12 + 2 + RING_STRIP + 15 });
-  assert.equal(RING_HEIGHT, RING_CHROME.h + ATLAS_GRID.cell);
-  // Four views: 4 × 70 + 3 rules + 2 borders = 285 (the default strip).
-  assert.equal(ringWidthFor(4), Math.max(RING_MIN_WIDTH, 4 * ATLAS_GRID.cell + 3 + 2));
-  assert.equal(ringWidthFor(16), 16 * ATLAS_GRID.cell + 15 + 2);
-  // A short ring floors at the strip's content width — the grid centers in
-  // the slack there rather than clipping the controls.
-  assert.equal(ringWidthFor(1), RING_MIN_WIDTH);
-  assert.ok(ringWidthFor(2) >= RING_MIN_WIDTH);
-  assert.equal(ringWidthFor(0), RING_MIN_WIDTH, 'never fewer than one cell');
-  // The default strip has no slack: four cells is wider than the floor.
-  assert.ok(4 * ATLAS_GRID.cell + 3 + 2 >= RING_MIN_WIDTH);
+  assert.equal(ringHeightFor(64), RING_CHROME.h + 64);
+  assert.equal(ringHeightFor(255), RING_CHROME.h + 255);
+  assert.equal(ringHeightFor(0), RING_CHROME.h + 1, 'never a zero row');
+  // The natural row: n cells of size + n−1 rules + 2 borders, floored at
+  // the strip's content width (a short ring never clips the controls).
+  assert.equal(ringWidthFor(4, 64), Math.max(RING_MIN_WIDTH, 4 * 64 + 3 + 2));
+  assert.equal(ringWidthFor(4, 70), Math.max(RING_MIN_WIDTH, 4 * 70 + 3 + 2));
+  assert.equal(ringWidthFor(16, 255), 16 * 255 + 15 + 2);
+  assert.equal(ringWidthFor(1, 128), RING_MIN_WIDTH, 'a short ring floors at the strip');
+  assert.equal(ringWidthFor(0, 64), RING_MIN_WIDTH, 'never fewer than one cell');
+  // The layout's default size mirrors the slice's (one truth, restated for
+  // the no-opts call), and the Sprite View's cell is no longer the ring's.
+  assert.equal(RING_DEFAULTS.size, 64);
+  assert.equal(
+    initialPlacement(W, H, TOOLS).ring.height,
+    ringHeightFor(RING_DEFAULTS.size)
+  );
+  assert.equal(ATLAS_GRID.cell, 70);
 });
 
-test("placement: the ring docks on the bottom margin at the doc box's left, at its fixed size", () => {
+test("placement: the ring docks on the bottom margin at the doc box's left — the tile's height, the row's width", () => {
   const p = initialPlacement(W, H, TOOLS);
+  const x1 = p.sprite.left - 14; // the vacancy's right edge
   assert.equal(p.ring.left, p.doc.left);
   assert.equal(p.ring.top + p.ring.height, H - 8);
-  assert.equal(p.ring.height, RING_HEIGHT);
-  assert.equal(p.ring.width, ringWidthFor(4));
-  // The width follows the view count; nothing else about the box moves.
+  assert.equal(p.ring.height, ringHeightFor(64));
+  assert.equal(p.ring.width, ringWidthFor(4, 64));
+  // The tile size moves the height (the bottom stays docked); the view
+  // count seeds the width; nothing else about the box moves.
+  const big = initialPlacement(W, H, TOOLS, { ringSize: 200 });
+  assert.equal(big.ring.height, ringHeightFor(200));
+  assert.equal(big.ring.top + big.ring.height, H - 8);
+  assert.equal(big.ring.left, p.ring.left);
+  // (four 200-px cells outgrow this raster's vacancy — the cap below.)
+  assert.equal(big.ring.width, Math.min(ringWidthFor(4, 200), x1 - p.doc.left));
   const eight = initialPlacement(W, H, TOOLS, { ringViews: 8 });
-  assert.equal(eight.ring.width, ringWidthFor(8));
-  assert.equal(eight.ring.left, p.ring.left);
+  assert.equal(eight.ring.width, ringWidthFor(8, 64));
   assert.equal(eight.ring.top, p.ring.top);
+  // A row wider than the vacant middle is CAPPED at it — a fresh strip
+  // never runs under the rail (the rail goes live instead) — and never
+  // drops under the strip's floor.
+  const wide = initialPlacement(W, H, TOOLS, { ringViews: 16, ringSize: 255 });
+  assert.ok(ringWidthFor(16, 255) > x1 - p.doc.left);
+  assert.equal(wide.ring.left + wide.ring.width, x1);
+  const tiny = initialPlacement(300, 400, TOOLS, { ringViews: 16 });
+  assert.equal(tiny.ring.width, RING_MIN_WIDTH);
 });
 
 test('placement: a shown ring shortens the doc box; hidden, nothing changes', () => {
@@ -172,6 +196,10 @@ test('placement: a shown ring shortens the doc box; hidden, nothing changes', ()
     assert.ok(s.top + on.doc.height <= on.ring.top - 8, `slot ${i} runs into the strip`);
     occupied = [...occupied, s];
   }
+  // …by the tile's own height: a bigger tile takes more of the vacancy.
+  const tall = initialPlacement(W, H, TOOLS, { ringShown: true, ringSize: 200 });
+  assert.equal(tall.doc.height, on.doc.height - (ringHeightFor(200) - ringHeightFor(64)));
+  assert.equal(tall.doc.top + tall.doc.height + room, tall.ring.top - 8);
 });
 
 test('placement: the rail is one column — the stage takes the sprite width on any raster', () => {
@@ -324,6 +352,9 @@ test('zoom: a shown ring stops the zoomed box a gap above the strip', () => {
   // The right edge is the rail's inset either way; the default is unchanged.
   assert.equal(z.width, zoomedBox(W, H, p.doc).width);
   assert.deepEqual(zoomedBox(W, H, p.doc, { ringShown: false }), zoomedBox(W, H, p.doc));
+  // The band is the tile's own: a bigger tile stops the zoom higher.
+  const zt = zoomedBox(W, H, p.doc, { ringShown: true, ringSize: 200 });
+  assert.equal(zt.top + zt.height, H - 8 - ringHeightFor(200) - 8);
 });
 
 test('zoom: a window dragged past the vacancy still gets a workable floor', () => {
@@ -562,19 +593,35 @@ test('pin: the placement is a fixed point — a resize lands the windoids where 
         `stage ${JSON.stringify([r0, r1])}`
       );
       // The 3D Sprite Atlas strip: bottom-docked at the doc box's left, a
-      // fixed-size box whose left edge is a near strut and bottom edge a
-      // far strut — a fixed point WITHOUT a frame change, at the default
-      // four views and at the widest ring (whose right edge hangs past the
-      // right band: opposite struts keep the near edge).
+      // MIXED box — its y axis a fixed size (the bottom edge a far strut,
+      // the top following), its x axis resizable and floored at the strip
+      // (the left edge a near strut; the right edge springs with the
+      // middle, like the document window's) — so its left, top and height
+      // are a fixed point WITHOUT a frame change, at the default four views
+      // and at the widest ring (capped at the vacancy), at two tile sizes,
+      // while its width is content: inside the vacancy, never under the
+      // strip's floor. (A 255 tile on the 620 raster trips the header's
+      // top-band caveat — the near edge wins there, accepted — so the
+      // sizes here stay under it.)
       for (const views of [4, 16]) {
-        const g0 = initialPlacement(r0.width, r0.height, TOOLS, { ringViews: views });
-        const g1 = initialPlacement(r1.width, r1.height, TOOLS, { ringViews: views });
-        const size = { width: ringWidthFor(views), height: RING_HEIGHT };
-        assert.deepEqual(
-          roundTrip(g0.ring, r0, r1, WINDOW_FRAME, { size }),
-          g1.ring,
-          `ring(${views}) ${JSON.stringify([r0, r1])}`
-        );
+        for (const size of [64, 128]) {
+          const opts = { ringViews: views, ringSize: size };
+          const g0 = initialPlacement(r0.width, r0.height, TOOLS, opts);
+          const g1 = initialPlacement(r1.width, r1.height, TOOLS, opts);
+          const ring = roundTrip(g0.ring, r0, r1, WINDOW_FRAME, {
+            size: { height: ringHeightFor(size) },
+            min: { width: RING_MIN_WIDTH },
+          });
+          const tag = `ring(${views}, ${size}) ${JSON.stringify([r0, r1])}`;
+          assert.equal(ring.left, g1.ring.left, `${tag} left`);
+          assert.equal(ring.top, g1.ring.top, `${tag} top`);
+          assert.equal(ring.height, g1.ring.height, `${tag} height`);
+          assert.ok(ring.width >= RING_MIN_WIDTH, `${tag} under the floor`);
+          assert.ok(
+            ring.left + ring.width <= p1.sprite.left - 14,
+            `${tag} runs into the rail`
+          );
+        }
       }
       const doc = roundTrip(p0.doc, r0, r1, WINDOW_FRAME, {
         min: { width: 80, height: 54 },
@@ -633,7 +680,8 @@ test('pin: a zero-sized raster degrades gracefully', () => {
     { width: 600, height: 500 },
     WINDOW_FRAME,
     {
-      size: { width: p.ring.width, height: p.ring.height },
+      size: { height: p.ring.height },
+      min: { width: RING_MIN_WIDTH },
     }
   );
   for (const v of Object.values(rp)) assert.ok(Number.isFinite(v));

@@ -41,7 +41,13 @@ import { session } from '../state/session.js';
 import { prefs } from '../state/prefs.js';
 import { build } from '../state/build.js';
 import { shell } from '../state/shell.js';
-import { ring, ringMetaChunks, RING_MAX_VIEWS, RING_MAX_SCALE } from '../state/ring.js';
+import {
+  ring,
+  ringMetaChunks,
+  RING_MAX_VIEWS,
+  RING_MIN_SIZE,
+  RING_MAX_SIZE,
+} from '../state/ring.js';
 import { files, UNTITLED, docFilename, ringFilename } from '../state/files.js';
 import { workspace, followActive } from '../state/workspace.js';
 import { TILE_MIN, TILE_MAX, clampTile } from '../lib/atlas.js';
@@ -429,26 +435,28 @@ export function initMenus(desktop, windows, panels) {
   const atlasStep = $('#atlas-step');
   const atlasElevation = $('#atlas-elevation');
   const atlasOffset = $('#atlas-offset');
-  const atlasScale = $('#atlas-scale');
+  const atlasSize = $('#atlas-size');
   const atlasDims = $('#atlas-dims');
   const btnExportAtlasOk = $('#btn-export-atlas-ok');
   atlasViews.min = 1;
   atlasViews.max = RING_MAX_VIEWS;
-  atlasScale.min = 1;
-  atlasScale.max = RING_MAX_SCALE;
+  atlasSize.min = RING_MIN_SIZE;
+  atlasSize.max = RING_MAX_SIZE;
   const seedRingDialog = () => {
     const st = ring.get();
     atlasViews.value = String(st.views);
     atlasElevation.value = String(st.elevation);
     atlasOffset.value = String(st.offset);
-    atlasScale.value = String(st.scale);
+    atlasSize.value = String(st.size);
     const step = 360 / st.views;
     atlasStep.textContent = `${Number.isInteger(step) ? step : step.toFixed(1)}° step`;
+    // The sheet: views tiles of `size` side by side (the frame IS the size
+    // — the field above says it — so the readout is the sheet alone).
     const dims = build.get().dims;
     if (dims) {
-      const { px } = ringFrame(dims, st.elevation, st.scale);
+      const { px } = ringFrame(dims, st.elevation, st.size);
       const sheet = ringSheet(st.views, px);
-      atlasDims.textContent = `frame ${px} × ${px} px · sheet ${sheet.width} × ${sheet.height} px`;
+      atlasDims.textContent = `${sheet.width} × ${sheet.height} px`;
     } else {
       atlasDims.textContent = '—';
     }
@@ -477,8 +485,8 @@ export function initMenus(desktop, windows, panels) {
     ring.setOffset(e.detail.valueAsNumber);
     syncRingDialog();
   });
-  on(atlasScale, 'vf-change', (e) => {
-    ring.setScale(e.detail.valueAsNumber);
+  on(atlasSize, 'vf-change', (e) => {
+    ring.setSize(e.detail.valueAsNumber);
     syncRingDialog();
   });
   on($('#btn-export-atlas-cancel'), 'click', () => dlgExportAtlas.close());
@@ -494,12 +502,13 @@ export function initMenus(desktop, windows, panels) {
     try {
       const canvas = panels.ring.renderSheet();
       const st = ring.get();
-      const { px } = ringFrame(dims, st.elevation, st.scale);
+      const { px, scale } = ringFrame(dims, st.elevation, st.size);
       const bytes = setTextChunks(
         await canvasToPngBytes(canvas),
         ringMetaChunks(ctx.name, st, {
           frame: px,
-          anchor: ringAnchor(dims, st.elevation, st.scale, px),
+          scale,
+          anchor: ringAnchor(dims, st.elevation, st.size),
           yaws: ringYaws(st.views, st.offset),
         })
       );

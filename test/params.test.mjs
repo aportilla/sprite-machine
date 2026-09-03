@@ -62,18 +62,18 @@ test('defaults: everything off / null on an empty query', () => {
   );
 });
 
-test('?ring: the view count, then optional elevation / offset / scale (defaults fill in)', () => {
+test('?ring: the view count, then optional elevation / offset / size (defaults fill in)', () => {
   assert.deepEqual(parseBootParams('?ring=4').ring, {
     views: 4,
     elevation: 45,
     offset: 0,
-    scale: 1,
+    size: 64,
   });
-  assert.deepEqual(parseBootParams('?ring=8,30,45,2').ring, {
+  assert.deepEqual(parseBootParams('?ring=8,30,45,128').ring, {
     views: 8,
     elevation: 30,
     offset: 45,
-    scale: 2,
+    size: 128,
   });
   assert.equal(
     parseBootParams('?ring=8,x').ring.elevation,

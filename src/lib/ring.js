@@ -9,16 +9,18 @@
 // voxel, the mesh builders' own expression) exactly once. Angles are degrees
 // at the API, radians inside.
 //
-// THE FRAME IS THE LATTICE'S ENVELOPE, NOT THE CONTENT'S. Every frame is a
-// square of F px sized so the whole nx×ny×nz voxel box fits at EVERY yaw and
-// this elevation: the box's XZ footprint turns inside its bounding circle (r
-// = hypot(nx, nz) / 2), so the projected envelope is the same at every yaw
-// — that circle swept up the box's height. The frame therefore never changes
-// size between angles, between strokes, or with the first-angle offset: a
-// sprite can't jitter in an animation, and one setting change is one
-// predictable re-layout. It is loose at yaw 0 (a cube uses 40 of its 56.57
-// width) — accepted: the sprite stays centered and the margin is
-// transparent. A tight per-frame bound would breathe with the angle.
+// THE FRAME IS THE TILE — a square of `size` px, the one size setting — and
+// what fills it is THE LATTICE'S ENVELOPE, NOT THE CONTENT'S: the whole
+// nx×ny×nz voxel box at EVERY yaw and this elevation. The box's XZ footprint
+// turns inside its bounding circle (r = hypot(nx, nz) / 2), so the projected
+// envelope is the same at every yaw — that circle swept up the box's height
+// — and its larger extent spans the tile exactly, which makes px per voxel a
+// DERIVED fraction (size / that extent), not a setting. The frame therefore
+// never changes size between angles, between strokes, or with the
+// first-angle offset: a sprite can't jitter in an animation, and one setting
+// change is one predictable re-layout. It is loose at yaw 0 (a cube uses 40
+// of its 56.57 width) — accepted: the sprite stays centered and the margin
+// is transparent. A tight per-frame bound would breathe with the angle.
 //
 // THE YAW CONVENTION: yaw 0 puts the camera on +z (the FRONT face toward
 // it); positive yaw walks the camera toward +x, so the second of four views
@@ -67,20 +69,23 @@ export function ringEnvelope(dims, elevation) {
 }
 
 /**
- * The frame: a SQUARE of F = ceil(max(width, height) · scale) px, and the
- * orthographic half-extent that puts exactly `scale` px on a voxel: half =
- * F / (2·scale) voxel units — at least the envelope's half, so the box
- * always fits, centered. The same for every yaw and every first-angle
- * offset (the API takes neither).
+ * The frame: the tile itself — a SQUARE of `size` px — with the orthographic
+ * half-extent that fits the envelope's larger extent to it exactly, half =
+ * max(width, height) / 2 voxel units (the box fits at every yaw, centered,
+ * the smaller extent's margin transparent), and the px per voxel that
+ * implies, scale = size / max(width, height) — DERIVED, a fraction (a 40³
+ * lattice at 45° in a 64 tile is 0.937 px per voxel). The same for every
+ * yaw and every first-angle offset (the API takes neither).
  * @param {{nx: number, ny: number, nz: number}} dims
  * @param {number} elevation  degrees
- * @param {number} scale  px per voxel
- * @returns {{px: number, half: number}}
+ * @param {number} size  the tile's edge, px
+ * @returns {{px: number, half: number, scale: number}}
  */
-export function ringFrame(dims, elevation, scale) {
+export function ringFrame(dims, elevation, size) {
   const { width, height } = ringEnvelope(dims, elevation);
-  const px = Math.max(1, Math.ceil(Math.max(width, height) * scale));
-  return { px, half: px / (2 * scale) };
+  const px = Math.max(1, Math.round(size));
+  const span = Math.max(width, height, 1e-9);
+  return { px, half: span / 2, scale: px / span };
 }
 
 /**
@@ -137,14 +142,15 @@ export function ringCenter(dims) {
  * Where the lattice floor's center (0, 0, 0) lands in EVERY frame, in px from
  * the frame's top-left: x = F/2, y = F/2 + (ny/2)·cos e·scale — the floor
  * point sits ny/2 below the center along world −y, whose screen-up component
- * is cos e. The engine anchor (feet-row), yaw-independent by construction.
+ * is cos e, at the frame's derived px per voxel (ringFrame). The engine
+ * anchor (feet-row), yaw-independent by construction.
  * @param {{nx: number, ny: number, nz: number}} dims
  * @param {number} elevation  degrees
- * @param {number} scale  px per voxel
- * @param {number} framePx
+ * @param {number} size  the tile's edge, px
  * @returns {{x: number, y: number}}
  */
-export function ringAnchor(dims, elevation, scale, framePx) {
+export function ringAnchor(dims, elevation, size) {
   const e = elevation * RAD;
-  return { x: framePx / 2, y: framePx / 2 + (dims.ny / 2) * Math.cos(e) * scale };
+  const { px, scale } = ringFrame(dims, elevation, size);
+  return { x: px / 2, y: px / 2 + (dims.ny / 2) * Math.cos(e) * scale };
 }

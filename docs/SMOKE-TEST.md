@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 258 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 264 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -305,36 +305,54 @@ browser, `http://localhost:5173/`.
 - [ ] **The 3D Sprite Atlas, by eye**: with the Car open, View → 3D Sprite
       Atlas — a windoid lands under the document window, left-aligned with
       it, on the bottom margin: a two-row strip (`views` / `elev` over
-      `from` / `scale`) over four cells on the gray-25 paper — the Car
-      from the front, its right, the back, its left, all at one size and
-      centered — and a status line reading `4 × 69 px`. The front view's
-      shading reads like the 3D View's default framing (roof brightest),
-      and **every angle is lit the same way** (the light rides with the
-      camera — the flank facing you is always the lit one). The dot bar
-      carries a close box; its click hides the windoid and unchecks the
-      item; the item re-shows it where it was, on top of the other
-      windoids.
-- [ ] **Settings are live, both ways**: step `views` to 8 — the windoid
-      widens to the right (its left edge holds), eight cells at a 45°
-      step; `elev` 0 — pure side views; 90 — plan views; `from` 45 — the
-      ring rotates; `scale` 2 — the frames double (the status reads
-      `8 × 137 px`), the thumbnails stay the cell size. Draw a stroke —
-      every cell follows at frame rate. File → Export Sprite Atlas… reads
-      the same numbers (and the step, the frame and the sheet); change one
-      there — the strip follows behind the modal; Cancel keeps it.
+      `from` / `size`) over four 64-px tiles on the gray-25 paper — the
+      Car from the front, its right, the back, its left, all at one size
+      and centered, each tile shown 1:1 (zoom the browser: a tile is a
+      whole count of device px, never a resample) — and, where a status
+      strip would be, the kit's **horizontal scroll rail**: arrows on a
+      bare channel (nothing to scroll), a corner cell at its right end
+      with the **grow box** in it. The front view's shading reads like
+      the 3D View's default framing (roof brightest), and **every angle
+      is lit the same way** (the light rides with the camera — the flank
+      facing you is always the lit one). The dot bar carries a close box;
+      its click hides the windoid and unchecks the item; the item re-shows
+      it where it was, on top of the other windoids.
+- [ ] **The row scrolls, the strip holds**: step `views` to 8 — the
+      windoid does NOT widen; the row runs past its right edge and the
+      rail comes alive (the dither trough, the thumb). Drag the thumb,
+      press the arrows, wheel sideways: the tiles scroll under the strip
+      while the four fields stay put at the left. Grow the window wider
+      than the row: the rail idles again, white to the right of the last
+      tile.
+- [ ] **Size moves the height, the grow box moves the width**: set `size`
+      to 128 — the tiles double, the windoid grows UP (its bottom stays on
+      the margin, its width holds); 255 — the same, taller still; 2 — a
+      row of dots. Drag the grow box down-right: the window widens and
+      does NOT get taller (the height is the tile's); drag it far left —
+      it stops at the strip's width, the fields never clipped.
+- [ ] **Settings are live, both ways**: `elev` 0 — pure side views; 90 —
+      plan views; `from` 45 — the ring rotates. Draw a stroke — every tile
+      follows at frame rate. File → Export Sprite Atlas… reads the same
+      numbers (the step and the sheet); change one there — the strip
+      follows behind the modal; Cancel keeps it. The exported sheet is
+      `views × size` by `size` px, its `sprite-machine:ring` chunk naming
+      the size, the frame and the derived px-per-voxel scale.
 - [ ] **The frame never breathes**: with the Cube open, step `from` 0 → 45
-      → 90 — the cube's silhouette changes, the cells don't; step `views`
+      → 90 — the cube's silhouette changes, the tiles don't; step `views`
       — same; draw on it — same.
 - [ ] **Arrange makes room**: with the strip shown, View → Arrange Windows
-      shortens the document window to clear it (a gap between); hide the
-      strip and Arrange again — the document takes the height back. The
-      zoom box stops above a shown strip and runs to the bottom margin
-      with it hidden. Toggling the strip on never moves a window already
-      open.
+      shortens the document window to clear it (a gap between — more at a
+      bigger tile) and re-seeds the strip's width (the row, no wider than
+      the space under the document); hide the strip and Arrange again —
+      the document takes the height back. The zoom box stops above a
+      shown strip and runs to the bottom margin with it hidden. Toggling
+      the strip on never moves a window already open.
 - [ ] **A resize keeps it docked**: shrink the browser — the strip stays
-      on the bottom margin at the document's left; grow it back — exactly
-      home. A desktop click hides it with the other windoids (the View
-      item stays checked, greyed); clicking the document brings it back.
+      on the bottom margin at the document's left, at its height, its
+      width shrinking with the middle like the document's; grow it back —
+      exactly home, width included. A desktop click hides it with the
+      other windoids (the View item stays checked, greyed); clicking the
+      document brings it back.
 - [ ] **The 3D View can't degenerate**: grow-box-shrink it as far as it
       goes — the drag stops at the strip's width (both checkboxes stay
       whole) and at a height that keeps a real patch of canvas under the

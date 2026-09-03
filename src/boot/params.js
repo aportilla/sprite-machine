@@ -118,12 +118,12 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     }
   }
 
-  // ?ring=<views>[,<elevation>[,<offset>[,<scale>]]]: show the 3D Sprite
+  // ?ring=<views>[,<elevation>[,<offset>[,<size>]]]: show the 3D Sprite
   // Atlas windoid (it boots hidden) with those settings — a capture hook,
   // since the capture tool can't pull a menu. Present with a valid first
   // integer ≥ 1 means "show"; each missing or unparseable trailing field
   // keeps its default (the slice clamps the rest at seed). ?ring=0 → null.
-  /** @type {{views: number, elevation: number, offset: number, scale: number}|null} */
+  /** @type {{views: number, elevation: number, offset: number, size: number}|null} */
   let ring = null;
   const ringParam = params.get('ring');
   if (ringParam) {
@@ -134,7 +134,7 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
         views: p[0],
         elevation: at(1, RING_DEFAULTS.elevation),
         offset: at(2, RING_DEFAULTS.offset),
-        scale: at(3, RING_DEFAULTS.scale),
+        size: at(3, RING_DEFAULTS.size),
       };
     }
   }

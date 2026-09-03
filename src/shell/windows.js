@@ -10,10 +10,14 @@
 //   is appActive AND prefs.showRing — View → 3D Sprite Atlas flips the
 //   flag, the close box (routed below) clears it, and a show brings it to
 //   the front of the windoid band (a palette you asked for comes up on
-//   top). Its size is a derivation like the
-//   Sprite View's (fitRing: RING_HEIGHT tall, ringWidthFor(views) wide,
-//   re-fit live as the view count changes). They hide, never unmount —
-//   canvas identity survives.
+//   top). Its HEIGHT is a derivation like the Sprite View's size (fitRing:
+//   ringHeightFor(size), re-fit as the tile size changes and DECLARED to
+//   the grow box as the kit's size rect, min-height = max-height — so it
+//   resizes on the horizontal axis alone); its WIDTH is the user's, seeded
+//   by the placement, moved by the grow box, floored at the strip (the
+//   rect's min-width; the cell row scrolls under the kit's rail past it —
+//   docs/ring-size-plan.md). They hide, never unmount — canvas identity
+//   survives.
 //
 //   DOCUMENT WINDOWS: one per open document, reconciled from the workspace
 //   slice (the syncDocIcons pattern lifted to windows): a context appearing
@@ -78,8 +82,9 @@
 // constant; opening any document window activates through the kit (hidden
 // windows included — ?hide=document captures keep their windoids that way).
 //
-// Close boxes never hide windows directly: the windoids have no close box
-// at all, and a document window's close routes through the injected
+// Close boxes never hide windows directly: the permanent windoids have no
+// close box at all, the 3D Sprite Atlas's is its toggle's uncheck (onClose
+// below), and a document window's close routes through the injected
 // dirty-checking flow (menus.js) — the workspace does the removing.
 //
 // The ZOOM BOX (document windows only — the template declares `zoomable`)
@@ -100,8 +105,8 @@ import {
   pinOf,
   pinTo,
   spriteHeightFor,
-  ringWidthFor,
-  RING_HEIGHT,
+  ringHeightFor,
+  RING_MIN_WIDTH,
   SPRITE_WIDTH,
   TOP_RESERVE,
   WINDOW_FRAME,
@@ -110,8 +115,11 @@ import {
 
 // The 3D View windoid's size floor, in system px — the kit's own grow floor
 // is a general 80×54, under which this windoid degenerates. Applied to every
-// geometry that lands on it: boot (the smart placement on a tiny raster)
-// and the grow box (via vf-resize below).
+// geometry that lands on it: boot (the smart placement on a tiny raster),
+// the raster re-pin (floorOf), and the grow box — DECLARED to it as the
+// kit's size rect (vintage-frames 0.5.6: `min-width` / `min-height` bound
+// the drag per axis, the way GrowWindow took the app's rectangle), so no
+// correction ever runs after a vf-resize.
 // WIDTH: the controls strip across its top (sm-stage-controls — the rotate /
 // smooth checkboxes) must never be clipped: its measured content width, 159
 // (8 pad + the two checkboxes 61 + 68 + the 14 gap + 8 pad) + the frame's
@@ -191,7 +199,7 @@ export function initWindows(desktop, { hide = [] } = {}) {
         width: byId.tools.width ?? 0,
         height: byId.tools.height ?? 0,
       },
-      { ringViews: ring.get().views, ringShown: ringShown() }
+      { ringViews: ring.get().views, ringSize: ring.get().size, ringShown: ringShown() }
     );
 
   // --- the Full Sprite View's fixed size ---------------------------------------
@@ -210,16 +218,50 @@ export function initWindows(desktop, { hide = [] } = {}) {
     byId.sprite.width = SPRITE_WIDTH;
     byId.sprite.height = spriteHeightFor(SPRITE_WIDTH, spriteRatio());
   };
-  // --- the 3D Sprite Atlas's fixed size ------------------------------------------
-  // The same picture-frame rule turned sideways: RING_HEIGHT tall, one cell
-  // per view wide (ringWidthFor — floored at the controls strip). Never
-  // authored truth: applied at placement and re-derived as the view count
-  // changes. A width write on a non-resizable window is no "touch" for the
-  // pin cache (it compares position only), so the left edge holds through a
-  // view-count change and the strip grows rightward from where it sits.
+  // --- the 3D Sprite Atlas's derived height ---------------------------------------
+  // The Sprite View's rule on ONE axis: ringHeightFor(size) tall — the
+  // chrome over one row of tile-size cells — never authored truth, applied
+  // at placement, re-derived as the tile size changes, and DECLARED to the
+  // grow box as the kit's size rect (min-height = max-height: the axis is
+  // locked, the drag moves the width alone — the kit's own Patterns-strip
+  // idiom). The WIDTH is the user's: the placement seeds it (the natural
+  // row, capped at the vacancy), the grow box moves it within the rect's
+  // min-width — the strip's content width, RING_MIN_WIDTH (the kit's own
+  // grow floor is a general 80) — and floorRingWidth guards the
+  // programmatic writers the rect doesn't bound (the rect bounds the
+  // gesture only). Two writers, two anchors: fitRing holds the TOP (a
+  // placement wrote it), while a tile-size change (refitRingHeight) holds
+  // the BOTTOM — the strip is bottom-docked, so a bigger tile grows the
+  // window UP rather than off the raster's bottom edge, the top floored at
+  // the reserve so the bar stays grabbable (a move, so the pin re-reads:
+  // the bottom is still its far strut).
+  const floorRingWidth = () => {
+    if ((byId.ring.width ?? 0) < RING_MIN_WIDTH) byId.ring.width = RING_MIN_WIDTH;
+  };
+  /** The rect, restated whenever the height derivation moves. */
+  const declareRingRect = (h) => {
+    byId.ring.minWidth = RING_MIN_WIDTH;
+    byId.ring.minHeight = h;
+    byId.ring.maxHeight = h;
+  };
   const fitRing = () => {
-    byId.ring.width = ringWidthFor(ring.get().views);
-    byId.ring.height = RING_HEIGHT;
+    const h = ringHeightFor(ring.get().size);
+    byId.ring.height = h;
+    declareRingRect(h);
+    floorRingWidth();
+  };
+  const refitRingHeight = () => {
+    const win = byId.ring;
+    const h = ringHeightFor(ring.get().size);
+    const prev = win.height ?? h;
+    if (h !== prev) {
+      const k = systemPxQuantum(win);
+      const minTop = Math.ceil(TOP_RESERVE / k) * k;
+      win.top = Math.max(minTop, snapSys((win.top ?? minTop) + prev - h, win));
+      win.height = h;
+    }
+    declareRingRect(h);
+    floorRingWidth();
   };
   /** Per-window nine-slice pin across raster resizes: the unrounded pin
    *  (shell/layout.js) plus the geometry this path last applied — a
@@ -244,8 +286,9 @@ export function initWindows(desktop, { hide = [] } = {}) {
       byId[id].width = Math.max(byId[id].width ?? 0, STAGE_MIN_WIDTH);
       byId[id].height = Math.max(byId[id].height ?? 0, STAGE_MIN_HEIGHT);
     }
-    // The sprite and ring windoids' sizes are never authored truth — they
-    // are always the fixed derivations.
+    // The sprite windoid's size and the ring's height are never authored
+    // truth — always the derivations (the ring's placed width stands,
+    // floored).
     if (id === 'sprite') fitSprite();
     if (id === 'ring') fitRing();
     clampWindow(desktop, byId[id]);
@@ -290,18 +333,13 @@ export function initWindows(desktop, { hide = [] } = {}) {
     // (onClose below), so the kit's default stands.
     if (id !== 'ring') byId[id].closable = false;
   }
+  // The 3D View's floor, declared to its grow box as the kit's size rect:
+  // the drag stops there on its own (the kit's general 80×54 would let it
+  // shrink under the strip). The ring's rect rides fitRing above — its
+  // height bound moves with the tile size.
+  byId.stage.minWidth = STAGE_MIN_WIDTH;
+  byId.stage.minHeight = STAGE_MIN_HEIGHT;
   placeUtility();
-  // The grow box enforces only the kit's general 80×54 floor, so a drag could
-  // shrink the 3D View under its own floor: re-floor on every vf-resize. The
-  // kit fires it after the shrunken box has been applied but the correction
-  // lands in the same microtask batch — before the next paint — so the drag
-  // simply stops at the floor.
-  const onStageResize = () => {
-    if ((byId.stage.width ?? 0) < STAGE_MIN_WIDTH) byId.stage.width = STAGE_MIN_WIDTH;
-    if ((byId.stage.height ?? 0) < STAGE_MIN_HEIGHT) byId.stage.height = STAGE_MIN_HEIGHT;
-  };
-  byId.stage.addEventListener('vf-resize', onStageResize);
-  unsubs.push(() => byId.stage.removeEventListener('vf-resize', onStageResize));
 
   // A document switch or a structural doc change (a tile resize, a load) can
   // change the atlas ratio: re-derive the sprite windoid's height. Guarded on
@@ -320,12 +358,14 @@ export function initWindows(desktop, { hide = [] } = {}) {
     })
   );
 
-  // The view count changes the ring's width: re-fit, guarded on the
-  // computed width so a settings change that leaves it (elevation, scale)
-  // writes nothing (the sprite refit's idiom).
+  // The tile size changes the ring's height: re-fit with the bottom edge
+  // held, guarded on the computed height so a settings change that leaves
+  // it (views, elevation, offset) writes nothing (the sprite refit's
+  // idiom). The view count no longer touches the window — a longer row
+  // scrolls under the rail.
   unsubs.push(
     ring.subscribe(() => {
-      if ((byId.ring.width ?? 0) !== ringWidthFor(ring.get().views)) fitRing();
+      if ((byId.ring.height ?? 0) !== ringHeightFor(ring.get().size)) refitRingHeight();
     })
   );
 
@@ -479,15 +519,29 @@ export function initWindows(desktop, { hide = [] } = {}) {
   // — it routes through the dirty-checking flow menus.js injects — and so
   // does the 3D Sprite Atlas windoid alone among the windoids: its close is
   // the View menu's uncheck, one truth (prefs.showRing).
-  /** A resizable window's size floor — the 3D View's own, the kit's for
-   *  the rest — applied on the re-pin itself (shell/layout.js pinTo), so
-   *  onStageResize never has a correction to make after this path (one
-   *  that fired would read as a grow-box "touch" on the next event and
-   *  re-derive the pin from the floored geometry — a drift). */
+  /** A resizable window's size floor — the 3D View's own, the ring's (the
+   *  strip's width over its derived height), the kit's for the rest —
+   *  applied on the re-pin itself (shell/layout.js pinTo): the declared
+   *  size rects bound the grow box alone, so this path floors its own
+   *  programmatic writes (a floor applied afterwards would read as a
+   *  "touch" on the next event and re-derive the pin from the floored
+   *  geometry — a drift). */
   const floorOf = (win) =>
     win === byId.stage
       ? { width: STAGE_MIN_WIDTH, height: STAGE_MIN_HEIGHT }
-      : { width: KIT_MIN_WIDTH, height: KIT_MIN_HEIGHT };
+      : win === byId.ring
+        ? { width: RING_MIN_WIDTH, height: ringHeightFor(ring.get().size) }
+        : { width: KIT_MIN_WIDTH, height: KIT_MIN_HEIGHT };
+  /** The pin's policy: a fixed-size box passes its live size, a resizable
+   *  one its floor — and the 3D Sprite Atlas both, per axis: its height is
+   *  a derivation (fixed — the bottom strut holds, the top follows), its
+   *  width the user's (resizable, floored at the strip). */
+  const policyOf = (win, cur) =>
+    win === byId.ring
+      ? { size: { height: cur.height }, min: { width: RING_MIN_WIDTH } }
+      : win.resizable
+        ? { min: floorOf(win) }
+        : { size: { width: cur.width, height: cur.height } };
   /** The window's pin re-expressed on the new raster — the whole of
    *  onDesktopResized per window (its doc comment is the contract). */
   const repin = (win, before, after) => {
@@ -500,23 +554,18 @@ export function initWindows(desktop, { hide = [] } = {}) {
     let rec = pins.get(win);
     // Moved or resized since this path last wrote it (a non-resizable
     // window compares position only: the Sprite View's height is the
-    // fixed derivation, re-fit on document switches, never a touch) — or
-    // never pinned: read the pin from where it sits, on the raster it sat
-    // on.
-    const moved =
-      !rec ||
-      rec.left !== cur.left ||
-      rec.top !== cur.top ||
-      (win.resizable && (rec.width !== cur.width || rec.height !== cur.height));
+    // fixed derivation, re-fit on document switches, never a touch — and
+    // the ring compares its width alone: a grow is a touch, its height
+    // refit on a tile-size change is not) — or never pinned: read the pin
+    // from where it sits, on the raster it sat on.
+    const sized =
+      !!rec &&
+      (win === byId.ring
+        ? rec.width !== cur.width
+        : win.resizable && (rec.width !== cur.width || rec.height !== cur.height));
+    const moved = !rec || rec.left !== cur.left || rec.top !== cur.top || sized;
     if (moved) rec = { pin: pinOf(cur, before, WINDOW_FRAME) };
-    const g = pinTo(
-      rec.pin,
-      after,
-      WINDOW_FRAME,
-      win.resizable
-        ? { min: floorOf(win) }
-        : { size: { width: cur.width, height: cur.height } }
-    );
+    const g = pinTo(rec.pin, after, WINDOW_FRAME, policyOf(win, cur));
     win.left = snapSys(g.left, win);
     win.top = snapSys(g.top, win);
     if (win.resizable) {
@@ -726,7 +775,7 @@ export function initWindows(desktop, { hide = [] } = {}) {
       desktop.width,
       desktop.height,
       { left: win.left ?? 0, top: win.top ?? 0 },
-      { ringShown: ringShown() }
+      { ringShown: ringShown(), ringSize: ring.get().size }
     );
     if (win.width === z.width && win.height === z.height) {
       const back = zoomMemory.get(win) ?? smartLayout().doc;

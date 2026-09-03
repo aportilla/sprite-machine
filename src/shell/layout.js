@@ -44,26 +44,35 @@
 //   grid exactly fills the body below the picker strip (windows.js
 //   re-derives the height on document switches and structural changes).
 //
-//   ringWidthFor() is the 3D Sprite Atlas windoid's — the same picture-frame
-//   idea turned sideways: a fixed RING_HEIGHT (one row of ATLAS_GRID.cell
-//   cells under its two-row controls strip, over its status line) and a
-//   width that follows the VIEW COUNT, one cell per view, floored at the
-//   strip's content width (windows.js re-fits it as the count changes). The
-//   windoid is toggleable (View → 3D Sprite Atlas, its close box) and boots
-//   hidden; initialPlacement DOCKS it at the bottom margin, left-aligned
-//   with the doc box, and — only while it is shown — takes its band out of
-//   the vacancy so a fresh open or Arrange Windows lands the document clear
-//   of it (zoomedBox stops above it the same way). Its placed edges make it
-//   a fixed point of the resize rule WITHOUT touching WINDOW_FRAME: its
-//   left edge sits in the left band (a near strut), its bottom in the
-//   bottom band (a far strut), and a fixed-size box resolves each axis by
-//   its lone strut — so a resize lands it exactly where Arrange would, at
-//   any view count (a wide strip's right edge in the right band is the
-//   opposite kind of strut, and opposite struts keep the near edge). The one
-//   caveat: on a raster shorter than the top band + the strip (~430 px) its
-//   top edge reads as a top strut too and the near edge wins — accepted,
-//   the placement itself floors there. Never make it `resizable` without
-//   redoing this argument (a resizable box's top edge would spring).
+//   ringHeightFor() / ringWidthFor() are the 3D Sprite Atlas windoid's — the
+//   Sprite View's picture-frame idea turned sideways and half let go: its
+//   HEIGHT is a derivation (RING_CHROME.h — the dot bar, the borders, the
+//   two-row controls strip and the kit's horizontal scroll rail — over one
+//   row of cells at the ring's TILE SIZE, the setting whose value is the
+//   tile's edge in px; windows.js re-fits it as the size changes and
+//   declares it to the grow box as the kit's size rect, min-height =
+//   max-height, so the window resizes on the horizontal axis alone), while
+//   its WIDTH is the user's: the placement seeds it with the natural row
+//   (one cell per view — ringWidthFor — floored at the strip's content
+//   width and capped at the vacant middle) and the grow box takes it from
+//   there within the rect's min-width, the cell row scrolling under the
+//   rail when it outgrows the window. The windoid is toggleable (View → 3D
+//   Sprite Atlas, its close box) and boots hidden; initialPlacement DOCKS it
+//   at the bottom margin, left-aligned with the doc box, and — only while
+//   it is shown — takes its band out of the vacancy so a fresh open or
+//   Arrange Windows lands the document clear of it (zoomedBox stops above
+//   it the same way). In the resize rule it is a MIXED box: its y axis a
+//   fixed size (the bottom edge in the bottom band, a far strut; the top
+//   following through the anchor rule) and its x axis a resizable one
+//   floored at the strip (the left edge in the left band, a near strut; the
+//   right edge springing with the middle, like the document window's above
+//   it) — so a resize keeps it docked at the document's left at its derived
+//   height, at any size, WITHOUT touching WINDOW_FRAME; its width is
+//   content, not a fixed point (see docs/ring-size-plan.md). The one
+//   caveat: on a raster shorter than the top band + the strip (~460 px at
+//   the default 64 tile, ~650 at a 255 one) its top edge reads as a top
+//   strut too and the near edge wins — accepted, the placement itself
+//   floors there.
 //
 //   iconDefault() is the icons' half of the same idea: the classic
 //   left-edge column below the Tools band, derived from the raster instead
@@ -178,50 +187,62 @@ const ICON_COL_PITCH = 80; // the 64px icon plate + a 16px gutter
 // hugs under the art well inside it) — also the margin icons.js clamps by.
 export const ICON_CELL = 64;
 
-// --- the 3D Sprite Atlas windoid's fixed size -----------------------------------
-// A fixed-size picture frame like the Sprite View, turned sideways: one row
-// of ATLAS_GRID.cell cells, one per view, under the controls strip and over
-// the status line. All system px, measured at scale 1 — if the strip, the
-// status line or the window chrome changes, re-measure:
+// --- the 3D Sprite Atlas windoid's derived size ---------------------------------
+// The Sprite View's picture-frame rule turned sideways: one row of cells,
+// each the ring's TILE SIZE square (the tile at 1:1 — one image px per
+// system px), under the controls strip and over the kit's horizontal scroll
+// rail (vf-window scrollbars="horizontal": the rail on the frame's bottom
+// edge, 15 px inside the frame, the corner cell holding the grow box). All
+// system px, measured at scale 1 — if the strip, the rail or the window
+// chrome changes, re-measure:
 //   width chrome: the frame's two 1px side borders;
 //   height chrome: 12 dot bar + 2 borders + RING_STRIP controls strip + 15
-//   status = 92.
-// The controls strip is TWO rows (views / elev over from / scale — four
-// labeled number fields don't fit one row at the default four-cell width):
-// 4 pad + 25 (the kit's stepper-tall number field) + 4 + 25 + 4 pad over a
-// 1px rule = 63 (sm-ring-view.js states the same box).
+//   rail = 92.
+// The controls strip is TWO rows (views / elev over from / size — four
+// labeled number fields don't fit one row at a four-cell width): 4 pad + 25
+// (the kit's stepper-tall number field) + 4 + 25 + 4 pad over a 1px rule =
+// 63 (sm-ring-view.js states the same box).
 export const RING_STRIP = 63;
 export const RING_CHROME = { w: 2, h: 12 + 2 + RING_STRIP + 15 };
-export const RING_HEIGHT = RING_CHROME.h + ATLAS_GRID.cell;
-// The strip's content width — the floor under a short ring (one to three
-// views): the wider of its two rows (a caption, a stepper-tall number
-// field at 3.5em, a caption, a field — 248) plus the strip's 8px side
-// padding (264), plus the 2 borders. Measured on sm-ring-view at scale 1
-// (re-measure if its fields or captions change; drive.mjs pins this number
-// against the live element). Four cells (285) clear it, so the default
-// strip has no slack.
-export const RING_MIN_WIDTH = 266;
+// The strip's content width — the windoid's width FLOOR (the grow box's
+// declared min-width, and the placement's floor): the wider of its two
+// rows (a caption, a
+// stepper-tall number field at 3.5em, a caption, a field — 242) plus the
+// field group's 8px side padding (258), plus the 2 borders. Measured on
+// sm-ring-view at scale 1 (re-measure if its fields or captions change;
+// drive.mjs pins this number against the live element). Four cells at the
+// default 64 (261) just clear it.
+export const RING_MIN_WIDTH = 260;
 
-/** The 3D Sprite Atlas windoid's width for a view count: n cells of
- *  ATLAS_GRID.cell with the grid's n−1 rules and the frame's borders — the
- *  grid fills the body edge to edge — floored at the strip's width. */
-export function ringWidthFor(views) {
+/** The 3D Sprite Atlas windoid's height for a tile size: the chrome over
+ *  one row of size-px cells — a derivation windows.js applies and declares
+ *  as the grow box's locked axis (the drag moves the width alone). */
+export function ringHeightFor(size) {
+  return RING_CHROME.h + Math.max(1, Math.floor(size));
+}
+
+/** A ring's NATURAL width: n cells of `size` with the grid's n−1 rules and
+ *  the frame's borders, floored at the strip — the placement's seed for the
+ *  windoid's width (the user's from there; a wider row scrolls). */
+export function ringWidthFor(views, size) {
   const n = Math.max(1, Math.floor(views));
-  return Math.max(RING_MIN_WIDTH, n * ATLAS_GRID.cell + (n - 1) + RING_CHROME.w);
+  const s = Math.max(1, Math.floor(size));
+  return Math.max(RING_MIN_WIDTH, n * s + (n - 1) + RING_CHROME.w);
 }
 
 /**
  * The smart boot arrangement for a `desktopW`×`desktopH` system-px raster.
  * `tools` is the Tools palette's content-hugging authored size (the one box
- * this module doesn't compute — index.html owns it). `ringViews` sizes the
- * 3D Sprite Atlas windoid's box (its width follows the count); `ringShown`
- * says whether that box is on screen — only then does the doc box give up
- * the strip's band (a hidden strip reserves nothing).
+ * this module doesn't compute — index.html owns it). `ringViews` and
+ * `ringSize` seed the 3D Sprite Atlas windoid's box (the natural row's
+ * width, the tile's height — the defaults mirror the ring slice's);
+ * `ringShown` says whether that box is on screen — only then does the doc
+ * box give up the strip's band (a hidden strip reserves nothing).
  *
  * @param {number} desktopW
  * @param {number} desktopH
  * @param {{width: number, height: number}} tools
- * @param {{ringViews?: number, ringShown?: boolean}} [opts]
+ * @param {{ringViews?: number, ringSize?: number, ringShown?: boolean}} [opts]
  * @returns {{
  *   tools: {left: number, top: number},
  *   sprite: {left: number, top: number, width: number, height: number},
@@ -234,7 +255,7 @@ export function initialPlacement(
   desktopW,
   desktopH,
   tools,
-  { ringViews = 4, ringShown = false } = {}
+  { ringViews = 4, ringSize = 64, ringShown = false } = {}
 ) {
   const top = TOP_RESERVE + GAP;
 
@@ -260,21 +281,25 @@ export function initialPlacement(
   // cascade room at the right and bottom, so each further window opens at
   // this same size, stepped down-right, inside the vacancy.
   const x0 = EDGE + tools.width + EDGE;
+  const vacantW = Math.max(0, railLeft - EDGE - x0);
   // The 3D Sprite Atlas strip: docked on the bottom margin, left-aligned
-  // with the doc box (the document's footer), at its fixed height and the
-  // width its view count derives. Placed whether or not it is shown (a
-  // hidden windoid still has a place for when it comes back).
+  // with the doc box (the document's footer), at the height its tile size
+  // derives and the width its view count SEEDS — the natural row, capped at
+  // the vacancy so a fresh strip never runs under the rail (the rail goes
+  // live instead), floored at the strip; the user's from there. Placed
+  // whether or not it is shown (a hidden windoid still has a place for when
+  // it comes back).
+  const ringH = ringHeightFor(ringSize);
   const ring = {
     left: x0,
-    top: Math.max(top, desktopH - GAP - RING_HEIGHT),
-    width: ringWidthFor(ringViews),
-    height: RING_HEIGHT,
+    top: Math.max(top, desktopH - GAP - ringH),
+    width: Math.max(RING_MIN_WIDTH, Math.min(ringWidthFor(ringViews, ringSize), vacantW)),
+    height: ringH,
   };
-  const vacantW = Math.max(0, railLeft - EDGE - x0);
   // While the strip is shown it takes its band + a GAP out of the vacancy's
   // height BEFORE the cascade room comes off, so every cascade slot still
   // lands above it (a sixth window that wraps is the existing rule).
-  const vacantH = Math.max(0, desktopH - GAP - top - (ringShown ? RING_HEIGHT + GAP : 0));
+  const vacantH = Math.max(0, desktopH - GAP - top - (ringShown ? ringH + GAP : 0));
   const doc = {
     left: x0,
     top,
@@ -348,12 +373,17 @@ export function cascadeSlot(base, i) {
  * @param {number} desktopW
  * @param {number} desktopH
  * @param {{left: number, top: number}} pos
- * @param {{ringShown?: boolean}} [opts]
+ * @param {{ringShown?: boolean, ringSize?: number}} [opts]
  * @returns {{left: number, top: number, width: number, height: number}}
  */
-export function zoomedBox(desktopW, desktopH, pos, { ringShown = false } = {}) {
+export function zoomedBox(
+  desktopW,
+  desktopH,
+  pos,
+  { ringShown = false, ringSize = 64 } = {}
+) {
   const railLeft = Math.max(0, desktopW - EDGE - SPRITE_WIDTH);
-  const bottom = desktopH - GAP - (ringShown ? RING_HEIGHT + GAP : 0);
+  const bottom = desktopH - GAP - (ringShown ? ringHeightFor(ringSize) + GAP : 0);
   return {
     left: pos.left,
     top: pos.top,
@@ -548,14 +578,17 @@ export function pinOf(box, raster, frame = WINDOW_FRAME) {
  * was read in. `size` is a fixed-size box's LIVE size (its edges resolve
  * through the anchor rule — the Sprite View's height changes under it on a
  * document switch, and that is no move); `min` is a resizable box's floor.
- * Whole system px, otherwise raw: the caller snaps onto its element's
- * lattice and applies the oversize intervention. Nothing clamps — see the
- * header.
+ * Both are read PER AXIS: an axis given a size resolves as fixed, one given
+ * a floor (or nothing) as resizable, so a box fixed on one axis and free on
+ * the other — the 3D Sprite Atlas, a derived height over a user-sized width
+ * — states both. Whole system px, otherwise raw: the caller snaps onto its
+ * element's lattice and applies the oversize intervention. Nothing clamps —
+ * see the header.
  *
  * @param {Pin} pin
  * @param {{width: number, height: number}} raster
  * @param {Frame} [frame]
- * @param {{size?: {width: number, height: number}, min?: {width: number, height: number}}} [policy]
+ * @param {{size?: {width?: number, height?: number}, min?: {width?: number, height?: number}}} [policy]
  * @returns {{left: number, top: number, width: number, height: number}}
  */
 export function pinTo(pin, raster, frame = WINDOW_FRAME, { size, min } = {}) {

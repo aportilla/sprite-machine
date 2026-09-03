@@ -9,16 +9,19 @@ import {
   ringMetaChunks,
   RING_DEFAULTS,
   RING_MAX_VIEWS,
-  RING_MAX_SCALE,
+  RING_MIN_SIZE,
+  RING_MAX_SIZE,
   RING_CHUNK_KEY,
 } from '../src/state/ring.js';
 import { SOFTWARE } from '../src/state/files.js';
 
-test('the defaults: four views, 45° up, from the front, 1 px per voxel', () => {
-  assert.deepEqual(RING_DEFAULTS, { views: 4, elevation: 45, offset: 0, scale: 1 });
+test('the defaults: four views, 45° up, from the front, a 64 px tile', () => {
+  assert.deepEqual(RING_DEFAULTS, { views: 4, elevation: 45, offset: 0, size: 64 });
   assert.deepEqual(createRing().get(), RING_DEFAULTS);
   assert.equal(RING_MAX_VIEWS, 16);
-  assert.equal(RING_MAX_SCALE, 8);
+  // The tile's edge: greater than 1, less than 256.
+  assert.equal(RING_MIN_SIZE, 2);
+  assert.equal(RING_MAX_SIZE, 255);
 });
 
 test('setViews: integer, clamped 1..16, NaN a no-op, silent when unchanged', () => {
@@ -42,7 +45,7 @@ test('setViews: integer, clamped 1..16, NaN a no-op, silent when unchanged', () 
   assert.equal(fired, 3);
 });
 
-test('setElevation / setScale: clamped to their ranges', () => {
+test('setElevation / setSize: clamped to their ranges', () => {
   const r = createRing();
   r.setElevation(-5);
   assert.equal(r.get().elevation, 0);
@@ -50,12 +53,21 @@ test('setElevation / setScale: clamped to their ranges', () => {
   assert.equal(r.get().elevation, 90);
   r.setElevation(30.4);
   assert.equal(r.get().elevation, 30);
-  r.setScale(0);
-  assert.equal(r.get().scale, 1);
-  r.setScale(20);
-  assert.equal(r.get().scale, RING_MAX_SCALE);
-  r.setScale(2);
-  assert.equal(r.get().scale, 2);
+  r.setSize(0);
+  assert.equal(r.get().size, RING_MIN_SIZE, 'never a 1-px (or 0-px) tile');
+  r.setSize(1);
+  assert.equal(r.get().size, RING_MIN_SIZE);
+  r.setSize(256);
+  assert.equal(r.get().size, RING_MAX_SIZE, 'less than 256');
+  r.setSize(1000);
+  assert.equal(r.get().size, RING_MAX_SIZE);
+  r.setSize(128.4);
+  assert.equal(r.get().size, 128, 'an integer');
+  let fired = 0;
+  r.subscribe(() => fired++);
+  r.setSize(NaN);
+  r.setSize(128);
+  assert.equal(fired, 0, 'NaN (a field mid-edit) and a same value are silent');
 });
 
 test('setOffset: normalized into [0, 360)', () => {
@@ -102,8 +114,15 @@ test('the sheet channel never touches the store', () => {
 });
 
 test('ringMetaChunks: Title, Software, and a JSON that round-trips', () => {
-  const settings = { views: 8, elevation: 30, offset: 45, scale: 2 };
-  const geometry = { frame: 123, anchor: { x: 61.5, y: 96.1 }, yaws: [45, 90, 135] };
+  const settings = { views: 8, elevation: 30, offset: 45, size: 123 };
+  // The frame equals the size (kept for importers reading `frame`); the
+  // scale is the derived px per voxel, a float.
+  const geometry = {
+    frame: 123,
+    scale: 1.8014,
+    anchor: { x: 61.5, y: 96.1 },
+    yaws: [45, 90, 135],
+  };
   const chunks = ringMetaChunks('Car', settings, geometry);
   assert.deepEqual(Object.keys(chunks), ['Title', 'Software', RING_CHUNK_KEY]);
   assert.equal(chunks.Title, 'Car atlas');
@@ -111,6 +130,7 @@ test('ringMetaChunks: Title, Software, and a JSON that round-trips', () => {
   assert.deepEqual(JSON.parse(chunks[RING_CHUNK_KEY]), {
     ...settings,
     frame: 123,
+    scale: 1.8014,
     anchor: { x: 61.5, y: 96.1 },
     yaws: [45, 90, 135],
   });

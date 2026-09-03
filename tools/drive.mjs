@@ -72,16 +72,18 @@ import {
   ICON_CELL,
   zoomedBox,
   centeredBox,
+  initialPlacement,
   ringWidthFor,
-  RING_HEIGHT,
+  ringHeightFor,
   RING_MIN_WIDTH,
   CASCADE_STEP,
   CASCADE_SLOTS,
 } from '../src/shell/layout.js';
-// The 3D Sprite Atlas's geometry and the document format's chunk reader —
-// pure ESM too, the oracles for the atlas section's frame sizes and its
-// exported file.
+// The 3D Sprite Atlas's geometry, its slice's defaults and the document
+// format's chunk reader — pure ESM too, the oracles for the atlas section's
+// frame sizes and its exported file.
 import { ringFrame, ringSheet } from '../src/lib/ring.js';
+import { RING_DEFAULTS } from '../src/state/ring.js';
 import { readTextChunks } from '../src/lib/png-chunks.js';
 
 const APP_PORT = process.argv[2] || '5173';
@@ -385,23 +387,6 @@ const PROBE = `(() => {${DEEP}
   for (const m of buildStats.matchAll(/(grid|voxels|tris) ([^·]+)/g)) {
     stats[m[1]] = m[2].trim();
   }
-  // The 3D Sprite Atlas's status line: "4 × 69 px" on the line, the full
-  // readout ("frame 69×69 px · sheet 276×69 px · 45° · from 0° · 1×") on its
-  // title tooltip — parsed back by the numbers' positions, never the words.
-  const ringStatus = (() => {
-    const el = __q('sm-status-line[kind="ring"]');
-    const lb = el && el.shadowRoot ? el.shadowRoot.querySelector('vf-label') : null;
-    const t = (lb && lb.getAttribute('title')) || '';
-    const nums = (t.match(/[0-9]+/g) || []).map(Number);
-    if (nums.length < 7) return null;
-    return {
-      frame: nums[0] + '×' + nums[1],
-      sheet: nums[2] + '×' + nums[3],
-      elevation: nums[4],
-      offset: nums[5],
-      scale: nums[6],
-    };
-  })();
   // The sprite windoid carries NO status line — its status slot is empty, so
   // the kit draws no bottom bar (.status.empty): null when the strip is
   // absent or empty, its text if one ever comes back.
@@ -472,7 +457,6 @@ const PROBE = `(() => {${DEEP}
     buildLine,
     buildStats,
     atlasStatus,
-    ringStatus,
     stats,
     voxels: +(stats.voxels || 0),
     docIcons: __qa('vf-icon').filter((i) => (i.dataset.key || '').startsWith('doc:'))
@@ -2608,12 +2592,18 @@ async function main() {
   // The toggleable windoid: View → 3D Sprite Atlas shows it (it boots
   // hidden, the item unchecked) and its close box hides it; the placement
   // docks it on the bottom margin at the document's left (shell/layout.js
-  // is the oracle: RING_HEIGHT tall, ringWidthFor(views) wide); its width
-  // follows the view count live; File → Export Sprite Atlas… edits the same
-  // settings behind the modal; the export is the strip's exact sheet with
-  // the ring's metadata chunk; it hides with the application and a resize
-  // keeps it docked. The frame sizes come from lib/ring.js over the Car's
-  // 40³ lattice. The desktop-click spot is the focus section's bareSpot.
+  // is the oracle: ringHeightFor(size) tall — the chrome over one row of
+  // tile-size cells — seeded ringWidthFor(views, size) wide, capped at the
+  // vacant middle); the cells are the tile at 1:1; the view count no longer
+  // touches the window (a longer row overflows into the kit's horizontal
+  // rail), the tile size moves its HEIGHT, and the grow box moves its WIDTH
+  // alone (the app re-asserts the height on every vf-resize and floors the
+  // width at the strip); File → Export Sprite Atlas… edits the same settings
+  // behind the modal; the export is the strip's exact sheet with the ring's
+  // metadata chunk; it hides with the application and a resize keeps it
+  // docked, its width springing with the middle. The frame sizes come from
+  // lib/ring.js over the Car's 40³ lattice. The desktop-click spot is the
+  // focus section's bareSpot.
   section('3D sprite atlas');
   await freshPage();
   s = await probe();
@@ -2629,10 +2619,27 @@ async function main() {
   const ringBox = () =>
     evaluate(
       `(() => {${DEEP} const w = __q('#win-ring'); const d = __q('#desktop'); const doc = __doc();
-        const f = __q('.ring-views');
+        const t = __q('#win-tools');
+        const num = (sel) => { const f = __q(sel); return f ? +f.value : null; };
+        const cell = __q('.ring-cell');
+        // The kit's built-in scroll area's viewport (its exported part, in
+        // the window's own shadow): the row's overflow is what puts the rail
+        // to work.
+        const vp = __q('[part="viewport"]', w.shadowRoot);
         return { left: w.left, top: w.top, w: w.width, h: w.height, dw: d.width, dh: d.height,
           docLeft: doc.left, docTop: doc.top, docH: doc.height,
-          cells: __qa('.ring-cell').length, views: f ? +f.value : null }; })()`
+          toolsW: t.width, toolsH: t.height,
+          cells: __qa('.ring-cell').length,
+          views: num('.ring-views'), elev: num('.ring-elev'), offset: num('.ring-offset'),
+          size: num('.ring-size'),
+          cell: cell ? Math.round(cell.getBoundingClientRect().width) : null,
+          scrollW: vp ? vp.scrollWidth : null, clientW: vp ? vp.clientWidth : null,
+          // The windoid's composition — the app's own statement, not the
+          // kit's rendering: the rail's axis, the grow box, flush, no status,
+          // and the grow box's declared size rect (the kit's min/max per axis).
+          scrollbars: w.getAttribute('scrollbars'), resizable: !!w.resizable, flush: !!w.flush,
+          status: !!w.querySelector('[slot="status"]'),
+          minW: w.minWidth, maxW: w.maxWidth, minH: w.minHeight, maxH: w.maxHeight }; })()`
     );
   const cellPixels = () =>
     evaluate(
@@ -2646,7 +2653,9 @@ async function main() {
         return { w: c.width, h: c.height, opaque: n, hash }; }); })()`
     );
   const DIMS = { nx: TILE, ny: TILE, nz: TILE };
-  const F4 = ringFrame(DIMS, 45, 1).px;
+  const S0 = RING_DEFAULTS.size;
+  // The frame IS the tile: lib/ring.js hands the size back as the frame.
+  const F0 = ringFrame(DIMS, 45, S0).px;
   await pickMenu('#menu-view', 'ring');
   s = await probe();
   let rb = await ringBox();
@@ -2656,76 +2665,170 @@ async function main() {
     JSON.stringify({ shown: s.ringShown, checked: s.menuChecks.ring })
   );
   check(
-    '…docked on the bottom margin, left-aligned with the document, at its fixed size, four cells',
+    "…docked on the bottom margin, left-aligned with the document — the tile's height, the seeded row's width — four cells at the default size",
     rb.left === rb.docLeft &&
-      rb.top === rb.dh - 8 - RING_HEIGHT &&
-      rb.w === ringWidthFor(4) &&
-      rb.h === RING_HEIGHT &&
+      rb.top === rb.dh - 8 - ringHeightFor(S0) &&
+      rb.w === ringWidthFor(4, S0) &&
+      rb.h === ringHeightFor(S0) &&
       rb.cells === 4 &&
-      rb.views === 4,
+      rb.views === 4 &&
+      rb.size === S0,
     JSON.stringify({
       rb,
-      want: { top: rb.dh - 8 - RING_HEIGHT, w: ringWidthFor(4), h: RING_HEIGHT },
+      want: {
+        top: rb.dh - 8 - ringHeightFor(S0),
+        w: ringWidthFor(4, S0),
+        h: ringHeightFor(S0),
+      },
     })
   );
-  // The strip's content width IS the windoid's width floor (shell/layout.js
+  check(
+    "the windoid is the scrolling document window turned windoid: a horizontal rail, a grow box, flush, no status strip (the kit's corner cell rides on that)",
+    rb.scrollbars === 'horizontal' &&
+      rb.resizable === true &&
+      rb.flush === true &&
+      rb.status === false,
+    JSON.stringify({
+      scrollbars: rb.scrollbars,
+      resizable: rb.resizable,
+      flush: rb.flush,
+      status: rb.status,
+    })
+  );
+  // The axis lock is DECLARED, the kit's size rect (the Patterns strip's
+  // idiom): min-height = max-height at the derived height, min-width at
+  // the strip, the width otherwise unbounded.
+  const rectDeclared = (r, h) =>
+    r.minW === RING_MIN_WIDTH && r.maxW == null && r.minH === h && r.maxH === h;
+  check(
+    "the grow box's size rect is declared: min-width at the strip, min-height = max-height at the derived height (the axis lock), max-width unbounded",
+    rectDeclared(rb, ringHeightFor(S0)),
+    JSON.stringify({ minW: rb.minW, maxW: rb.maxW, minH: rb.minH, maxH: rb.maxH })
+  );
+  // The strip's field group IS the windoid's width floor (shell/layout.js
   // RING_MIN_WIDTH restates it; a strip change must re-measure).
   const stripWidth = await evaluate(
-    `(() => {${DEEP} const c = __q('sm-ring-view').shadowRoot.querySelector('.controls');
-      const r = c.getBoundingClientRect();
-      const right = Math.max(...[...c.children].map((e) => e.getBoundingClientRect().right));
-      return Math.ceil(right - r.left + parseFloat(getComputedStyle(c).paddingRight)); })()`
+    `(() => {${DEEP} const f = __q('sm-ring-view').shadowRoot.querySelector('.fields');
+      return Math.ceil(f.getBoundingClientRect().width); })()`
   );
   check(
-    "the strip's content width + the borders is the width floor (RING_MIN_WIDTH — re-measure on a strip change)",
+    "the strip's field group + the borders is the width floor (RING_MIN_WIDTH — re-measure on a strip change)",
     stripWidth + 2 === RING_MIN_WIDTH,
     `${stripWidth} + 2 vs ${RING_MIN_WIDTH}`
   );
   await sleep(400);
   let cells = await cellPixels();
   check(
-    "every cell holds a rendered frame of the model at the frame's native size, each facing its own",
-    cells.length === 4 &&
-      cells.every((c) => c.w === F4 && c.h === F4 && c.opaque > 0) &&
-      new Set(cells.map((c) => c.hash)).size === 4,
-    JSON.stringify({ F: F4, cells })
+    'every cell holds a rendered frame of the model at the tile size — the backing AND the box, 1:1 — each facing its own',
+    F0 === S0 &&
+      cells.length === 4 &&
+      cells.every((c) => c.w === F0 && c.h === F0 && c.opaque > 0) &&
+      new Set(cells.map((c) => c.hash)).size === 4 &&
+      rb.cell === S0,
+    JSON.stringify({ S0, F0, cell: rb.cell, cells })
   );
   check(
-    "the status line's tooltip reads the frame and the sheet",
-    !!s.ringStatus &&
-      s.ringStatus.frame === `${F4}×${F4}` &&
-      s.ringStatus.sheet === `${ringSheet(4, F4).width}×${F4}` &&
-      s.ringStatus.elevation === 45 &&
-      s.ringStatus.offset === 0 &&
-      s.ringStatus.scale === 1,
-    JSON.stringify(s.ringStatus)
+    'four default cells fit the seeded width: the row does not overflow (the rail idles)',
+    rb.scrollW != null && rb.scrollW <= rb.clientW,
+    JSON.stringify({ scrollW: rb.scrollW, clientW: rb.clientW })
   );
   // The strip's views stepper ▲ (the properties section's recipe — autorepeat
-  // can land more than one step, so assert direction): the windoid widens to
-  // the right, its left edge holding.
+  // can land more than one step, so assert direction): cells are added, the
+  // windoid's box HOLDS (its width is the user's now), and the row outgrows
+  // the viewport — the kit's rail goes live on the overflow.
   const ringStepper = await evaluate(
     `(() => {${DEEP} const st = __q('.ring-views')
         .shadowRoot.querySelector('[part="stepper"]').getBoundingClientRect();
       return { x: st.left + st.width / 2, y: st.top + st.height * 0.25 }; })()`
   );
   const ringLeft0 = rb.left;
+  const ringW0 = rb.w;
   await click(ringStepper.x, ringStepper.y);
   await sleep(600);
   rb = await ringBox();
   check(
-    "the strip's views stepper adds cells and widens the windoid rightward (its left edge holds)",
+    "the strip's views stepper adds cells while the windoid's box holds — the row overflows into the rail instead",
     rb.cells > 4 &&
       rb.cells === rb.views &&
-      rb.w === ringWidthFor(rb.cells) &&
+      rb.w === ringW0 &&
       rb.left === ringLeft0 &&
-      rb.h === RING_HEIGHT,
-    JSON.stringify({ rb, ringLeft0 })
+      rb.h === ringHeightFor(S0) &&
+      rb.scrollW > rb.clientW,
+    JSON.stringify({ rb, ringLeft0, ringW0 })
   );
   cells = await cellPixels();
   check(
     '…and every new cell renders',
-    cells.length === rb.cells && cells.every((c) => c.w === F4 && c.opaque > 0),
+    cells.length === rb.cells && cells.every((c) => c.w === F0 && c.opaque > 0),
     JSON.stringify(cells)
+  );
+  // The size field: the tile's edge. Typed to 128, the windoid's HEIGHT
+  // follows (the chrome over one row of 128-px cells), its bottom stays on
+  // the margin, its width holds, and every cell — backing and box — is 128.
+  await evaluate(
+    `(() => {${DEEP} __q('.ring-size').shadowRoot.querySelector('input').focus(); })()`
+  );
+  await keyPress('Backspace');
+  await keyPress('Backspace');
+  await typeText('128');
+  await keyPress('Enter');
+  await sleep(600);
+  rb = await ringBox();
+  cells = await cellPixels();
+  check(
+    "a tile size typed in the strip re-derives the windoid's height (still docked, the width held) and re-sizes every cell 1:1",
+    rb.size === 128 &&
+      rb.h === ringHeightFor(128) &&
+      rb.top === rb.dh - 8 - rb.h &&
+      rb.w === ringW0 &&
+      rb.left === ringLeft0 &&
+      rb.cell === 128 &&
+      cells.length === rb.cells &&
+      cells.every((c) => c.w === 128 && c.h === 128 && c.opaque > 0),
+    JSON.stringify({ rb, cells })
+  );
+  check(
+    '…and the declared rect follows the new height (the lock moves with the tile)',
+    rectDeclared(rb, ringHeightFor(128)),
+    JSON.stringify({ minW: rb.minW, maxW: rb.maxW, minH: rb.minH, maxH: rb.maxH })
+  );
+  // The grow box moves the WIDTH alone — the kit clamps the drag into the
+  // declared rect: a +30/+20 drag lands +30/0, the viewport widening with
+  // it; a drag far past the strip stops at the declared min-width
+  // (RING_MIN_WIDTH), not the kit's general 80.
+  const ringGrow = () =>
+    evaluate(
+      `(() => {${DEEP} const g = __q('#win-ring').shadowRoot
+          .querySelector('[part="grow-box"]').getBoundingClientRect();
+        return { x: g.left + g.width / 2, y: g.top + g.height / 2 }; })()`
+    );
+  let gp = await ringGrow();
+  await mouse('mousePressed', gp.x, gp.y);
+  await mouse('mouseMoved', gp.x + 15, gp.y + 10, { buttons: 1 });
+  await mouse('mouseMoved', gp.x + 30, gp.y + 20, { buttons: 1 });
+  await mouse('mouseReleased', gp.x + 30, gp.y + 20, { buttons: 0 });
+  await sleep(400);
+  const ringGrown = await ringBox();
+  check(
+    'the grow box resizes the windoid on the horizontal axis alone: a +30/+20 drag lands +30/0, the viewport widening with it',
+    ringGrown.w === ringW0 + 30 &&
+      ringGrown.h === ringHeightFor(128) &&
+      ringGrown.left === ringLeft0 &&
+      ringGrown.top === rb.top &&
+      ringGrown.clientW === rb.clientW + 30,
+    JSON.stringify({ before: rb, after: ringGrown })
+  );
+  gp = await ringGrow();
+  await mouse('mousePressed', gp.x, gp.y);
+  await mouse('mouseMoved', gp.x - 200, gp.y, { buttons: 1 });
+  await mouse('mouseMoved', gp.x - 400, gp.y, { buttons: 1 });
+  await mouse('mouseReleased', gp.x - 400, gp.y, { buttons: 0 });
+  await sleep(400);
+  rb = await ringBox();
+  check(
+    'a shrink past the strip stops at the declared min-width (RING_MIN_WIDTH), the height still derived',
+    rb.w === RING_MIN_WIDTH && rb.h === ringHeightFor(128) && rb.left === ringLeft0,
+    JSON.stringify({ rb, floor: RING_MIN_WIDTH })
   );
   // File → Export Sprite Atlas…: the dialog reads the strip's settings, and
   // edits them LIVE (the readouts are parsed by their numbers' positions).
@@ -2735,7 +2838,7 @@ async function main() {
         return {
           open: __q('#dlg-export-atlas').open,
           views: __q('#atlas-views').value, elevation: __q('#atlas-elevation').value,
-          offset: __q('#atlas-offset').value, scale: __q('#atlas-scale').value,
+          offset: __q('#atlas-offset').value, size: __q('#atlas-size').value,
           step: nums(__q('#atlas-step')), dims: nums(__q('#atlas-dims')),
           exportEnabled: !__q('#btn-export-atlas-ok').disabled }; })()`
     );
@@ -2747,15 +2850,14 @@ async function main() {
       dlg.views === String(rb.cells) &&
       dlg.elevation === '45' &&
       dlg.offset === '0' &&
-      dlg.scale === '1' &&
+      dlg.size === '128' &&
       dlg.exportEnabled === true,
     JSON.stringify(dlg)
   );
   check(
-    '…its readouts derive the step, the frame and the sheet from the same numbers',
+    '…its readouts derive the step and the sheet from the same numbers',
     dlg.step[0] === 360 / rb.cells &&
-      JSON.stringify(dlg.dims) ===
-        JSON.stringify([F4, F4, ringSheet(rb.cells, F4).width, F4]),
+      JSON.stringify(dlg.dims) === JSON.stringify([ringSheet(rb.cells, 128).width, 128]),
     JSON.stringify({ step: dlg.step, dims: dlg.dims, cells: rb.cells })
   );
   await evaluate(
@@ -2769,12 +2871,12 @@ async function main() {
   rb = await ringBox();
   dlg = await ringDialog();
   check(
-    'a view count typed in the dialog moves the strip behind the modal at once (live, not pending)',
+    "a view count typed in the dialog moves the strip behind the modal at once (live, not pending) — the windoid's width holding",
     rb.cells === 8 &&
-      rb.w === ringWidthFor(8) &&
+      rb.w === RING_MIN_WIDTH &&
       dlg.views === '8' &&
       dlg.step[0] === 45 &&
-      dlg.dims[2] === ringSheet(8, F4).width,
+      dlg.dims[0] === ringSheet(8, 128).width,
     JSON.stringify({ rb, dlg })
   );
   const atlasCancel = await centreOf('#btn-export-atlas-cancel');
@@ -2824,18 +2926,21 @@ async function main() {
       ringMeta = JSON.parse(meta['sprite-machine:ring'] || 'null');
     } catch {}
     check(
-      'the exported file is the sheet: views·F × F px, named «slug»-atlas.png',
-      ihdr.w === ringSheet(8, F4).width &&
-        ihdr.h === F4 &&
+      'the exported file is the sheet: views·size × size px, named «slug»-atlas.png',
+      ihdr.w === ringSheet(8, 128).width &&
+        ihdr.h === 128 &&
         /-atlas\.png$/.test(exported.name),
-      JSON.stringify({ ihdr, want: ringSheet(8, F4), name: exported.name })
+      JSON.stringify({ ihdr, want: ringSheet(8, 128), name: exported.name })
     );
     check(
-      '…carrying the sprite-machine:ring chunk (settings, frame, anchor, yaws) beside Title and Software',
+      '…carrying the sprite-machine:ring chunk (settings, frame, the derived scale, anchor, yaws) beside Title and Software',
       !!ringMeta &&
         ringMeta.views === 8 &&
         ringMeta.elevation === 45 &&
-        ringMeta.frame === F4 &&
+        ringMeta.size === 128 &&
+        ringMeta.frame === 128 &&
+        typeof ringMeta.scale === 'number' &&
+        ringMeta.scale > 0 &&
         ringMeta.yaws.length === 8 &&
         ringMeta.yaws[1] === 45 &&
         typeof ringMeta.anchor.y === 'number' &&
@@ -2868,12 +2973,12 @@ async function main() {
   s = await probe();
   rb = await ringBox();
   check(
-    'View → 3D Sprite Atlas brings it back where it was, eight cells',
+    "View → 3D Sprite Atlas brings it back where it was, eight cells, at the user's width",
     s.ringShown === true &&
       rb.cells === 8 &&
       rb.left === ringPos.left &&
       rb.top === ringPos.top &&
-      rb.w === ringWidthFor(8),
+      rb.w === RING_MIN_WIDTH,
     JSON.stringify({ rb, ringPos })
   );
   // It hides with the application like every windoid (the item stays
@@ -2909,16 +3014,29 @@ async function main() {
   await pickMenu('#menu-view', 'arrange');
   rb = await ringBox();
   const room = (CASCADE_SLOTS - 1) * CASCADE_STEP;
+  // Arrange re-seeds the width too: the placement's — the natural row (eight
+  // 128s), capped at this raster's vacant middle (the oracle, from the live
+  // tools box).
+  const seeded = initialPlacement(
+    rb.dw,
+    rb.dh,
+    { width: rb.toolsW, height: rb.toolsH },
+    { ringViews: 8, ringSize: 128, ringShown: true }
+  ).ring.width;
   check(
-    "View → Arrange Windows shortens the document to clear the strip (bottom + the cascade room = the strip's top − 8)",
+    "View → Arrange Windows shortens the document to clear the strip (bottom + the cascade room = the strip's top − 8) and re-seeds the strip's width",
     rb.docTop + rb.docH + room === rb.top - 8 &&
       rb.left === rb.docLeft &&
-      rb.top === rb.dh - 8 - RING_HEIGHT,
-    JSON.stringify({ rb, room })
+      rb.top === rb.dh - 8 - ringHeightFor(128) &&
+      rb.w === seeded &&
+      seeded < ringWidthFor(8, 128),
+    JSON.stringify({ rb, room, seeded, natural: ringWidthFor(8, 128) })
   );
-  // A browser resize keeps it docked: a fixed-size box whose left edge is a
-  // near strut and bottom edge a far strut lands where the placement puts
-  // it on every raster, and round-trips.
+  // A browser resize keeps it docked: the y axis a fixed size (the bottom
+  // edge a far strut, the top following), the x axis resizable — the left
+  // edge a near strut, the right springing with the middle, inside the
+  // vacancy and never under the floor — and the pin cache round-trips it
+  // home exactly, width included.
   const ringMetrics = (width, height) =>
     send('Emulation.setDeviceMetricsOverride', {
       width,
@@ -2927,48 +3045,51 @@ async function main() {
       mobile: false,
     });
   const docked = (r) =>
-    r.left === r.docLeft &&
-    r.top + r.h === r.dh - 8 &&
-    r.w === ringWidthFor(8) &&
-    r.h === RING_HEIGHT;
+    r.left === r.docLeft && r.top + r.h === r.dh - 8 && r.h === ringHeightFor(128);
+  const ringW1 = rb.w;
   await ringMetrics(780, 640);
   await sleep(400);
   let rr = await ringBox();
   check(
-    "a browser shrink keeps the strip docked: the document's left, the bottom margin, its size",
-    docked(rr),
-    JSON.stringify(rr)
+    "a browser shrink keeps the strip docked — the document's left, the bottom margin, its derived height — while its width follows the middle (inside the vacancy, never under the floor)",
+    docked(rr) &&
+      rr.w >= RING_MIN_WIDTH &&
+      rr.w < ringW1 &&
+      rr.left + rr.w <= rr.dw - 14 - 214 - 14,
+    JSON.stringify({ rr, ringW1 })
   );
   await ringMetrics(1000, 850);
   await sleep(400);
   rr = await ringBox();
   check(
-    '…and a grow back too (a bottom-docked fixed-size box round-trips)',
-    docked(rr),
-    JSON.stringify(rr)
+    '…and a grow back brings it exactly home, width included (the pin cache round-trips)',
+    docked(rr) && rr.w === ringW1,
+    JSON.stringify({ rr, ringW1 })
   );
   await send('Emulation.clearDeviceMetricsOverride');
   await sleep(300);
-  // The capture hook: ?ring=<views>,<elevation>,<offset>,<scale> boots the
+  // The capture hook: ?ring=<views>,<elevation>,<offset>,<size> boots the
   // windoid shown with those settings.
-  await send('Page.navigate', { url: `${URL}&ring=6,30,45,2` });
+  await send('Page.navigate', { url: `${URL}&ring=6,30,45,100` });
   await waitForApp();
   await sleep(400);
   s = await probe();
   rb = await ringBox();
-  const F6 = ringFrame(DIMS, 30, 2).px;
+  cells = await cellPixels();
   check(
-    '?ring=6,30,45,2 boots the windoid shown: six views at 30°, from 45°, 2 px per voxel',
+    '?ring=6,30,45,100 boots the windoid shown: six views at 30°, from 45°, a 100 px tile — the height and the cells its own',
     s.ringShown === true &&
       s.menuChecks.ring === true &&
       rb.cells === 6 &&
-      rb.w === ringWidthFor(6) &&
-      !!s.ringStatus &&
-      s.ringStatus.elevation === 30 &&
-      s.ringStatus.offset === 45 &&
-      s.ringStatus.scale === 2 &&
-      s.ringStatus.frame === `${F6}×${F6}`,
-    JSON.stringify({ shown: s.ringShown, rb, status: s.ringStatus, F6 })
+      rb.elev === 30 &&
+      rb.offset === 45 &&
+      rb.size === 100 &&
+      rb.h === ringHeightFor(100) &&
+      rb.w === ringWidthFor(6, 100) &&
+      rb.cell === 100 &&
+      cells.length === 6 &&
+      cells.every((c) => c.w === 100 && c.h === 100 && c.opaque > 0),
+    JSON.stringify({ shown: s.ringShown, rb, cells })
   );
 
   section('desktop patterns');

@@ -15,16 +15,16 @@
 // (no ground plane, no shadow in a sprite: the ground is the 3D View's
 // furniture). Two GL contexts on the page, the stage's and this one — fine.
 //
-// THE FRAME is lib/ring.js's: a square of F px holding the whole lattice's
-// envelope at every yaw, `scale` px per voxel exactly (the orthographic
-// half-extent is F / (2·scale) voxel units), the camera looking at the
-// lattice center from `dist` out along the pose's direction with the pose's
-// TRUE up vector (e = 90, straight down, is well defined). No antialiasing
-// and no smoothing in the copy chain: a 1-px-per-voxel sprite is pixel art
-// at the source's own resolution. The clear is transparent (alpha: true) —
-// the frame's margin is paper in the windoid and transparency in the file —
-// and outputColorSpace is the stage's SRGB, so the sprites' colors agree
-// with the 3D View's.
+// THE FRAME is lib/ring.js's: the tile — a square of `size` px — with the
+// whole lattice's envelope fit to it at every yaw (the orthographic
+// half-extent is the envelope's larger half in voxel units, so px per voxel
+// is a derived fraction), the camera looking at the lattice center from
+// `dist` out along the pose's direction with the pose's TRUE up vector
+// (e = 90, straight down, is well defined). No antialiasing and no
+// smoothing in the copy chain: every px is a hard sample of the mesh, never
+// a blend. The clear is transparent (alpha: true) — the frame's margin is
+// paper in the windoid and transparency in the file — and outputColorSpace
+// is the stage's SRGB, so the sprites' colors agree with the 3D View's.
 //
 // THE LIGHTS RIDE WITH THE CAMERA: in an engine the camera and the sun are
 // fixed and the OBJECT turns, so the light's direction relative to the
@@ -63,7 +63,7 @@ const KEY_DIR = new THREE.Vector3(0.22, 0.52, 0.83).normalize();
 const FILL_DIR = new THREE.Vector3(-0.1, 0.81, -0.57).normalize();
 
 /**
- * @typedef {{views: number, elevation: number, offset: number, scale: number}} RingSettings
+ * @typedef {{views: number, elevation: number, offset: number, size: number}} RingSettings
  * @typedef {{canvas: HTMLCanvasElement, frame: number, views: number}} RingSheet
  */
 
@@ -124,19 +124,19 @@ export function createRingRenderer() {
 
     /**
      * Render the whole strip now, synchronously: `views` frames of the
-     * subject at `ringYaws(views, offset)`, `scale` px per voxel, at
+     * subject at `ringYaws(views, offset)`, each a `size` px tile, at
      * `elevation` — returned as the sheet (null with no subject).
      * @param {RingSettings} settings
      * @returns {RingSheet|null}
      */
-    render({ views, elevation, offset: first, scale }) {
+    render({ views, elevation, offset: first, size }) {
       if (!subject) return null;
       const { dims } = subject;
       const n = Math.max(1, Math.floor(views));
       // World units per voxel — the exact expression voxelMesh / wedgeMesh
       // scale by (their default worldSize; thread it here if it ever moves).
       const s = DEFAULT_WORLD_SIZE / Math.max(dims.nx, dims.ny, dims.nz);
-      const { px: F, half } = ringFrame(dims, elevation, scale);
+      const { px: F, half } = ringFrame(dims, elevation, size);
       const { width, height } = ringSheet(n, F);
       if (gl.width !== width || gl.height !== height)
         renderer.setSize(width, height, false);

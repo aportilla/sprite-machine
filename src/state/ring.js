@@ -1,14 +1,14 @@
 // ---------------------------------------------------------------------------
 // `ring` slice — the 3D Sprite Atlas's settings and its SHEET CHANNEL. The
-// settings (view count, elevation, first-angle offset, px per voxel) are
-// app-level and session-only, the prefs discipline: one ring, whichever
-// document is active, nothing persisted (per-document settings in a PNG
-// chunk are the planned follow-up — docs/sprite-atlas-plan.md §8). Written
-// by the windoid's controls strip and File → Export Sprite Atlas…'s fields
-// (the same settings, two surfaces — the dialog edits LIVE, no pending
-// state), and by the ?ring capture hook; read by the renderer's follower
-// (scene/ring.js), the windoid body, the status line, and shell/windows.js
-// (the windoid's width follows the view count).
+// settings (view count, elevation, first-angle offset, the tile's edge in
+// px) are app-level and session-only, the prefs discipline: one ring,
+// whichever document is active, nothing persisted (per-document settings in
+// a PNG chunk are the planned follow-up — docs/sprite-atlas-plan.md §8).
+// Written by the windoid's controls strip and File → Export Sprite Atlas…'s
+// fields (the same settings, two surfaces — the dialog edits LIVE, no
+// pending state), and by the ?ring capture hook; read by the renderer's
+// follower (scene/ring.js), the windoid body, and shell/windows.js (the
+// windoid's height follows the tile size — docs/ring-size-plan.md).
 //
 // THE SHEET CHANNEL is the doc's `onLive` shape — hot, imperative, never
 // through the store: the follower publishes the rendered sheet canvas (by
@@ -25,20 +25,25 @@
 import { createStore } from './store.js';
 import { SOFTWARE } from './files.js';
 
-export const RING_DEFAULTS = { views: 4, elevation: 45, offset: 0, scale: 1 };
-/** The view count's ceiling — the strip's width follows it (one cell per
- *  view), and past sixteen a strip is a wall. */
+export const RING_DEFAULTS = { views: 4, elevation: 45, offset: 0, size: 64 };
+/** The view count's ceiling: the strip scrolls past what fits its window,
+ *  but a 255-px tile at sixteen views is already a 4080-px sheet, and past
+ *  sixteen a ring is a wall. */
 export const RING_MAX_VIEWS = 16;
-/** Px per voxel, at most: a 64-tile sheet of sixteen views at 8× is ~14000
- *  px wide, inside every desktop GPU's render-target limit. */
-export const RING_MAX_SCALE = 8;
+/** The tile's edge in px — greater than 1, less than 256 (the ask); the
+ *  model's lattice envelope is fit to it, so px per voxel is derived. A
+ *  16-view sheet at 255 is 4080 px wide, inside every desktop GPU's
+ *  render-target limit. The default is the engine-friendly power of two —
+ *  the editor's own tile ceiling. */
+export const RING_MIN_SIZE = 2;
+export const RING_MAX_SIZE = 255;
 
 /** The export's own text chunk: the settings, the frame, the anchor and the
  *  yaw list — enough for an engine importer to slice and align the sheet. */
 export const RING_CHUNK_KEY = 'sprite-machine:ring';
 
 /**
- * @typedef {{views: number, elevation: number, offset: number, scale: number}} RingSettings
+ * @typedef {{views: number, elevation: number, offset: number, size: number}} RingSettings
  * @typedef {{canvas: HTMLCanvasElement, frame: number, views: number}} RingSheet
  *   canvas: the whole strip, `views` frames of `frame` px side by side.
  */
@@ -76,9 +81,9 @@ export function createRing() {
       const i = int(d);
       set('offset', Number.isNaN(i) ? NaN : ((i % 360) + 360) % 360);
     },
-    /** @param {number} n  px per voxel, 1..RING_MAX_SCALE */
-    setScale(n) {
-      set('scale', clampInt(n, 1, RING_MAX_SCALE));
+    /** @param {number} n  the tile's edge in px, RING_MIN_SIZE..RING_MAX_SIZE */
+    setSize(n) {
+      set('size', clampInt(n, RING_MIN_SIZE, RING_MAX_SIZE));
     },
 
     /** The follower's publish: stores the sheet by reference and calls every
@@ -104,14 +109,18 @@ export function createRing() {
 /**
  * The metadata chunks the export writes beside the pixels (pure; the
  * exporter passes what it knows): a Title naming the sheet after the
- * document, the Software marker, and the ring chunk's JSON.
+ * document, the Software marker, and the ring chunk's JSON — the settings,
+ * then the frame (equal to `size`; an importer reading `frame` keeps
+ * working), the DERIVED px per voxel (`scale`, a float — how an engine
+ * relates the sprite's px to the lattice's units), the anchor and the yaw
+ * list.
  * @param {string} name  the document's name
  * @param {RingSettings} settings
- * @param {{frame: number, anchor: {x: number, y: number}, yaws: number[]}} geometry
+ * @param {{frame: number, scale: number, anchor: {x: number, y: number}, yaws: number[]}} geometry
  * @returns {Record<string, string>}
  */
-export function ringMetaChunks(name, settings, { frame, anchor, yaws }) {
-  const { views, elevation, offset, scale } = settings;
+export function ringMetaChunks(name, settings, { frame, scale, anchor, yaws }) {
+  const { views, elevation, offset, size } = settings;
   return {
     Title: `${name} atlas`,
     Software: SOFTWARE,
@@ -119,8 +128,9 @@ export function ringMetaChunks(name, settings, { frame, anchor, yaws }) {
       views,
       elevation,
       offset,
-      scale,
+      size,
       frame,
+      scale,
       anchor: { x: anchor.x, y: anchor.y },
       yaws: [...yaws],
     }),

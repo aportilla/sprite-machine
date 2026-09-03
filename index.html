@@ -198,23 +198,40 @@
 
       <!-- The 3D Sprite Atlas: the active document's model rendered
            ORTHOGRAPHICALLY from a ring of evenly stepped yaw angles at one
-           elevation — the rotation set an engine consumes — as a strip of
-           thumbnails, one 70px cell per view on the kit's gray-25 paper
-           (the same `pattern` grammar as the Sprite View), under a two-row
-           controls strip (views / elev / from / scale — the same settings
-           File → Export Sprite Atlas… edits, live) and over a status line
-           reading the frame size. Toggleable: View → 3D Sprite Atlas shows
-           it (hidden every load), the close box hides it — the ONE windoid
-           that keeps the kit's close box. FIXED-size: movable, no grow box;
-           shell/windows.js sets its height to RING_HEIGHT and its width to
-           ringWidthFor(views) — one cell per view + rules + borders, floored
-           at the strip's width (RING_MIN_WIDTH) — re-fitting live as the
-           view count changes (fitRing). The placement docks it on the bottom
-           margin, left-aligned with the document window, and shortens the
-           doc box to clear it only while it is shown (shell/layout.js). -->
-      <vf-window id="win-ring" variant="utility" heading="3D Sprite Atlas" movable flush>
+           elevation — the rotation set an engine consumes — as a row of
+           tiles, one cell per view at the TILE SIZE (1:1 — the `size`
+           setting is the tile's edge in px, 2–255, the model's envelope
+           fit to it) on the kit's gray-25 paper (the same `pattern` grammar
+           as the Sprite View), under a two-row controls strip (views / elev
+           / from / size — the same settings File → Export Sprite Atlas…
+           edits, live). Toggleable: View → 3D Sprite Atlas shows it (hidden
+           every load), the close box hides it — the ONE windoid that keeps
+           the kit's close box. The classic scrolling document window turned
+           windoid: `scrollbars="horizontal"` puts the kit's rail on the
+           frame's bottom edge where a status strip would be (none here —
+           the empty status slot is what lets the kit reserve the rail's
+           corner cell for the grow box), `flush` runs the body to the frame
+           and the rail, and `resizable` gives it the grow box — on the
+           HORIZONTAL axis alone, through the kit's size rect (the Patterns
+           strip's idiom: min-height = max-height locks the axis), declared
+           from shell/windows.js rather than authored here because the
+           bound moves: min-height = max-height = ringHeightFor(size) (the
+           chrome over one row of cells, re-declared as the size changes)
+           and min-width = the strip's RING_MIN_WIDTH; the row scrolls
+           under the rail past it. The placement seeds the width with the natural
+           row (capped at the vacant middle), docks it on the bottom margin,
+           left-aligned with the document window, and shortens the doc box
+           to clear it only while it is shown (shell/layout.js). -->
+      <vf-window
+        id="win-ring"
+        variant="utility"
+        heading="3D Sprite Atlas"
+        movable
+        resizable
+        scrollbars="horizontal"
+        flush
+      >
         <sm-ring-view pattern="gray-25"></sm-ring-view>
-        <sm-status-line kind="ring" slot="status"></sm-status-line>
       </vf-window>
 
       <!-- The floating Tools palette: utility tier — floats above the
@@ -504,8 +521,9 @@
       <!-- Export Sprite Atlas: the 3D Sprite Atlas windoid's settings as a
            form — the view count (any n is a 360/n step; the readout beside
            it says the step), the camera's elevation, the first view's
-           offset angle, and the px-per-voxel scale — over a readout of the
-           frame and sheet the settings produce. The fields are bound LIVE
+           offset angle, and the tile size (the frame's edge in px, the
+           model's envelope fit to it) — over a readout of the sheet the
+           settings produce. The fields are bound LIVE
            to the ring slice (shell/menus.js): a change here moves the
            windoid's strip behind the modal at once, and Cancel doesn't
            revert — the settings are non-destructive and the strip IS the
@@ -564,11 +582,11 @@
           </vf-stack>
           <vf-stack fill-width direction="row" gap="8" place="start">
             <vf-stack pad="4 0 0">
-              <vf-label width="80" for="atlas-scale">Scale:</vf-label>
+              <vf-label width="80" for="atlas-size">Size:</vf-label>
             </vf-stack>
-            <vf-number-field id="atlas-scale" min="1" max="8" step="1"></vf-number-field>
+            <vf-number-field id="atlas-size" min="2" max="255" step="1"></vf-number-field>
             <vf-stack pad="4 0 0">
-              <vf-label>px per voxel</vf-label>
+              <vf-label>px per tile</vf-label>
             </vf-stack>
           </vf-stack>
           <vf-stack fill-width direction="row" gap="8" place="start">
