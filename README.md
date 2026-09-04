@@ -539,7 +539,10 @@ the tool and ink stay app-level (one palette, one ink, System 7
 style). The utility windoids and the Edit menu always serve the **active**
 document: switching windows re-targets the 3D View (the camera re-frames —
 a window switch is a new subject), the Full Sprite View, the options
-strip's clamp bounds, and the Undo/Redo enablement.
+strip's clamp bounds, and the Undo/Redo enablement. The View menu lists
+every open document window by name, the active one checked (see
+[Menu bar](#menu-bar)) — a pick brings a window buried under the others
+forward.
 
 ### Menu bar
 
@@ -629,7 +632,19 @@ strip's clamp bounds, and the Undo/Redo enablement.
   window open — nothing on screen to arrange — and, arranged, in the
   Finder role (no active window to zoom); off its placement it is live
   in both roles, so from the Finder role a pick re-rails the hidden
-  windoids too, nothing activating). The three
+  windoids too, nothing activating) — and then, after a separator, the
+  menu's tail: the **open document windows**, one item per open document
+  window (System 7's Window-menu idiom). Each reads the document's name
+  (its window's title, so a rename or a first save relabels it); the
+  **active** window's item is checked — a reading of which window holds
+  the active state, so none is checked in the Finder role — and the order
+  is **creation order**, the cascade's own (a raise never reorders the
+  list); a pick brings that window forward through the same activation
+  funnel a click on its title bar takes, from the Finder role too, where
+  the application returns with it — the way back to a window buried under
+  the others. Nothing in the markup: `shell/menus.js` keeps the section
+  reconciled off the workspace, and with no document window open it is
+  absent, separator included. The three
   permanent windoids need no toggles: they're up whenever a document
   window is active; the 3D Sprite Atlas is the one exception.
 - **The clock** — System 7.5's menu bar clock at the bar's right end
@@ -1469,7 +1484,10 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   re-pinned like every window, and mirroring as the Finder's turn when active)
   menus.js        vf-menu-select -> workspace/file actions on the ACTIVE document; the two-role
                   focus gating + checkmark sync; the ⌘J item's state rule (Arrange Windows /
-                  Zoom Window — value + label read off windows.arranged()); Desktop Patterns ->
+                  Zoom Window — value + label read off windows.arranged()); the View menu's
+                  open-windows section (one item per open document window after a separator,
+                  reconciled off the workspace: the name, the active one checked, creation
+                  order; a pick activates its window, from the Finder role too); Desktop Patterns ->
                   the panel (patterns.js);
                   every dialog flow (About — the boot greeting too, its version + date
                   lines stamped at wire-up from vite.config.js's define — / Settings / New

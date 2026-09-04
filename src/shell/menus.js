@@ -1,6 +1,9 @@
 // ---------------------------------------------------------------------------
 // Menu + dialog wiring for the desktop shell: vf-menu-select → store/file
-// actions, checkmark + enabled sync, and every dialog flow (About, Open, the
+// actions, checkmark + enabled sync, the View menu's open-windows section
+// (one item per open document window, reconciled off the workspace — the
+// active one checked, a pick bringing its window forward), and every dialog
+// flow (About, Open, the
 // shared name prompt, Properties, the unsaved-changes alert, the
 // storage-unavailable notice, the parked Export 3D Model… configurator — a
 // dummy form whose only live control is Cancel — and the LIVE Export Sprite
@@ -640,7 +643,8 @@ export function initMenus(desktop, windows, panels) {
 
   on($('#menu-view'), 'vf-menu-select', (e) => {
     if (modalOpen()) return;
-    switch (menuDetail(e).value) {
+    const v = String(menuDetail(e).value ?? '');
+    switch (v) {
       case 'guides':
         // The extent rules over every document canvas: a toggle on the
         // prefs slice (off by default); syncView below mirrors it back
@@ -667,6 +671,13 @@ export function initMenus(desktop, windows, panels) {
         // zoom box's own toggle — and, that window now off its placement,
         // reads Arrange Windows again.
         windows.zoomActive();
+        break;
+      default:
+        // The open-windows section (syncWindows below): `window:<key>`
+        // brings that document window forward through the window layer's
+        // one activation funnel — from the Finder role too, where the
+        // application returns with it.
+        if (v.startsWith('window:')) windows.activateContext(v.slice('window:'.length));
         break;
     }
   });
@@ -699,7 +710,9 @@ export function initMenus(desktop, windows, panels) {
   // Desktop Patterns / Quit / New / Open stay — they're app-level (the
   // parked Settings… is disabled in the markup in both roles); the ⌘J
   // item (Arrange Windows / Zoom Window) keeps its own gate below
-  // (an open document window, and the windows' state) — and Open wears the
+  // (an open document window, and the windows' state); the View menu's
+  // open-windows items (syncWindows below) are live in both roles — a pick
+  // there is what brings the application back — and Open wears the
   // Finder grammar above: its label follows the selection ("Open" on a
   // selected icon, "Open…" for the listing dialog otherwise), never greyed.
   // Disabling an item also parks its key equivalent (the kit never fires a
@@ -783,6 +796,73 @@ export function initMenus(desktop, windows, panels) {
     windows.onLayout(syncArrange)
   );
   syncArrange();
+
+  // --- the open document windows: the View menu's dynamic section ------------
+  // System 7's Window-menu idiom — the application's open documents listed
+  // by name, the front one checked — as the View menu's tail: after the
+  // markup's last item, a separator and then ONE item per open document
+  // window. The label is the document's name (its window's title, so a
+  // rename or a first save relabels it); the checkmark is the ACTIVE
+  // window's, a reading of workspace.activeKey (none in the Finder role,
+  // where no document window is active); the order is the workspace's
+  // creation order — the cascade's own — never the stacking order, which a
+  // raise changes: a menu that shuffles under the pointer is hostile. The
+  // value is `window:<key>` (the context key, never the name — two saved
+  // documents can share one), and a pick brings that window forward
+  // through the window layer's one activation funnel (bringToFront →
+  // vf-activate), from the Finder role too, where the application returns
+  // with it — an icon's double-click on an already-open document, the
+  // menu's way; live in both roles for that reason (not DOC_SCOPED). With
+  // no document window open the section is absent, separator included:
+  // the menu ends at the markup's last item, and no dangling rule.
+  // RECONCILED, not rebuilt: an item lives as long as its window — the
+  // kit re-queries its slotted items on every access, so a runtime item is
+  // as live as an authored one — and moves only when the light DOM
+  // disagrees with the order. `checkable` up front: every item in the
+  // section is a check slot (the kit's own advice for a toggle that starts
+  // off), so the unchecked ones announce as such rather than as commands.
+  const menuView = $('#menu-view');
+  const sectionAnchor = /** @type {Element} */ (menuView.lastElementChild);
+  const windowSep = document.createElement('vf-separator');
+  /** @type {Map<string, HTMLElementTagNameMap['vf-menu-item']>} ctx key -> its item */
+  const windowItems = new Map();
+  const syncWindows = () => {
+    const { contexts, activeKey } = workspace.get();
+    const live = new Set(contexts.map((c) => c.key));
+    for (const [key, item] of windowItems) {
+      if (!live.has(key)) {
+        item.remove();
+        windowItems.delete(key);
+      }
+    }
+    const items = contexts.map((ctx) => {
+      let item = windowItems.get(ctx.key);
+      if (!item) {
+        item = document.createElement('vf-menu-item');
+        item.setAttribute('value', `window:${ctx.key}`);
+        item.checkable = true;
+        windowItems.set(ctx.key, item);
+      }
+      if (item.textContent !== ctx.name) item.textContent = ctx.name;
+      item.checked = ctx.key === activeKey;
+      return item;
+    });
+    if (items.length === 0) {
+      windowSep.remove();
+      return;
+    }
+    let after = sectionAnchor;
+    for (const el of [windowSep, ...items]) {
+      if (el.previousElementSibling !== after) after.after(el);
+      after = el;
+    }
+  };
+  teardown.push(workspace.subscribe(syncWindows), () => {
+    windowSep.remove();
+    for (const item of windowItems.values()) item.remove();
+    windowItems.clear();
+  });
+  syncWindows();
 
   // The Tools menu mirrors the sticky tool modes — exactly one item checked,
   // off the same session truth the tool strip and the S/B/R/G/E/I keys write.

@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 282 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 294 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -57,6 +57,17 @@ browser, `http://localhost:5173/`.
       untitled open, click between them — the 3D View, Sprite View, window
       title, tile-size readout, and Undo enablement all track the front
       window; the camera re-frames on each switch.
+- [ ] **The View menu lists the open windows**: with the Car and two
+      untitleds open, pull View — under Arrange Windows a dotted rule (the
+      kit's menu divider, a full row), then Car / untitled / untitled 2 in
+      the order they opened, a ✓ beside the front window. Click another
+      window and pull again — the ✓ moved, the order didn't. Pick a window
+      buried under the others — it comes forward, active. Click the bare
+      desktop (the Finder role) and pull View — the three are still
+      listed, live, none checked; pick one — the application comes back
+      on it, windoids and all. ⌘S an untitled under a name — its item
+      relabels; close a window — its item goes; close the last — the rule
+      goes with it and the menu ends at Arrange Windows.
 - [ ] **Per-document undo**: draw in each of two documents; ⌘Z in one never
       touches the other's pixels.
 - [ ] **One window per saved doc**: double-click a saved doc's icon twice —

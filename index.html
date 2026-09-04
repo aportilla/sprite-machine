@@ -117,6 +117,13 @@
           <vf-menu-item id="item-arrange" value="arrange" shortcut="⌘J" disabled
             >Arrange Windows</vf-menu-item
           >
+          <!-- The OPEN DOCUMENT WINDOWS follow here — a dynamic section,
+               nothing in the markup: after this menu's last authored item,
+               menus.js (syncWindows) keeps a separator and one item per
+               open document window — the document's name, the active
+               window's checked, in creation order, value `window:<key>`;
+               a pick brings that window forward, from the Finder role too.
+               Absent, separator included, with no document window open. -->
         </vf-menu>
         <!-- The menu bar clock (System 7.5's Date & Time clock): a kit
              vf-label at the bar's right end. The bar's slot is unfiltered

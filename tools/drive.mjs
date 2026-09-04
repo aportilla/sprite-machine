@@ -547,6 +547,37 @@ const PROBE = `(() => {${DEEP}
       undoEnabled: !__q('vf-menu-item[value="undo"]').disabled,
       redoEnabled: !__q('vf-menu-item[value="redo"]').disabled,
     },
+    // The View menu's open-windows section (menus.js syncWindows): one item
+    // per open document window after a separator, at the menu's tail — the
+    // value \`window:<key>\`, the label the document's name, the checkmark
+    // the active window's — read beside the document windows themselves
+    // (key, heading, active) so a check can hold the two against each other.
+    viewWindows: (() => {
+      const isWin = (el) => (el.getAttribute('value') || '').startsWith('window:');
+      const kids = [...__q('#menu-view').children];
+      const first = kids.findIndex(isWin);
+      return {
+        items: kids.filter(isWin).map((i) => ({
+          value: i.getAttribute('value'),
+          label: i.textContent.trim(),
+          checked: !!i.checked,
+          enabled: !i.disabled,
+        })),
+        // A separator leads the section…
+        separator: first > 0 && kids[first - 1].tagName === 'VF-SEPARATOR',
+        // …nothing but window items follow its first…
+        atEnd: first < 0 || kids.slice(first).every(isWin),
+        // …and with no items there is no dangling rule.
+        trailingSeparator: kids.length > 0 && kids[kids.length - 1].tagName === 'VF-SEPARATOR',
+        windows: [...document.querySelectorAll('vf-window')]
+          .filter((w) => w.id.startsWith('win-doc-'))
+          .map((w) => ({
+            key: w.id.slice('win-doc-'.length),
+            heading: w.heading,
+            active: w.hasAttribute('active'),
+          })),
+      };
+    })(),
     stamp: window.__stamp || 'RELOADED',
   };
 })()`;
@@ -3671,12 +3702,53 @@ async function main() {
     s.docWindows === 1 && s.heading === 'Car',
     `${s.docWindows} windows, "${s.heading}"`
   );
+  // The View menu's open-windows section against the document windows on
+  // screen: one item per window — its value the window's key, its label
+  // the window's heading — in CREATION order (the key's own count, never
+  // the stacking order a raise changes), the ACTIVE window's item checked
+  // and no other's, every item live; a separator before the first, nothing
+  // after the last, and with none open no dangling rule.
+  const windowListTrue = (vw) => {
+    const wins = new Map(vw.windows.map((w) => [w.key, w]));
+    const keys = vw.items.map((i) => String(i.value).slice('window:'.length));
+    return (
+      vw.items.length === vw.windows.length &&
+      new Set(keys).size === keys.length &&
+      keys.every((k) => wins.has(k)) &&
+      keys.every((k, i) => i === 0 || +keys[i - 1].slice(1) < +k.slice(1)) &&
+      vw.items.every(
+        (it, i) =>
+          it.enabled &&
+          it.label === wins.get(keys[i]).heading &&
+          it.checked === wins.get(keys[i]).active
+      ) &&
+      vw.atEnd &&
+      (vw.items.length > 0 ? vw.separator : !vw.trailingSeparator)
+    );
+  };
+  const windowItemOf = (vw, heading) =>
+    vw.items.find((i) => i.label === heading)?.value ?? null;
+  check(
+    'the View menu lists the one open window after a separator, checked (the active one)',
+    windowListTrue(s.viewWindows) &&
+      s.viewWindows.items.length === 1 &&
+      s.viewWindows.items[0].checked === true,
+    JSON.stringify(s.viewWindows)
+  );
   await newBlankDoc();
   s = await probe();
   check(
     'File → New… (dialog OK) opens a SECOND window, active and untitled',
     s.docWindows === 2 && s.docActive && s.heading === 'untitled',
     `${s.docWindows} windows, "${s.heading}"`
+  );
+  check(
+    '…and the View menu lists both in creation order, the newcomer last and checked',
+    windowListTrue(s.viewWindows) &&
+      s.viewWindows.items.length === 2 &&
+      s.viewWindows.items[1].checked === true &&
+      s.viewWindows.items[0].checked === false,
+    JSON.stringify(s.viewWindows)
   );
   check('…the 3D view empties for the blank untitled', s.voxels === 0, s.buildStats);
   // Draw one texel in the untitled — ITS history, not Car's.
@@ -3714,6 +3786,13 @@ async function main() {
     'clicking the Car window activates it: title and undo enablement follow',
     s.heading === 'Car' && s.docWindows === 2 && s.menuChecks.undoEnabled === false,
     JSON.stringify({ heading: s.heading, undo: s.menuChecks.undoEnabled })
+  );
+  check(
+    '…and the View menu moves the check to Car — the items stay in creation order (a raise reorders nothing)',
+    windowListTrue(s.viewWindows) &&
+      s.viewWindows.items[0].checked === true &&
+      s.viewWindows.items[1].checked === false,
+    JSON.stringify(s.viewWindows)
   );
   check(
     '…and the 3D View rebuilds the car (the stage follows the active document)',
@@ -3806,6 +3885,71 @@ async function main() {
     s.heading === 'Car' && s.docActive === true,
     JSON.stringify({ heading: s.heading, active: s.docActive })
   );
+  check(
+    '…nor the View menu list: still creation order under the re-stack (Car first, checked)',
+    windowListTrue(s.viewWindows) &&
+      s.viewWindows.items[0].label === 'Car' &&
+      s.viewWindows.items[0].checked === true,
+    JSON.stringify(s.viewWindows)
+  );
+  // A pick from the View menu's section brings that window forward: the
+  // untitled (under the raised Car) activates — the title, the focus and
+  // the check follow — and a pick of Car brings it back.
+  const untitledItem = windowItemOf(s.viewWindows, 'untitled');
+  const carItem = windowItemOf(s.viewWindows, 'Car');
+  await pickMenu('#menu-view', untitledItem);
+  s = await probe();
+  check(
+    'picking a window from the View menu activates it: the untitled comes forward, its item checked',
+    s.heading === 'untitled' &&
+      s.docActive === true &&
+      windowListTrue(s.viewWindows) &&
+      windowItemOf(s.viewWindows, 'untitled') === untitledItem &&
+      s.viewWindows.items.find((i) => i.value === untitledItem)?.checked === true,
+    JSON.stringify({ heading: s.heading, list: s.viewWindows })
+  );
+  await pickMenu('#menu-view', carItem);
+  s = await probe();
+  check(
+    '…and picking Car brings it back, the check with it',
+    s.heading === 'Car' &&
+      s.docActive === true &&
+      windowListTrue(s.viewWindows) &&
+      s.viewWindows.items.find((i) => i.value === carItem)?.checked === true,
+    JSON.stringify({ heading: s.heading, list: s.viewWindows })
+  );
+  // From the Finder role the section stays live with no item checked (no
+  // document window is active), and a pick brings the application back
+  // with that window — the windoids return, the item checks.
+  const bare2 = await bareSpot();
+  check(
+    'found a bare patch of desktop to click (the window list from the Finder)',
+    !!bare2
+  );
+  await click(bare2.x, bare2.y);
+  await sleep(300);
+  s = await probe();
+  check(
+    'in the Finder role the View menu still lists the windows, live, none checked',
+    s.docActive === false &&
+      windowListTrue(s.viewWindows) &&
+      s.viewWindows.items.length === 2 &&
+      s.viewWindows.items.every((i) => i.enabled && !i.checked),
+    JSON.stringify({ docActive: s.docActive, list: s.viewWindows })
+  );
+  await pickMenu('#menu-view', carItem);
+  s = await probe();
+  check(
+    'picking Car from the Finder role reactivates the application on it: windoids back, item checked',
+    s.heading === 'Car' &&
+      s.docActive === true &&
+      s.windows.tools &&
+      s.windows.sprite &&
+      s.windows.stage &&
+      windowListTrue(s.viewWindows) &&
+      s.viewWindows.items.find((i) => i.value === carItem)?.checked === true,
+    JSON.stringify({ heading: s.heading, windows: s.windows, list: s.viewWindows })
+  );
   // Close the dirty untitled: activate it, File → Close, No (don't save). The
   // staggered untitled sits mostly UNDER the just-raised Car window, and the
   // utility windoids float over every document — so scan its whole box for
@@ -3844,6 +3988,14 @@ async function main() {
     s.docWindows === 1 && s.heading === 'Car' && s.docActive === true,
     JSON.stringify({ docWindows: s.docWindows, heading: s.heading })
   );
+  check(
+    '…and the View menu drops the closed window’s item: Car alone, checked',
+    windowListTrue(s.viewWindows) &&
+      s.viewWindows.items.length === 1 &&
+      s.viewWindows.items[0].value === carItem &&
+      s.viewWindows.items[0].checked === true,
+    JSON.stringify(s.viewWindows)
+  );
   // The quit cascade: a fresh dirty untitled, then Quit — Cancel aborts the
   // whole walk; a second Quit answered No closes everything (the clean
   // Car goes silently) and leaves the bare desktop focused.
@@ -3880,6 +4032,13 @@ async function main() {
       !s.windows.sprite &&
       !s.windows.stage,
     JSON.stringify({ docWindows: s.docWindows, windows: s.windows })
+  );
+  check(
+    '…and the View menu’s open-windows section is gone, separator included',
+    windowListTrue(s.viewWindows) &&
+      s.viewWindows.items.length === 0 &&
+      s.viewWindows.trailingSeparator === false,
+    JSON.stringify(s.viewWindows)
   );
 
   // --- desktop: the New Document dialog ---------------------------------------
@@ -4002,6 +4161,14 @@ async function main() {
   await sleep(900);
   s = await probe();
   check('the save titles the document window', s.heading === 'Test Doc', s.heading);
+  check(
+    '…and its View menu item relabels with the window (the name follows the save)',
+    windowListTrue(s.viewWindows) &&
+      s.viewWindows.items.length === 1 &&
+      s.viewWindows.items[0].label === s.heading &&
+      s.viewWindows.items[0].checked === true,
+    JSON.stringify(s.viewWindows)
+  );
   check('a desktop icon appears for the saved doc', s.docIcons === 3, `${s.docIcons}`);
   um = await urlMirror();
   check(
