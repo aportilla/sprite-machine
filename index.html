@@ -91,13 +91,32 @@
                the menu. Document-scoped like Guides. -->
           <vf-menu-item value="ring">3D Sprite Atlas</vf-menu-item>
           <vf-separator></vf-separator>
-          <!-- Re-runs the boot placement on the CURRENT raster — the
+          <!-- ⌘J: ONE item, two commands, a STATE rule (menus.js owns the
+               sync and writes the value AND the label): with anything on
+               screen off its placement — a drag, a grow, a zoom, the
+               browser resized — it is "Arrange Windows" (value `arrange`:
+               the boot placement re-run on the CURRENT raster, the
                windoids back to the rail, every open document window onto
-               the cascade — after things were moved around or the browser
-               resized. Greyed without an open document window (nothing on
-               screen to arrange; menus.js owns the sync) — boots disabled
-               to match the empty workspace, like Undo/Redo. -->
-          <vf-menu-item value="arrange" disabled>Arrange Windows</vf-menu-item>
+               the cascade); with everything already where the placement
+               puts it — Arrange would change nothing — it is "Zoom Window"
+               (value `zoom`: the active document window through the zoom
+               box's own toggle; a window zoomed from its slot, like any
+               permutation of the documents across the cascade, still
+               reads arranged, so repeats toggle that one window while
+               nothing else moves). Greyed without an open document window
+               (nothing on screen to arrange) — boots disabled to match the
+               empty workspace, like Undo/Redo — and, arranged, in the
+               Finder role (no active window to zoom). ⌘J: one of the few
+               clean letters left (no Mac browser binds it — Downloads is
+               ⇧⌘J — and ⌘A stays for a Select All), beside ⌘K. Off-Mac,
+               Ctrl+J IS the browser's Downloads, which the kit's claim
+               pre-empts while the item is live; a disabled item claims
+               nothing (the kit's contract — a greyed Undo's ⌘Z, likewise),
+               so with nothing open the stroke falls through to the
+               browser. -->
+          <vf-menu-item id="item-arrange" value="arrange" shortcut="⌘J" disabled
+            >Arrange Windows</vf-menu-item
+          >
         </vf-menu>
         <!-- The menu bar clock (System 7.5's Date & Time clock): a kit
              vf-label at the bar's right end. The bar's slot is unfiltered

@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 272 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 282 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -217,16 +217,37 @@ browser, `http://localhost:5173/`.
       edge; drag the Sprite View into the bottom-right corner and resize
       — it never moves relative to that corner. Grow the browser back
       after any of these — every window is exactly where it was.
-- [ ] **View → Arrange Windows**: with three documents open, drag every
-      window somewhere odd and grow-box the 3D View and a document; pick
-      Arrange Windows — the windoids snap back to the rail at their placed
-      sizes and the documents stack as a fresh cascade, bottom-most window
-      on the first slot, the active one on top; nothing changes focus.
-      Shrink the browser window, pick it again — the arrangement re-derives
-      for the smaller raster. From the Finder role (click the desktop) the
-      item stays enabled while documents are open and re-rails the hidden
-      windoids for the next open; close every document — it greys (nothing
-      left to arrange).
+- [ ] **View → Arrange Windows / Zoom Window, ⌘J — a state rule**: with
+      three documents open, drag every window somewhere odd and grow-box
+      the 3D View and a document; pull the View menu — the item reads
+      Arrange Windows; pick it — the windoids snap back to the rail at
+      their placed sizes and the documents stack as a fresh cascade,
+      bottom-most window on the first slot, the active one on top;
+      nothing changes focus. Pull the menu again — the same item now reads
+      Zoom Window. Press ⌘J — the active document expands to the vacancy's
+      edges, top-left held, exactly as its zoom box would; ⌘J — it is back
+      on its doc box, nothing else moved (the item read Zoom Window
+      throughout: a window zoomed from its slot still counts as arranged);
+      ⌘J, ⌘J — the toggle, the View title flashing each time (the menu
+      never opens). With two documents on the cascade, click the
+      upper-left one to raise it and ⌘J — it zooms in place, never a swap
+      of the two (which document is on which slot is not the layout's
+      business); ⌘J — back on its slot, the other window never moved. Drag
+      a windoid off, ⌘J —
+      the arrangement lands first (the rule is state, not a sequence);
+      ⌘J — the zoom. Shrink the browser window with everything arranged —
+      the windoids land where Arrange would, the document springs with the
+      middle, so the first ⌘J after a resize re-applies the cascade room
+      (a small change of its far edges) and the second zooms. Grow the 3D
+      Sprite Atlas strip wider by its grow box — the item still reads Zoom
+      Window (the strip's width is yours, not the arrangement's; Arrange
+      still re-seeds it). From the Finder role (click the desktop) with
+      everything arranged the item greys (nothing on screen to arrange, no
+      active window to zoom); drag a document window off and click the
+      desktop — it reads Arrange Windows, live, and the pick re-rails the
+      hidden windoids for the next open (⌘J too) without activating
+      anything; close every document — it greys (nothing left to arrange)
+      and ⌘J does nothing.
 - [ ] **New windows cascade into free slots**: File → New… four more
       times — every window the same size, each a step down-right, the
       fifth flush with the rail's inset and the bottom margin, none under

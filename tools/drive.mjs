@@ -515,9 +515,14 @@ const PROBE = `(() => {${DEEP}
       save: !__q('vf-menu-item[value="save"]').disabled,
       close: !__q('vf-menu-item[value="close"]').disabled,
       pickColor: !__q('vf-menu-item[value="pick-color"]').disabled,
-      // Arrange gates on the workspace's open set (any document window, in
-      // either role) — not on appActive like the doc-scoped items.
-      arrange: !__q('vf-menu-item[value="arrange"]').disabled,
+      // The ⌘J item — Arrange Windows (value \`arrange\`) with anything on
+      // screen off its placement, Zoom Window (value \`zoom\`) once
+      // everything is arranged: the value is the state's readout, the
+      // label follows it. Greyed with nothing open, and arranged in the
+      // Finder role (nothing to arrange, no active window to zoom).
+      arrange: !__q('#item-arrange').disabled,
+      arrangeValue: __q('#item-arrange').getAttribute('value'),
+      arrangeLabel: __q('#item-arrange').textContent.trim(),
       toolPencil: !__q('vf-menu-item[value="tool-pencil"]').disabled,
       guides: !__q('vf-menu-item[value="guides"]').disabled,
       ring: !__q('vf-menu-item[value="ring"]').disabled,
@@ -1856,8 +1861,8 @@ async function main() {
   );
   s = await probe();
   check(
-    'View → Arrange Windows is live with a document open',
-    s.menuEnabled.arrange === true,
+    'the ⌘J item is live with a document open — and, fresh from the placement, reads the zoom state',
+    s.menuEnabled.arrange === true && s.menuEnabled.arrangeValue === 'zoom',
     JSON.stringify(s.menuEnabled)
   );
   // View → Guides: the extent rules over the canvas are OFF every load (the
@@ -2026,6 +2031,85 @@ async function main() {
       arranged.stage.w === sizeBefore.w &&
       arranged.stage.h === sizeBefore.h,
     JSON.stringify({ dragged, grown, posBefore, posAfter, sizeBefore, arranged })
+  );
+  // ⌘J is Arrange's key equivalent (`shortcut` on the item; the kit's
+  // document-level ear claims the chord and activates the item, menu
+  // closed). Drag the document window off its placed position again — the
+  // bar is back where the first drag found it, Arrange having put it there
+  // — and the chord lands it back: the same arithmetic as the pick.
+  await mouse('mousePressed', bar.x, bar.y);
+  await mouse('mouseMoved', bar.x + 20, bar.y + 12, { buttons: 1 });
+  await mouse('mouseMoved', bar.x + 40, bar.y + 24, { buttons: 1 });
+  await mouse('mouseReleased', bar.x + 40, bar.y + 24, { buttons: 0 });
+  await sleep(300);
+  const draggedAgain = await evaluate(
+    `(() => {${DEEP} const w = __doc(); return { top: w.top, left: w.left }; })()`
+  );
+  s = await probe();
+  const offPlacement = { ...s.menuEnabled };
+  await keyPress('j', META);
+  await sleep(600);
+  const keyArranged = await evaluate(
+    `(() => {${DEEP} const w = __doc(); return { top: w.top, left: w.left }; })()`
+  );
+  check(
+    '⌘J is Arrange Windows while something is off its placement: the chord puts the dragged window back',
+    offPlacement.arrangeValue === 'arrange' &&
+      draggedAgain.left === posBefore.left + 40 &&
+      draggedAgain.top === posBefore.top + 24 &&
+      keyArranged.left === posBefore.left &&
+      keyArranged.top === posBefore.top,
+    JSON.stringify({ posBefore, draggedAgain, keyArranged, item: offPlacement })
+  );
+  // A STATE rule, not a sequence: everything now where the placement puts
+  // it, the same item turns to its other command — value `zoom`, the label
+  // its readout — and the chord zooms the ACTIVE document window through
+  // the zoom box's own toggle (layout.js zoomedBox the oracle: the
+  // vacancy's edges, top-left held); a window zoomed from its slot still
+  // reads arranged — the zoom IS the zoom box's toggle — so the item stays
+  // Zoom Window and the next chord restores that one window: repeats
+  // toggle it, nothing else moving.
+  const docBoxNow = () =>
+    evaluate(
+      `(() => {${DEEP} const w = __doc(); const d = __q('#desktop');
+        return { left: w.left, top: w.top, w: w.width, h: w.height,
+          deskW: d.width, deskH: d.height }; })()`
+    );
+  s = await probe();
+  const arrangedDoc = await docBoxNow();
+  check(
+    'arranged, the ⌘J item turns to the zoom state: value `zoom`, its label a different readout, still live',
+    s.menuEnabled.arrange === true &&
+      s.menuEnabled.arrangeValue === 'zoom' &&
+      s.menuEnabled.arrangeLabel !== offPlacement.arrangeLabel,
+    JSON.stringify({ off: offPlacement, arranged: s.menuEnabled })
+  );
+  await keyPress('j', META);
+  await sleep(600);
+  const zoomedDoc = await docBoxNow();
+  const zoomedWant = zoomedBox(arrangedDoc.deskW, arrangedDoc.deskH, arrangedDoc);
+  s = await probe();
+  check(
+    "⌘J again zooms the active document window (the zoom box's own toggle, top-left held) — and the item stays Zoom Window: the zoom is part of the arranged reading",
+    zoomedDoc.left === arrangedDoc.left &&
+      zoomedDoc.top === arrangedDoc.top &&
+      zoomedDoc.w === zoomedWant.width &&
+      zoomedDoc.h === zoomedWant.height &&
+      s.menuEnabled.arrangeValue === 'zoom',
+    JSON.stringify({ arrangedDoc, zoomedDoc, zoomedWant, item: s.menuEnabled })
+  );
+  await keyPress('j', META);
+  await sleep(600);
+  const toggledBack = await docBoxNow();
+  s = await probe();
+  check(
+    "⌘J a third time restores it — the toggle's other half: the document back on its doc box, the item still Zoom Window",
+    toggledBack.left === arrangedDoc.left &&
+      toggledBack.top === arrangedDoc.top &&
+      toggledBack.w === arrangedDoc.w &&
+      toggledBack.h === arrangedDoc.h &&
+      s.menuEnabled.arrangeValue === 'zoom',
+    JSON.stringify({ arrangedDoc, toggledBack, item: s.menuEnabled })
   );
 
   // --- the zoom box: fill the vacancy / back to the doc box -------------------
@@ -2519,14 +2603,15 @@ async function main() {
   );
   check('…the options strip hides with the application', s.optionsStrip === false);
   check(
-    '…the Finder menu grammar lands: New and Open… stay, the rest grey out (Arrange stays: a document is open)',
+    '…the Finder menu grammar lands: New and Open… stay, the rest grey out (the ⌘J item too: everything arranged, nothing to arrange and no active window to zoom)',
     s.menuEnabled.newDoc === true &&
       s.menuEnabled.open === true &&
       s.menuEnabled.openLabel === 'Open…' &&
       s.menuEnabled.save === false &&
       s.menuEnabled.close === false &&
       s.menuEnabled.pickColor === false &&
-      s.menuEnabled.arrange === true &&
+      s.menuEnabled.arrange === false &&
+      s.menuEnabled.arrangeValue === 'zoom' &&
       s.menuEnabled.guides === false &&
       s.menuEnabled.toolPencil === false,
     JSON.stringify(s.menuEnabled)
@@ -2663,6 +2748,45 @@ async function main() {
       s.windows.stage &&
       s.optionsStrip,
     JSON.stringify({ docActive: s.docActive, windows: s.windows, strip: s.optionsStrip })
+  );
+  // Off its placement, the ⌘J item is Arrange Windows in BOTH roles: drag
+  // the document window, click the Finder — the item is live, reading the
+  // arrange state — and the pick from the Finder role lands the
+  // arrangement (the hidden windoids re-railed with it) without activating
+  // anything: positions only, the item back to its greyed zoom state.
+  const barOff = await evaluate(
+    `(() => {${DEEP} const r = __doc().getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + 9 }; })()`
+  );
+  await mouse('mousePressed', barOff.x, barOff.y);
+  await mouse('mouseMoved', barOff.x + 20, barOff.y + 12, { buttons: 1 });
+  await mouse('mouseMoved', barOff.x + 40, barOff.y + 24, { buttons: 1 });
+  await mouse('mouseReleased', barOff.x + 40, barOff.y + 24, { buttons: 0 });
+  await sleep(300);
+  const BARE_OFF = await bareSpot();
+  check(
+    'found a bare patch of desktop beside the dragged window',
+    !!BARE_OFF,
+    JSON.stringify(BARE_OFF)
+  );
+  if (BARE_OFF) await click(BARE_OFF.x, BARE_OFF.y);
+  await sleep(300);
+  s = await probe();
+  check(
+    'a document window dragged off its placement makes the ⌘J item Arrange Windows in the Finder role too: live, value `arrange`',
+    s.docActive === false &&
+      s.menuEnabled.arrange === true &&
+      s.menuEnabled.arrangeValue === 'arrange',
+    JSON.stringify({ docActive: s.docActive, item: s.menuEnabled })
+  );
+  await pickMenu('#menu-view', 'arrange');
+  s = await probe();
+  check(
+    '…and the pick from the Finder lands the arrangement: the item back to its greyed zoom state, nothing activated',
+    s.docActive === false &&
+      s.menuEnabled.arrangeValue === 'zoom' &&
+      s.menuEnabled.arrange === false,
+    JSON.stringify({ docActive: s.docActive, item: s.menuEnabled })
   );
 
   // --- desktop: multiple documents ---------------------------------------------
@@ -3596,9 +3720,61 @@ async function main() {
     s.voxels > 100,
     s.buildStats
   );
+  // Two windows on the cascade, the upper-left one (Car, on the first
+  // slot) just RAISED: which document sits on which slot is stacking
+  // bookkeeping, so the screen still reads arranged and the ⌘J item is
+  // Zoom Window — the reported case, where the item read Arrange and the
+  // chord SWAPPED the two windows instead of zooming. ⌘J zooms Car from
+  // its slot, the untitled untouched; ⌘J again restores it (the zoom
+  // box's toggle), the untitled still untouched.
+  const docBoxes = () =>
+    evaluate(
+      `(() => {${DEEP}
+        const out = {}; const d = __q('#desktop');
+        for (const w of document.querySelectorAll('vf-window')) {
+          if (w.id.startsWith('win-doc-'))
+            out[w.heading] = { left: w.left, top: w.top, w: w.width, h: w.height };
+        }
+        out.desk = { w: d.width, h: d.height };
+        return out; })()`
+    );
+  const twoUp = await docBoxes();
+  s = await probe();
+  check(
+    'two documents on the cascade, the upper-left one raised: the ⌘J item reads Zoom Window (a permutation of the slots is still the arrangement)',
+    s.menuEnabled.arrange === true && s.menuEnabled.arrangeValue === 'zoom',
+    JSON.stringify({ item: s.menuEnabled, twoUp })
+  );
+  await keyPress('j', META);
+  await sleep(600);
+  const carZoomed = await docBoxes();
+  const carZoomWant = zoomedBox(twoUp.desk.w, twoUp.desk.h, twoUp.Car);
+  s = await probe();
+  check(
+    '⌘J zooms the raised Car from its slot — no swap — and the untitled does not move; the item stays Zoom Window',
+    carZoomed.Car.left === twoUp.Car.left &&
+      carZoomed.Car.top === twoUp.Car.top &&
+      carZoomed.Car.w === carZoomWant.width &&
+      carZoomed.Car.h === carZoomWant.height &&
+      JSON.stringify(carZoomed.untitled) === JSON.stringify(twoUp.untitled) &&
+      s.menuEnabled.arrangeValue === 'zoom',
+    JSON.stringify({ twoUp, carZoomed, carZoomWant, item: s.menuEnabled })
+  );
+  await keyPress('j', META);
+  await sleep(600);
+  const carBack = await docBoxes();
+  check(
+    '⌘J again restores Car to its slot, the untitled still untouched — the toggle moves one window',
+    JSON.stringify(carBack.Car) === JSON.stringify(twoUp.Car) &&
+      JSON.stringify(carBack.untitled) === JSON.stringify(twoUp.untitled),
+    JSON.stringify({ twoUp, carBack })
+  );
   // View → Arrange Windows cascades in STACKING order: Car, just raised to
   // the front, takes the second slot and the untitled drops to the first —
-  // the two swap places (both at the doc box size).
+  // the two swap places (both at the doc box size). The item offers
+  // Arrange only once something is off its placement (the state rule), so
+  // Car is nudged off its slot by its bar first — the slots are read
+  // before the nudge.
   const docSlots = () =>
     evaluate(
       `(() => {${DEEP}
@@ -3609,6 +3785,11 @@ async function main() {
         return out; })()`
     );
   const slotsBefore = await docSlots();
+  await mouse('mousePressed', carBar.x, carBar.y);
+  await mouse('mouseMoved', carBar.x + 10, carBar.y + 6, { buttons: 1 });
+  await mouse('mouseMoved', carBar.x + 20, carBar.y + 12, { buttons: 1 });
+  await mouse('mouseReleased', carBar.x + 20, carBar.y + 12, { buttons: 0 });
+  await sleep(300);
   await pickMenu('#menu-view', 'arrange');
   const slotsAfter = await docSlots();
   check(
@@ -3960,7 +4141,16 @@ async function main() {
   // so the override above was itself a resize and the document window's
   // pin was read THERE. Arrange drops every record, so the shrink below
   // reads each pin on the wide raster — exactly where the oracle reads it.
-  await pickMenu('#menu-view', 'arrange');
+  // (The ⌘J item is Arrange Windows only while something is off its
+  // placement — here the document window, sprung by that resize; already
+  // arranged, there would be nothing to pick and nothing to do.)
+  async function arrangeIfNeeded() {
+    const v = await evaluate(
+      `document.querySelector('#item-arrange').getAttribute('value')`
+    );
+    if (v === 'arrange') await pickMenu('#menu-view', 'arrange');
+  }
+  await arrangeIfNeeded();
   const placedWide = await layoutSnap();
   await metrics(780, 640);
   await sleep(400);
@@ -3977,7 +4167,7 @@ async function main() {
   // so the resize lands them exactly where Arrange Windows puts them on the
   // new raster, and the rail is right-flush and full-height there (a
   // proportional pin would have scaled the inset and left the stage short).
-  await pickMenu('#menu-view', 'arrange');
+  await arrangeIfNeeded();
   const arrangedNarrow = await layoutSnap();
   const windoids = (snap) => snap.wins.filter((w) => !w.id.startsWith('win-doc-'));
   check(
@@ -4187,14 +4377,17 @@ async function main() {
     made = await probe();
   }
   const afterCreate = await layoutSnap();
-  await pickMenu('#menu-view', 'arrange');
-  const afterArrange = await layoutSnap();
+  s = await probe();
+  // "Where Arrange would" is the app's own question now: the ⌘J item reads
+  // the zoom state exactly when every window on screen sits on the box its
+  // placement would write (windows.js arranged()).
   check(
-    'a resize behind the About box: Create lands every window where Arrange would',
+    'a resize behind the About box: Create lands every window where Arrange would — the ⌘J item reads the zoom state',
     made?.docWindows === 1 &&
       afterCreate.wins.length === 4 &&
-      JSON.stringify(afterCreate.wins) === JSON.stringify(afterArrange.wins),
-    JSON.stringify({ created: afterCreate.wins, arranged: afterArrange.wins })
+      s.menuEnabled.arrange === true &&
+      s.menuEnabled.arrangeValue === 'zoom',
+    JSON.stringify({ created: afterCreate.wins, item: s.menuEnabled })
   );
   const railD = afterCreate.wins.find((w) => w.id === 'win-sprite');
   const stageD = afterCreate.wins.find((w) => w.id === 'win-stage');

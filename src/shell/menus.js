@@ -656,10 +656,17 @@ export function initMenus(desktop, windows, panels) {
         break;
       case 'arrange':
         // The boot placement re-run on the current raster — windoids and
-        // every open document window (windows.js). The item greys with no
-        // document window open (syncArrange below), so a pick always has
-        // something to arrange.
+        // every open document window (windows.js). The item wears this
+        // value only while something on screen is off its placement
+        // (syncArrange below), so a pick always has something to arrange.
         windows.arrange();
+        break;
+      case 'zoom':
+        // The same item's other command (syncArrange below): everything
+        // already arranged, ⌘J zooms the active document window — the
+        // zoom box's own toggle — and, that window now off its placement,
+        // reads Arrange Windows again.
+        windows.zoomActive();
         break;
     }
   });
@@ -690,9 +697,9 @@ export function initMenus(desktop, windows, panels) {
   // Two roles share one menu bar (the single-application affordance): with
   // the desktop focused, every document-scoped item greys out. About /
   // Desktop Patterns / Quit / New / Open stay — they're app-level (the
-  // parked Settings… is disabled in the markup in both roles); Arrange
-  // Windows keeps its own gate below
-  // (an open document window, in either role) — and Open wears the
+  // parked Settings… is disabled in the markup in both roles); the ⌘J
+  // item (Arrange Windows / Zoom Window) keeps its own gate below
+  // (an open document window, and the windows' state) — and Open wears the
   // Finder grammar above: its label follows the selection ("Open" on a
   // selected icon, "Open…" for the listing dialog otherwise), never greyed.
   // Disabling an item also parks its key equivalent (the kit never fires a
@@ -731,16 +738,50 @@ export function initMenus(desktop, windows, panels) {
   teardown.push(shell.subscribe(syncGate));
   syncGate();
 
-  // Arrange Windows wants something to arrange: at least one document
-  // window (the windoids hide with the desktop focused and re-place at
-  // open). Gated on the workspace's open set, NOT appActive — from the
-  // Finder role with a document open the item stays live and re-rails the
-  // hidden windoids too (positions only, nothing activates).
-  const itemArrange = $('vf-menu-item[value="arrange"]');
+  // --- Arrange Windows / Zoom Window: one item, ⌘J, a STATE rule ---------------
+  // The View menu's ⌘J item carries two commands, and which one is a
+  // reading of the windows, never of what was pressed last: with anything
+  // on screen off its placement — a drag, a grow, a zoom, the 3D Sprite
+  // Atlas shown into the doc box's band, a browser resize the document
+  // window sprung with — it is ARRANGE WINDOWS, the placement re-run
+  // (windows.arrange); with everything already where the placement puts it
+  // — arrange would change nothing (windows.arranged) — it is ZOOM WINDOW,
+  // the active document window through the zoom box's own toggle
+  // (windows.zoomActive). A window zoomed from its slot still reads
+  // arranged — and so does any permutation of the documents across the
+  // cascade's slots (a raise is bookkeeping, not layout) — so repeats of
+  // ⌘J toggle the focused document between its slot and the vacancy while
+  // nothing else moves, and from any other state the first ⌘J lands the
+  // arrangement. The label is the
+  // readout (the Open… / Open idiom) and the VALUE turns with it — two
+  // commands in one slot, so the select handler above dispatches on the
+  // value alone and a pick can never mean the other thing. Greyed with no
+  // document window open (nothing on screen to arrange), and, arranged, in
+  // the Finder role (nothing to arrange — the hidden windoids don't count,
+  // the test being what's on screen — and no active window to zoom); off
+  // its placement it stays live in both roles, and from the Finder role
+  // re-rails the hidden windoids too (positions only, nothing activates).
+  // windows.onLayout is the geometry signal (every write that module makes,
+  // every gesture it hears); the stores cover the window set, the role and
+  // the placement's inputs.
+  const itemArrange = $('#item-arrange');
   const syncArrange = () => {
-    itemArrange.disabled = workspace.get().contexts.length === 0;
+    const open = workspace.get().contexts.length > 0;
+    const arranged = open && windows.arranged();
+    const value = arranged ? 'zoom' : 'arrange';
+    const label = arranged ? 'Zoom Window' : 'Arrange Windows';
+    if (itemArrange.getAttribute('value') !== value)
+      itemArrange.setAttribute('value', value);
+    if (itemArrange.textContent !== label) itemArrange.textContent = label;
+    itemArrange.disabled = !open || (arranged && !shell.get().appActive);
   };
-  teardown.push(workspace.subscribe(syncArrange));
+  teardown.push(
+    workspace.subscribe(syncArrange),
+    shell.subscribe(syncArrange),
+    prefs.subscribe(syncArrange),
+    ring.subscribe(syncArrange),
+    windows.onLayout(syncArrange)
+  );
   syncArrange();
 
   // The Tools menu mirrors the sticky tool modes — exactly one item checked,

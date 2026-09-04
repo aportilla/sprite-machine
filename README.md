@@ -602,14 +602,34 @@ strip's clamp bounds, and the Undo/Redo enablement.
   windoid — see [Windows](#windows) — off every load; the windoid's own
   close box is the same uncheck, MacPaint's palettes closing from their box
   and coming back from the menu; document-scoped),
-  _Arrange Windows_ (the boot placement re-run on the
-  **current** raster: the windoids back to the rail at their placed sizes,
-  every open document window onto the doc box at its size, cascaded in
-  stacking order so the front window tops the cascade — the one way to get
-  the arrangement back after moving things around or resizing the browser;
-  greyed with no document window open — nothing on screen to arrange — and
-  otherwise live in both roles, so from the Finder role with a document
-  open it re-rails the hidden windoids for the next open). The three
+  _Arrange Windows_ / _Zoom Window_ ⌘J (**one item, two commands, a
+  state rule** — which one is a reading of the windows, never of what
+  was pressed last: with anything on screen off its placement — a drag,
+  a grow, a zoom, the 3D Sprite Atlas shown into the doc box's band, a
+  browser resize the document window sprung with — it is _Arrange
+  Windows_, the boot placement re-run on the **current** raster: the
+  windoids back to the rail at their placed sizes, every open document
+  window onto the doc box at its size, cascaded in stacking order so the
+  front window tops the cascade; with everything already where the
+  placement puts it — Arrange would change nothing — it is _Zoom
+  Window_, the active document window through the zoom box's own toggle
+  (see [Windows](#windows)). A window zoomed from its slot still reads
+  arranged — the zoom is the zoom box's own toggle — so repeats of ⌘J
+  toggle the focused document between its slot and the vacancy while
+  nothing else moves, and from any other state the first ⌘J lands the
+  arrangement. The test is what's on screen — every visible window's
+  live box against the box its placement would write, `arranged()` in
+  `shell/windows.js`; hidden windows don't count, nor does the atlas
+  strip's width, the user's own (Arrange still re-seeds it), nor which
+  document sits on which cascade slot (a raise is stacking bookkeeping,
+  not layout: two documents swapped across the cascade by a click still
+  read arranged, where Arrange itself, once something is off, cascades
+  in stacking order) — and the label is the readout, the Open… /
+  Open idiom, the item's value turning with it. Greyed with no document
+  window open — nothing on screen to arrange — and, arranged, in the
+  Finder role (no active window to zoom); off its placement it is live
+  in both roles, so from the Finder role a pick re-rails the hidden
+  windoids too, nothing activating). The three
   permanent windoids need no toggles: they're up whenever a document
   window is active; the 3D Sprite Atlas is the one exception.
 - **The clock** — System 7.5's menu bar clock at the bar's right end
@@ -629,7 +649,13 @@ strip's clamp bounds, and the Undo/Redo enablement.
 
 Key equivalents are the kit's own (`shortcut` on `vf-menu-item`; Ctrl stands
 in for ⌘ off-Mac). ⌘N/⌘W stay unassigned on purpose — the browser owns them
-before the page ever sees them. The bare-letter tool keys (S/B/R/G/E/I) keep
+before the page ever sees them. Arrange Windows' ⌘J is one of the few
+clean letters left (no Mac browser binds it — Downloads is ⇧⌘J — and ⌘A
+stays for a Select All); off-Mac, where Ctrl+J IS the browser's Downloads,
+the kit's claim (`preventDefault` on a match) pre-empts it while the item
+is live, and a disabled item claims nothing, so with no document open the
+stroke falls through to the browser — exactly as a greyed Undo leaves ⌘Z
+to a focused field's native undo. The bare-letter tool keys (S/B/R/G/E/I) keep
 living in `src/shortcuts.js`; the kit deliberately never matches an
 unmodified printable key — which is also what lets the Tools menu _display_
 those letters in its shortcut column without ever double-firing them.
@@ -658,7 +684,12 @@ Patterns control panel (document tier, not a document — see
   already at that state returns exactly that remembered pre-zoom size (a
   session truth, like a windoid arrangement you dragged: it never
   persists — a reload still places every window fresh; the doc box's
-  size for the CURRENT raster is the no-memory fallback). And because a
+  size for the CURRENT raster is the no-memory fallback). **⌘J's zoom
+  half is this toggle**: with everything arranged the View menu's ⌘J
+  item reads _Zoom Window_ and expands the active window from its doc
+  box; the next ⌘J — still _Zoom Window_, a window zoomed from its slot
+  reading as arranged — restores it, nothing else moving (see
+  [Menu bar](#menu-bar)). And because a
   zoomed window's far edges are struts of the nine-slice pin, a browser
   resize keeps a zoomed window zoomed.
 - **Utility windoids** (floating tier, `variant="utility"`): the **Tools
@@ -902,8 +933,9 @@ windoids for the raster it actually has, and every open — a saved
 document or an untitled — lands on the cascade. Within a session, what
 you drag is yours: the windoids keep their arrangement across
 deactivation and across closing to zero, until the page reloads — or
-until **View → Arrange Windows** re-runs the placement on the raster as
-it is now, every window included. (Desktop
+until **View → Arrange Windows** (⌘J, while anything is off its
+placement — see [Menu bar](#menu-bar)) re-runs the placement on the
+raster as it is now, every window included. (Desktop
 icons are the exception — the Finder's furniture, arranged by hand; see
 [Desktop icons & state](#desktop-icons--state).) Everything clamps onto
 the raster's lattice.
@@ -1425,13 +1457,20 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   cascaded — never a restored geometry, title sync, close-box routing); the vf-activate wire into
                   shell.appActive + workspace.activeKey; boot clamp + the resize rule (every window
                   re-pins by the nine-slice pin — the placement being a fixed point of it); arrange()
-                  (View → Arrange Windows: the placement re-run over every window); the
+                  (View → Arrange Windows: the placement re-run over every window) + arranged()
+                  (would arrange() change anything on screen? every visible window's live box
+                  against the target box its placement would write — the ⌘J item's state rule,
+                  so every placement here is a computed box before it is a write) + zoomActive()
+                  (⌘J's other half: the active document window through the zoom box's own
+                  toggle) + onLayout (the layout signal the item re-derives on); the
                   Sprite View's fixed sizing (fitSprite — boot + doc switches/tile resizes);
                   the PANEL adoption (addPanel/removePanel: a document-tier window that is
                   not a document — the Desktop Patterns control panel — placed, arranged and
                   re-pinned like every window, and mirroring as the Finder's turn when active)
   menus.js        vf-menu-select -> workspace/file actions on the ACTIVE document; the two-role
-                  focus gating + checkmark sync; Desktop Patterns -> the panel (patterns.js);
+                  focus gating + checkmark sync; the ⌘J item's state rule (Arrange Windows /
+                  Zoom Window — value + label read off windows.arranged()); Desktop Patterns ->
+                  the panel (patterns.js);
                   every dialog flow (About — the boot greeting too, its version + date
                   lines stamped at wire-up from vite.config.js's define — / Settings / New
                   Document (templates + tile size) / Open / name prompt / Properties /

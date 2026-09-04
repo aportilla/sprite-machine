@@ -91,6 +91,24 @@
 // toggles a window between the placement's zoomed state and the size it
 // had before the zoom (a session truth, never persisted), top-left held
 // both ways: see onZoom below.
+//
+// ⌘J — View → Arrange Windows / Zoom Window — is ONE item under a STATE
+// rule (menus.js owns the item; arranged() and zoomActive() here are its
+// two halves): arranged() asks whether the screen IS the arrangement —
+// every visible window's live box against the box its placement would
+// write on the current raster — and the item is Arrange Windows while
+// something is off (a drag, a grow, the strip shown into the doc box's
+// band, a browser resize the document window sprung with) and Zoom Window
+// (the zoom box's own toggle on the active document window) once
+// everything is where the placement puts it. Two readings are
+// deliberately loose: which document sits on which cascade slot is
+// stacking bookkeeping (a raise alone must not turn the item to Arrange —
+// the chord would swap two windows plainly on the cascade), and the
+// active window may sit zoomed from its slot (so repeats of ⌘J toggle
+// that one window while nothing else moves). So that the test and the
+// writes share one arithmetic, every placement below is a computed TARGET
+// box (clampedBox) before it is a write (writeBox); onLayout is the
+// signal the item re-derives on.
 // ---------------------------------------------------------------------------
 
 import { snapSys, systemPxQuantum, VfWindow } from 'vintage-frames';
@@ -148,23 +166,49 @@ const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
  * oversize box shrinks to a workable one.
  */
 export function clampWindow(desktop, win) {
+  const g = clampedBox(desktop, win, {
+    left: win.left,
+    top: win.top,
+    width: win.width,
+    height: win.height,
+  });
+  if (win.resizable) {
+    if (Number.isFinite(g.width)) win.width = g.width;
+    if (Number.isFinite(g.height)) win.height = g.height;
+  }
+  win.left = g.left;
+  win.top = g.top;
+}
+
+/**
+ * The box clampWindow would write for `g` on `win`'s lattice — the same
+ * arithmetic without the write, so a placement's target can be COMPUTED and
+ * compared with where a window sits (arranged(), below) without touching
+ * it. A non-resizable window's size passes through as given.
+ * @param {import('vintage-frames').VfDesktop} desktop
+ * @param {VfWindow} win
+ * @param {{left?: number, top?: number, width?: number, height?: number}} g
+ */
+export function clampedBox(desktop, win, g) {
   const k = systemPxQuantum(win);
   const down = (v) => Math.floor(v / k) * k;
   const up = (v) => Math.ceil(v / k) * k;
   const minTop = up(TOP_RESERVE);
+  let { width, height } = g;
   if (win.resizable) {
-    if (Number.isFinite(win.width)) win.width = Math.min(win.width, down(desktop.width));
-    if (Number.isFinite(win.height))
-      win.height = Math.min(win.height, down(Math.max(0, desktop.height - minTop)));
+    if (Number.isFinite(width)) width = Math.min(width, down(desktop.width));
+    if (Number.isFinite(height))
+      height = Math.min(height, down(Math.max(0, desktop.height - minTop)));
   }
-  const w = win.width ?? 0;
-  const h = win.height ?? 0;
-  win.left = clamp(snapSys(win.left ?? 0, win), 0, Math.max(0, down(desktop.width - w)));
-  win.top = clamp(
-    snapSys(win.top ?? minTop, win),
+  const w = width ?? 0;
+  const h = height ?? 0;
+  const left = clamp(snapSys(g.left ?? 0, win), 0, Math.max(0, down(desktop.width - w)));
+  const top = clamp(
+    snapSys(g.top ?? minTop, win),
     minTop,
     Math.max(minTop, down(desktop.height - h))
   );
+  return { left, top, width, height };
 }
 
 /**
@@ -267,29 +311,62 @@ export function initWindows(desktop, { hide = [] } = {}) {
    *  onDesktopResized. A placement drops the record outright: the next
    *  resize reads the pin from the placed geometry. */
   const pins = new WeakMap();
+  /** The layout signal (onLayout below): told after every geometry write
+   *  this module makes — a placement, a re-fit, a re-pin, a zoom, the
+   *  window set changing — and after every gesture it hears (a drag's
+   *  release, a grow's commit). menus.js re-derives the View menu's
+   *  Arrange Windows / Zoom Window readout on it (arranged()). */
+  const layoutListeners = new Set();
+  const notifyLayout = () => {
+    for (const fn of layoutListeners) fn();
+  };
 
   // The placement is the geometry — no prior session's is consulted (see
   // the header): a windoid lands where THIS raster puts it. Run for all
-  // three at boot and by arrange().
-  const placeWindoid = (id, smart) => {
+  // four at boot and by arrange(). Every placement is a TARGET BOX first —
+  // computed without touching the window (clampedBox: the boot clamp's own
+  // arithmetic) — and then written (writeBox): arranged() below asks the
+  // same targets whether arrange() would change anything, so the test and
+  // the writes can't disagree.
+  const windoidBox = (id, smart) => {
+    const win = byId[id];
     const sm = smart[id];
-    byId[id].left = sm.left;
-    byId[id].top = sm.top;
-    if ('width' in sm && byId[id].resizable) {
-      byId[id].width = sm.width;
-      byId[id].height = sm.height;
+    const g = { left: sm.left, top: sm.top, width: win.width, height: win.height };
+    if ('width' in sm && win.resizable) {
+      g.width = sm.width;
+      g.height = sm.height;
     }
     if (id === 'stage') {
-      byId[id].width = Math.max(byId[id].width ?? 0, STAGE_MIN_WIDTH);
-      byId[id].height = Math.max(byId[id].height ?? 0, STAGE_MIN_HEIGHT);
+      g.width = Math.max(g.width ?? 0, STAGE_MIN_WIDTH);
+      g.height = Math.max(g.height ?? 0, STAGE_MIN_HEIGHT);
     }
     // The sprite windoid's size and the ring's height are never authored
     // truth — always the derivations (the ring's placed width stands,
     // floored).
-    if (id === 'sprite') fitSprite();
-    if (id === 'ring') fitRing();
-    clampWindow(desktop, byId[id]);
-    pins.delete(byId[id]);
+    if (id === 'sprite') {
+      g.width = SPRITE_WIDTH;
+      g.height = spriteHeightFor(SPRITE_WIDTH, spriteRatio());
+    }
+    if (id === 'ring') {
+      g.height = ringHeightFor(ring.get().size);
+      g.width = Math.max(g.width ?? 0, RING_MIN_WIDTH);
+    }
+    return clampedBox(desktop, win, g);
+  };
+  /** A placement's write: the target box onto the window, its pin record
+   *  dropped (the next raster resize reads the pin from the placed
+   *  geometry). A size the target leaves undefined (the Tools palette's
+   *  content-hugging one) stays the window's. */
+  const writeBox = (win, g) => {
+    win.left = g.left;
+    win.top = g.top;
+    if (Number.isFinite(g.width)) win.width = g.width;
+    if (Number.isFinite(g.height)) win.height = g.height;
+    pins.delete(win);
+  };
+  const placeWindoid = (id, smart) => {
+    writeBox(byId[id], windoidBox(id, smart));
+    if (id === 'ring') declareRingRect(ringHeightFor(ring.get().size));
   };
   const placeUtility = () => {
     const smart = smartLayout();
@@ -299,29 +376,27 @@ export function initWindows(desktop, { hide = [] } = {}) {
   // pure placement that puts it on a raster: `(desktopW, desktopH) → box`.
   /** @type {Map<VfWindow, (w: number, h: number) => {left: number, top: number, width: number, height: number}>} */
   const panels = new Map();
-  const placePanel = (win) => {
+  const panelBox = (win) => {
     const boxFor = panels.get(win);
-    if (!boxFor) return;
-    const g = boxFor(desktop.width, desktop.height);
-    win.left = g.left;
-    win.top = g.top;
-    win.width = g.width;
-    win.height = g.height;
-    clampWindow(desktop, win);
-    pins.delete(win);
+    return boxFor
+      ? clampedBox(desktop, win, boxFor(desktop.width, desktop.height))
+      : null;
+  };
+  const placePanel = (win) => {
+    const g = panelBox(win);
+    if (g) writeBox(win, g);
   };
   // A document window onto cascade slot `slot` of the CURRENT raster's doc
   // box, at the box's size: arrange().
-  const placeDoc = (win, slot) => {
-    const d = smartLayout().doc;
-    const pos = cascadeSlot(d, slot);
-    win.left = pos.left;
-    win.top = pos.top;
-    win.width = d.width;
-    win.height = d.height;
-    clampWindow(desktop, win);
-    pins.delete(win);
+  const docBox = (win, smart, slot) => {
+    const d = smart.doc;
+    return clampedBox(desktop, win, {
+      ...cascadeSlot(d, slot),
+      width: d.width,
+      height: d.height,
+    });
   };
+  const placeDoc = (win, slot) => writeBox(win, docBox(win, smartLayout(), slot));
   for (const id of WINDOW_IDS) {
     // Non-closeable by design: the permanent windoids are on screen
     // whenever the application is. `closable` defaults true and markup can't
@@ -349,8 +424,10 @@ export function initWindows(desktop, { hide = [] } = {}) {
     followActive(workspace, (ctx) => {
       if (!ctx) return;
       const refit = () => {
-        if ((byId.sprite.height ?? 0) !== spriteHeightFor(SPRITE_WIDTH, spriteRatio()))
+        if ((byId.sprite.height ?? 0) !== spriteHeightFor(SPRITE_WIDTH, spriteRatio())) {
           fitSprite();
+          notifyLayout();
+        }
       };
       const un = ctx.doc.subscribe(refit);
       refit();
@@ -366,6 +443,9 @@ export function initWindows(desktop, { hide = [] } = {}) {
   unsubs.push(
     ring.subscribe(() => {
       if ((byId.ring.height ?? 0) !== ringHeightFor(ring.get().size)) fitRing();
+      // The placement's inputs moved (the strip's box, the doc box behind
+      // a shown strip) whether or not the window did.
+      notifyLayout();
     })
   );
 
@@ -388,6 +468,9 @@ export function initWindows(desktop, { hide = [] } = {}) {
     const ringNow = !byId.ring.hidden;
     if (ringNow && !ringWasShown) desktop.bringToFront(byId.ring);
     ringWasShown = ringNow;
+    // What is on screen changed (and, with the strip, the doc box the
+    // placement would write).
+    notifyLayout();
   };
   unsubs.push(shell.subscribe(syncUtility), prefs.subscribe(syncUtility));
   syncUtility();
@@ -466,6 +549,7 @@ export function initWindows(desktop, { hide = [] } = {}) {
       const rec = byKey.get(ctx.key);
       if (rec.win.heading !== ctx.name) rec.win.heading = ctx.name;
     }
+    notifyLayout(); // the window set (a new window placed, a closed one gone)
   };
   unsubs.push(workspace.subscribe(syncDocs));
   syncDocs(); // HMR: rebuild windows for contexts that survived the reload
@@ -632,6 +716,107 @@ export function initWindows(desktop, { hide = [] } = {}) {
       }
       // A panel goes back where its placement puts it on this raster too.
       for (const win of panels.keys()) placePanel(win);
+      notifyLayout();
+    },
+    /** Is the screen the arrangement? Every visible window's live box
+     *  against the box its placement would write on the current raster —
+     *  the very targets arrange() writes (windoidBox / docBox / panelBox,
+     *  the clamp included), so the test and the writes can't disagree.
+     *  Deliberately loose in four places. HIDDEN windows don't count (the
+     *  Finder role's windoids, a ?hide= capture's) — the test is what the
+     *  user sees, so a hidden strip re-fit behind the Export dialog never
+     *  makes the item "Arrange" over a screen that looks arranged. Nor
+     *  does the 3D Sprite Atlas strip's WIDTH: content, the user's (a
+     *  grow-box drag, the spring of a browser resize — layout.js's "mixed
+     *  box"); arrange() still re-seeds it, but a strip at its dock at its
+     *  derived height is an arranged strip whatever its width. Nor WHICH
+     *  document sits on WHICH cascade slot: the documents must fill the
+     *  cascade's first n slots as a set, one each, but a permutation is
+     *  stacking bookkeeping — arrange() cascades in stacking order, so a
+     *  raise alone (a click on the upper-left of two) would otherwise turn
+     *  the item to Arrange over two windows plainly on the cascade, and
+     *  the chord would SWAP them rather than zoom. And the ACTIVE document
+     *  window may sit ZOOMED from its slot (the zoom box's own box for that
+     *  top-left, zoomBoxFor): its zoom is part of the arranged reading, so
+     *  the item stays Zoom Window and the next ⌘J restores that one window
+     *  — an Arrange there would re-cascade and swap. The View menu's ⌘J
+     *  item is Arrange Windows while this reads false and Zoom Window
+     *  while it reads true (menus.js). */
+    arranged() {
+      const KEYS = /** @type {const} */ (['left', 'top', 'width', 'height']);
+      /** @param {VfWindow} win */
+      const liveOf = (win) => ({
+        left: win.left,
+        top: win.top,
+        width: win.width,
+        height: win.height,
+      });
+      /** @param {VfWindow} win @param {ReturnType<typeof clampedBox>} g @param {readonly string[]} [skip] */
+      const at = (win, g, skip = []) => {
+        const live = liveOf(win);
+        return KEYS.every(
+          (k) => skip.includes(k) || !Number.isFinite(g[k]) || (live[k] ?? 0) === g[k]
+        );
+      };
+      const smart = smartLayout();
+      for (const id of WINDOW_IDS) {
+        const win = byId[id];
+        if (win.hidden) continue;
+        if (!at(win, windoidBox(id, smart), id === 'ring' ? ['width'] : [])) return false;
+      }
+      // The documents: the cascade's first n slots (n every document
+      // window, hidden ones included — each holds a slot in arrange()) as
+      // a pool, every visible window claiming a distinct one — at the doc
+      // box's size, or, the active window, at its zoom box's.
+      const docs = [...desktop.querySelectorAll(':scope > vf-window')]
+        .map((el) => /** @type {VfWindow} */ (el))
+        .filter((win) => keyOf(win) != null);
+      const activeKey = workspace.get().activeKey;
+      const activeWin = activeKey != null ? (byKey.get(activeKey)?.win ?? null) : null;
+      /** @type {(ReturnType<typeof clampedBox> | null)[]} */
+      const pool = docs.map((win, i) => docBox(win, smart, i));
+      for (const win of docs) {
+        if (win.hidden) continue;
+        const live = liveOf(win);
+        const z = win === activeWin ? zoomBoxFor(win) : null;
+        const i = pool.findIndex(
+          (g) =>
+            g != null &&
+            live.left === g.left &&
+            live.top === g.top &&
+            ((live.width === g.width && live.height === g.height) ||
+              (z != null && live.width === z.width && live.height === z.height))
+        );
+        if (i < 0) return false;
+        pool[i] = null;
+      }
+      for (const win of panels.keys()) {
+        const g = panelBox(win);
+        if (g && !win.hidden && !at(win, g)) return false;
+      }
+      return true;
+    },
+    /** ⌘J's other half (menus.js, once everything is arranged): the ACTIVE
+     *  document window through the zoom box's own toggle (zoomToggle below
+     *  — from the slot it sits on to the vacancy's edges, top-left held,
+     *  and back). A window zoomed from its slot still reads arranged
+     *  (above), so the item stays Zoom Window and repeats toggle that one
+     *  window while nothing else moves. Nothing without an active document
+     *  window (the Finder role — menus.js greys the item there). */
+    zoomActive() {
+      const key = workspace.get().activeKey;
+      const win = key != null ? byKey.get(key)?.win : null;
+      if (!win) return;
+      zoomToggle(win);
+      notifyLayout();
+    },
+    /** Subscribe to the layout signal (see notifyLayout); returns the
+     *  unsubscribe. */
+    onLayout(fn) {
+      layoutListeners.add(fn);
+      return () => {
+        layoutListeners.delete(fn);
+      };
     },
     /** Adopt a PANEL window (see the header): `boxFor` is its pure placement
      *  on a raster, applied now (+ the boot clamp), by arrange(), and —
@@ -640,12 +825,14 @@ export function initWindows(desktop, { hide = [] } = {}) {
     addPanel(win, boxFor) {
       panels.set(win, boxFor);
       placePanel(win);
+      notifyLayout();
     },
     /** Drop a panel from the placement + re-pin set (the owner removes the
      *  node). */
     removePanel(win) {
       panels.delete(win);
       pins.delete(win);
+      notifyLayout();
     },
     /** The raster changed size (a browser resize / zoom re-fit — main.js
      *  calls this right after fitWithin, per event, un-debounced: the raster
@@ -698,6 +885,7 @@ export function initWindows(desktop, { hide = [] } = {}) {
       for (const id of WINDOW_IDS) repin(byId[id], before, after);
       for (const { win } of byKey.values()) repin(win, before, after);
       for (const win of panels.keys()) repin(win, before, after);
+      notifyLayout();
     },
     /** Deactivate the application programmatically (nothing calls this on
      *  the happy paths — closing the last window deactivates via the kit —
@@ -709,6 +897,10 @@ export function initWindows(desktop, { hide = [] } = {}) {
       for (const u of unsubs) u();
       desktop.removeEventListener('vf-close', onClose);
       desktop.removeEventListener('vf-zoom', onZoom);
+      desktop.removeEventListener('vf-resize', onGrow);
+      desktop.removeEventListener('pointerup', onRelease);
+      desktop.removeEventListener('pointercancel', onRelease);
+      layoutListeners.clear();
       // HMR: leave the windows standing — the re-init's syncDocs adopts…
       // it cannot: the fresh Map starts empty and would double them. Remove
       // and let the next init rebuild from the surviving workspace state.
@@ -769,17 +961,22 @@ export function initWindows(desktop, { hide = [] } = {}) {
   /** Pre-zoom sizes, per window — recorded by the expand, consumed by the
    *  restore. A WeakMap so a closed window's record dies with its node. */
   const zoomMemory = new WeakMap();
-  const onZoom = (e) => {
-    const win = e.target;
-    if (!(win instanceof VfWindow) || keyOf(win) == null) return;
-    // A shown 3D Sprite Atlas strip is a boundary the zoom respects (the
-    // doc box leaves it the same room).
-    const z = zoomedBox(
+  /** The zoom box's target for `win` where it sits: the vacancy's edges
+   *  from its top-left (layout.js zoomedBox). A shown 3D Sprite Atlas
+   *  strip is a boundary the zoom respects (the doc box leaves it the
+   *  same room). Shared by the toggle and arranged()'s reading of a
+   *  zoomed active window. */
+  const zoomBoxFor = (win) =>
+    zoomedBox(
       desktop.width,
       desktop.height,
       { left: win.left ?? 0, top: win.top ?? 0 },
       { ringShown: ringShown(), ringSize: ring.get().size }
     );
+  /** The toggle itself — the zoom box's click and ⌘J's zoom half
+   *  (zoomActive) share it. */
+  const zoomToggle = (win) => {
+    const z = zoomBoxFor(win);
     if (win.width === z.width && win.height === z.height) {
       const back = zoomMemory.get(win) ?? smartLayout().doc;
       zoomMemory.delete(win);
@@ -791,7 +988,30 @@ export function initWindows(desktop, { hide = [] } = {}) {
       win.height = z.height;
     }
   };
+  const onZoom = (e) => {
+    const win = e.target;
+    if (!(win instanceof VfWindow) || keyOf(win) == null) return;
+    zoomToggle(win);
+    notifyLayout();
+  };
   desktop.addEventListener('vf-zoom', onZoom);
+
+  // --- the gestures the layout signal hears ---------------------------------------
+  // A title-bar drag fires nothing of its own (the kit's position: a move
+  // is the window's own business), so its release — a pointerup anywhere
+  // on the desktop, read a task later so the kit's own settle has landed —
+  // stands in; a grow box's drag fires vf-resize, and its `commit` is the
+  // gesture settling. Either just re-derives the View menu's readout
+  // (menus.js) — cheap, and a release that moved nothing changes nothing.
+  const onRelease = () => {
+    setTimeout(notifyLayout, 0);
+  };
+  const onGrow = (e) => {
+    if (/** @type {CustomEvent} */ (e).detail?.commit) notifyLayout();
+  };
+  desktop.addEventListener('vf-resize', onGrow);
+  desktop.addEventListener('pointerup', onRelease);
+  desktop.addEventListener('pointercancel', onRelease);
 
   return api;
 }
