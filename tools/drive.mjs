@@ -229,13 +229,23 @@ function keyDesc(name) {
   return { key: name, code, vk: upper.charCodeAt(0), text: name };
 }
 
+// NO nativeVirtualKeyCode — ever. With one, headless Chrome on macOS builds a
+// native NSEvent behind the DOM event, and a keydown the page leaves
+// UNHANDLED (no preventDefault — the app's Esc over a selection, by design)
+// is re-injected through that native path endlessly: ~7000 trusted keydowns
+// a second, timeStamp 0, until the tab dies, starving every timer on the
+// page (the kit's menu-shortcut blink among them, which is what took ⌘K and
+// the five checks after it down for two days as an "environment issue" —
+// 83cfcec). The Windows vk alone gives the DOM its keyCode, and with no
+// native code there is no OS event to re-dispatch. (The storm's events read
+// key "Unidentified", code "Minus": vk 27 is Escape on Windows but the
+// Minus key's native code on a Mac — the tell that led here.)
 const keyEvent = (type, k, modifiers) =>
   send('Input.dispatchKeyEvent', {
     type,
     key: k.key,
     code: k.code,
     windowsVirtualKeyCode: k.vk,
-    nativeVirtualKeyCode: k.vk,
     ...(type === 'keyUp' ? {} : { text: k.text }),
     modifiers,
   });
