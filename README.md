@@ -343,16 +343,20 @@ template — see [UI layer: Lit](#ui-layer-lit).
   (`left`/`right`, `front`/`back`, `top`/`bottom`)
   so you can flip between a pair for reference. A pick is an ordinary
   **click** on the radio or its icon (see [Windows](#windows) for why no
-  windoid control needs a press-driven bridge). Each icon is a **21×26 pixel-art**
-  isometric cube (`src/assets/faces/`, wired up inside `sm-face-picker.js` — the one
+  windoid control needs a press-driven bridge). Each icon is a **21×26 1-bit
+  pixel-art** isometric cube (`src/assets/faces/` — black ink, white paper,
+  transparent outside the silhouette and nothing else; wired up inside
+  `sm-face-picker.js`, the one
   component that renders and styles them): the three
-  quads the view shows (`front`, `left`, `top`) fill **solid red**, and their hidden
-  opposites (`back`, `right`, `bottom`) draw a thin red **sliver** peeking out along
+  quads the view shows (`front`, `left`, `top`) fill **solid black**, and their hidden
+  opposites (`back`, `right`, `bottom`) draw a thin black **sliver** peeking out along
   the silhouette edge they hide behind — "the far side of this one". Left/right in
   the icons is the **object's own** handedness (stage-left): `left` is the cube's
   lower-**right** quad, the way a car facing you shows its left flank on your right —
   deliberately not the world-axis reading (`left` = −x, on the viewer's left). The **checked**
-  face takes a **50% red dither** (`selected.png`) laid over its whole cube; the
+  face takes a **50% black dither** (`selected.png`) laid over its whole cube —
+  it vanishes over the filled quad and reads as the classic selected gray over
+  the white ones; the
   overlay is always in the DOM and the picker's template flips its visibility class
   off the `selected` prop, so it never re-mounts (and never depends on the kit's
   internal radio state). Being raster pixel art, every tile goes through
@@ -361,9 +365,9 @@ template — see [UI layer: Lit](#ui-layer-lit).
   `vf-img`'s own `top`/`left` (system px), so it stays registered to the art's grid
   at any display scale. The **atlas grid** below the strip is a picking
   surface too: pressing any face's tile selects that face (the same
-  press-not-click rule), and the selected tile is **stroked in the face
-  art's red** (`--sm-select`, `#ff4f4f`) — see the Full Sprite View bullet
-  under [Windows](#windows). A **mirror-derived** face (one with
+  press-not-click rule), and the selected tile is **stroked in black ink**
+  (a 2-system-px inset ring over the tile's edge) — see the Full Sprite View
+  bullet under [Windows](#windows). A **mirror-derived** face (one with
   no art of its own) opens with an **empty canvas** and a **faded onion-skin** of
   the mirrored opposite behind it for reference; it becomes its own independent art
   only once you actually change a pixel — switching away and back leaves it derived,
@@ -750,8 +754,10 @@ Patterns control panel (document tier, not a document — see
   is a **picking surface**: pressing a tile selects that face — on the
   press, the Tools palette's mouse-down feel — with the picker radios and
   the edit canvas
-  following, and the selected tile **stroked in the face art's red**
-  (`--sm-select`, `#ff4f4f`, an inset ring over the tile's edge); the
+  following, and the selected tile **stroked in black ink** (a 2-system-px
+  inset ring over the tile's edge, the kit's own black — the face art's
+  ink: the windoid's chrome is 1-bit end to end, the sprite art the only
+  color in it); the
   windoid carries **no status strip** (its status slot stays empty, so
   the kit draws no bottom bar — the grid runs down to the frame).
   The windoid is a **fixed-size picture frame** — movable but not
@@ -1546,7 +1552,7 @@ src/
                        rectangle, SPRITE_PICKER_AT -> workspace.setFace on the ACTIVE key)
                        and its body (sm-atlas-view: the clickable 3×2 face-tile vf-grid —
                        tile picks fire on the press, the selected tile ringed in
-                       --sm-select red — the cells live canvases following the active
+                       black ink — the cells live canvases following the active
                        document) / the 3D Sprite Atlas's controls (sm-ring-controls, in
                        the window's HEADER slot: the two-row settings strip as a DITL —
                        the captions and fields placed at the top/left shell/layout.js's
@@ -1577,7 +1583,8 @@ src/
                   generated icon art (browser)
   assets/         the app's own raster art, every piece through the kit's vf-img at 1:1: tools/ (the
                   tool strip's six 22×19 1-bit icons — no icon library), faces/ (the face picker's
-                  21×26 cubes + the selected dither), the 32×32 application icon (the About box)
+                  21×26 1-bit cubes + the selected dither, black ink), the 32×32 application icon
+                  (the About box)
 ```
 
 ### UI layer: Lit + a hand-rolled store

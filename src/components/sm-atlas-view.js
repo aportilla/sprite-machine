@@ -10,8 +10,10 @@
 // mouse-down feel (sm-tool-strip's header: feel, not a bridge — the kit's
 // 0.5.4 re-insert lands after the click, so the click that follows a press
 // is simply a no-op on the face already selected) — and the selected tile
-// is stroked with a red ring (--sm-select, the face-picker art's own
-// #ff4f4f) laid over its edge.
+// is stroked with a BLACK ring laid over its edge: 2 system px of the kit's
+// ink, the face-picker art's own (the `--sm-select` red it wore went with
+// the red-tinted cube art on 2026-09-04 — the windoid's chrome is 1-bit end
+// to end, the sprite art the only color in it).
 //
 // The windoid is FIXED-size — no grow box: shell/windows.js pins its width
 // to the atlas grid block (SPRITE_WIDTH in shell/layout.js — cols ×
@@ -115,14 +117,16 @@ export class SmAtlasView extends LitElement {
         image-rendering: pixelated;
         image-rendering: crisp-edges;
       }
-      /* The selection ring: the edited face's square stroked in the
-         face-picker art's red, laid over the tile's own edge. Always in the
-         DOM — selection flips a class (visibility, not display), the same
+      /* The selection ring: the edited face's square stroked in black ink
+         (the kit's own token, the focus ring's), laid over the tile's own
+         edge — 2 system px, so it reads as a THICK border against the grid's
+         1px rules, the 1-bit way to say "selected". Always in the DOM —
+         selection flips a class (visibility, not display), the same
          no-remount discipline as the picker's dither overlay. */
       .atlas-ring {
         position: absolute;
         inset: 0;
-        border: calc(var(--vf-scale, 1) * 2px) solid var(--sm-select, #ff4f4f);
+        border: calc(var(--vf-scale, 1) * 2px) solid var(--vf-black, #000);
         pointer-events: none;
         visibility: hidden;
       }

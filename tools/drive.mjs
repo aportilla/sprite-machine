@@ -2425,6 +2425,15 @@ async function main() {
     ringOn === gridTarget,
     ringOn
   );
+  // The ring is INK — black, the 1-bit face art's own (its red went with
+  // the red-tinted cubes) — read as the computed border color.
+  const ringInk = await evaluate(
+    `(() => {${DEEP}
+      const ring = __q('.atlas-cell[data-face="${gridTarget}"] .atlas-ring');
+      return ring ? getComputedStyle(ring).borderTopColor : null;
+    })()`
+  );
+  check('the selection ring is black ink', ringInk === 'rgb(0, 0, 0)', ringInk);
   // A windoid control acts on the ordinary CLICK — no press-driven bridge
   // anywhere in the app since vintage-frames 0.5.4 syncs the light-DOM
   // order in a task AFTER a press's click has landed (the kit used to

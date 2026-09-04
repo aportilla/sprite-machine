@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 292 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 293 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -165,6 +165,13 @@ browser, `http://localhost:5173/`.
       selected cell is the same glyph white on black, no gray fringe. Tab
       to a cell: the dotted focus ring runs on the cell's outermost pixel
       row, clear of the ink.
+- [ ] **The face icons, by eye**: the Sprite View's six 21×26 cubes are
+      black ink on white paper — no red anywhere in the windoid: a visible
+      quad solid black, a hidden face's sliver black, the checked cube
+      under a black 50% dither (gray over its white quads, gone over the
+      black one), and the atlas grid's selected tile ringed by a 2px black
+      border inside the grid's 1px rules — every pixel crisp under browser
+      zoom, the sprite art the only color in the windoid.
 - [ ] **The palette acts on mouse DOWN**: press a tool cell and hold — the
       cell inverts and the Tools menu's checkmark moves before the button
       comes up (MacPaint's palette feel); releasing changes nothing more.

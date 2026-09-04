@@ -9,11 +9,14 @@
 //
 // THE CUBE ICONS (formerly face-icons.js, folded in — only this component
 // renders or styles them): one small isometric cube per atlas face, drawn as
-// 21×26 pixel art. The cube is seen from a top-front corner, so three quads
-// are visible and their three opposites hide behind it. A face with a visible
-// quad (`front`, `left`, `top`) fills that quad SOLID red; a hidden one
-// (`back`, `right`, `bottom`) draws a thin red SLIVER peeking out along the
-// silhouette edge it hides behind — "the far side of this one".
+// 21×26 1-BIT pixel art — black ink, white paper, transparent outside the
+// silhouette, and nothing else (every file decoded and checked: three pixel
+// values; the red-tinted set they replaced on 2026-09-04 carried a fourth).
+// The cube is seen from a top-front corner, so three quads are visible and
+// their three opposites hide behind it. A face with a visible quad (`front`,
+// `left`, `top`) fills that quad SOLID black; a hidden one (`back`, `right`,
+// `bottom`) draws a thin black SLIVER peeking out along the silhouette edge
+// it hides behind — "the far side of this one".
 //
 // Left/right in this art is the OBJECT's own handedness (stage-left), not the
 // viewer's: `left` is the cube's lower-RIGHT quad and `right` the sliver on
@@ -24,7 +27,9 @@
 // The art is raster, so it goes through `vf-img`: one image pixel is one
 // system px, magnified nearest-neighbor on whole device pixels. width/height
 // are stated up front so the cell reserves its box before the file lands.
-// SELECTED is a 50% red dither in the cube's silhouette, laid OVER the art
+// SELECTED is a 50% black dither in the cube's silhouette (over the filled
+// quad it vanishes, over the white ones it reads as the classic selected
+// gray — ink, so it is 1-bit like the art), laid OVER the art
 // via vf-img's own top/left (system px, from the position:relative wrapper —
 // vf-img writes that placement as INLINE style, so the overlay's state rides
 // on `class`, which lit owns, never on a bound `style` attribute that would
