@@ -13,7 +13,7 @@
 import { clampTile } from '../lib/atlas.js';
 import { VIEW_NAMES } from '../lib/views.js';
 import { PALETTE_168 } from '../lib/constants.js';
-import { RING_DEFAULTS } from '../state/ring.js';
+import { RING_DEFAULTS, RING_PAPERS } from '../state/ring.js';
 
 /**
  * @param {string} search  location.search (with or without the leading '?')
@@ -118,16 +118,19 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     }
   }
 
-  // ?ring=<views>[,<elevation>[,<offset>[,<size>]]]: show the 3D Sprite
-  // Atlas windoid (it boots hidden) with those settings — a capture hook,
-  // since the capture tool can't pull a menu. Present with a valid first
-  // integer ≥ 1 means "show"; each missing or unparseable trailing field
-  // keeps its default (the slice clamps the rest at seed). ?ring=0 → null.
-  /** @type {{views: number, elevation: number, offset: number, size: number}|null} */
+  // ?ring=<views>[,<elevation>[,<offset>[,<size>[,<paper>]]]]: show the 3D
+  // Sprite Atlas windoid (it boots hidden) with those settings — a capture
+  // hook, since the capture tool can't pull a menu or click a radio.
+  // Present with a valid first integer ≥ 1 means "show"; each missing or
+  // unparseable trailing field keeps its default (the slice clamps the
+  // rest at seed; the paper is a RING_PAPERS key — white / black / gray —
+  // or the default). ?ring=0 → null.
+  /** @type {{views: number, elevation: number, offset: number, size: number, paper: string}|null} */
   let ring = null;
   const ringParam = params.get('ring');
   if (ringParam) {
-    const p = ringParam.split(',').map((s) => parseInt(s, 10));
+    const raw = ringParam.split(',');
+    const p = raw.map((s) => parseInt(s, 10));
     if (Number.isFinite(p[0]) && p[0] >= 1) {
       const at = (i, d) => (p.length > i && Number.isFinite(p[i]) ? p[i] : d);
       ring = {
@@ -135,6 +138,7 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
         elevation: at(1, RING_DEFAULTS.elevation),
         offset: at(2, RING_DEFAULTS.offset),
         size: at(3, RING_DEFAULTS.size),
+        paper: Object.hasOwn(RING_PAPERS, raw[4] ?? '') ? raw[4] : RING_DEFAULTS.paper,
       };
     }
   }

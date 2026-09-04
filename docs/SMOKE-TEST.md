@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 271 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 272 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -313,12 +313,11 @@ browser, `http://localhost:5173/`.
 - [ ] **The 3D Sprite Atlas, by eye**: with the Car open, View → 3D Sprite
       Atlas — a windoid lands under the document window, left-aligned with
       it, on the bottom margin: a two-row strip (`views` / `elev` over
-      `from` / `size`) over four 64-px tiles butted on ONE sheet of the
-      kit's dots paper that runs across the whole body — no rules between
-      the tiles, no seam in the dots where one tile ends (the paper is the
-      body's, not a pattern per cell), and the dots continue past the last
-      tile to the frame (at the default the row is two px narrower than
-      the strip's floor, so two px of paper show there) — the
+      `from` / `size`) over four 64-px tiles butted on ONE sheet of white
+      paper that runs across the whole body — no rules between the tiles,
+      and the paper continues past the last tile to the frame (at the
+      default the row is two px narrower than the strip's floor, so two
+      px of paper show there) — the
       Car from the front, its right, the back, its left, all at one size
       and centered, each tile shown 1:1 (zoom the browser: a tile is a
       whole count of device px, never a resample) — and, where a status
@@ -330,23 +329,35 @@ browser, `http://localhost:5173/`.
       facing you is always the lit one). The dot bar carries a close box;
       its click hides the windoid and unchecks the item; the item re-shows
       it where it was, on top of the other windoids.
+- [ ] **The other papers, by URL**: no control sets the body's paper
+      (white is the one paper for now), so load
+      `?sample=car&ring=4,45,0,64,gray` — the whole body is the kit's dots
+      dither in one sheet (no seam in the dots where one tile ends: the
+      paper is the body's, not a pattern per cell; the dots run past the
+      last tile and, at eight views, under the scrolled row) — and
+      `…,black`: solid black under the tiles, the Car's transparent
+      margins reading black. File → Export Sprite Atlas… saves transparent
+      margins on any paper (open the file over a checkerboard).
 - [ ] **The row scrolls, the header holds**: step `views` to 8 — the
       windoid does NOT widen; the row runs past its right edge and the
       rail comes alive (the dither trough, the thumb). Drag the thumb,
       press the arrows, wheel sideways: the tiles scroll while the
       controls strip — the window's header, its white paper and its rule
       — does not move at all. Grow the window wider than the row: the
-      rail idles again, the dots running on to the right of the last tile
-      (the paper is the body's, as wide as the window), the header
+      rail idles again, the paper running on to the right of the last
+      tile (the paper is the body's, as wide as the window), the header
       spanning the window as ever. Step `views` past the window and
-      scroll: the dots run under the whole row, never ending short of it.
+      scroll (on the gray paper, where the sheet is visible — the URL
+      item above): the dots run under the whole row, never ending short
+      of it.
 - [ ] **The strip is a DITL**: zoom the browser to 200% — every caption
       (`views` / `elev` / `from` / `size`) stays crisp on whole pixels, each
       right-aligned against its field, its baseline on the field's digits'
       baseline; the four fields sit in two columns, the rule under the
-      header is one system px, and the body's paper is 1-bit, its dots in
-      phase across every tile edge (set `size` to 70 — not a multiple of
-      the pattern's 8 — and the dots still run unbroken under the row).
+      header is one system px, and on the gray paper (`?ring=4,45,0,70,gray`
+      — 70 is not a multiple of the pattern's 8) the body's paper is
+      1-bit, its dots in phase across every tile edge, running unbroken
+      under the row.
       Nothing in the windoid is flexed: the strip is the window's header
       band (vintage-frames 0.6.1) with the controls placed in it at stated
       system px, the row and every cell are kit boxes at stated system px,

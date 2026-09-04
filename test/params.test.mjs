@@ -62,25 +62,35 @@ test('defaults: everything off / null on an empty query', () => {
   );
 });
 
-test('?ring: the view count, then optional elevation / offset / size (defaults fill in)', () => {
+test('?ring: the view count, then optional elevation / offset / size / paper (defaults fill in)', () => {
   assert.deepEqual(parseBootParams('?ring=4').ring, {
     views: 4,
     elevation: 45,
     offset: 0,
     size: 64,
+    paper: 'white',
   });
-  assert.deepEqual(parseBootParams('?ring=8,30,45,128').ring, {
+  assert.deepEqual(parseBootParams('?ring=8,30,45,128,gray').ring, {
     views: 8,
     elevation: 30,
     offset: 45,
     size: 128,
+    paper: 'gray',
   });
+  assert.equal(parseBootParams('?ring=8,30,45,128,black').ring.paper, 'black');
   assert.equal(
     parseBootParams('?ring=8,x').ring.elevation,
     45,
     'a bad field keeps its default'
   );
   assert.equal(parseBootParams('?ring=8,x,90').ring.offset, 90);
+  assert.equal(
+    parseBootParams('?ring=8,30,45,128,dots').ring.paper,
+    'white',
+    'the paper is a choice name, not a pattern — an unknown one keeps the default'
+  );
+  assert.equal(parseBootParams('?ring=8,,,,gray').ring.paper, 'gray', 'the paper alone');
+  assert.equal(parseBootParams('?ring=8,,,,gray').ring.size, 64);
   assert.equal(parseBootParams('?ring=0').ring, null, 'fewer than one view is no ring');
   assert.equal(parseBootParams('?ring=').ring, null);
   assert.equal(parseBootParams('?ring=abc').ring, null);

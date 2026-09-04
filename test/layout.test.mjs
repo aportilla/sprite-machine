@@ -176,12 +176,14 @@ test("ring strip: the controls are a DITL whose arithmetic is the header's heigh
   // The DITL reproduces the strip as it was first measured (the plan's
   // as-built 258 × 62 — ring-size-plan.md): the strip is the controls over
   // the header's rule (the window's header-height, rule included), the
-  // floor the controls plus the borders.
+  // floor the controls plus the borders. (The paper setting has no column
+  // — its radios were built and retired; ring-size-plan.md note 8.)
   assert.deepEqual(box, { width: 258, height: 62 });
   assert.equal(RING_STRIP, box.height + 1);
   assert.equal(RING_STRIP, 63);
   assert.equal(RING_MIN_WIDTH, box.width + RING_CHROME.w);
   assert.equal(RING_MIN_WIDTH, 260);
+  assert.equal('paper' in RING_FIELDS, false);
 });
 
 test('ring sizing: the height derives from the tile size, the width seeds from the row, both floored', () => {

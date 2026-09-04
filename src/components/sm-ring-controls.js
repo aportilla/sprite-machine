@@ -20,6 +20,14 @@
 // controls' 258 plus the borders; a window can't be dragged narrower, so
 // the header never clips a field).
 //
+// The slice's fifth setting, the body's PAPER (state/ring.js's `paper` —
+// white / black / gray), has NO control here: a third column of radios for
+// it was built and retired the same day (2026-09-03, the user's call —
+// white is the one paper for now, and the choice is meant to be made for
+// the user one day from the sheet's own content, whether it has a lot of
+// white or black in it, rather than asked). The plumbing stays: the slice
+// holds the value, the body paints it, ?ring= can seed it for a capture.
+//
 // The host is `display: contents`: the items sit directly in the header,
 // their (0,0) its corner. The one stylesheet line beyond the captions'
 // alignment is the number field's width — the kit's own token, in the

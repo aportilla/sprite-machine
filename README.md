@@ -440,10 +440,13 @@ being a saved doc — no first-boot seeding, no About box greet, and no
 state writes — deterministic
 captures on a machine with saved docs) and `?hide=<window>[,<window>]`
 (`document|tools|sprite|stage|ring`) hides windows a capture needs out of frame,
-`?ring=<views>[,<elevation>[,<offset>[,<size>]]]` shows the **3D Sprite
-Atlas** windoid (View → 3D Sprite Atlas, which boots hidden) with those
-settings — `?ring=4` the default set, `?ring=8,30,45,128` eight views at
-30° from 45° in 128 px tiles; a missing trailing field keeps its default —
+`?ring=<views>[,<elevation>[,<offset>[,<size>[,<paper>]]]]` shows the
+**3D Sprite Atlas** windoid (View → 3D Sprite Atlas, which boots hidden)
+with those settings — `?ring=4` the default set, `?ring=8,30,45,128,gray`
+eight views at 30° from 45° in 128 px tiles on the gray paper (the fifth
+field is the body's paper, `white` / `black` / `gray` — a slice setting
+nothing in the UI writes today, so this hook is the one way to see the
+other two); a missing trailing field keeps its default —
 and `?now=<when>` (an ISO date-time like `2026-08-24T19:27`, read as local
 time, or epoch milliseconds) **freezes the menu bar clock** at that instant —
 a live clock would otherwise make every shot with the bar in frame differ by
@@ -746,9 +749,18 @@ Patterns control panel (document tier, not a document — see
   elevation, the way an engine consumes a pre-rendered rotation set, as a
   **row of tiles**: one cell per view, each the **tile at 1:1** — `size`
   system px square, one image pixel per system pixel — butted, no rules
-  between (`rules="none"` on the grid), on **one sheet** of the kit's
-  `dots` paper that runs across the whole body (the Sprite View's
-  pattern grammar, but the body's rather than the cells': a
+  between (`rules="none"` on the grid), on **one sheet** of **white**
+  kit paper that runs across the whole body — the ring slice's `paper`
+  setting, which admits `white` / `black` / `gray` (each a kit pattern by
+  name, `RING_PAPERS` in `state/ring.js`; gray is the kit's `dots`
+  dither, a 1-bit surface's gray) but which **nothing in the UI writes**:
+  a column of radios for it was built and retired the same day, the
+  intent being that the app pick the paper for you one day from the
+  sheet's own content (a sprite with a lot of white in it reads better on
+  black, and the reverse) rather than ask; the plumbing stays, and the
+  `?ring=` hook can seed it for a capture. A viewing choice either way —
+  the export clears transparent whatever the setting says — (the Sprite
+  View's pattern grammar, but the body's rather than the cells': a
   `vf-container pattern` under the grid, filling the body's width —
   `fill-width`, the kit's own fill, so it spans the scroll plane past
   the last tile and under a scrolled row — and the tile tall; the
@@ -790,7 +802,7 @@ Patterns control panel (document tier, not a document — see
   token. No
   status line: the windoid's bottom edge is the kit's **horizontal scroll
   rail** (below). Defaults: four views at a 90° step, 45° up, from the
-  front, 64 px tiles. **Yaw runs front → right → back → left** (yaw 0
+  front, 64 px tiles, white paper. **Yaw runs front → right → back → left** (yaw 0
   puts the camera on `+z`, the FRONT toward it; positive yaw walks it
   toward `+x`). **The frame is the tile**, and what fills it is the
   lattice's envelope, not the content's: the `nx×nz` footprint's bounding
@@ -1226,8 +1238,10 @@ camera direction and true up vector — unit, perpendicular, well defined
 straight down — and the yaw-independent anchor), and
 `test/ring-state.test.mjs` its settings slice (the defaults, every
 setter's clamp / rounding / NaN no-op / silence on an unchanged value, the
-size's 2–255 range, the offset's normalization, the sheet channel by
-reference, and the export's metadata chunks round-tripping).
+size's 2–255 range, the offset's normalization, the paper's three names
+and the setter's no-op on anything else, the sheet channel by reference,
+and the export's metadata chunks round-tripping — the paper never in
+them).
 `test/palette.test.mjs` pins the editor's
 168-color palette: 168 entries in a 21×8 grid, all colors AND names distinct,
 valid `#rrggbb`, `packed` derived from `css`, the layout corners (the
@@ -1488,7 +1502,8 @@ src/
                        the captions and fields placed at the top/left shell/layout.js's
                        RING_FIELDS states against the header's corner -> the ring slice)
                        and its body (sm-ring-view: the body's paper — a vf-container
-                       pattern filling the body's width, the tile tall — holding a
+                       pattern filling the body's width, the tile tall, its pattern the
+                       slice's paper setting, white with no control today — holding a
                        rules="none" vf-grid in flow, one bare vf-stack cell per view
                        painted 1:1 from the sheet channel) / the 3D View's controls
                        (sm-stage-controls, in the

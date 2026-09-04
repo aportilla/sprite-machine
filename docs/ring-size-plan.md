@@ -99,7 +99,36 @@ bridge for **kit ask #11**, a window body's paper as a kit pattern
 four default 64s make a 256 row, two px under the strip's 258, so the
 default width seeds at `RING_MIN_WIDTH` with two px of paper right of the
 last tile (the natural row at 64 used to clear the floor by one px through
-its three rules). ·
+its three rules). **(8) The paper is a SETTING with no control** (2026-09-03).
+The ask came in two parts. First: _"3 options for the background color...
+white, black, grey — grey will be the current 'dots' option, but the
+default should be white; the initial windoid will need to be wider to
+accommodate a 3rd column of controls in the header"_ — built as a third
+`RING_FIELDS.paper` column: a `vf-radio-group` of three radios in a gap-0
+column `vf-stack` (the kit's own 6px stacking margin would put three of
+its 20px toggle rows at 72, over the header's 62), 60 tall, set 1 down
+from the header's top so the first circle (painted 3 below its row) met
+the first field's top at 4, and 57 wide — the widest radio measured live
+(the 13px circle, the 6px gap, "white" at 38; "black" 35, "gray" 30) —
+the DITL's box 321 × 62, `RING_MIN_WIDTH` 323. Then, on seeing it:
+_"nevermind the switcher, let's just use white as the only option... leave
+the switching plumbing in place if we ever decide to change it... we might
+in the future be dynamic and detect whether the image has lots of white or
+black pixel areas in it"_. So the column is gone and the DITL is note 6's
+258 × 62 again (`RING_MIN_WIDTH` 260 — the numbers of the retired column
+are kept in `layout.js`'s comment), and the PLUMBING stays: the ring
+slice's `paper` (`RING_PAPERS` in `state/ring.js` — `white` / `black` /
+`gray`, each naming the kit pattern the body paints, gray being `dots`;
+`setPaper` a no-op on anything else; the default white; the export chunk
+never carries it, the frames rendering over a transparent clear
+regardless), `sm-ring-view` painting the paper from the slice (its
+`pattern` attribute is gone — one truth, so the future automatic pick is
+one `setPaper` call from wherever the sheet's content is measured), and a
+fifth `?ring=` field, the paper's name (`?ring=4,45,0,64,gray` — the one
+way to see the other two papers today; the drive drives it and pins
+`dots`). The drive pins the paper's pattern as a `RING_PAPERS` value and
+white at boot; the ring-state suite pins the slice, the params suite the
+field. ·
 **Planned:** 2026-09-02 on `e37ea05` (the 1-bit ants). **Depends on:**
 vintage-frames **0.5.5** — `flush` passing through `vf-window[scrollbars]`
 to the built-in scroll area's viewport, and the corner cell reserved on a

@@ -11,17 +11,53 @@ import {
   RING_MAX_VIEWS,
   RING_MIN_SIZE,
   RING_MAX_SIZE,
+  RING_PAPERS,
   RING_CHUNK_KEY,
 } from '../src/state/ring.js';
 import { SOFTWARE } from '../src/state/files.js';
 
-test('the defaults: four views, 45° up, from the front, a 64 px tile', () => {
-  assert.deepEqual(RING_DEFAULTS, { views: 4, elevation: 45, offset: 0, size: 64 });
+test('the defaults: four views, 45° up, from the front, a 64 px tile, white paper', () => {
+  assert.deepEqual(RING_DEFAULTS, {
+    views: 4,
+    elevation: 45,
+    offset: 0,
+    size: 64,
+    paper: 'white',
+  });
   assert.deepEqual(createRing().get(), RING_DEFAULTS);
   assert.equal(RING_MAX_VIEWS, 16);
   // The tile's edge: greater than 1, less than 256.
   assert.equal(RING_MIN_SIZE, 2);
   assert.equal(RING_MAX_SIZE, 255);
+});
+
+test('the papers: three choices in the strip’s order, each a kit pattern by name; gray is the dots dither', () => {
+  assert.deepEqual(Object.keys(RING_PAPERS), ['white', 'black', 'gray']);
+  assert.deepEqual(RING_PAPERS, { white: 'white', black: 'black', gray: 'dots' });
+  assert.ok(
+    Object.hasOwn(RING_PAPERS, RING_DEFAULTS.paper),
+    'the default is one of them'
+  );
+});
+
+test('setPaper: a RING_PAPERS key, anything else a no-op, silent when unchanged', () => {
+  const r = createRing();
+  let fired = 0;
+  r.subscribe(() => fired++);
+  r.setPaper('gray');
+  assert.equal(r.get().paper, 'gray');
+  assert.equal(fired, 1);
+  r.setPaper('gray');
+  assert.equal(fired, 1, 'a same-value write is a silent no-op');
+  r.setPaper('black');
+  assert.equal(r.get().paper, 'black');
+  for (const bad of ['dots', 'grey', 'toString', '', undefined, null, 3]) {
+    r.setPaper(/** @type {any} */ (bad));
+    assert.equal(r.get().paper, 'black', `${String(bad)} changes nothing`);
+  }
+  assert.equal(fired, 2);
+  r.setPaper('white');
+  assert.equal(r.get().paper, 'white');
 });
 
 test('setViews: integer, clamped 1..16, NaN a no-op, silent when unchanged', () => {
@@ -113,7 +149,7 @@ test('the sheet channel never touches the store', () => {
   assert.equal(fired, 0);
 });
 
-test('ringMetaChunks: Title, Software, and a JSON that round-trips', () => {
+test('ringMetaChunks: Title, Software, and a JSON that round-trips — the paper never in it', () => {
   const settings = { views: 8, elevation: 30, offset: 45, size: 123 };
   // The frame equals the size (kept for importers reading `frame`); the
   // scale is the derived px per voxel, a float.
@@ -123,7 +159,9 @@ test('ringMetaChunks: Title, Software, and a JSON that round-trips', () => {
     anchor: { x: 61.5, y: 96.1 },
     yaws: [45, 90, 135],
   };
-  const chunks = ringMetaChunks('Car', settings, geometry);
+  // The slice's whole snapshot goes in (the exporter passes ring.get()); the
+  // paper is a viewing choice and stays out of the file.
+  const chunks = ringMetaChunks('Car', { ...settings, paper: 'black' }, geometry);
   assert.deepEqual(Object.keys(chunks), ['Title', 'Software', RING_CHUNK_KEY]);
   assert.equal(chunks.Title, 'Car atlas');
   assert.equal(chunks.Software, SOFTWARE);

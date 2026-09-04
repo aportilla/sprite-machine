@@ -91,7 +91,7 @@ import {
 // format's chunk reader — pure ESM too, the oracles for the atlas section's
 // frame sizes and its exported file.
 import { ringFrame, ringSheet } from '../src/lib/ring.js';
-import { RING_DEFAULTS } from '../src/state/ring.js';
+import { RING_DEFAULTS, RING_PAPERS } from '../src/state/ring.js';
 import { readTextChunks } from '../src/lib/png-chunks.js';
 
 const APP_PORT = process.argv[2] || '5173';
@@ -377,7 +377,9 @@ const PROBE = `(() => {${DEEP}
   const r = canvas
     ? canvas.getBoundingClientRect()
     : { left: 0, top: 0, width: 0, height: 0 };
-  const checked = __q('vf-radio[checked]');
+  // The face picker's checked radio (scoped: the 3D Sprite Atlas strip
+  // carries radios of its own — the paper choice).
+  const checked = __q('sm-face-picker')?.shadowRoot?.querySelector('vf-radio[checked]');
   // The 3D View's status line: the fixed "3D Model View" label (a static
   // readout — no error or warning ever takes the line); the build stats
   // ("grid 40px · voxels 4950 · tris 1784") ride the label's title tooltip —
@@ -2203,7 +2205,8 @@ async function main() {
         sprite: { slot: __q('sm-atlas-controls').getAttribute('slot'), headerH: ws.headerHeight,
           header: rect(sh), picker: { left: picker.left, top: picker.top, w: picker.width, h: picker.height,
             pattern: picker.getAttribute('pattern'), ownRaster },
-          pickerLive: rel(picker, sh), radios: __qa('vf-radio').length },
+          pickerLive: rel(picker, sh),
+          radios: __q('sm-face-picker').shadowRoot.querySelectorAll('vf-radio').length },
         stage: { slot: __q('sm-stage-controls').getAttribute('slot'), headerH: wst.headerHeight,
           header: rect(th), checks: [...__q('sm-stage-controls').shadowRoot.querySelectorAll('vf-checkbox')]
             .map((c) => rel(c, th)), well: rect(well), body: rect(body) },
@@ -2709,9 +2712,10 @@ async function main() {
         // two can't drift), the header part's live box, the body's PAPER in
         // flow (no top/left — sm-ring-view: a vf-container pattern FILLING
         // the body's width, no declared width of its own, the tile tall —
-        // its live width read back), the grid inside it and its rules, a
-        // cell's declared box and that it names no pattern of its own. (A
-        // comment inside the evaluate string: no backticks.)
+        // its live width read back, its pattern the strip's paper radios'
+        // choice), the grid inside it and its rules, a cell's declared box
+        // and that it names no pattern of its own. (A comment inside the
+        // evaluate string: no backticks.)
         const hdr = w.shadowRoot.querySelector('[part="header"]');
         const hr = hdr ? hdr.getBoundingClientRect() : null;
         const view = __q('sm-ring-view');
@@ -2727,7 +2731,6 @@ async function main() {
             pattern: paper.getAttribute('pattern') } : null,
           grid: { top: grid.top ?? null, left: grid.left ?? null, rules: grid.rules },
           cell: cell ? { w: cell.width, h: cell.height, pattern: cell.getAttribute('pattern') } : null,
-          hostPattern: view.getAttribute('pattern'),
         };
         return { left: w.left, top: w.top, w: w.width, h: w.height, dw: d.width, dh: d.height,
           docLeft: doc.left, docTop: doc.top, docH: doc.height,
@@ -2814,12 +2817,15 @@ async function main() {
   // header spanning the window inside its borders; the body's PAPER is in
   // flow — a kit pattern box FILLING the body's width (no declared width;
   // the kit measures the filled axis for its raster), the tile tall,
-  // wearing the host's pattern — as wide as the plane, so it covers the
-  // scroll range: the row's width or the viewport's, whichever is wider
-  // (the kit sizes its plane to the grid inside the paper) — under a
-  // viewport exactly the tile tall (nothing overflows down); the grid
-  // inside it draws no rules; a cell is the tile's declared box naming no
-  // pattern of its own (the paper is the body's, not the cells').
+  // wearing a kit pattern the ring slice's paper setting names (a
+  // RING_PAPERS value — white by default; nothing in the UI writes the
+  // setting today, the ?ring hook seeds it below) — as wide as the plane,
+  // so it covers the scroll range: the row's width or the viewport's,
+  // whichever is wider (the kit sizes its plane to the grid inside the
+  // paper) — under a viewport exactly the tile tall (nothing overflows
+  // down); the grid inside it draws no rules; a cell is the tile's
+  // declared box naming no pattern of its own (the paper is the body's,
+  // not the cells').
   const ditlDeclared = (r, n, size) => {
     const d = r.ditl;
     return (
@@ -2835,7 +2841,7 @@ async function main() {
       d.paper.w === null &&
       d.paper.h === size &&
       d.paper.live === Math.max(r.clientW, ringRowWidth(n, size)) &&
-      d.paper.pattern === d.hostPattern &&
+      Object.values(RING_PAPERS).includes(d.paper.pattern) &&
       d.grid.top === null &&
       d.grid.left === null &&
       d.grid.rules === 'none' &&
@@ -2849,9 +2855,22 @@ async function main() {
     );
   };
   check(
-    "the windoid is a DITL: the controls strip is the window's header at RING_STRIP, the body's paper in flow — the host's pattern filling the body's width, the tile tall — covers the scroll range under a viewport exactly the tile tall, the grid draws no rules, a cell is the tile's bare box",
+    "the windoid is a DITL: the controls strip is the window's header at RING_STRIP, the body's paper in flow — a kit pattern filling the body's width, the tile tall — covers the scroll range under a viewport exactly the tile tall, the grid draws no rules, a cell is the tile's bare box",
     ditlDeclared(rb, 4, S0),
     JSON.stringify({ ditl: rb.ditl, clientW: rb.clientW, clientH: rb.clientH })
+  );
+  // The paper setting's default, read as the pattern the body declares
+  // (no control writes the setting — the strip holds four fields and
+  // nothing else; the ?ring hook below is the one writer).
+  check(
+    "the body's paper boots white — the slice's default — and the strip holds no control for it",
+    rb.ditl.paper.pattern === RING_PAPERS[RING_DEFAULTS.paper] &&
+      rb.ditl.paper.pattern === 'white' &&
+      (await evaluate(
+        `(() => {${DEEP} const c = __q('sm-ring-controls').shadowRoot;
+          return c.querySelectorAll('vf-radio, vf-radio-group, vf-select, vf-checkbox').length; })()`
+      )) === 0,
+    JSON.stringify({ pattern: rb.ditl.paper.pattern })
   );
   // The declared columns against the LIVE glyphs (the kit's rule: a caption
   // wider than its column overflows rather than reflowing — the number is
@@ -3267,22 +3286,25 @@ async function main() {
   );
   await send('Emulation.clearDeviceMetricsOverride');
   await sleep(300);
-  // The capture hook: ?ring=<views>,<elevation>,<offset>,<size> boots the
-  // windoid shown with those settings.
-  await send('Page.navigate', { url: `${URL}&ring=6,30,45,100` });
+  // The capture hook: ?ring=<views>,<elevation>,<offset>,<size>,<paper>
+  // boots the windoid shown with those settings — the paper's one writer
+  // today (the slice's gray is the kit's dots dither).
+  await send('Page.navigate', { url: `${URL}&ring=6,30,45,100,gray` });
   await waitForApp();
   await sleep(400);
   s = await probe();
   rb = await ringBox();
   cells = await cellPixels();
   check(
-    '?ring=6,30,45,100 boots the windoid shown: six views at 30°, from 45°, a 100 px tile — the height and the cells its own',
+    '?ring=6,30,45,100,gray boots the windoid shown: six views at 30°, from 45°, a 100 px tile on the gray (dots) paper — the height and the cells its own',
     s.ringShown === true &&
       s.menuChecks.ring === true &&
       rb.cells === 6 &&
       rb.elev === 30 &&
       rb.offset === 45 &&
       rb.size === 100 &&
+      rb.ditl.paper.pattern === RING_PAPERS.gray &&
+      rb.ditl.paper.pattern === 'dots' &&
       rb.h === ringHeightFor(100) &&
       rb.w === ringWidthFor(6, 100) &&
       rb.cell === 100 &&

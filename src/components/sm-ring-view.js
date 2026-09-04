@@ -7,31 +7,37 @@
 // PAPER: a `vf-container pattern` FILLING the body's width (`fill-width`,
 // the kit's own fill — the one width a page can always express; as wide as
 // the kit's scroll plane, so the paper runs past the last tile to the
-// frame and under a scrolled row alike) and the tile tall (`pattern` on
-// the host — the Sprite View's grammar and the Desktop Patterns panel's
-// element: the kit paints its 1-bit paper at the declared height and
-// MEASURES the filled axis for the raster, its own contract for an
-// undeclared axis, re-rastering as the grow box moves), the grid inside it
-// with its surface token cleared so the paper shows through, and each cell
-// a `vf-stack` at the tile's declared size — the kit's layout box, which
-// paints nothing by contract — holding a canvas that fills it with that
-// view's frame of the rendered sheet: the active document's model seen
-// orthographically from that yaw at the controls' elevation. A frame's
-// transparent margin thus reads as the unbroken paper under the whole
-// body — no seam where one tile ends and the next begins (a pattern per
-// cell restarts its phase at every cell edge at any tile size that is not
-// a multiple of 8), and no edge where the row ends.
+// frame and under a scrolled row alike) and the tile tall, its pattern the
+// ring slice's PAPER setting — white / black / gray, each a kit pattern by
+// name in state/ring.js's RING_PAPERS (white and black the flat fills,
+// gray the `dots` dither), white by default and, today, white always: no
+// control writes the setting (a radio column was built and retired the
+// same day; the paper is meant to be chosen FOR the user one day from the
+// sheet's content — see RING_PAPERS), only the ?ring= hook seeds it (the
+// Desktop Patterns panel's element: the kit paints its 1-bit paper at the
+// declared height and MEASURES the filled axis for the raster, its own
+// contract for an undeclared axis, re-rastering as the grow box moves),
+// the grid inside it with its surface token cleared so the paper shows
+// through, and each cell a `vf-stack` at the tile's declared size — the
+// kit's layout box, which paints nothing by contract — holding a canvas
+// that fills it with that view's frame of the rendered sheet: the active
+// document's model seen orthographically from that yaw at the controls'
+// elevation. A frame's transparent margin thus reads as the unbroken paper
+// under the whole body — no seam where one tile ends and the next begins
+// (a pattern per cell restarts its phase at every cell edge at any tile
+// size that is not a multiple of 8), and no edge where the row ends. The
+// paper is a viewing choice: the export clears transparent whatever the
+// setting says.
 //
 // The paper container is the app-side bridge for KIT ASK #11 — a window
 // body's paper as a kit pattern, the way vf-desktop's `pattern` is the
-// screen's (docs/kit-asks-body-pattern.md); the day it ships, the attribute
-// moves onto the window and the container goes (the surface-token line
-// stays: it is the grid's own knob, not a bridge). A cell is a stack
-// rather than a bare vf-container because a bare container paints the
-// desktop's ink (kit ask #6, docs/kit-asks-pattern-paper.md) and a cell
-// here must paint NOTHING; and when the host names no pattern the paper
-// declares `white` — the same ask's bridge — so the body is plain white
-// paper rather than the desktop's dither showing through. The controls
+// screen's (docs/kit-asks-body-pattern.md); the day it ships, the pattern
+// is written onto the window from the slice and the container goes (the
+// surface-token line stays: it is the grid's own knob, not a bridge). A
+// cell is a stack rather than a bare vf-container because a bare container
+// paints the desktop's ink (kit ask #6, docs/kit-asks-pattern-paper.md)
+// and a cell here must paint NOTHING — and the white paper is a DECLARED
+// pattern for the same reason, the same ask's bridge. The controls
 // themselves are <sm-ring-controls>, in the window's HEADER (vintage-frames
 // 0.6.1) — the band over the body, outside the scroll area — so the body
 // is the document and nothing else.
@@ -61,17 +67,17 @@
 // bridge here).
 //
 // A CONNECTED chrome component. The ring slice drives the TEMPLATE (the
-// cell count and size, the cells' yaw captions). The PIXELS never go through
-// a store: the renderer's follower (scene/ring.js) publishes the rendered
-// sheet canvas on the ring slice's SHEET CHANNEL (the doc's onLive shape —
-// hot, imperative, a render per rebuild frame during a stroke), and #paint
-// slices it across the cells with drawImage — one copy per cell per frame,
-// the Sprite View's cost class. connectedCallback subscribes and
-// disconnectedCallback unsubscribes (the desktop re-inserts a windoid's node
-// to raise it — the same reconnect the Sprite View survives), and every
-// update repaints from the last sheet (`ring.sheet()`), so a freshly
-// rendered cell — a views or size change, a reconnect — never sits blank
-// waiting on the next render.
+// cell count and size, the paper, the cells' yaw captions). The PIXELS
+// never go through a store: the renderer's follower (scene/ring.js)
+// publishes the rendered sheet canvas on the ring slice's SHEET CHANNEL
+// (the doc's onLive shape — hot, imperative, a render per rebuild frame
+// during a stroke), and #paint slices it across the cells with drawImage —
+// one copy per cell per frame, the Sprite View's cost class.
+// connectedCallback subscribes and disconnectedCallback unsubscribes (the
+// desktop re-inserts a windoid's node to raise it — the same reconnect the
+// Sprite View survives), and every update repaints from the last sheet
+// (`ring.sheet()`), so a freshly rendered cell — a views or size change, a
+// reconnect — never sits blank waiting on the next render.
 //
 // A cell's backing store is the frame's native F × F px, and F IS the cell
 // (the sheet is rendered at the tile size), so the canvas draws 1:1; the
@@ -85,19 +91,12 @@
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
-import { ring, RING_MAX_VIEWS } from '../state/ring.js';
+import { ring, RING_MAX_VIEWS, RING_PAPERS } from '../state/ring.js';
 import { StoreController } from '../state/store-controller.js';
 import { ringYaws } from '../lib/ring.js';
 import { baseStyles } from './base-styles.js';
-import { parsePatternAttr } from './ui-bits.js';
 
 export class SmRingView extends LitElement {
-  static properties = {
-    /** The body's paper: a kit library name or 16 hex digits
-     *  (docs/PATTERNS.md in vintage-frames). Unset ⇒ plain white paper. */
-    pattern: { type: String },
-  };
-
   static styles = [
     baseStyles,
     css`
@@ -128,25 +127,13 @@ export class SmRingView extends LitElement {
   /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>[]} */
   #cellCanvas = Array.from({ length: RING_MAX_VIEWS }, () => createRef());
   #offSheet = null;
-  /** `pattern`, resolved through the kit's grammar; null ⇒ white paper. */
-  #pattern = null;
-  #patternWarn = { warned: false };
 
   constructor() {
     super();
-    /** @type {string|null} the `pattern` attribute, verbatim (see willUpdate) */
-    this.pattern = null;
     // The template's share: re-render on any settings change (the cell
-    // count and size, the yaw captions) — the pixels ride the sheet channel
-    // below.
+    // count and size, the paper, the yaw captions) — the pixels ride the
+    // sheet channel below.
     new StoreController(this, ring.store);
-  }
-
-  willUpdate(changed) {
-    if (!changed.has('pattern')) return;
-    // Validated ONCE here (one warning, in this component's name) and handed
-    // to the paper verbatim — the kit parses the same grammar there.
-    this.#pattern = parsePatternAttr('sm-ring-view', this.pattern, this.#patternWarn);
   }
 
   connectedCallback() {
@@ -173,9 +160,11 @@ export class SmRingView extends LitElement {
     const st = ring.get();
     const n = st.views;
     const yaws = ringYaws(n, st.offset);
-    // The paper: the host's pattern, or white when it names none — a bare
-    // vf-container would paint the desktop's ink (kit ask #6).
-    const paper = this.#pattern ? this.pattern : 'white';
+    // The paper: the kit pattern the slice's choice names (the slice admits
+    // only RING_PAPERS' keys, so this always resolves — and always to a
+    // DECLARED pattern: a bare vf-container would paint the desktop's ink,
+    // kit ask #6).
+    const paper = RING_PAPERS[st.paper];
     return html`
       <vf-container class="ring-paper" fill-width height=${st.size} pattern=${paper}>
         <vf-grid

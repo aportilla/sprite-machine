@@ -1,14 +1,16 @@
 // ---------------------------------------------------------------------------
 // `ring` slice — the 3D Sprite Atlas's settings and its SHEET CHANNEL. The
 // settings (view count, elevation, first-angle offset, the tile's edge in
-// px) are app-level and session-only, the prefs discipline: one ring,
-// whichever document is active, nothing persisted (per-document settings in
-// a PNG chunk are the planned follow-up — docs/sprite-atlas-plan.md §8).
-// Written by the windoid's controls strip and File → Export Sprite Atlas…'s
-// fields (the same settings, two surfaces — the dialog edits LIVE, no
-// pending state), and by the ?ring capture hook; read by the renderer's
-// follower (scene/ring.js), the windoid body, and shell/windows.js (the
-// windoid's height follows the tile size — docs/ring-size-plan.md).
+// px, and the body's paper) are app-level and session-only, the prefs
+// discipline: one ring, whichever document is active, nothing persisted
+// (per-document settings in a PNG chunk are the planned follow-up —
+// docs/sprite-atlas-plan.md §8). Written by the windoid's controls strip and
+// File → Export Sprite Atlas…'s fields (the same settings, two surfaces —
+// the dialog edits LIVE, no pending state; the paper has no control today
+// — see RING_PAPERS — a viewing choice the export never carries), and by
+// the ?ring capture hook; read by the renderer's follower (scene/ring.js),
+// the windoid body, and shell/windows.js (the windoid's height follows the
+// tile size — docs/ring-size-plan.md).
 //
 // THE SHEET CHANNEL is the doc's `onLive` shape — hot, imperative, never
 // through the store: the follower publishes the rendered sheet canvas (by
@@ -25,7 +27,26 @@
 import { createStore } from './store.js';
 import { SOFTWARE } from './files.js';
 
-export const RING_DEFAULTS = { views: 4, elevation: 45, offset: 0, size: 64 };
+export const RING_DEFAULTS = {
+  views: 4,
+  elevation: 45,
+  offset: 0,
+  size: 64,
+  paper: 'white',
+};
+/** The body's PAPER — the three the slice admits, each naming the kit
+ *  pattern the windoid paints for it (vintage-frames docs/PATTERNS.md):
+ *  `white` and `black` are the flat fills, and `gray` is the `dots` motif
+ *  — a 1-bit surface shows gray as a dither, and dots is the paper the
+ *  atlas wore before there was a setting. A VIEWING setting: the frames
+ *  render over a transparent clear, so the export carries no paper and
+ *  the chunk omits it. The default is white — and today NOTHING in the UI
+ *  writes it (a radio column in the strip was built and retired on
+ *  2026-09-03; the user's intent is to pick the paper FOR the user one
+ *  day, from the sheet's own content — a sprite with a lot of white in
+ *  it reads better on black, and the reverse — rather than ask); only
+ *  the ?ring= capture hook seeds it. The plumbing is kept for that. */
+export const RING_PAPERS = { white: 'white', black: 'black', gray: 'dots' };
 /** The view count's ceiling: the strip scrolls past what fits its window,
  *  but a 255-px tile at sixteen views is already a 4080-px sheet, and past
  *  sixteen a ring is a wall. */
@@ -43,7 +64,8 @@ export const RING_MAX_SIZE = 255;
 export const RING_CHUNK_KEY = 'sprite-machine:ring';
 
 /**
- * @typedef {{views: number, elevation: number, offset: number, size: number}} RingSettings
+ * @typedef {{views: number, elevation: number, offset: number, size: number, paper: string}} RingSettings
+ *   paper: a RING_PAPERS key.
  * @typedef {{canvas: HTMLCanvasElement, frame: number, views: number}} RingSheet
  *   canvas: the whole strip, `views` frames of `frame` px side by side.
  */
@@ -85,6 +107,12 @@ export function createRing() {
     setSize(n) {
       set('size', clampInt(n, RING_MIN_SIZE, RING_MAX_SIZE));
     },
+    /** @param {string} name  a RING_PAPERS key; anything else is a no-op
+     *  (the NaN rule's shape — a stray value changes nothing) */
+    setPaper(name) {
+      if (!Object.hasOwn(RING_PAPERS, name)) return;
+      set('paper', name);
+    },
 
     /** The follower's publish: stores the sheet by reference and calls every
      *  listener with it (null: no model — the cells show paper). */
@@ -109,13 +137,14 @@ export function createRing() {
 /**
  * The metadata chunks the export writes beside the pixels (pure; the
  * exporter passes what it knows): a Title naming the sheet after the
- * document, the Software marker, and the ring chunk's JSON — the settings,
- * then the frame (equal to `size`; an importer reading `frame` keeps
- * working), the DERIVED px per voxel (`scale`, a float — how an engine
- * relates the sprite's px to the lattice's units), the anchor and the yaw
- * list.
+ * document, the Software marker, and the ring chunk's JSON — the settings
+ * (the four the sheet depends on; the paper is the windoid's own and never
+ * written), then the frame (equal to `size`; an importer reading `frame`
+ * keeps working), the DERIVED px per voxel (`scale`, a float — how an
+ * engine relates the sprite's px to the lattice's units), the anchor and
+ * the yaw list.
  * @param {string} name  the document's name
- * @param {RingSettings} settings
+ * @param {Pick<RingSettings, 'views'|'elevation'|'offset'|'size'>} settings
  * @param {{frame: number, scale: number, anchor: {x: number, y: number}, yaws: number[]}} geometry
  * @returns {Record<string, string>}
  */

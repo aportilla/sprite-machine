@@ -61,25 +61,39 @@ so the paper shows through between and under the tiles. Each cell is a
 `vf-stack` at the tile's declared size holding the frame canvas
 (`fill-width fill-height`): a bare `vf-container` cell would paint the
 desktop's ink (kit ask #6, [kit-asks-pattern-paper.md](kit-asks-pattern-paper.md)),
-and a cell here must paint nothing. When the host names no pattern the
-paper declares `white` — #6's bridge again — so the body is plain paper
-rather than the desktop's dither. `index.html` says `<sm-ring-view
-pattern="dots">`; `tools/drive.mjs` pins the paper's `fill-width`, that it
-declares no width, its declared height, its live width against
-`max(clientW, ringRowWidth)`, its pattern (the host's), the grid's `rules`,
+and a cell here must paint nothing. **Revised 2026-09-03 (later the same
+day):** the paper is a SETTING now — the ring slice's `paper`, white /
+black / gray, `RING_PAPERS` in `src/state/ring.js` naming the kit pattern
+each paints (`white`, `black`, `dots`), white the default and, today,
+white always (a radio column for it was built and retired the same day;
+the user's intent is an automatic pick from the sheet's content one day —
+[ring-size-plan.md](ring-size-plan.md) note 8; the `?ring=` hook seeds it
+for a capture) — so the container's `pattern` is written from the ring
+slice and `<sm-ring-view>` carries no attribute of its own (the
+`pattern="dots"` in `index.html` is gone). Every value is a declared
+pattern, white included — #6's bridge, still — so the body never shows the
+desktop's dither through a bare box. `tools/drive.mjs` pins the paper's
+`fill-width`, that it declares no width, its declared height, its live
+width against `max(clientW, ringRowWidth)`, its pattern as a `RING_PAPERS`
+value (white at boot, `dots` under `?ring=…,gray`), the grid's `rules`,
 and that a cell names no pattern.
 
 ## After the bump
 
-- `index.html`: `pattern="dots"` moves onto `#win-ring` (or its scroll
-  area); `<sm-ring-view>` loses its attribute.
+- `shell/windows.js` (or the view): write `RING_PAPERS[ring.get().paper]`
+  onto `#win-ring`'s `pattern` (or its scroll area's) from a ring-slice
+  subscription — the setting is the slice's, so the window's attribute is
+  derived, never authored in `index.html`.
 - `sm-ring-view.js`: the paper container goes and the grid is the body's
   in-flow content again. The `--vf-surface` line STAYS — it is the grid's
   own knob, not a bridge. The cells stay stacks (they paint nothing either
   way — and if #6 ships paper-by-default, a container cell would need the
   transparent opt-in, so the stack is the right box regardless).
 - `tools/drive.mjs`: the paper pins move onto the window's attribute; the
-  row-width oracle (`ringRowWidth`) and the scroll-range pin are unchanged.
+  row-width oracle (`ringRowWidth`), the scroll-range pin and the paper
+  checks (a `RING_PAPERS` value; `dots` under the hook) are unchanged in
+  substance.
 - `index.html`'s comment, the README's ring passage, the ring-size plan's
-  as-built note 7 and SMOKE-TEST's atlas items: the bridge sentence out.
+  as-built notes 7 and 8 and SMOKE-TEST's atlas items: the bridge sentence
+  out.
 - Pin the release in `package.json`.

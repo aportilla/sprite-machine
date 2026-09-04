@@ -65,14 +65,15 @@ if (boot.lowpoly != null) prefs.setLowpoly(boot.lowpoly);
 if (boot.rotate === false) prefs.setAutoRotate(false);
 if (boot.guides) prefs.setShowGuides(true); // the extent rules are off by default
 if (boot.ring) {
-  // ?ring=<views>[,<elevation>[,<offset>[,<size>]]]: the 3D Sprite Atlas
-  // windoid shown (it boots hidden) with its settings seeded — the slice's
-  // own clamps apply.
+  // ?ring=<views>[,<elevation>[,<offset>[,<size>[,<paper>]]]]: the 3D
+  // Sprite Atlas windoid shown (it boots hidden) with its settings seeded —
+  // the slice's own clamps apply.
   prefs.setShowRing(true);
   ring.setViews(boot.ring.views);
   ring.setElevation(boot.ring.elevation);
   ring.setOffset(boot.ring.offset);
   ring.setSize(boot.ring.size);
+  ring.setPaper(boot.ring.paper);
 }
 // The on-mount hook order, preserved: pencil size, then pick (so ?palette
 // reflects it and ?fill fills with it), then the dialog, then rect, then

@@ -266,6 +266,13 @@ export const ICON_CELL = 64;
 // kit's rule: the number is the column), so drive.mjs checks every item
 // against the live glyphs — inside its column, inside the controls' box at
 // the header's corner.
+// (A third column once held the body's paper as three radios — white /
+// black / gray, the kit's 20px toggle rows in a gap-0 stack, 57 wide, the
+// box 321 — built and retired on 2026-09-03 at the user's call: white is
+// the one paper for now, and the choice is meant to be made for the user
+// one day from the sheet's own content, not asked; the setting itself
+// stays in state/ring.js. The numbers are kept here for the day it needs
+// a control again.)
 export const RING_FIELD = { width: 74, height: 25 };
 export const RING_CAPTION_HEIGHT = 16;
 const RING_INSET = 8;
