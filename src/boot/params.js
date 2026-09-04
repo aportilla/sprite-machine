@@ -212,9 +212,6 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     // seeding is an IndexedDB round-trip the capture tool's virtual-time
     // budget stalls on, so under ?fresh this is the way to a shot of it).
     about: params.get('about') === '1',
-    // ?guides=1: show the canvas's extent rules (View → Guides), which boot
-    // OFF — a capture hook, since the capture tool can't pull a menu.
-    guides: params.get('guides') === '1',
     // ?ring=…: the 3D Sprite Atlas windoid, shown with these settings (see
     // above); null leaves it hidden at the defaults.
     ring,

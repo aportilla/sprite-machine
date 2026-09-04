@@ -47,18 +47,6 @@ test('mirrorBehind is the OPPOSITE face, mirrored — null when it has no own ar
   assert.equal(vm2.mirrorBehind, null, 'bottom has no art of its own');
 });
 
-test('the view model carries the alignment guides for the face', () => {
-  const top = tile(3, 3);
-  setPx(top, 1, 0, [9, 9, 9]);
-  setPx(top, 1, 2, [9, 9, 9]);
-  const vm = editorViewModel({ views: { top }, tileW: 3, tileH: 3 }, 'front');
-  // Editing FRONT, the TOP view's occupied column (x=1) bounds the u extent.
-  assert.deepEqual(
-    { uMin: vm.guides.extent.uMin, uMax: vm.guides.extent.uMax },
-    { uMin: 1, uMax: 1 }
-  );
-});
-
 test('mirrorImage flips in image space along the given axis', () => {
   const t = tile(3, 1);
   setPx(t, 0, 0, [1, 2, 3]);

@@ -31,7 +31,6 @@ test('defaults: everything off / null on an empty query', () => {
       now: b.now,
       patterns: b.patterns,
       about: b.about,
-      guides: b.guides,
       ring: b.ring,
     },
     {
@@ -56,7 +55,6 @@ test('defaults: everything off / null on an empty query', () => {
       now: null,
       patterns: false,
       about: false,
-      guides: false,
       ring: null,
     }
   );
@@ -94,12 +92,6 @@ test('?ring: the view count, then optional elevation / offset / size / paper (de
   assert.equal(parseBootParams('?ring=0').ring, null, 'fewer than one view is no ring');
   assert.equal(parseBootParams('?ring=').ring, null);
   assert.equal(parseBootParams('?ring=abc').ring, null);
-});
-
-test('?guides=1 shows the extent rules (off by default)', () => {
-  assert.equal(parseBootParams('?guides=1').guides, true);
-  assert.equal(parseBootParams('?guides=0').guides, false);
-  assert.equal(parseBootParams('?guides=yes').guides, false, 'only the documented 1');
 });
 
 test('?patterns=1 opens the Desktop Patterns panel after the boot document', () => {

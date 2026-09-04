@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 294 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 291 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -145,14 +145,7 @@ browser, `http://localhost:5173/`.
       indicator: an empty texel reads as dither, a painted texel covers
       it, and a WHITE texel reads against the gray; no dot grid, no
       checkerboard, and no View item touches the paper. Nothing is drawn
-      over the art but the extent rules, and those only with
-      **View → Guides** checked — a fresh load boots them off with the
-      item unchecked; the pick checks it and every open window's rules
-      appear at once, a second pick clears them; the item greys with the
-      desktop focused — solid black hairlines, one system px, each
-      reading as a solid line through the gray: the left/top rules on the
-      supported extent's near edge, the right/bottom ones one px inside
-      its far edge; no lattice of grid lines, no cyan — the art is the
+      over the art: no lattice of grid lines, no cyan — the art is the
       only color on the canvas. On a derived face the onion-skin is a
       pale tint of the opposite face's art over the dither. And the paper
       is the CANVAS'S OWN dither, never the desktop's pattern showing

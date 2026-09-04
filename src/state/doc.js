@@ -13,7 +13,7 @@
 //   - `onLive` (live; stroke-rate, coalesced to one blit per animation frame):
 //     blit-then-notify. Its only subscriber is the mesh rebuilder.
 // `applyTileEdit` mutates `views[face]` SILENTLY on the change channel — the
-// same staleness contract as before: guides / onion-skin recompute only on a
+// same staleness contract as before: the onion-skin recomputes only on a
 // face switch or structural change, never mid-stroke.
 //
 // DRAIN-BEFORE-CONSUME has exactly one owner: every canonical-atlas consumer

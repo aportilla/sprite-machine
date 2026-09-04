@@ -1,8 +1,7 @@
 // ---------------------------------------------------------------------------
-// Pure canvas painters for <sm-draw-canvas>'s system-res layers: the
-// alignment-guide hairlines, the pencil's filled hover-footprint preview, the
-// eyedropper's sample-target outline, the rect tool's live drag preview, and
-// the selection tool's marching ants. Stateless — everything arrives as
+// Pure canvas painters for <sm-draw-canvas>'s system-res layers: the pencil's
+// filled hover-footprint preview, the eyedropper's sample-target outline, the
+// rect tool's live drag preview, and the selection tool's marching ants. Stateless — everything arrives as
 // arguments — so the component keeps only gesture state and these stay
 // trivially readable.
 // All draw in SYSTEM-px space — the kit's virtual pixel grid: the backings are
@@ -23,29 +22,8 @@ import { antsRuns } from '../lib/ants.js';
 /** `scale` is whole system px per texel; `sysW`/`sysH` the layer in system px.
  *  @typedef {{tileW:number, tileH:number, scale:number, sysW:number, sysH:number}} OverlayView */
 
-// Draw the four "furthest extent" hairlines — the guide layer's only painter
-// (there are no lines over the art: the texel grid is the dithered paper's
-// own lattice). SOLID BLACK, one system px: 1-bit like everything else on
-// the canvas, opaque so a rule reads as one line on any art color, and a
-// continuous run the eye picks out of the dithered paper (half its px
-// coincide with the dither's black and the rest turn its white px black — a
-// solid line through gray, the way MacPaint ruled over a fill). The lines
-// box the region where a painted pixel can survive the carve: verticals at
-// the outer edges of the supported columns — the left rule ON the first
-// supported column's near edge (uMin·scale), the right rule one px INSIDE
-// the last one's far edge ((uMax+1)·scale − T, so a far-edge extent still
-// has a column to land on) — horizontals likewise. The caller clears the
-// layer first.
-export function drawGuides(g, guides, scale, sysW, sysH) {
-  if (!guides) return;
-  const { uMin, uMax, vMin, vMax } = guides.extent;
-  const T = 1; // hairline thickness (1 system px — the kit's hairline unit)
-  g.fillStyle = '#000';
-  if (uMin != null) g.fillRect(uMin * scale, 0, T, sysH); // left extent
-  if (uMax != null) g.fillRect((uMax + 1) * scale - T, 0, T, sysH); // right extent
-  if (vMin != null) g.fillRect(0, vMin * scale, sysW, T); // top extent
-  if (vMax != null) g.fillRect(0, (vMax + 1) * scale - T, sysW, T); // bottom extent
-}
+// There are no lines over the art: the texel grid is the dithered paper's
+// own lattice.
 
 // The haloed hairline box both cursor overlays share: a dark halo so the
 // outline reads on any art color, then the 1px line (red while erasing).

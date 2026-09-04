@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
-// <sm-draw-canvas> — the pixel-canvas subsystem: the 5-layer stack (onion-skin
-// background, the editable pixel canvas, the hairline guide overlay,
-// the cursor overlay, the selection's marching-ants overlay), the working
+// <sm-draw-canvas> — the pixel-canvas subsystem: the 4-layer stack (onion-skin
+// background, the editable pixel canvas, the cursor overlay, the selection's
+// marching-ants overlay), the working
 // buffer, the selection/pencil/rect/fill/eraser/eyedropper gestures (the
 // eraser is a pencil that writes transparency — it shares the stroke path but
 // carries its OWN tip size), the whole-system-px layout fitting, and the
@@ -50,8 +50,7 @@
 // The low-rate reactive inputs beyond the brush state are `active` —
 // whether this window is the desktop's active document window — which gates
 // the selection's no-drag Esc (every open window's canvas listens on the
-// document; only the active one answers) — and `showGuides` (View → Guides,
-// off by default): whether the extent rules draw on the guide layer at all.
+// document; only the active one answers).
 // The PAPER under the art is the kit's 50% dither, always — the stack
 // container's own kit pattern, the classic transparency look (an empty texel
 // reads as dither, a painted one covers it — WHITE art included).
@@ -95,7 +94,6 @@ import {
 } from '../lib/select.js';
 import { ANTS_PERIOD } from '../lib/ants.js';
 import {
-  drawGuides,
   drawCursorOutline,
   drawPencilPreview,
   drawRectPreview,
@@ -157,11 +155,10 @@ export class SmDrawCanvas extends LitElement {
        target and the canvases' positioning anchor, so all four layers ride
        it together. No rule block needed: the kit owns the container's
        layout entirely. */
-      /* All five layers fill the stack (backing stores managed in JS): a background
+      /* All four layers fill the stack (backing stores managed in JS): a background
        (the faded onion-skin, system-px res), the transparent pixel canvas
-       (native tile res), then the guide + cursor + selection overlays
-       (system-px res — their 1px hairlines are 1 system px, the kit's
-       hairline unit). */
+       (native tile res), then the cursor + selection overlays (system-px
+       res — their 1px hairlines are 1 system px, the kit's hairline unit). */
       .editor-canvas-stack > canvas {
         position: absolute;
         inset: 0;
@@ -192,13 +189,9 @@ export class SmDrawCanvas extends LitElement {
         z-index: 0;
         pointer-events: none;
       }
-      /* Hairline extent rules sit ABOVE the pixel canvas; the cursor preview above them. */
-      .editor-canvas-overlay {
-        z-index: 2;
-        pointer-events: none;
-      }
+      /* The cursor preview sits ABOVE the pixel canvas. */
       .editor-canvas-cursor {
-        z-index: 3;
+        z-index: 2;
         pointer-events: none;
       }
       /* The selection's marching ants, topmost — nothing may cover the
@@ -206,7 +199,7 @@ export class SmDrawCanvas extends LitElement {
        and redraws the cursor layer at pointer-move rate, and ants drawn
        there would be wiped by the next move. */
       .editor-canvas-select {
-        z-index: 4;
+        z-index: 3;
         pointer-events: none;
       }
     `,
@@ -217,7 +210,6 @@ export class SmDrawCanvas extends LitElement {
     tileW: { type: Number },
     tileH: { type: Number },
     mirrorBehind: { attribute: false },
-    guides: { attribute: false },
     tool: {},
     ink: { attribute: false },
     pencilSize: { type: Number },
@@ -229,11 +221,6 @@ export class SmDrawCanvas extends LitElement {
      *  selection's no-drag Esc gate (decision: Esc drops the ACTIVE window's
      *  selection only). Nothing else reads it. */
     active: { type: Boolean },
-    /** Whether the extent rules (the alignment guides) draw on the
-     *  guide layer — View → Guides, prefs.showGuides, OFF by default. The
-     *  guides themselves (`guides`) are always computed; this only gates
-     *  their painting. */
-    showGuides: { type: Boolean },
   };
 
   constructor() {
@@ -242,7 +229,6 @@ export class SmDrawCanvas extends LitElement {
     this.tileW = 0;
     this.tileH = 0;
     this.mirrorBehind = null;
-    this.guides = null;
     this.tool = 'pencil';
     this.ink = null;
     this.pencilSize = 1;
@@ -251,7 +237,6 @@ export class SmDrawCanvas extends LitElement {
     this.fillContiguous = true;
     this.fillAllFaces = false;
     this.active = false;
-    this.showGuides = false;
 
     // Dev hooks (plain: consumed once on the first update, never re-read).
     this.previewCursor = false;
@@ -327,13 +312,10 @@ export class SmDrawCanvas extends LitElement {
   /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
   #canvas = createRef();
   /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
-  #overlay = createRef();
-  /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
   #cursor = createRef();
   /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
   #antsLayer = createRef();
   #ctx = null;
-  #overlayCtx = null;
   #cursorCtx = null;
   #antsCtx = null;
 
@@ -403,7 +385,6 @@ export class SmDrawCanvas extends LitElement {
 
   firstUpdated() {
     this.#ctx = this.#canvas.value.getContext('2d');
-    this.#overlayCtx = this.#overlay.value.getContext('2d');
     this.#cursorCtx = this.#cursor.value.getContext('2d');
     this.#antsCtx = this.#antsLayer.value.getContext('2d');
     this.#observeResize();
@@ -428,8 +409,6 @@ export class SmDrawCanvas extends LitElement {
     // template-bound width/height would clear the backing store mid-diff).
     if (geom) this.#applyGeometry();
     else if (changed.has('mirrorBehind')) this.#paintBg();
-    if (!geom && (changed.has('guides') || changed.has('showGuides')))
-      this.#drawGuidesLayer();
 
     // The cursor overlay is canvas-drawn, so the state the template can't express
     // has to be re-stroked here.
@@ -611,26 +590,13 @@ export class SmDrawCanvas extends LitElement {
     // System-res backings: hairlines are 1 system px.
     this.#bg.value.width = this.#sysW;
     this.#bg.value.height = this.#sysH;
-    this.#overlay.value.width = this.#sysW;
-    this.#overlay.value.height = this.#sysH;
     this.#cursor.value.width = this.#sysW;
     this.#cursor.value.height = this.#sysH;
     this.#antsLayer.value.width = this.#sysW;
     this.#antsLayer.value.height = this.#sysH;
     this.#paintBg(); // the backing resize cleared it — the onion-skin at the new scale
-    this.#drawGuidesLayer();
     this.#redrawCursorLayer(); // re-stroke the footprint / rect preview at the new scale
     this.#drawAnts(); // the backing resize cleared the ants — re-stroke them at the new scale
-  }
-
-  #drawGuidesLayer() {
-    const g = this.#overlayCtx;
-    if (!g) return;
-    g.clearRect(0, 0, this.#sysW, this.#sysH);
-    // The extent rules are the layer's only painter — and only when asked
-    // for (View → Guides): off, the layer stays clear.
-    if (this.showGuides)
-      drawGuides(g, this.guides, this.#texelSys, this.#sysW, this.#sysH);
   }
 
   // --- one-shot dev hooks (canvas halves; the state halves are boot actions) --
@@ -691,10 +657,10 @@ export class SmDrawCanvas extends LitElement {
   // The WELL (.editor-canvas-wrap) fills the draw box below the options bar
   // (CSS flex:1) — its height comes from the flex layout, not JS — so nothing
   // shifts when the tile size (and thus the drawn canvas) changes. Inside it,
-  // a kit <vf-container> holds the five aligned layers: #layout() states its
+  // a kit <vf-container> holds the four aligned layers: #layout() states its
   // width/height/top/left in whole system px (the DITL rectangle — centered
   // by arithmetic, on the pixel lattice by construction), and the canvases
-  // fill its box (inset: 0 against the container's own anchor, so all five
+  // fill its box (inset: 0 against the container's own anchor, so all four
   // ride its grid-snap correction together). The container DECLARES its
   // pattern — the PAPER (PAPER, the kit's 50% dither, the transparency
   // indicator) — and not only
@@ -708,9 +674,9 @@ export class SmDrawCanvas extends LitElement {
   // default dither). A declared pattern gives the box its own ink and its
   // own ground. Kit ask #6: the private token should not inherit.
   // Only the pixel canvas takes pointer events. It keeps a native tileW×tileH
-  // backing store (CSS upscales it crisp); the bg + overlay + cursor +
-  // selection layers are SYSTEM-res (backing tracks the box's system px) so
-  // their 1px lines are 1 system px — the kit's own hairline unit.
+  // backing store (CSS upscales it crisp); the bg + cursor + selection
+  // layers are SYSTEM-res (backing tracks the box's system px) so their 1px
+  // lines are 1 system px — the kit's own hairline unit.
   // Backing stores are set in #applyGeometry()/#layout(), never bound here.
   // The pixel canvas's
   // data-vf-cursor is the kit's page-drawn cursor claim — cloned once, never
@@ -732,7 +698,6 @@ export class SmDrawCanvas extends LitElement {
             @pointerleave=${this.#onPointerLeave}
             @contextmenu=${this.#onContextMenu}
           ></canvas>
-          <canvas class="editor-canvas-overlay" ${ref(this.#overlay)}></canvas>
           <canvas class="editor-canvas-cursor" ${ref(this.#cursor)}></canvas>
           <canvas class="editor-canvas-select" ${ref(this.#antsLayer)}></canvas>
         </vf-container>
@@ -1236,8 +1201,8 @@ export class SmDrawCanvas extends LitElement {
   // untouched (x is their depth axis); a +dy shifts LEFT's, RIGHT's and
   // BACK's rows y0..y1 (every column) by dy, TOP/BOTTOM untouched. The
   // per-face bounds and deltas come from lib/views.js's axis mappings
-  // (VIEW_IMAGE_AXES — the same table the alignment guides are derived
-  // from); the per-face edit is lib/select.js's lift / clear / composite
+  // (VIEW_IMAGE_AXES — the table the sheet resize registers by); the
+  // per-face edit is lib/select.js's lift / clear / composite
   // over each face's own slice; the undo is ONE whole-atlas snapshot
   // (history.withAtlasSnapshot) rather than a tile entry; and the live
   // preview during the drag stays THIS face's (the other faces land at

@@ -77,18 +77,13 @@
           <vf-menu-item value="tool-eyedropper" shortcut="I">Eyedropper</vf-menu-item>
         </vf-menu>
         <vf-menu id="menu-view" label="View">
-          <!-- The editor's extent rules — the alignment guides over
-               every document canvas — as a checkmark toggle, OFF by default:
-               menus.js flips prefs.showGuides on the pick and mirrors it
-               back as the check. Document-scoped (greys with the desktop
-               focused), like the Tools menu's modes. -->
-          <vf-menu-item value="guides">Guides</vf-menu-item>
           <!-- The 3D Sprite Atlas windoid (#win-ring below) as a checkmark
                toggle over prefs.showRing, OFF every load: the pick shows or
                hides it (menus.js flips the slice and mirrors it back as the
                check), and the windoid's own close box is the same uncheck —
                MacPaint's palettes closed from their box and came back from
-               the menu. Document-scoped like Guides. -->
+               the menu. Document-scoped (greys with the desktop focused),
+               like the Tools menu's modes. -->
           <vf-menu-item value="ring">3D Sprite Atlas</vf-menu-item>
           <vf-separator></vf-separator>
           <!-- ⌘J: ONE item, two commands, a STATE rule (menus.js owns the

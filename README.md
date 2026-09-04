@@ -108,8 +108,8 @@ The **tile size is auto-derived** from the image dimensions and the grid (a
 lattice** — a pixel's position inside its tile _is_ its position in the object,
 so tiles are read at full size (**no auto-crop**) and must be **registered across
 faces**: a FRONT pixel only becomes solid where the SIDE covers its row and the
-TOP covers its column. Use **square tiles** (a cubic lattice); the in-app editor
-draws alignment guides to help you line pixels up.
+TOP covers its column. Use **square tiles** (a cubic lattice); the in-app
+editor's onion-skin helps you line pixels up across faces.
 
 **Tile orientation** (world: `+x` right, `+y` up, `+z` = front toward camera) —
 draw each tile this way for a zero-transform ingest:
@@ -124,7 +124,7 @@ draw each tile this way for a zero-transform ingest:
 
 The **face picker** switches which tile you're editing; check each tile's
 orientation against this table's **Front points** column, using the faded
-onion-skin of the mirrored opposite and the alignment guides behind the canvas.
+onion-skin of the mirrored opposite behind the canvas.
 Per-tile `rot`/`flip` transforms exist in the pipeline for sheets that don't
 follow the convention.
 
@@ -155,22 +155,15 @@ template — see [UI layer: Lit](#ui-layer-lit).
   holds it there against any upstream fraction. It **re-fits responsively**
   when the window (or its grow box) resizes and when the display density or
   browser zoom changes. The onion-skin background under the art and the
-  guide + cursor overlays over it draw at system-px resolution, so their
+  cursor + selection overlays over it draw at system-px resolution, so their
   hairlines are 1 system px — the kit's hairline unit. See `#layout()` in
   `src/components/sm-draw-canvas.js`. The canvas is **1-bit but for the
   art**: its paper is the kit's **50% dither** — `gray-50`, the desktop's
   own default, painted by the kit as the stack container's `pattern` — the
   classic transparency indicator, so an empty texel reads as dither, a
   painted one covers it, and **white art** reads against it (no
-  checkerboard, no dot grid);
-  the extent rules — **View → Guides**, off by default,
-  so a fresh canvas is paper and art alone — are **solid black**
-  hairlines (one system px, opaque — a continuous run the eye picks out of
-  the dithered paper: half its px coincide with the dither's black, the
-  rest turn its white px black — a line through gray, the way MacPaint
-  ruled over a fill), the left/top rules on the supported extent's near
-  edge, the right/bottom ones one px inside its far edge; and nothing is
-  drawn over the art but those rules — no lattice of grid lines. The
+  checkerboard, no dot grid); and nothing is drawn over the art — no
+  lattice of grid lines, so a fresh canvas is paper and art alone. The
   sprite is the only color on the canvas.
 - **Tools** — the **Tools palette** holds the **tool strip**: a single column of square
   cells (the **selection `S`** first — MacPaint's palette led with it — then
@@ -395,15 +388,11 @@ template — see [UI layer: Lit](#ui-layer-lit).
 Drawn pixels map 1:1 to voxels at their **literal tile position** — `buildVoxels`
 reads each view at full size (no crop, no re-centering) and the carve intersects
 the extruded silhouettes, so a pixel survives only where every view sharing an
-axis agrees. To help meet that stricter requirement the editor draws **hairline
-extent rules** (solid black hairlines: how far the orthogonal faces' pixels
-reach — the box a pixel must land inside to survive the carve; **View →
-Guides** shows them, off by default) and a **faded onion-skin** of the
-opposite face behind the canvas. There is **no auto ground-rest**: an object sits at whatever Y
+axis agrees. To help meet that stricter requirement the editor draws a **faded
+onion-skin** of the opposite face behind the canvas. There is **no auto ground-rest**: an object sits at whatever Y
 you paint it (paint at the tile's bottom to rest on the ground). The editor is
 pure authoring — no changes to the carve / colorize / mesh pipeline. See
-`src/components/` (the `<sm-editor>` container and its leaves) and
-`src/lib/guides.js`.
+`src/components/` (the `<sm-editor>` container and its leaves).
 
 **Dev hook:** append `?edit=<face>` (e.g. `?edit=front`) to boot with the editor
 on that face — it's always open now, so this just picks the starting tab. It's how
@@ -453,11 +442,10 @@ a live clock would otherwise make every shot with the bar in frame differ by
 the minute — `?patterns=1` opens the **Desktop Patterns** control
 panel once the boot document has landed (the capture tool can't pull a
 menu; under `?fresh` the desktop is on the dither, so the panel shows it
-seeded), `?about=1` opens the **About box** over the boot document
+seeded), and `?about=1` opens the **About box** over the boot document
 (the plain boot's own greet — but that boot's virgin seeding is an
 IndexedDB round-trip the capture tool's virtual-time budget stalls on, so
-under `?fresh` this is the way to a shot of it), and `?guides=1` shows the
-canvas's **extent rules** (View → Guides, which boot off).
+under `?fresh` this is the way to a shot of it).
 `?sample` shares the storage-untouched discipline: it opens the named
 built-in as an untitled from in-memory data, skipping the seeding and the
 `?file`/dialog boot alike (the deterministic path `drive.mjs` drives).
@@ -596,15 +584,12 @@ forward.
   _Fill_, _Eraser_, _Eyedropper_ — with the active one checkmarked (the same
   session truth the palette's tool strip and the S/B/R/G/E/I keys write, so a
   pick from any of the three moves all three).
-- **View** — _Guides_ (a checkmark toggle for the canvas's **extent
-  rules** — see [Drawing editor](#drawing-editor); **off every load**, the
-  item unchecked, and the pick flips `prefs.showGuides` so every open
-  document window's rules appear or clear together; document-scoped, so it
-  greys with the desktop focused), _3D Sprite Atlas_ (the same toggle
-  shape over `prefs.showRing`: shows and hides the **3D Sprite Atlas**
-  windoid — see [Windows](#windows) — off every load; the windoid's own
-  close box is the same uncheck, MacPaint's palettes closing from their box
-  and coming back from the menu; document-scoped),
+- **View** — _3D Sprite Atlas_ (a checkmark toggle over `prefs.showRing`:
+  shows and hides the **3D Sprite Atlas** windoid — see
+  [Windows](#windows) — **off every load**, the item unchecked; the
+  windoid's own close box is the same uncheck, MacPaint's palettes closing
+  from their box and coming back from the menu; document-scoped, so it
+  greys with the desktop focused),
   _Arrange Windows_ / _Zoom Window_ ⌘J (**one item, two commands, a
   state rule** — which one is a reading of the windows, never of what
   was pressed last: with anything on screen off its placement — a drag,
@@ -1185,8 +1170,8 @@ any angle — 1 pixel = 1 voxel = 1 cube.
 1. **Ingest** — each sprite is read at native pixel resolution into occupancy +
    packed-RGB typed arrays at **full tile size (no crop)**. Strict registration:
    a tile is a literal slice of the lattice, so texel (u,v) maps 1:1 to a fixed
-   lattice line and must line up across faces (the author's job — the editor
-   guides help).
+   lattice line and must line up across faces (the author's job — the editor's
+   onion-skin helps).
 2. **Reconcile dims** — one integer resolution per axis comes straight from the
    (uniform) tile size: `front → W×H`, `side → D×H`, `top → W×D` (MagicaVoxel's
    `12×30 + 10×30 → 12×10×30` rule). Views are placed at **identity position** —
@@ -1266,9 +1251,9 @@ verified in Node (`test/pipeline.test.mjs`), including the depth-smear regressio
 and asymmetric-face coloring. A companion `test/wedge-mesh.test.mjs` loads THREE
 to gate the low-poly wedge engine (the Helium canvas-farbling regression), and
 `test/atlas.test.mjs` locks the tile write-back inverse (slice → `blitTile`
-round-trip) that the drawing editor depends on. `test/guides.test.mjs` pins the
-editor's cross-axis alignment guides (and that `VIEW_IMAGE_AXES` can't drift from
-the projections it's probed from). `test/rect.test.mjs` pins the rect tool's
+round-trip) that the drawing editor depends on. `test/views.test.mjs` pins that
+`VIEW_IMAGE_AXES` (the image-axis table the sheet resize registers by) can't
+drift from the projections it's probed from. `test/rect.test.mjs` pins the rect tool's
 rounded-rectangle rasterization (radius clamp, convex corners, per-row symmetry) and
 the Shift square-lock. `test/fill.test.mjs` pins the fill tool's flood + replace
 primitives (4-connectivity, contiguous vs. global scope, transparent-as-a-color,
@@ -1376,7 +1361,6 @@ src/lib/
   carve.js        dim reconciliation, visual-hull AND, surface extraction
   colorize.js     depth-aware first-hit surface coloring + palette snap
   faces.js        surface voxels -> quads: greedy-merged or culled (pure)
-  guides.js       editor alignment guides: per-face cross-axis extent (pure)
   ring.js         the 3D Sprite Atlas's geometry: the yaw ring, the lattice envelope + square frame,
                   the camera pose (direction + true up), the sheet, the engine anchor (pure)
   rect.js         editor rect tool: rounded-rectangle rasterization, per-row runs (pure)
@@ -1412,7 +1396,6 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
   session.js          editor session (app-level): tool, ink, per-tool options, picker
                       flag — one palette, one ink, however many documents are open
   prefs.js            lowpoly / autoRotate (the render toggles; the 3D View's controls strip writes them)
-                      + showGuides (the canvas's extent rules; View → Guides writes it, off by default)
                       + showRing (the 3D Sprite Atlas windoid; View → 3D Sprite Atlas and its close
                       box write it, off by default)
   ring.js             the 3D Sprite Atlas's settings (views / elevation / offset / size — the tile's
@@ -1429,7 +1412,7 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
                       (the Desktop Patterns panel's Set; the one desktop setting that persists)
   history.js          bounded undo/redo: tile-gesture + whole-atlas snapshot entries over the doc's
                       restores. A FACTORY — one instance per open document (no singleton)
-  derive.js           pure selectors: editorViewModel(doc, face) -> { tile, mirrorBehind, guides, wasDerived }
+  derive.js           pure selectors: editorViewModel(doc, face) -> { tile, mirrorBehind, wasDerived }
 src/storage/
   db.js           the IndexedDB promise wrapper (one `docs` store) the files slice takes by injection
 src/scene/
@@ -1538,8 +1521,8 @@ src/
                        selection/pencil/rect/fill gestures (the selection's base + float + offset
                        composited in place, its ants on their own layer), integer-scale layout,
                        overlay layers, gesture-scoped keys, per-gesture undo capture (sm-commit)
-    draw-overlays.js   pure canvas painters for the guide hairlines / hover footprint / rect
-                       drag preview / the selection's marching ants
+    draw-overlays.js   pure canvas painters for the hover footprint / rect drag preview / the
+                       selection's marching ants
     sm-face-picker.js, sm-tool-strip.js, sm-tool-options.js
                        presentational leaves: props down, bubbling sm-* events up, no store imports
     sm-options-bar.js, sm-tools-panel.js, sm-atlas-controls.js, sm-atlas-view.js,
@@ -1650,7 +1633,7 @@ blit-then-notify, whose only subscribers are the mesh rebuilder and — same
 cost class, one blit per frame — the Full Sprite View, both following the
 ACTIVE document). A live stroke lands via `applyTileEdit`,
 which stores the canvas's working buffer **by reference** into `views[face]`
-_silently_ on the change channel — guides and onion-skin recompute only on a
+_silently_ on the change channel — the onion-skin recomputes only on a
 face switch or structural change, never mid-stroke — and every
 canonical-atlas consumer (save, export, resize, replace-all, an undo
 snapshot) folds the pending stroke in first through the one `drain()` guard.
@@ -1703,8 +1686,8 @@ only when the tile's IDENTITY actually changes.
   horizontal move on FRONT shifts those columns on the top and bottom
   faces (and the mirrored ones on BACK) by the same delta, a vertical move
   those rows on the sides, everything else untouched; the per-face bounds
-  and deltas come from the same axis table the alignment guides use
-  (`VIEW_IMAGE_AXES`), the per-face edit is `select.js`'s lift / clear /
+  and deltas come from the views' image-axis table (`VIEW_IMAGE_AXES`, the
+  one the sheet resize registers by), the per-face edit is `select.js`'s lift / clear /
   composite over each face's slice, and the undo is one whole-atlas
   snapshot. Controlled by a session checkbox in the strip, the fill tool's
   "on all faces" idiom. The single-face move is written so nothing about it

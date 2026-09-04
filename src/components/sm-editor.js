@@ -17,7 +17,7 @@
 // context isn't known at construction) and re-wired across the desktop's
 // disconnect/reconnect node moves. The per-face view model is memoized on
 // (face, views-identity, tile geometry) — the two-speed contract depends on
-// it: a live stroke mutates `views[face]` SILENTLY (same object), so guides /
+// it: a live stroke mutates `views[face]` SILENTLY (same object), so the
 // onion-skin / the working tile's identity stay put mid-stroke and the canvas
 // never resets its buffer. Canvas gesture commits feed THIS document's undo
 // history (sm-commit → ctx.history.pushTile), and the canvas's selection
@@ -26,15 +26,12 @@
 // Edit-menu gating — to follow. The canvas also learns whether THIS window is
 // the active one (`active`): a selection's no-drag Esc acts on the active
 // window's selection only — every open window's canvas listens on the
-// document, so without it one Esc would drop them all. And whether to draw
-// the extent rules at all (`showGuides`) — off the prefs slice
-// (View → Guides), app-level like the tool and ink, so every window follows.
+// document, so without it one Esc would drop them all.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { maxCornerRadius } from '../lib/rect.js';
-import { prefs } from '../state/prefs.js';
 import { session } from '../state/session.js';
 import { workspace } from '../state/workspace.js';
 import { editorViewModel } from '../state/derive.js';
@@ -83,13 +80,11 @@ export class SmEditor extends LitElement {
     /** @type {import('../state/workspace.js').DocContext|null} */
     this.ctx = null;
 
-    // Any session action (brush state), workspace change (this window's
-    // face, the activation state the tool clamp gates on) or prefs change
-    // (the guides toggle) re-renders; live strokes are silent on all by
-    // design.
+    // Any session action (brush state) or workspace change (this window's
+    // face, the activation state the tool clamp gates on) re-renders; live
+    // strokes are silent on both by design.
     new StoreController(this, session.store);
     new StoreController(this, workspace.store);
-    new StoreController(this, prefs.store);
   }
 
   // The context's doc: wired by hand (the context isn't known at
@@ -180,7 +175,6 @@ export class SmEditor extends LitElement {
             .tileW=${d.tileW}
             .tileH=${d.tileH}
             .mirrorBehind=${vm.mirrorBehind}
-            .guides=${vm.guides}
             .tool=${s.tool}
             .ink=${s.ink}
             .pencilSize=${s.pencilSize}
@@ -189,7 +183,6 @@ export class SmEditor extends LitElement {
             .fillContiguous=${s.fillContiguous}
             .fillAllFaces=${s.fillAllFaces}
             .active=${this.#isActive}
-            .showGuides=${prefs.get().showGuides}
             .previewCursor=${hooks?.previewCursor ?? false}
             .previewRect=${hooks?.previewRect ?? null}
             .fillOnMount=${hooks?.fillOnMount ?? null}

@@ -5,7 +5,6 @@
 // ---------------------------------------------------------------------------
 
 import { VIEW_OPPOSITE, MIRROR_AXIS } from '../lib/views.js';
-import { faceGuides } from '../lib/guides.js';
 import { flip } from '../lib/ingest.js';
 
 // Mirror a tile for display (an axis-flip in image space), so a mirror-derived
@@ -27,8 +26,6 @@ export function mirrorImage(img, axis) {
  *   - `mirrorBehind`: the opposite face's OWN art, mirrored, for the faded
  *     onion-skin — null when the opposite has no independent art (a derived
  *     opposite is just this face's own mirror; it would overlay identically).
- *   - `guides`: hairline extent rules from the orthogonal faces sharing each of
- *     this face's axes — where a painted pixel can survive the strict carve.
  *
  * @param {{views: Record<string, {width:number,height:number,data:Uint8ClampedArray}|null>,
  *          tileW: number, tileH: number}} docState
@@ -46,6 +43,5 @@ export function editorViewModel(docState, face) {
     },
     wasDerived: existing == null,
     mirrorBehind: oppArt ? mirrorImage(oppArt, MIRROR_AXIS) : null,
-    guides: faceGuides(views, face, tileW, tileH),
   };
 }

@@ -524,14 +524,11 @@ const PROBE = `(() => {${DEEP}
       arrangeValue: __q('#item-arrange').getAttribute('value'),
       arrangeLabel: __q('#item-arrange').textContent.trim(),
       toolPencil: !__q('vf-menu-item[value="tool-pencil"]').disabled,
-      guides: !__q('vf-menu-item[value="guides"]').disabled,
       ring: !__q('vf-menu-item[value="ring"]').disabled,
       exportAtlas: !__q('vf-menu-item[value="export-atlas"]').disabled,
     },
     menuChecks: {
-      // View → Guides: the extent rules' toggle, checkmark off prefs.
-      guides: !!__q('vf-menu-item[value="guides"]').checked,
-      // View → 3D Sprite Atlas: the windoid's toggle, the same slice.
+      // View → 3D Sprite Atlas: the windoid's toggle, checkmark off prefs.
       ring: !!__q('vf-menu-item[value="ring"]').checked,
       // The Tools menu's checked tool item, sans its 'tool-' prefix. Exactly
       // one must be checked (the sticky mode) — any other count reads '!N',
@@ -873,7 +870,6 @@ async function main() {
       greet.menuEnabled.close === false &&
       greet.menuEnabled.pickColor === false &&
       greet.menuEnabled.arrange === false &&
-      greet.menuEnabled.guides === false &&
       greet.menuEnabled.toolPencil === false,
     JSON.stringify(greet.menuEnabled)
   );
@@ -1896,30 +1892,6 @@ async function main() {
     s.menuEnabled.arrange === true && s.menuEnabled.arrangeValue === 'zoom',
     JSON.stringify(s.menuEnabled)
   );
-  // View → Guides: the extent rules over the canvas are OFF every load (the
-  // guide layer is the rules' only painter now, so "off" is an empty layer)
-  // and the item is a checkmark toggle off the prefs slice — a real menu
-  // pick draws them and checks the item, a second pick clears both.
-  const guidesShowing = async () => !(await layerIsEmpty('.editor-canvas-overlay'));
-  check(
-    'the extent rules boot off: View → Guides unchecked, the guide layer clear',
-    s.menuChecks.guides === false && !(await guidesShowing()),
-    JSON.stringify({ checked: s.menuChecks.guides, showing: await guidesShowing() })
-  );
-  await pickMenu('#menu-view', 'guides');
-  s = await probe();
-  check(
-    'View → Guides draws the extent rules and checks the item',
-    s.menuChecks.guides === true && (await guidesShowing()),
-    JSON.stringify({ checked: s.menuChecks.guides, showing: await guidesShowing() })
-  );
-  await pickMenu('#menu-view', 'guides');
-  s = await probe();
-  check(
-    '…and a second pick clears the rules and the check',
-    s.menuChecks.guides === false && !(await guidesShowing()),
-    JSON.stringify({ checked: s.menuChecks.guides, showing: await guidesShowing() })
-  );
   // The paper under the art is the canvas stack container's OWN kit
   // pattern — permanently the 50% dither (`gray-50`), the transparency
   // indicator. No toggle: no menu item touches it, and the background layer
@@ -2643,7 +2615,6 @@ async function main() {
       s.menuEnabled.pickColor === false &&
       s.menuEnabled.arrange === false &&
       s.menuEnabled.arrangeValue === 'zoom' &&
-      s.menuEnabled.guides === false &&
       s.menuEnabled.toolPencil === false,
     JSON.stringify(s.menuEnabled)
   );

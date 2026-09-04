@@ -214,9 +214,9 @@ export const VIEW_AXES = {
 // For each view: which world axis its image COLUMNS (u) and ROWS (v) run along,
 // and whether the image index runs the SAME direction as the world coordinate
 // (flip:false) or the OPPOSITE (flip:true). Probed from project() at load so it
-// can never drift from the projections above. Consumed by the editor's alignment
-// guides (src/lib/guides.js) to map a sibling view's occupancy into the edited
-// face's own pixel frame.
+// can never drift from the projections above (test/views.test.mjs pins it).
+// Consumed by the sheet resize (src/lib/atlas.js resizeAtlas) to place each
+// face's tile so every face sharing a world axis shifts identically.
 const AXIS_ARG = { nx: 0, ny: 1, nz: 2 };
 function probeFlip(spec, axisName, which) {
   const d = { nx: 2, ny: 2, nz: 2 };

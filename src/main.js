@@ -63,7 +63,6 @@ const boot = parseBootParams(location.search, {
 });
 if (boot.lowpoly != null) prefs.setLowpoly(boot.lowpoly);
 if (boot.rotate === false) prefs.setAutoRotate(false);
-if (boot.guides) prefs.setShowGuides(true); // the extent rules are off by default
 if (boot.ring) {
   // ?ring=<views>[,<elevation>[,<offset>[,<size>[,<paper>]]]]: the 3D
   // Sprite Atlas windoid shown (it boots hidden) with its settings seeded —

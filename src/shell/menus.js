@@ -645,17 +645,11 @@ export function initMenus(desktop, windows, panels) {
     if (modalOpen()) return;
     const v = String(menuDetail(e).value ?? '');
     switch (v) {
-      case 'guides':
-        // The extent rules over every document canvas: a toggle on the
-        // prefs slice (off by default); syncView below mirrors it back
-        // as the item's checkmark.
-        prefs.setShowGuides(!prefs.get().showGuides);
-        break;
       case 'ring':
-        // The 3D Sprite Atlas windoid: the same toggle shape (off every
-        // load); shell/windows.js shows and hides the windoid off the
+        // The 3D Sprite Atlas windoid: a toggle on the prefs slice (off
+        // every load); shell/windows.js shows and hides the windoid off the
         // flag, and its close box clears it — one truth, mirrored back as
-        // the checkmark.
+        // the checkmark by syncView below.
         prefs.setShowRing(!prefs.get().showRing);
         break;
       case 'arrange':
@@ -728,7 +722,6 @@ export function initMenus(desktop, windows, panels) {
     'export-atlas',
     'properties',
     'pick-color',
-    'guides',
     'ring',
     'tool-select',
     'tool-pencil',
@@ -875,14 +868,12 @@ export function initMenus(desktop, windows, panels) {
   teardown.push(session.subscribe(syncTools));
   syncTools();
 
-  // The View menu's checkmarks mirror the prefs slice — Guides ↔
-  // showGuides, 3D Sprite Atlas ↔ showRing: a pick toggles the slice, the
-  // check follows it (both boot unchecked, the slice's defaults; the
-  // windoid's close box lands here through the same flag).
-  const itemGuides = $('vf-menu-item[value="guides"]');
+  // The View menu's 3D Sprite Atlas checkmark mirrors the prefs slice
+  // (showRing): a pick toggles the slice, the check follows it (boots
+  // unchecked, the slice's default; the windoid's close box lands here
+  // through the same flag).
   const itemRing = $('vf-menu-item[value="ring"]');
   const syncView = () => {
-    itemGuides.checked = prefs.get().showGuides;
     itemRing.checked = prefs.get().showRing;
   };
   teardown.push(prefs.subscribe(syncView));
