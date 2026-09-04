@@ -36,6 +36,15 @@ var(--_vf-pattern-image, none)` on every such box — while
    0.6.1) left both facts as they are: `src/pattern-fill.ts` 194–212 is the
    recipe; `src/components/vf-desktop.ts` 379–381 is the desktop's controller
    on `.screen`.
+4. **The leak is blurred, too (found 2026-09-04).** `image-rendering:
+pixelated` and the white ground ride `.vf-patterned`, the class only a
+   declared pattern earns, while the inherited image and size land through
+   `.vf-pattern-fill` alone. A bare box therefore paints the desktop's
+   raster bilinear-scaled wherever a system px is more than one device px
+   — on a Retina display the 50% dither smears into a soft gray with a
+   fuzzy 1px grid through it, beside a desktop that draws the same raster
+   crisp. Closing the leak closes this with it; until then the blur is the
+   tell that a box has no pattern of its own.
 
 So: **the transparency is original; the leak snuck in with the pattern
 attribute.**
@@ -67,17 +76,21 @@ it.
 
 Every `vf-container` in sprite-machine that holds content over paper
 declares a pattern: the options strip (`white`), the draw canvas's layer
-stack (`white`), the Sprite View's picker box (`white`), the 3D View's
-well and the atlas cells (`gray-25`), the Desktop Patterns well and cells
-(their own). `tools/drive.mjs` pins the picker box's attribute and that
+stack (`gray-12`, its paper — `white` when the bridge went in on
+2026-08-28, `gray-50` from 2026-08-29, `gray-12` since 2026-09-04: a
+pattern of its own, never a bare bridge), the Sprite View's picker box (`white`), the
+3D View's well and the atlas cells (`gray-12` too, since 2026-09-04 —
+`gray-25` before), the Desktop Patterns well
+and cells (their own). `tools/drive.mjs` pins the picker box's attribute and that
 its raster is written on its own inline style rather than inherited; a
 SMOKE-TEST eye item pins the canvas paper.
 
 ## After the bump
 
-- Nothing to change for correctness: `pattern="white"` on the three
-  bridged boxes becomes a restatement of the default, and can come out or
-  stay as documentation.
+- Nothing to change for correctness: `pattern="white"` on the two bridged
+  boxes (the strip, the picker box) becomes a restatement of the default,
+  and can come out or stay as documentation; the canvas stack keeps its
+  `gray-12` — a paper of its own, not a bridge.
 - Retire the drive's own-raster pin (the leak has no mechanism to pin),
   keep the attribute pin only if the attribute stays.
 - Pin the release in `package.json` and note it in the ring-size plan's

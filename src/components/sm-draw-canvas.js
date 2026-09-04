@@ -51,9 +51,10 @@
 // whether this window is the desktop's active document window — which gates
 // the selection's no-drag Esc (every open window's canvas listens on the
 // document; only the active one answers).
-// The PAPER under the art is the kit's 50% dither, always — the stack
-// container's own kit pattern, the classic transparency look (an empty texel
-// reads as dither, a painted one covers it — WHITE art included).
+// The PAPER under the art is the kit's 12% dither (`gray-12`, a sparse field
+// of dots), always — the stack container's own kit pattern, the transparency
+// look (an empty texel reads as dotted paper, a painted one covers it — WHITE
+// art included, a clear patch in the dots).
 //
 // The working buffer resets in willUpdate when the tile IDENTITY (or the tile
 // geometry) changes — identity is the caller's contract: the same reference
@@ -116,11 +117,13 @@ const ANTS_MS = 100;
 const TOOL_KEYS = new Set(['s', 'b', 'r', 'g', 'e', 'i']);
 
 // The PAPER under the art — the stack container's `pattern`, the kit's own
-// 1-bit fill (vintage-frames docs/PATTERNS.md): the classic 50% dither
-// (`gray-50`, the desktop's own default pattern), the transparency
-// indicator — WHITE art reads against it. Declaring a pattern is also what
-// keeps the desktop's pattern ink out of the box — see the template note.
-const PAPER = 'gray-50';
+// 1-bit fill (vintage-frames docs/PATTERNS.md): the 12% dither (`gray-12`,
+// one ink px in eight, a sparse field of dots — lighter than the desktop's
+// 50% default, so the art sits on near-white paper), the transparency
+// indicator — a painted texel covers the dots, WHITE art reading as a clear
+// patch in them. Declaring a pattern is also what keeps the desktop's
+// pattern ink out of the box — see the template note.
+const PAPER = 'gray-12';
 
 export class SmDrawCanvas extends LitElement {
   static styles = [
@@ -662,7 +665,7 @@ export class SmDrawCanvas extends LitElement {
   // by arithmetic, on the pixel lattice by construction), and the canvases
   // fill its box (inset: 0 against the container's own anchor, so all four
   // ride its grid-snap correction together). The container DECLARES its
-  // pattern — the PAPER (PAPER, the kit's 50% dither, the transparency
+  // pattern — the PAPER (PAPER, the kit's 12% dither, the transparency
   // indicator) — and not only
   // for the reading: a vf-container with no pattern of its
   // own INHERITS THE DESKTOP'S. vf-desktop paints its pattern as black ink
@@ -670,9 +673,14 @@ export class SmDrawCanvas extends LitElement {
   // its .screen, custom properties inherit through the slot into every
   // window, and a bare container's shadow .box (.vf-pattern-fill) resolves
   // it — so the stack would paint the desktop's OWN pattern under the
-  // transparent texels (the two agree only while the desktop sits on its
-  // default dither). A declared pattern gives the box its own ink and its
-  // own ground. Kit ask #6: the private token should not inherit.
+  // transparent texels (the 50% dither by default — never this paper), and
+  // paint it BLURRED: `image-rendering: pixelated` and the white ground ride
+  // the kit's .vf-patterned class, which only a declared pattern earns, so
+  // the leaked raster is bilinear-scaled wherever a system px is more than
+  // one device px — the "fuzzy 1px grid" a bare stack shows on a Retina
+  // display (Sep 4 2026). A declared pattern gives the box its own ink, its
+  // own ground and its own crisp raster. Kit ask #6: the private token
+  // should not inherit.
   // Only the pixel canvas takes pointer events. It keeps a native tileW×tileH
   // backing store (CSS upscales it crisp); the bg + cursor + selection
   // layers are SYSTEM-res (backing tracks the box's system px) so their 1px

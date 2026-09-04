@@ -139,18 +139,21 @@ browser, `http://localhost:5173/`.
       the selection stays and the tool stays Selection; Alt-click empty
       space — the eraser is selected and the selection drops (the existing
       empty-sample rule).
-- [ ] **1-bit canvas, by eye**: the canvas box sits on the kit's 50%
-      dither, edge to edge (the stack container's own pattern, so it
-      re-rasters crisp at any zoom and display density) — the transparency
-      indicator: an empty texel reads as dither, a painted texel covers
-      it, and a WHITE texel reads against the gray; no dot grid, no
-      checkerboard, and no View item touches the paper. Nothing is drawn
-      over the art: no lattice of grid lines, no cyan — the art is the
-      only color on the canvas. On a derived face the onion-skin is a
-      pale tint of the opposite face's art over the dither. And the paper
-      is the CANVAS'S OWN dither, never the desktop's pattern showing
-      through — a kit leak the stack's declared `pattern` bridges (kit
-      ask #6): set a different desktop pattern and the canvas paper must
+- [ ] **1-bit canvas, by eye**: the canvas box sits on the kit's 12%
+      dither (`gray-12`, a sparse field of dots — one ink px in eight),
+      edge to edge (the stack container's own pattern, so it re-rasters
+      crisp at any zoom and display density: every dot a whole, sharp
+      system px, never a soft one) — the transparency indicator: an empty
+      texel reads as dotted paper, a painted texel covers it, and a WHITE
+      texel reads as a clear patch in the dots; no checkerboard, and no
+      View item touches the paper. Nothing is drawn over the art: no
+      lattice of grid lines, no cyan — the art is the only color on the
+      canvas. On a derived face the onion-skin is a pale tint of the
+      opposite face's art over the dots. And the paper is the CANVAS'S
+      OWN pattern, never the desktop's showing through — a kit leak the
+      stack's declared `pattern` bridges (kit ask #6; a bare stack paints
+      the desktop's 50% dither, smeared into a fuzzy grid on a Retina
+      display): set a different desktop pattern and the canvas paper must
       not change.
 - [ ] **One cursor, everywhere**: over the pixel canvas only the kit's drawn
       crosshair shows (no native crosshair beneath it), and the tool cells

@@ -57,7 +57,7 @@ export class SmEditor extends LitElement {
          bleed, running edge to edge from the title bar down to the status
          strip (a window body carries no inset of its own — vintage-frames
          0.6.0 — so it meets the frame's own black line).
-         The canvas box inside it carries its own paper — the kit's 50%
+         The canvas box inside it carries its own paper — the kit's 12%
          dither, the transparency indicator. */
       .editor-drawbox {
         flex: 1;

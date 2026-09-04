@@ -8,11 +8,11 @@
 // tileW·k × tileH·k for a k-system-px texel, CSS-magnified nearest-neighbor in
 // lockstep with the art, so their 1px hairlines are exactly one system px (the
 // kit's own hairline unit), crisp at any display density or browser zoom. The
-// canvas is 1-BIT BUT FOR THE ART: the paper under it is the kit's 50% dither
-// (the transparency indicator — the stack container's own pattern, not a
-// painter here) and everything here is black or white (the hover previews'
-// ink tint and erase red are the exceptions — they preview the art itself),
-// so the sprite is the only color on the page.
+// canvas is 1-BIT BUT FOR THE ART: the paper under it is the kit's 12% dither
+// (`gray-12`, a sparse dot field — the transparency indicator; the stack
+// container's own pattern, not a painter here) and everything here is black
+// or white (the hover previews' ink tint and erase red are the exceptions —
+// they preview the art itself), so the sprite is the only color on the page.
 // ---------------------------------------------------------------------------
 
 import { brushBounds } from '../lib/brush.js';
@@ -22,8 +22,8 @@ import { antsRuns } from '../lib/ants.js';
 /** `scale` is whole system px per texel; `sysW`/`sysH` the layer in system px.
  *  @typedef {{tileW:number, tileH:number, scale:number, sysW:number, sysH:number}} OverlayView */
 
-// There are no lines over the art: the texel grid is the dithered paper's
-// own lattice.
+// There are no lines over the art — no texel lattice: the dotted paper alone
+// shows through unpainted texels.
 
 // The haloed hairline box both cursor overlays share: a dark halo so the
 // outline reads on any art color, then the 1px line (red while erasing).

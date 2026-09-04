@@ -158,13 +158,17 @@ template — see [UI layer: Lit](#ui-layer-lit).
   cursor + selection overlays over it draw at system-px resolution, so their
   hairlines are 1 system px — the kit's hairline unit. See `#layout()` in
   `src/components/sm-draw-canvas.js`. The canvas is **1-bit but for the
-  art**: its paper is the kit's **50% dither** — `gray-50`, the desktop's
-  own default, painted by the kit as the stack container's `pattern` — the
-  classic transparency indicator, so an empty texel reads as dither, a
-  painted one covers it, and **white art** reads against it (no
-  checkerboard, no dot grid); and nothing is drawn over the art — no
-  lattice of grid lines, so a fresh canvas is paper and art alone. The
-  sprite is the only color on the canvas.
+  art**: its paper is the kit's **12% dither** — `gray-12`, a sparse field
+  of dots, one ink px in eight, painted by the kit as the stack container's
+  `pattern` (declared, never inherited: a bare `vf-container` paints the
+  desktop's own pattern, and paints it smeared — kit ask #6,
+  [docs/kit-asks-pattern-paper.md](docs/kit-asks-pattern-paper.md)) — the
+  transparency indicator, so an empty texel reads as dotted paper, a
+  painted one covers it, and **white art** reads as a clear patch in the
+  dots (the kit's own raster, not a painter of the app's — no checkerboard,
+  no drawn lattice); and nothing is drawn over the art — no lattice of grid
+  lines, so a fresh canvas is paper and art alone. The sprite is the only
+  color on the canvas.
 - **Tools** — the **Tools palette** holds the **tool strip**: a single column of
   **22×19** cells (the **selection `S`** first — MacPaint's palette led with it — then
   **pencil `B`**, **rect `R`**, **fill `G`**, the **eraser `E`**, and the
@@ -752,8 +756,10 @@ Patterns control panel (document tier, not a document — see
   in the sheet's own arrangement, each cell a live canvas of that face's
   slice drawn nearest-neighbor, the grid's 1px rules the only lines
   between (frameless — the windoid frame is its perimeter), every cell
-  on a **1-bit kit pattern** (`pattern` on `<sm-atlas-view>`, `gray-25`
-  — any of the kit's 38 MacPaint patterns by name, or sixteen hex digits;
+  on a **1-bit kit pattern** (`pattern` on `<sm-atlas-view>`, `gray-12`
+  — the draw canvas's own paper, so a face reads the same in the grid as
+  on the canvas; any of the kit's 38 MacPaint patterns by name, or
+  sixteen hex digits;
   painted per cell by the kit's own `PatternFillController` at the cell's
   declared size, so a tile's transparent texels read against paper, and
   dropping the attribute gives plain white cells back). The grid
@@ -781,12 +787,13 @@ Patterns control panel (document tier, not a document — see
   **rotate** (auto-spin) and **smooth** (the low-poly wedge pass), a kit
   row stack writing the prefs slice live (`sm-stage-controls`; these
   lived in Settings… before) — over the THREE canvas in a **kit pattern
-  well** (`#stage-well`, a `vf-container pattern="gray-25"` filling the
+  well** (`#stage-well`, a `vf-container pattern="gray-12"` filling the
   body by its own `fill-width fill-height`): the renderer clears
   **transparent** (`alpha: true`, no scene
   background), so the model and its shadow composite over the 1-bit
-  pattern rather than a flat gray — the same pattern the Sprite View's
-  cells wear, both the kit's own fill; its status strip reading the fixed
+  pattern rather than a flat gray — the same paper the Sprite View's
+  cells and the draw canvas wear, one paper under every view of the
+  art, all the kit's own fill; its status strip reading the fixed
   "3D Model View" — a static label; no build error or warning ever takes
   the line — with the build stats (grid / voxels / tris) riding the
   strip's hover tooltip. The 3D View

@@ -1941,15 +1941,16 @@ async function main() {
     JSON.stringify(s.menuEnabled)
   );
   // The paper under the art is the canvas stack container's OWN kit
-  // pattern — permanently the 50% dither (`gray-50`), the transparency
+  // pattern — permanently the 12% dither (`gray-12`), the transparency
   // indicator. No toggle: no menu item touches it, and the background layer
-  // carries no dot grid — its only painter left is the onion-skin, whose
-  // MIRROR_ALPHA tint never reaches full opacity (a dot was alpha 255).
+  // carries no dot grid of its own (the paper's dots are the container's
+  // raster, not this layer's) — its only painter left is the onion-skin,
+  // whose MIRROR_ALPHA tint never reaches full opacity (a dot was alpha 255).
   const paper = () =>
     evaluate(`(() => {${DEEP} return __qd('.editor-canvas-stack').pattern; })()`);
   check(
-    "the paper is permanently the kit's 50% dither (the stack container's pattern)",
-    (await paper()) === 'gray-50',
+    "the paper is permanently the kit's 12% dither (the stack container's pattern)",
+    (await paper()) === 'gray-12',
     `${await paper()}`
   );
   const bgOpaquePx = await evaluate(`(() => {${DEEP}
