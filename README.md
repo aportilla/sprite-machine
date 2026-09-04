@@ -165,12 +165,20 @@ template — see [UI layer: Lit](#ui-layer-lit).
   checkerboard, no dot grid); and nothing is drawn over the art — no
   lattice of grid lines, so a fresh canvas is paper and art alone. The
   sprite is the only color on the canvas.
-- **Tools** — the **Tools palette** holds the **tool strip**: a single column of square
-  cells (the **selection `S`** first — MacPaint's palette led with it — then
+- **Tools** — the **Tools palette** holds the **tool strip**: a single column of
+  **22×19** cells (the **selection `S`** first — MacPaint's palette led with it — then
   **pencil `B`**, **rect `R`**, **fill `G`**, the **eraser `E`**, and the
-  **eyedropper `I`**; the selected cell inverts) — each an icon from the
-  open-source **Adobe Spectrum _workflow_** set (`rect-select` / `draw` /
-  `rectangle` / `color-fill` / `erase` / `sampler`) in a frameless `vf-grid` lattice run
+  **eyedropper `I`**; the selected cell inverts) — each cell exactly one
+  **22×19 1-bit pixel-art icon**, the app's own art (`src/assets/tools/`,
+  black ink on transparency and nothing else — no icon library: the Adobe
+  Spectrum glyphs that once drew them are gone, dependency and all),
+  through the kit's **`vf-img`** at 1:1 — one image pixel one system px,
+  nearest-neighbor on whole device pixels, so the glyphs are crisp at any
+  display scale — and the inverted cell's white glyph is a CSS `invert` of
+  the same file, exact because the art is pure black; the cell IS the icon
+  (`TOOL_CELL` in `shell/layout.js`, which derives the windoid's authored
+  box, `TOOLS_BOX`, from it — the markup pinned against the arithmetic by
+  the drive) in a frameless `vf-grid` lattice run
   flush to the windoid's edge — no inner padding, the cells sharing the
   window frame's own black line. A cell **picks on the press**, not the
   click — System 7's tool palettes act on mouse-down: the cell inverts the
@@ -1433,7 +1441,9 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   boot/open arrangement from the raster — the ONLY source of window geometry;
                   none persists; the atlas strip docked at the bottom, the doc box shortened
                   only while it is shown) + cascadeFrom (the document windows' first-free-slot
-                  cascade) + spriteHeightFor (the fixed-size
+                  cascade) + TOOL_CELL / TOOLS_BOX (the Tools palette: the 22×19 icon
+                  cell — the tool strip's, the icon's own size — and the windoid box
+                  it derives, the one index.html authors and the drive pins) + spriteHeightFor (the fixed-size
                   Sprite View windoid: picker-block width, atlas-ratio height) + RING_FIELDS
                   (the 3D Sprite Atlas strip's DITL: the controls' box, rows, caption
                   columns and field lefts in whole system px against the window header's
@@ -1559,14 +1569,15 @@ src/
                        the Desktop Patterns panel's body (the kit-patterned preview well over
                        the 13×3 grid of every kit pattern over Set Desktop Pattern: a pending
                        selection picked by click, committed through shell.setDesktopPattern)
-    ui-bits.js         shared caption + warning-row template helpers (+ the warn row's styles,
-                       a css export its consumers compose into their own `static styles`) and
-                       the `pattern` attribute's parse the two patterned-cell views share
+    ui-bits.js         the shared caption template helper and the `pattern` attribute's parse
+                       the two patterned-cell views share
     base-styles.js     the shared border-box reset every component composes first (box-sizing
                        doesn't inherit across shadow boundaries)
   image-io.js     File/URL/bytes <-> ImageData codecs, a canvas -> PNG bytes, PNG downloads,
                   generated icon art (browser)
-  icons.js        registers the Adobe Spectrum workflow <sp-icon-*> tool-cell + warning glyphs, written literally in the component templates (color via currentColor, size via --mod-icon-size; no sp-theme)
+  assets/         the app's own raster art, every piece through the kit's vf-img at 1:1: tools/ (the
+                  tool strip's six 22×19 1-bit icons — no icon library), faces/ (the face picker's
+                  21×26 cubes + the selected dither), the 32×32 application icon (the About box)
 ```
 
 ### UI layer: Lit + a hand-rolled store
@@ -1613,9 +1624,8 @@ without `composed`. `style.css` keeps only the page's share: the palette
 tokens (custom properties inherit into every shadow tree), the reset, the
 black ground behind the desktop bezel, the light-DOM Colors-dialog host's
 display, the 3D viewport's fill rules, and the
-drop overlay `drop-target.js` renders into the page. The `.warn` row's styles
-live with its template as ui-bits' `warnStyles` export, composed by whoever
-renders `warnRow()`. One consequence for tooling: `tools/capture.sh dom`
+drop overlay `drop-target.js` renders into the page. One consequence for
+tooling: `tools/capture.sh dom`
 serializes light DOM only — now the desktop skeleton (menus, windows,
 dialogs) plus `<title>`, but never the components' internals — so the
 byte-deterministic screenshots and the shadow-piercing `drive.mjs` remain

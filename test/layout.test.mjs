@@ -36,13 +36,19 @@ import {
   TOP_RESERVE,
   MENU_BAR,
   ICON_CELL,
+  TOOL_CELL,
+  TOOLS_BOX,
   BAND,
   WINDOW_FRAME,
   ICON_FRAME,
 } from '../src/shell/layout.js';
 import { RING_DEFAULTS } from '../src/state/ring.js';
 
-const TOOLS = { width: 30, height: 187 };
+// The Tools palette's authored box (index.html's width / height) — the
+// strip's own arithmetic, restated here as a pin: six 22×19 icon cells in a
+// frameless column with 1px rules between, inside the 1px borders and the
+// 12px dot bar.
+const TOOLS = { width: 24, height: 133 };
 // The capture tool's raster (1000×850 CSS at DSF 1, minus the 10px bezel).
 const W = 980;
 const H = 830;
@@ -54,6 +60,14 @@ const R = { width: 1000, height: 800 };
 const box = (left, top, width, height) => ({ left, top, width, height });
 const roundTrip = (b, from, to, frame = F, policy) =>
   pinTo(pinOf(b, from, frame), to, frame, policy);
+
+test('the Tools palette box: six 22×19 icon cells in a frameless column + the chrome', () => {
+  // The cell is the icon's own size (src/assets/tools/, 22×19), and the
+  // windoid's box derives from it — the numbers index.html authors (the
+  // drive pins the markup against TOOLS_BOX).
+  assert.deepEqual(TOOL_CELL, { width: 22, height: 19 });
+  assert.deepEqual(TOOLS_BOX, TOOLS);
+});
 
 test('placement: the sprite/stage rail is one right-flush column, sprite fixed', () => {
   const p = initialPlacement(W, H, TOOLS);

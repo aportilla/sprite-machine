@@ -70,6 +70,8 @@ import {
   WINDOW_FRAME,
   ICON_FRAME,
   ICON_CELL,
+  TOOL_CELL,
+  TOOLS_BOX,
   zoomedBox,
   centeredBox,
   initialPlacement,
@@ -470,6 +472,24 @@ const PROBE = `(() => {${DEEP}
     toolCursor: (() => {
       const cell = __q('.editor-tool');
       return cell ? getComputedStyle(cell).cursor : null;
+    })(),
+    // The tool strip: the grid's declared cell, each cell's art at its
+    // natural size (the icon IS the cell — shell/layout.js's TOOL_CELL) and
+    // the Tools windoid's authored box (TOOLS_BOX, the strip's arithmetic).
+    toolStrip: (() => {
+      const grid = __q('.editor-toolstrip');
+      const win = __q('#win-tools');
+      return {
+        cell: grid
+          ? { width: +grid.getAttribute('cell-width'), height: +grid.getAttribute('cell-height') }
+          : null,
+        art: __qa('.editor-tool img').map((i) => ({
+          width: i.naturalWidth,
+          height: i.naturalHeight,
+          loaded: i.complete && i.naturalWidth > 0,
+        })),
+        win: win ? { width: win.width, height: win.height } : null,
+      };
     })(),
     colorsDialogLightDom: !!(colorsDialog && colorsDialog.getRootNode() === document),
     rect: { left: r.left, top: r.top, width: r.width, height: r.height },
@@ -1139,6 +1159,26 @@ async function main() {
     'the native cursor is hidden over the tool cells',
     s.toolCursor === 'none',
     s.toolCursor
+  );
+  // The tool cells ARE their icons: the art's natural size, the grid's
+  // declared cell and the windoid's authored box all read layout.js's
+  // numbers — the markup pinned against the arithmetic, the headers' idiom.
+  for (let i = 0; i < 20 && !s.toolStrip.art.every((a) => a.loaded); i++) {
+    await sleep(100);
+    s = await probe();
+  }
+  const ts = s.toolStrip;
+  const atCell = (b) =>
+    !!b && b.width === TOOL_CELL.width && b.height === TOOL_CELL.height;
+  check(
+    "the tool cells are the icons' own size (TOOL_CELL), the windoid the strip's box (TOOLS_BOX)",
+    atCell(ts.cell) &&
+      ts.art.length === 6 &&
+      ts.art.every((a) => a.loaded && atCell(a)) &&
+      !!ts.win &&
+      ts.win.width === TOOLS_BOX.width &&
+      ts.win.height === TOOLS_BOX.height,
+    JSON.stringify(ts)
   );
   check(
     'the options strip shows the pencil slider',

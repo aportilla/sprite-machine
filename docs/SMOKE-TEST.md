@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 291 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 292 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -157,6 +157,14 @@ browser, `http://localhost:5173/`.
       show only the kit's arrow (no native hand). Open the Colors dialog
       (⌘K or the ink swatch) — the drawn arrow stays visible over the
       dialog and its swatches, not swallowed by the modal.
+- [ ] **The tool icons, by eye**: the Tools palette is six 22×19 pixel-art
+      glyphs — marquee, pencil, rectangle, bucket, eraser, eyedropper — in
+      one column, each cell exactly its icon (no margin; the 1px rules the
+      only lines between, the windoid's frame their perimeter), every
+      pixel crisp at the display's scale and under browser zoom; the
+      selected cell is the same glyph white on black, no gray fringe. Tab
+      to a cell: the dotted focus ring runs on the cell's outermost pixel
+      row, clear of the ink.
 - [ ] **The palette acts on mouse DOWN**: press a tool cell and hold — the
       cell inverts and the Tools menu's checkmark moves before the button
       comes up (MacPaint's palette feel); releasing changes nothing more.

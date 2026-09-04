@@ -150,6 +150,26 @@ export const CASCADE_SLOTS = 5;
 const CASCADE_ROOM = (CASCADE_SLOTS - 1) * CASCADE_STEP;
 const DOC_MIN = 220; // the doc box's floor on a raster too small for the room
 
+// --- the Tools palette's box ---------------------------------------------------
+// The tool strip's cell is the tool ICON's own size — six 22×19 1-bit glyphs
+// in src/assets/tools/, each filling its cell edge to edge (no margin: the
+// icon IS the cell). sm-tool-strip states the vf-grid's cell and each
+// vf-img at these numbers, and the windoid's box is the strip's arithmetic:
+// one frameless column of six cells with 1px rules between (6 × 19 + 5 =
+// 119) inside the chrome — the two 1px side borders (22 + 2 = 24 wide),
+// the 12px dot bar + the top and bottom borders (119 + 14 = 133 tall).
+// index.html AUTHORS the box as the windoid's width / height (the kit's
+// grammar — the one box initialPlacement takes as INPUT, windows.js reading
+// the markup's), so tools/drive.mjs pins the markup against TOOLS_BOX the
+// way it pins every header's height, and the two can't drift.
+export const TOOL_CELL = { width: 22, height: 19 };
+const TOOL_COUNT = 6;
+const TOOLS_CHROME = { w: 2, h: 12 + 2 };
+export const TOOLS_BOX = {
+  width: TOOL_CELL.width + TOOLS_CHROME.w,
+  height: TOOL_COUNT * TOOL_CELL.height + (TOOL_COUNT - 1) + TOOLS_CHROME.h,
+};
+
 // --- the windoids' HEADERS -----------------------------------------------------
 // Every windoid's controls strip is the window's HEADER (vintage-frames
 // 0.6.1's `slot="header"`: a white band over a 1px rule between the title

@@ -1,10 +1,25 @@
 // ---------------------------------------------------------------------------
 // <sm-tool-strip> — the rail's tool strip: selection / pencil / rect / fill /
-// eraser / eyedropper as a 1-column vf-grid of square cells (the selected
-// cell inverts, CSS off `.active`). A presentational LEAF: props down
-// (`tool`), bubbling `sm-pick-tool {tool}` events up. All six cells are
-// sibling sticky modes — the eraser, eyedropper and selection select like any
-// other tool. The selection leads, as MacPaint's palette did.
+// eraser / eyedropper as a 1-column vf-grid of cells (the selected cell
+// inverts, CSS off `.active`). A presentational LEAF: props down (`tool`),
+// bubbling `sm-pick-tool {tool}` events up. All six cells are sibling sticky
+// modes — the eraser, eyedropper and selection select like any other tool.
+// The selection leads, as MacPaint's palette did.
+//
+// THE ICONS are the app's own art: six 22×19 1-bit PNGs in src/assets/tools/,
+// black ink on transparency and nothing else (the Adobe Spectrum workflow
+// glyphs that used to draw them — and the dependency with them — are gone).
+// A CELL IS ITS ICON: the vf-grid's cell is stated at the art's size
+// (TOOL_CELL in shell/layout.js, which derives the windoid's box from it),
+// and the art fills it edge to edge through the kit's `vf-img` — one image
+// pixel one system px, magnified nearest-neighbor on whole device pixels, so
+// the glyph is crisp at any display scale — no margin, no icon-size token,
+// nothing measured. The selected cell inverts as before, the glyph with it:
+// the art being pure black, `filter: invert(1)` on the image is an EXACT
+// white-on-black of the same file (a transparent texel stays transparent, a
+// black one turns white — no gray fringe, no second asset). The focus ring
+// sits on the cell's outermost pixel row (outline-offset −1), which every
+// icon leaves clear.
 //
 // A cell picks on the PRESS, not the click — System 7's tool palettes act
 // on mouse-down: the cell inverts the instant the button goes down, and
@@ -29,18 +44,25 @@
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
-import '../icons.js'; // registers the <sp-icon-*> tool glyphs used below
+import { TOOL_CELL } from '../shell/layout.js';
 import { baseStyles } from './base-styles.js';
+import selectUrl from '../assets/tools/select.png';
+import pencilUrl from '../assets/tools/pencil.png';
+import rectUrl from '../assets/tools/rect.png';
+import fillUrl from '../assets/tools/fill.png';
+import eraserUrl from '../assets/tools/eraser.png';
+import eyedropperUrl from '../assets/tools/eyedropper.png';
 
-// The six tool glyphs, as module-constant templates: a TemplateResult diffs to
-// a no-op, where a freshly built element would make lit swap the icon on every
-// re-render.
-const ICON_SELECT = html`<sp-icon-rect-select></sp-icon-rect-select>`;
-const ICON_DRAW = html`<sp-icon-draw></sp-icon-draw>`;
-const ICON_RECT = html`<sp-icon-rectangle></sp-icon-rectangle>`;
-const ICON_FILL = html`<sp-icon-color-fill></sp-icon-color-fill>`;
-const ICON_ERASE = html`<sp-icon-erase></sp-icon-erase>`;
-const ICON_SAMPLER = html`<sp-icon-sampler></sp-icon-sampler>`;
+// tool key -> its glyph. Swapping the artwork means editing this map alone
+// (and TOOL_CELL, should the art's size change — the cell IS the icon).
+const TOOL_ART = {
+  select: selectUrl,
+  pencil: pencilUrl,
+  rect: rectUrl,
+  fill: fillUrl,
+  eraser: eraserUrl,
+  eyedropper: eyedropperUrl,
+};
 
 export class SmToolStrip extends LitElement {
   static styles = [
@@ -67,16 +89,21 @@ export class SmToolStrip extends LitElement {
          this shadow root, and a bare \`cursor: pointer\` would put the native hand
          back alongside the kit's drawn arrow. */
         cursor: var(--vf-cursor, pointer);
-        --mod-icon-size: 18px;
       }
       .editor-toolstrip .editor-tool:active,
       .editor-toolstrip .editor-tool.active {
         background: var(--sm-black);
         color: var(--sm-white);
       }
+      /* The inverted cell's glyph: the same 1-bit file, inverted — exact,
+         because the art is pure black on transparency (see the header). */
+      .editor-toolstrip .editor-tool:active img,
+      .editor-toolstrip .editor-tool.active img {
+        filter: invert(1);
+      }
       .editor-toolstrip .editor-tool:focus-visible {
         outline: 1px dotted currentColor;
-        outline-offset: -4px;
+        outline-offset: -1px;
       }
     `,
   ];
@@ -91,70 +118,53 @@ export class SmToolStrip extends LitElement {
   }
 
   render() {
-    const cell = (name, glyph, title, active, tool) => html`
-      <button
-        type="button"
-        class=${classMap({ 'editor-tool': true, active })}
-        title=${title}
-        aria-label=${name}
-        aria-pressed=${active ? 'true' : 'false'}
-        @pointerdown=${(e) => this.#onCellPress(e, tool)}
-        @click=${() => this.#pickTool(tool)}
-      >
-        ${glyph}
-      </button>
-    `;
+    // One template for every cell: a re-render diffs to attribute updates
+    // only (an unchanged src is a no-op), so the images never re-mount.
+    const cell = (name, tool, title) => {
+      const active = this.tool === tool;
+      return html`
+        <button
+          type="button"
+          class=${classMap({ 'editor-tool': true, active })}
+          title=${title}
+          aria-label=${name}
+          aria-pressed=${active ? 'true' : 'false'}
+          @pointerdown=${(e) => this.#onCellPress(e, tool)}
+          @click=${() => this.#pickTool(tool)}
+        >
+          <vf-img width=${TOOL_CELL.width} height=${TOOL_CELL.height}>
+            <img src=${TOOL_ART[tool]} alt="" />
+          </vf-img>
+        </button>
+      `;
+    };
     return html`
       <vf-grid
         class="editor-toolstrip"
         columns="1"
-        cell-width="28"
-        cell-height="28"
+        cell-width=${TOOL_CELL.width}
+        cell-height=${TOOL_CELL.height}
         frameless
         role="group"
         aria-label="tools"
       >
         ${cell(
           'selection',
-          ICON_SELECT,
-          'selection — drag a box, then drag inside it to move (S)',
-          this.tool === 'select',
-          'select'
+          'select',
+          'selection — drag a box, then drag inside it to move (S)'
         )}
-        ${cell(
-          'pencil',
-          ICON_DRAW,
-          'pencil — draw (B)',
-          this.tool === 'pencil',
-          'pencil'
-        )}
-        ${cell(
-          'rectangle',
-          ICON_RECT,
-          'rectangle — drag a box (R)',
-          this.tool === 'rect',
-          'rect'
-        )}
-        ${cell(
-          'fill',
-          ICON_FILL,
-          'fill — flood a region, or replace a color (G)',
-          this.tool === 'fill',
-          'fill'
-        )}
+        ${cell('pencil', 'pencil', 'pencil — draw (B)')}
+        ${cell('rectangle', 'rect', 'rectangle — drag a box (R)')}
+        ${cell('fill', 'fill', 'fill — flood a region, or replace a color (G)')}
         ${cell(
           'eraser',
-          ICON_ERASE,
-          'eraser — draw transparency (E; right-click erases with any tool)',
-          this.tool === 'eraser',
-          'eraser'
+          'eraser',
+          'eraser — draw transparency (E; right-click erases with any tool)'
         )}
         ${cell(
           'eyedropper',
-          ICON_SAMPLER,
-          'eyedropper — click the sprite to sample (I, or hold Alt while drawing)',
-          this.tool === 'eyedropper',
-          'eyedropper'
+          'eyedropper',
+          'eyedropper — click the sprite to sample (I, or hold Alt while drawing)'
         )}
       </vf-grid>
     `;

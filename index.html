@@ -302,17 +302,19 @@
       <!-- The floating Tools palette: utility tier — floats above the
            document windows and never deactivates them. Its SIZE stays
            authored (the one box layout.js takes as input): hugging the tool
-           strip with NO inner padding — the frameless 28px-cell grid
-           (6×28 + 5 rules = 173) sits flush against the windoid's own frame
-           (the desk-accessory composition), + the chrome (1px borders,
-           12px bar) = 187. -->
+           strip with NO inner padding — the frameless grid of 22×19 cells,
+           each cell exactly one tool icon (6×19 + 5 rules = 119 tall, 22
+           wide), sits flush against the windoid's own frame (the
+           desk-accessory composition), + the chrome (1px borders, 12px
+           bar) = 24 × 133 — TOOLS_BOX in shell/layout.js, the arithmetic
+           tools/drive.mjs pins this markup against. -->
       <vf-window
         id="win-tools"
         variant="utility"
         heading="Tools"
         movable
-        width="30"
-        height="187"
+        width="24"
+        height="133"
       >
         <sm-tools-panel></sm-tools-panel>
       </vf-window>
