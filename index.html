@@ -26,9 +26,9 @@
       <vf-menu-bar shortcuts>
         <vf-menu id="menu-app" label="Sprite Machine">
           <vf-menu-item value="about">About Sprite Machine…</vf-menu-item>
-          <!-- Parked: the render toggles moved to the 3D View's controls
-               strip, leaving Settings… empty. The item stays disabled as the
-               placeholder for a future settings surface. -->
+          <!-- Parked: the render toggle (rotate) moved to the 3D View's
+               controls strip, leaving Settings… empty. The item stays
+               disabled as the placeholder for a future settings surface. -->
           <vf-menu-item value="settings" disabled>Settings…</vf-menu-item>
           <!-- The Desktop Patterns control panel (shell/patterns.js): a
                window, not a dialog, so no ellipsis — the Apple menu's
@@ -215,8 +215,9 @@
         <sm-atlas-view pattern="gray-12"></sm-atlas-view>
       </vf-window>
 
-      <!-- The 3D View: the controls strip (the two render toggles — rotate
-           / smooth, a kit row stack in sm-stage-controls) in the header,
+      <!-- The 3D View: the controls strip (the one render toggle — rotate,
+           off every load, in a kit row stack in sm-stage-controls; the
+           low-poly "smooth" pass is always on, no box for it) in the header,
            STAGE_STRIP tall, over the THREE canvas in a kit vf-container that
            fills the body (`fill-width fill-height`) and paints a 1-bit
            pattern as its background: the THREE scene renders with a
@@ -224,8 +225,8 @@
            — composite over the kit's pattern, not a flat gray. `pattern` is
            the kit grammar (a library name or sixteen hex digits); drop it
            for a bare white well. shell/windows.js floors this windoid's
-           width at the strip's content width so a grow-box shrink can't
-           clip the checkboxes. -->
+           size at its chrome plus a canvas that still reads as a view, the
+           strip's one checkbox well inside it. -->
       <vf-window
         id="win-stage"
         variant="utility"

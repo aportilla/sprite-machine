@@ -14,7 +14,7 @@
 // metadata chunk. File → Download is the source path.
 // Behavior only — the markup lives in
 // index.html, the aesthetics in the kit. (Settings… is parked: the render
-// toggles moved to the 3D View's controls strip, and the emptied item sits
+// toggle moved to the 3D View's controls strip, and the emptied item sits
 // disabled in the markup until it has contents again.)
 //
 // MULTI-DOCUMENT GRAMMAR: File actions target the ACTIVE workspace context;

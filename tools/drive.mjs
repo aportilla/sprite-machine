@@ -106,7 +106,9 @@ const KEEP_DOWNLOADS = process.env.DRIVE_KEEP_DOWNLOADS || '';
 const CHROME =
   process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const ROOT = '/tmp/cr-cap'; // shared with capture.sh so its `clean` reaps us too
-const URL = `http://localhost:${APP_PORT}/?sample=car&edit=front&rotate=0`;
+// (No ?rotate=0 — auto-rotate is off every load, the model at rest with
+// nothing said; no ?lowpoly either — the wedge pass is always on.)
+const URL = `http://localhost:${APP_PORT}/?sample=car&edit=front`;
 // The PLAIN app url — no ?sample, so the real boot path runs. On this run's
 // brand-new profile the first load is the one TRULY VIRGIN boot: it seeds the
 // built-in defaults (Car, Cube) into IndexedDB as ordinary stored documents
@@ -114,7 +116,7 @@ const URL = `http://localhost:${APP_PORT}/?sample=car&edit=front&rotate=0`;
 // opens). Every ?sample boot after it skips the seeding (the deterministic
 // test path), so the rest of the run sees exactly the two seeded docs plus
 // whatever it saves itself.
-const SEED_URL = `http://localhost:${APP_PORT}/?rotate=0`;
+const SEED_URL = `http://localhost:${APP_PORT}/`;
 
 if (!existsSync(CHROME)) {
   console.error(`Chrome not found at: ${CHROME} (set $CHROME)`);
@@ -510,11 +512,13 @@ const PROBE = `(() => {${DEEP}
     // The toggleable windoid, apart from the four always-open windows above
     // (it boots hidden — View → 3D Sprite Atlas shows it).
     ringShown: !__q('#win-ring').hidden,
-    // The 3D View's two render toggles, read as the strip's own checked
-    // bindings (live() off prefs — the app's statement of the slice).
+    // The 3D View's render toggle — rotate, the strip's one checkbox — read
+    // as its checked binding (live() off prefs — the app's statement of the
+    // slice), and whether a 'smooth' box exists at all (it must not: the
+    // wedge pass is always on, no toggle since Sep 4 2026).
     stageToggles: {
       rotate: !!__q('#stage-rotate')?.checked,
-      smooth: !!__q('#stage-smooth')?.checked,
+      smoothBox: !!__q('#stage-smooth'),
     },
     // How many document windows are open (one per open document).
     docWindows: [...document.querySelectorAll('vf-window')].filter((w) =>
@@ -1037,7 +1041,7 @@ async function main() {
       strip: created.optionsStrip,
     })
   );
-  await send('Page.navigate', { url: `${SEED_URL}&file=cube` });
+  await send('Page.navigate', { url: `${SEED_URL}?file=cube` });
   await waitForApp();
   seed = await seedProbe();
   check(
@@ -1106,7 +1110,7 @@ async function main() {
     left.tools.left !== placed.tools.left &&
     left.stage.width !== placed.stage.width;
   await sleep(600); // let the desktop-state debounce land before navigating
-  await send('Page.navigate', { url: `${SEED_URL}&file=cube` });
+  await send('Page.navigate', { url: `${SEED_URL}?file=cube` });
   await waitForApp();
   const again = await windowGeom();
   check(
@@ -1216,6 +1220,15 @@ async function main() {
     JSON.stringify(s.windows)
   );
   check('the status tooltip reads out a build', s.voxels > 0, s.buildStats);
+  // The 3D View's strip: rotate boots OFF (the model at rest — no ?rotate
+  // in the url, so this is the slice's own default through the live()
+  // binding), and there is no smooth box to find (the wedge pass is always
+  // on, not a toggle).
+  check(
+    'the 3D View boots with rotate off, and its strip holds no smooth box',
+    s.stageToggles.rotate === false && s.stageToggles.smoothBox === false,
+    JSON.stringify(s.stageToggles)
+  );
 
   // --- keyboard tool switching ----------------------------------------------
   section('keys');
@@ -2396,11 +2409,11 @@ async function main() {
     JSON.stringify(headers.sprite)
   );
   check(
-    "the 3D View's checkbox row is the window's header: slotted there at STAGE_STRIP, both boxes inside it, the pattern well filling the body",
+    "the 3D View's checkbox row is the window's header: slotted there at STAGE_STRIP, its one box inside it, the pattern well filling the body",
     headers.stage.slot === 'header' &&
       headers.stage.headerH === STAGE_STRIP &&
       headers.stage.header.h === STAGE_STRIP &&
-      headers.stage.checks.length === 2 &&
+      headers.stage.checks.length === 1 &&
       headers.stage.checks.every(
         (c) => c.top >= 0 && c.top + c.h <= STAGE_STRIP - 1 && c.left >= 0
       ) &&
@@ -2503,61 +2516,11 @@ async function main() {
     toolsRaised === true && s.drawTool === pressTool,
     JSON.stringify({ toolsRaised, tool: s.drawTool })
   );
-  // The 3D View's checkboxes (sm-stage-controls) are the kit's own
-  // click-driven toggles, and the bug this pins was theirs: a checkbox in a
-  // windoid needed a SECOND click whenever another windoid had been raised
-  // over the 3D View — after boot the common case (the Tools palette boots
-  // topmost). The palette was just raised, so the 3D View is behind it:
-  // this ONE click is exactly that case, and it must flip the box — the
-  // model's tri count the app-level witness that the pref reached the
-  // pipeline (smooth is the wedge pass over the car's slopes), the DOM
-  // order after folded in (the raise happened; the click survived it).
-  // Then a second click, the 3D View frontmost, flips it back — once — and
-  // Space on the focused box toggles it through the keyboard path. The
-  // pref ends where it began.
-  s = await probe();
-  const smoothBefore = s.stageToggles.smooth;
-  const trisBefore = s.stats.tris;
-  const smoothBox = await centreOf('#stage-smooth');
-  await click(smoothBox.x, smoothBox.y);
-  await sleep(400);
-  s = await probe();
-  const stageRaised = await evaluate(
-    `(() => {${DEEP}
-      const ids = [...document.querySelectorAll('vf-window')].map((w) => w.id);
-      return ids.indexOf('win-stage') > ids.indexOf('win-tools');
-    })()`
-  );
-  check(
-    'one click on a 3D View checkbox flips it, the 3D View not frontmost (re-meshed, the windoid raised)',
-    stageRaised === true &&
-      s.stageToggles.smooth === !smoothBefore &&
-      s.stats.tris !== trisBefore,
-    JSON.stringify({
-      stageRaised,
-      before: smoothBefore,
-      smooth: s.stageToggles.smooth,
-      tris: [trisBefore, s.stats.tris],
-    })
-  );
-  await click(smoothBox.x, smoothBox.y);
-  await sleep(400);
-  s = await probe();
-  check(
-    'a second click, the 3D View frontmost, flips it back — once, never twice',
-    s.stageToggles.smooth === smoothBefore && s.stats.tris === trisBefore,
-    JSON.stringify({ smooth: s.stageToggles.smooth, tris: [trisBefore, s.stats.tris] })
-  );
-  await keyPress('Space');
-  await sleep(400);
-  s = await probe();
-  check(
-    'Space on the focused checkbox toggles it (the keyboard path)',
-    s.stageToggles.smooth === !smoothBefore && s.stats.tris !== trisBefore,
-    JSON.stringify({ smooth: s.stageToggles.smooth, tris: [trisBefore, s.stats.tris] })
-  );
-  await keyPress('Space');
-  await sleep(400);
+  // (Until Sep 4 2026 a click-and-Space run over the strip's 'smooth' box
+  // sat here — the box went with its toggle, the wedge pass always on; its
+  // app-level witness was the tri count moving. The one box left, rotate,
+  // has no headless witness — the spin is the loop's per-frame read — and
+  // the kit's own click / raise timing is the kit's to test.)
   // The document window was dragged +40/+24 above, which tucks its grow box
   // under the stage windoid (the utility tier floats over the document
   // tier). Pull it left first so the grow press lands on the box, not the
@@ -4283,7 +4246,9 @@ async function main() {
   // layered over it is the oversize intervention (a resizable window never
   // wider or taller than the open area).
   section('browser resize');
-  const STAGE_MIN = { width: 164, height: 160 }; // windows.js STAGE_MIN_*
+  // windows.js STAGE_MIN_*: the chrome (2 across; 53 down) + a 107 canvas
+  // floor on both axes.
+  const STAGE_MIN = { width: 109, height: 160 };
   const KIT_MIN = { width: 80, height: 54 }; // vf-window's own grow floor
   const raster = (snap) => ({ width: snap.dw, height: snap.dh });
   const expectWin = (w, from, to) => {

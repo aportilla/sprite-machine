@@ -20,8 +20,9 @@
 #   tools/capture.sh clean                  # reap all capture Chrome + temp dirs
 #
 # Examples:
-#   tools/capture.sh shot 'http://localhost:5173/?sample=car&lowpoly=1&rotate=0' /tmp/shot.png
-#   tools/capture.sh dom  'http://localhost:5173/?sample=car&diag=1&rotate=0'
+#   tools/capture.sh shot 'http://localhost:5173/?sample=car' /tmp/shot.png
+#   tools/capture.sh dom  'http://localhost:5173/?sample=car&diag=1'
+# (No ?rotate=0: auto-rotate is off every load, so a shot's model is at rest.)
 set -euo pipefail
 
 CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"

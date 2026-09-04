@@ -19,13 +19,14 @@ Two headless-Chrome tools verify what Node can't, both against a running dev
 server:
 
 ```bash
-tools/capture.sh shot 'http://localhost:5173/?sample=car&rotate=0' /tmp/shot.png
-tools/capture.sh dom  'http://localhost:5173/?diag=1&rotate=0'   # light-DOM shell + title
+tools/capture.sh shot 'http://localhost:5173/?sample=car' /tmp/shot.png
+tools/capture.sh dom  'http://localhost:5173/?diag=1'   # light-DOM shell + title
 node tools/drive.mjs                                             # desktop + editor smoke test
 ```
 
 `capture.sh` shows what the app **looks** like — its shots are byte-deterministic
-(fixed window size, DSF 1, virtual time budget, `rotate=0`, `?fresh=1` on a
+(fixed window size, DSF 1, virtual time budget, the model at rest — auto-rotate
+is off every load, so no `rotate=0` — `?fresh=1` on a
 machine with saved docs or a set desktop pattern, `?now=<when>` whenever
 the menu bar's clock is in frame, and a selection only ever through
 `?select=…`, whose ants stand still — a live selection's would tick between
@@ -82,9 +83,11 @@ browser reload restores exactly what's on screen. The same
 built-ins live on as **templates in File → New…**, the New Document
 dialog: an Empty Document at a chosen tile size, or a template as a
 fresh untitled copy. **Double-click a desktop icon**, pick File → Open…, or
-drop your own **3×2 sprite sheet** PNG anywhere on the window. **Smooth slopes** (low-poly additive 45° wedges) is
-on by default and toggles live in the 3D View's controls strip ("smooth",
-beside "rotate"); greedy meshing is always on.
+drop your own **3×2 sprite sheet** PNG anywhere on the window. **Smooth slopes** (low-poly additive 45° wedges) are
+**always on** — no toggle: the "smooth" checkbox that could switch them off
+left the 3D View's controls strip on Sep 4 2026, and the one control there
+now is **rotate**, the auto-spin, **off every load** (the model sits still
+until you check it); greedy meshing is always on too.
 Sprites are hard pixel art — every texel is fully opaque or fully
 transparent — and every face with no view of its own is mirror-filled from
 its opposite at render time. The **face picker** (six pixel-art cube icons
@@ -414,11 +417,12 @@ pure authoring — no changes to the carve / colorize / mesh pipeline. See
 on that face — it's always open now, so this just picks the starting tab. It's how
 the editor gets exercised in headless screenshots (the capture tool can't click),
 and it's handy for jumping straight to a face while iterating. It joins the other
-test-only URL params: `?sample=<index|name>`, `?rotate=0`, `?lowpoly=0|1`,
-`?flat=1`, `?diag=1` (watertightness self-check — only the default low-poly/wedge
-mesh is guaranteed watertight; with `?lowpoly=0` the greedy-voxel mesh's unrepaired
-step T-junctions show as _expected_ nonzero boundary/odd edges, not holes, so the
-`DIAG` title is tagged with the mode), `?cam=top|front|fq|bq`,
+test-only URL params: `?sample=<index|name>`, `?flat=1`, `?diag=1`
+(watertightness self-check over the wedge mesh, which is guaranteed
+watertight — a nonzero boundary/odd-edge count in the `DIAG` title is a
+hole; `?rotate=0` and `?lowpoly=0|1` are gone with their toggles, Sep 4
+2026: auto-rotate is off every load and the wedge pass always on, so a
+capture's model is at rest and smooth with nothing said), `?cam=top|front|fq|bq`,
 `?tile=<N>` (or `<W>x<H>` to force an asymmetric, out-of-registration resize the
 locked-square UI can't produce) to apply one **centered** tile resize (the same
 `anchor:'center'` path the stepper drives) after the first build,
@@ -552,7 +556,7 @@ forward.
 
 - **Sprite Machine** — _About…_ (the About box — see
   [The About box](#the-about-box); it is also the boot greeting),
-  _Settings…_ (parked: the render prefs
+  _Settings…_ (parked: the render toggle
   moved to the 3D View's controls strip, so the emptied item sits disabled
   as a placeholder for a future settings surface), _Desktop Patterns_ (the
   control panel — see [Desktop Patterns](#desktop-patterns); a window, not
@@ -783,10 +787,12 @@ Patterns control panel (document tier, not a document — see
   `fitSprite` in `shell/windows.js`), so the grid exactly fills the body
   below the header — no margins — at boot and across document switches
   and tile resizes; the **3D View** carries its **controls strip** in its
-  header (`STAGE_STRIP` tall) — the two render toggles as checkboxes,
-  **rotate** (auto-spin) and **smooth** (the low-poly wedge pass), a kit
-  row stack writing the prefs slice live (`sm-stage-controls`; these
-  lived in Settings… before) — over the THREE canvas in a **kit pattern
+  header (`STAGE_STRIP` tall) — one render toggle as a checkbox,
+  **rotate** (the auto-spin, **off every load**: the model sits still
+  until asked), a kit row stack writing the prefs slice live
+  (`sm-stage-controls`; it lived in Settings… before, and a **smooth**
+  box sat beside it until Sep 4 2026 — the low-poly wedge pass is always
+  on now, no toggle) — over the THREE canvas in a **kit pattern
   well** (`#stage-well`, a `vf-container pattern="gray-12"` filling the
   body by its own `fill-width fill-height`): the renderer clears
   **transparent** (`alpha: true`, no scene
@@ -799,9 +805,9 @@ Patterns control panel (document tier, not a document — see
   strip's hover tooltip. The 3D View
   carries its own size floor (`shell/windows.js` — declared to the grow box
   as the kit's `min-width` / `min-height`, and applied to any boot geometry
-  and raster re-pin alike): width at the controls strip's content width so
-  the checkboxes can never be clipped, height at enough canvas under the
-  strip to still read as a view.
+  and raster re-pin alike): one rule on both axes, the fixed chrome plus
+  enough canvas to still read as a view — the strip's one checkbox sits
+  well inside the width (the two-box row used to floor it).
 - **The 3D Sprite Atlas** (`sm-ring-view`, `#win-ring` — "ring" is the
   feature's code name throughout the source: the model rendered from a
   **ring** of yaw angles) — the active document's model rendered
@@ -1232,14 +1238,17 @@ flatShading })`. One draw call, real shadows, and `flatShading` lets the
 
 ### Render modes
 
-| Mode           | What it is                                            | Use                                           |
-| -------------- | ----------------------------------------------------- | --------------------------------------------- |
-| **voxel (3D)** | Visual-hull voxel solid (above), greedy-meshed        | The real object (low-poly off)                |
-| **low-poly**   | Voxel solid + 45° wedges over same-surface staircases | Softer silhouette, fewer hard steps (default) |
+One, always: the **low-poly** mesh — the visual-hull voxel solid (above),
+greedy-meshed, with 45° wedges added over same-surface staircases — is
+what the 3D View, the 3D Sprite Atlas and the export all render. The
+"smooth" checkbox that could switch the wedges off (leaving the plain
+greedy-voxel solid, every step a hard step) went on Sep 4 2026; that
+builder, `voxelMesh` in `src/lib/mesh.js`, stays in the library,
+Node-tested, with no consumer in the app.
 
 ### Low-poly (additive wedges)
 
-Low-poly mode keeps the voxel solid and **adds 45° wedges** into concave
+The low-poly mesh keeps the voxel solid and **adds 45° wedges** into concave
 unit-step notches — a staircase of same-surface voxels becomes a smooth ramp
 (windshield, roof, wheel arch). It's **additive only**: wedges fill notches, so
 they can never punch a hole or eat the object, and a shape with no staircase (a
@@ -1400,8 +1409,9 @@ src/lib/
   pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
   t-junction.js   lattice-exact T-junction repair for merged+wedge meshes (pure)
   mesh-util.js    shared vertex-color linearizer + mesh finishing (THREE)
-  mesh.js         quads -> merged, vertex-colored THREE.Mesh    (voxel mode; THREE)
-  wedge-mesh.js   voxel solid + additive 45° wedges             (low-poly mode; THREE)
+  mesh.js         quads -> merged, vertex-colored THREE.Mesh    (the plain greedy builder — Node-tested,
+                  no app consumer since the smooth toggle went, Sep 4 2026; THREE)
+  wedge-mesh.js   voxel solid + additive 45° wedges             (THE mesh, always on; THREE)
   sprite-data.js  built-in defaults (as atlases): first-boot seeds + New-dialog templates, + grid->ImageData helper
   png-chunks.js   PNG chunk surgery: parse + tEXt/iTXt read/replace, CRC32 — the document format (pure)
   diag.js         geometry watertightness self-check (dev only; ?diag=1)
@@ -1424,9 +1434,10 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
                       and followActive() — the follow-the-active-document primitive
   session.js          editor session (app-level): tool, ink, per-tool options, picker
                       flag — one palette, one ink, however many documents are open
-  prefs.js            lowpoly / autoRotate (the render toggles; the 3D View's controls strip writes them)
-                      + showRing (the 3D Sprite Atlas windoid; View → 3D Sprite Atlas and its close
-                      box write it, off by default)
+  prefs.js            autoRotate (the one render toggle — the 3D View's controls strip writes it; OFF
+                      every load. The low-poly pass has no toggle: always on) + showRing (the 3D
+                      Sprite Atlas windoid; View → 3D Sprite Atlas and its close box write it, off by
+                      default)
   ring.js             the 3D Sprite Atlas's settings (views / elevation / offset / size — the tile's
                       edge in px — app-level, session-only, clamped setters) + the SHEET CHANNEL (the
                       rendered sheet, by reference, the doc's onLive shape) + ringMetaChunks (the
@@ -1447,7 +1458,8 @@ src/storage/
 src/scene/
   stage.js        renderer, camera + orbit controls, lights, ground, framing, on-demand render loop, resize
   rebuilder.js    the pipeline's ONLY consumer: follows the ACTIVE document (change+live channels,
-                  re-wired per activation) + prefs -> buildVoxels -> mesh swap -> build stats;
+                  re-wired per activation) -> buildVoxels -> the wedge mesh (always) -> mesh swap
+                  -> build stats;
                   a window switch re-frames the camera (a new subject); hands every mesh (and
                   null before a dispose) to one outside consumer through the onMesh seam
   ring-renderer.js  the 3D Sprite Atlas's own THREE world on an offscreen canvas: a shared-geometry
@@ -1578,8 +1590,8 @@ src/
                        rules="none" vf-grid in flow, one bare vf-stack cell per view
                        painted 1:1 from the sheet channel) / the 3D View's controls
                        (sm-stage-controls, in the
-                       window's HEADER slot: the rotate + smooth checkboxes in a kit row
-                       stack -> prefs) / the windows' status
+                       window's HEADER slot: the rotate checkbox — the one toggle, off
+                       every load — in a kit row stack -> prefs) / the windows' status
                        readouts (tile = the window's edited face; build = the 3D View's fixed
                        name, the build stats riding its tooltip; the Sprite View and the
                        3D Sprite Atlas carry none) /

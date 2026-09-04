@@ -61,8 +61,6 @@ const boot = parseBootParams(location.search, {
   sampleNames: SAMPLES.map((s) => s.name),
   hash: location.hash,
 });
-if (boot.lowpoly != null) prefs.setLowpoly(boot.lowpoly);
-if (boot.rotate === false) prefs.setAutoRotate(false);
 if (boot.ring) {
   // ?ring=<views>[,<elevation>[,<offset>[,<size>[,<paper>]]]]: the 3D
   // Sprite Atlas windoid shown (it boots hidden) with its settings seeded —

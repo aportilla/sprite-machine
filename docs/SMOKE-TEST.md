@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 294 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 292 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -344,20 +344,20 @@ browser, `http://localhost:5173/`.
       the time returns; press again while the date shows — the time returns
       at once. Neither press moves focus, deactivates the app, or clears a
       selected desktop icon.
-- [ ] **3D View controls strip**: the rotate / smooth checkboxes in the
-      window's header (the white band under the dot bar) toggle live — the
-      model stops spinning / re-meshes immediately (Settings… in the menu
-      stays disabled, a parked placeholder). One click, always: click the
-      Tools palette (or any other windoid) first, then a checkbox — it
-      flips on that first click (the 3D View comes forward under it),
-      never needs a second; Space on a focused box toggles it too.
+- [ ] **3D View controls strip**: one checkbox, **rotate**, in the window's
+      header (the white band under the dot bar), UNCHECKED at boot — the
+      model sits still (orbit it by hand). Check it: the model spins at
+      once; uncheck: it stops where it is. No **smooth** box anywhere: the
+      low-poly wedge pass is always on — the Car's windshield and wheel
+      arches ramp, with nothing to switch (Settings… in the menu stays
+      disabled, a parked placeholder).
 - [ ] **Every windoid's controls are its header**: the Sprite View's six
-      cube icons and radios, the 3D View's two checkboxes and the atlas's
+      cube icons and radios, the 3D View's rotate checkbox and the atlas's
       four fields each sit in the window's header band — white paper over
       one rule, directly under the dot bar — with the body (the face
       grid, the pattern well, the tile row) starting at the rule. Zoom
       the browser to 200%: each rule is one system px, the picker block is
-      centered with a pixel of slack each side, and the checkboxes sit on
+      centered with a pixel of slack each side, and the checkbox sits on
       whole pixels.
 - [ ] **The 3D Sprite Atlas, by eye**: with the Car open, View → 3D Sprite
       Atlas — a windoid lands under the document window, left-aligned with

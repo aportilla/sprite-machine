@@ -172,10 +172,9 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     diag: params.get('diag') === '1',
     /** @type {string|null} camera preset name (main maps it to a direction) */
     cam: params.get('cam'),
-    /** @type {boolean|null} null = leave the default */
-    lowpoly: params.get('lowpoly') != null ? params.get('lowpoly') === '1' : null,
-    /** false only for ?rotate=0 (the sole documented value); else null */
-    rotate: params.get('rotate') === '0' ? false : null,
+    // No ?lowpoly and no ?rotate (gone Sep 4 2026 with their toggles): the
+    // low-poly wedge pass is always on, and auto-rotate is off every load —
+    // a capture's model is at rest with nothing said.
     /** @type {string|null} validated face name */
     edit: editParam && VIEW_NAMES.includes(editParam) ? editParam : null,
     tile,

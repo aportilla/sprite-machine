@@ -126,6 +126,7 @@ import {
   ringHeightFor,
   RING_MIN_WIDTH,
   SPRITE_WIDTH,
+  STAGE_STRIP,
   TOP_RESERVE,
   WINDOW_FRAME,
   zoomedBox,
@@ -138,15 +139,19 @@ import {
 // kit's size rect (vintage-frames 0.5.6: `min-width` / `min-height` bound
 // the drag per axis, the way GrowWindow took the app's rectangle), so no
 // correction ever runs after a vf-resize.
-// WIDTH: the controls strip in its header (sm-stage-controls — the rotate /
-// smooth checkboxes) must never be clipped: its measured content width, 159
-// (8 pad + the two checkboxes 61 + 68 + the 14 gap + 8 pad) + the frame's
-// 1px borders, rounded up a hair — if the strip's contents change,
-// re-measure and re-pin. HEIGHT: the fixed chrome (12 dot bar + 2 borders +
-// the STAGE_STRIP header + 15 status = 53) plus enough canvas to still
-// read as a view.
-const STAGE_MIN_WIDTH = 164;
-const STAGE_MIN_HEIGHT = 160;
+// ONE RULE on both axes: the fixed chrome plus enough canvas to still read
+// as a view — the same canvas extent across and down. The chrome: the
+// frame's two 1px borders across; 12 dot bar + 2 borders + the STAGE_STRIP
+// header + 15 status (53) down. The controls strip in the header
+// (sm-stage-controls — the rotate checkbox) must never be clipped, and
+// isn't: its content width, 77 (8 pad + the ~61 checkbox + 8 pad), sits
+// well inside the canvas floor. Until Sep 4 2026 a second box ('smooth')
+// made that row 159 and the ROW floored the width, at 164; if the strip
+// ever outgrows the canvas floor again, re-measure and floor at the strip.
+const STAGE_CHROME = { w: 2, h: 12 + 2 + STAGE_STRIP + 15 };
+const STAGE_CANVAS_MIN = 107;
+const STAGE_MIN_WIDTH = STAGE_CHROME.w + STAGE_CANVAS_MIN; // 109
+const STAGE_MIN_HEIGHT = STAGE_CHROME.h + STAGE_CANVAS_MIN; // 160
 // The kit's own grow floor (vf-window's MIN_WIDTH × MIN_HEIGHT — not
 // exported, restated): the floor every other resizable window re-pins
 // against, so a resize can never leave one smaller than its grow box could.

@@ -180,8 +180,8 @@ export const TOOLS_BOX = {
 // numbers as the arithmetic they enter; tools/drive.mjs pins the markup
 // against them so the two can't drift.
 //
-// The 3D View's: the kit's 20px checkbox row (rotate / smooth, a row stack
-// in sm-stage-controls) centered in the 23 over the rule — 24.
+// The 3D View's: the kit's 20px checkbox row (rotate — the one toggle, a
+// row stack in sm-stage-controls) centered in the 23 over the rule — 24.
 export const STAGE_STRIP = 24;
 // The Full Sprite View's: the FACE PICKER block — six 21px cube icons with
 // 12px gaps (186) over the kit's 19px radio row under the 26px icons (45),

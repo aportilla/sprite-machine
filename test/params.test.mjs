@@ -13,8 +13,6 @@ test('defaults: everything off / null on an empty query', () => {
       flat: b.flat,
       diag: b.diag,
       cam: b.cam,
-      lowpoly: b.lowpoly,
-      rotate: b.rotate,
       edit: b.edit,
       tile: b.tile,
       palette: b.palette,
@@ -37,8 +35,6 @@ test('defaults: everything off / null on an empty query', () => {
       flat: false,
       diag: false,
       cam: null,
-      lowpoly: null,
-      rotate: null,
       edit: null,
       tile: null,
       palette: false,
@@ -144,13 +140,11 @@ test('?sample marks itself explicit (beats the last-doc boot restore)', () => {
   assert.equal(parseBootParams('', names).sampleExplicit, false);
 });
 
-test('scene flags: lowpoly tri-state, rotate=0, flat/diag/cam', () => {
-  assert.equal(parseBootParams('?lowpoly=0').lowpoly, false);
-  assert.equal(parseBootParams('?lowpoly=1').lowpoly, true);
-  assert.equal(parseBootParams('?rotate=0').rotate, false);
-  assert.equal(parseBootParams('?rotate=1').rotate, null, 'only rotate=0 is a value');
-  const b = parseBootParams('?flat=1&diag=1&cam=fq');
+test('scene flags: flat/diag/cam (no lowpoly, no rotate — gone with their toggles)', () => {
+  const b = parseBootParams('?flat=1&diag=1&cam=fq&lowpoly=0&rotate=0');
   assert.deepEqual([b.flat, b.diag, b.cam], [true, true, 'fq']);
+  assert.equal('lowpoly' in b, false);
+  assert.equal('rotate' in b, false);
 });
 
 test('?edit validates against the face vocabulary', () => {

@@ -3,10 +3,12 @@
 // store subscriber: it FOLLOWS THE ACTIVE DOCUMENT (the 3D View serves the
 // active window), wiring that context's doc channels — change (load / resize
 // / replace-all) and LIVE (the rAF-coalesced stroke flushes; it is that
-// channel's only subscriber) — plus the lowpoly pref; each event runs
-// ingest → carve → colorize → mesh and swaps the result into the stage. It
-// writes what it measured into the `build` slice for the stats readout. No
-// active document (the desktop focused with nothing open) empties the stage.
+// channel's only subscriber); each event runs ingest → carve → colorize →
+// the low-poly wedge mesh (ALWAYS — the "smooth" toggle that could switch
+// the wedges off went on Sep 4 2026; greedy meshing under them is always on
+// too) and swaps the result into the stage. It writes what it measured into
+// the `build` slice for the stats readout. No active document (the desktop
+// focused with nothing open) empties the stage.
 //
 // Framing: a build of a NEW sheet (the doc's `sheet` generation moved) — or
 // of a newly ACTIVATED document (a window switch is a new subject) — frames
@@ -27,11 +29,9 @@
 // ---------------------------------------------------------------------------
 
 import { buildVoxels } from '../lib/pipeline.js';
-import { voxelMesh } from '../lib/mesh.js';
 import { wedgeMesh } from '../lib/wedge-mesh.js';
 import { VIEW_NAMES } from '../lib/views.js';
 import { workspace, followActive } from '../state/workspace.js';
-import { prefs } from '../state/prefs.js';
 import { build } from '../state/build.js';
 
 /**
@@ -51,7 +51,7 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     if (!current) return;
     onMesh?.(null); // the consumer drops its clone before the geometry dies
     stage.scene.remove(current);
-    // Free the GPU resources of the mesh we're replacing. Both builders emit a
+    // Free the GPU resources of the mesh we're replacing. The builder emits a
     // single vertex-colored MeshStandardMaterial (no textures to dispose).
     current.traverse?.((o) => {
       o.geometry?.dispose?.();
@@ -87,8 +87,12 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     for (const n of VIEW_NAMES) rawViews[n] = d.views[n] || null;
 
     const result = buildVoxels(rawViews, opts);
-    const lowpoly = prefs.get().lowpoly;
-    current = lowpoly ? wedgeMesh(result, { flat }) : voxelMesh(result, { greedy: true }); // greedy meshing is always on
+    // The low-poly wedge mesh, always: additive 45° wedges over same-color
+    // staircases on the greedy-meshed voxel solid. The plain greedy-voxel
+    // builder (lib/mesh.js voxelMesh — the same solid, every step a hard
+    // step) is the library's, Node-tested, with no consumer here since the
+    // "smooth" toggle went (Sep 4 2026).
+    current = wedgeMesh(result, { flat });
     if (diag && current?.geometry) {
       const geo = current.geometry; // captured: current may change before load resolves
       import('../lib/diag.js').then(({ computeDiag }) => {
@@ -96,11 +100,9 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
         // the dynamic import settles; skip a stale read rather than measure a mesh
         // that's already been replaced.
         if (geo !== current?.geometry) return;
-        // Tag the mode: only the low-poly (wedge) mesh is guaranteed watertight. The
-        // greedy-voxel mesh (lowpoly off) deliberately leaves its step-riser T-junctions
-        // unrepaired, so nonzero boundary/odd edges there are expected artifacts, not holes.
-        document.title =
-          `DIAG ${lowpoly ? 'lowpoly' : 'voxel'} ` + JSON.stringify(computeDiag(geo));
+        // The wedge mesh is guaranteed watertight (its T-junctions are repaired
+        // lattice-exactly), so a nonzero boundary/odd-edge count here is a hole.
+        document.title = 'DIAG ' + JSON.stringify(computeDiag(geo));
       });
     }
     stage.scene.add(current);
@@ -136,21 +138,13 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     return () => unsubs.forEach((u) => u());
   });
 
-  // A lowpoly toggle rebuilds too (autoRotate doesn't — the loop reads it per
-  // frame).
-  let lastLowpoly = prefs.get().lowpoly;
-  const unsubPrefs = prefs.subscribe((p) => {
-    if (p.lowpoly !== lastLowpoly) {
-      lastLowpoly = p.lowpoly;
-      rebuild();
-    }
-  });
+  // No prefs subscription: the one render pref left, autoRotate, is the
+  // loop's per-frame read (scene/stage.js), never a rebuild.
 
   return {
     // HMR teardown: stop listening (the stage disposes the scene itself).
     dispose() {
       stopFollow();
-      unsubPrefs();
     },
   };
 }
