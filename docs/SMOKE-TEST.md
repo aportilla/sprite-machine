@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 293 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 294 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -58,7 +58,7 @@ browser, `http://localhost:5173/`.
       title, tile-size readout, and Undo enablement all track the front
       window; the camera re-frames on each switch.
 - [ ] **The View menu lists the open windows**: with the Car and two
-      untitleds open, pull View — under Arrange Windows a dotted rule (the
+      untitleds open, pull View — under 3D Sprite Atlas a dotted rule (the
       kit's menu divider, a full row), then Car / untitled / untitled 2 in
       the order they opened, a ✓ beside the front window. Click another
       window and pull again — the ✓ moved, the order didn't. Pick a window
@@ -67,7 +67,7 @@ browser, `http://localhost:5173/`.
       listed, live, none checked; pick one — the application comes back
       on it, windoids and all. ⌘S an untitled under a name — its item
       relabels; close a window — its item goes; close the last — the rule
-      goes with it and the menu ends at Arrange Windows.
+      goes with it and the menu ends at 3D Sprite Atlas.
 - [ ] **Per-document undo**: draw in each of two documents; ⌘Z in one never
       touches the other's pixels.
 - [ ] **One window per saved doc**: double-click a saved doc's icon twice —
@@ -267,6 +267,12 @@ browser, `http://localhost:5173/`.
       hidden windoids for the next open (⌘J too) without activating
       anything; close every document — it greys (nothing left to arrange)
       and ⌘J does nothing.
+- [ ] **The View menu's order, by eye**: pull View — Arrange Windows (or
+      Zoom Window) leads the menu, a dotted rule right under it, then 3D
+      Sprite Atlas, then (with documents open) the second rule and the
+      window list. No Fullscreen item — the browser's Fullscreen API owns
+      Esc and hides the kit's cursor in Chrome; use the browser's own
+      window fullscreen (⌃⌘F on the Mac), which leaves Esc to the editor.
 - [ ] **New windows cascade into free slots**: File → New… four more
       times — every window the same size, each a step down-right, the
       fifth flush with the rail's inset and the bottom margin, none under

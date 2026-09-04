@@ -77,15 +77,16 @@
           <vf-menu-item value="tool-eyedropper" shortcut="I">Eyedropper</vf-menu-item>
         </vf-menu>
         <vf-menu id="menu-view" label="View">
-          <!-- The 3D Sprite Atlas windoid (#win-ring below) as a checkmark
-               toggle over prefs.showRing, OFF every load: the pick shows or
-               hides it (menus.js flips the slice and mirrors it back as the
-               check), and the windoid's own close box is the same uncheck —
-               MacPaint's palettes closed from their box and came back from
-               the menu. Document-scoped (greys with the desktop focused),
-               like the Tools menu's modes. -->
-          <vf-menu-item value="ring">3D Sprite Atlas</vf-menu-item>
-          <vf-separator></vf-separator>
+          <!-- The ⌘J item LEADS the menu — the one command over the whole
+               screen — with the rule right after it; the windoid toggle and
+               the open-windows tail follow below the rule. No Fullscreen
+               item, on purpose (tried and retired Sep 4 2026): the
+               Fullscreen API reserves Esc for its own exit in every browser,
+               beyond the page's reach — so the editor's Esc bindings (drop
+               a selection, cancel a drag) went dead in fullscreen — and
+               Chrome's top layer put the fullscreened page over the kit's
+               page-drawn cursor. The browser's own window fullscreen (⌃⌘F
+               on the Mac) leaves Esc to the page. -->
           <!-- ⌘J: ONE item, two commands, a STATE rule (menus.js owns the
                sync and writes the value AND the label): with anything on
                screen off its placement — a drag, a grow, a zoom, the
@@ -112,6 +113,15 @@
           <vf-menu-item id="item-arrange" value="arrange" shortcut="⌘J" disabled
             >Arrange Windows</vf-menu-item
           >
+          <vf-separator></vf-separator>
+          <!-- The 3D Sprite Atlas windoid (#win-ring below) as a checkmark
+               toggle over prefs.showRing, OFF every load: the pick shows or
+               hides it (menus.js flips the slice and mirrors it back as the
+               check), and the windoid's own close box is the same uncheck —
+               MacPaint's palettes closed from their box and came back from
+               the menu. Document-scoped (greys with the desktop focused),
+               like the Tools menu's modes. -->
+          <vf-menu-item value="ring">3D Sprite Atlas</vf-menu-item>
           <!-- The OPEN DOCUMENT WINDOWS follow here — a dynamic section,
                nothing in the markup: after this menu's last authored item,
                menus.js (syncWindows) keeps a separator and one item per

@@ -564,6 +564,14 @@ const PROBE = `(() => {${DEEP}
       undoEnabled: !__q('vf-menu-item[value="undo"]').disabled,
       redoEnabled: !__q('vf-menu-item[value="redo"]').disabled,
     },
+    // The View menu's authored head: the ⌘J item (by id — its value turns
+    // with the state) leads, the rule right after it, the windoid toggle (by
+    // value) below the rule.
+    viewHead: [...__q('#menu-view').children]
+      .slice(0, 3)
+      .map((el) =>
+        el.tagName === 'VF-SEPARATOR' ? '---' : el.id || el.getAttribute('value')
+      ),
     // The View menu's open-windows section (menus.js syncWindows): one item
     // per open document window after a separator, at the menu's tail — the
     // value \`window:<key>\`, the label the document's name, the checkmark
@@ -1960,6 +1968,24 @@ async function main() {
     `(() => {${DEEP} return !!__q('vf-menu-item[value="dither"]'); })()`
   );
   check('no menu item toggles the paper', ditherItem === false);
+
+  // --- the View menu's order: the ⌘J item leads -------------------------------
+  // The one command over the whole screen sits at the top — Arrange Windows
+  // / Zoom Window, the rule right after it — with the windoid toggle below
+  // the rule and the open-windows tail after that (windowListTrue, the
+  // multiple-documents section, pins the tail). No Fullscreen item, on
+  // purpose: the Fullscreen API reserves Esc for its own exit in every
+  // browser, beyond the page's reach — the editor's Esc bindings went dead
+  // in it — and Chrome's top layer put the fullscreened page over the kit's
+  // page-drawn cursor (tried and retired Sep 4 2026).
+  s = await probe();
+  check(
+    'the ⌘J item leads the View menu, the rule right after it, the 3D Sprite Atlas toggle below the rule',
+    s.viewHead[0] === 'item-arrange' &&
+      s.viewHead[1] === '---' &&
+      s.viewHead[2] === 'ring',
+    JSON.stringify(s.viewHead)
+  );
 
   // --- desktop: the Tools menu ------------------------------------------------
   section('tools menu');

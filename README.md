@@ -596,13 +596,8 @@ forward.
   _Fill_, _Eraser_, _Eyedropper_ — with the active one checkmarked (the same
   session truth the palette's tool strip and the S/B/R/G/E/I keys write, so a
   pick from any of the three moves all three).
-- **View** — _3D Sprite Atlas_ (a checkmark toggle over `prefs.showRing`:
-  shows and hides the **3D Sprite Atlas** windoid — see
-  [Windows](#windows) — **off every load**, the item unchecked; the
-  windoid's own close box is the same uncheck, MacPaint's palettes closing
-  from their box and coming back from the menu; document-scoped, so it
-  greys with the desktop focused),
-  _Arrange Windows_ / _Zoom Window_ ⌘J (**one item, two commands, a
+- **View** — _Arrange Windows_ / _Zoom Window_ ⌘J **leading the menu**, the
+  one command over the whole screen (**one item, two commands, a
   state rule** — which one is a reading of the windows, never of what
   was pressed last: with anything on screen off its placement — a drag,
   a grow, a zoom, the 3D Sprite Atlas shown into the doc box's band, a
@@ -629,8 +624,14 @@ forward.
   window open — nothing on screen to arrange — and, arranged, in the
   Finder role (no active window to zoom); off its placement it is live
   in both roles, so from the Finder role a pick re-rails the hidden
-  windoids too, nothing activating) — and then, after a separator, the
-  menu's tail: the **open document windows**, one item per open document
+  windoids too, nothing activating); then, after a separator,
+  _3D Sprite Atlas_ (a checkmark toggle over `prefs.showRing`:
+  shows and hides the **3D Sprite Atlas** windoid — see
+  [Windows](#windows) — **off every load**, the item unchecked; the
+  windoid's own close box is the same uncheck, MacPaint's palettes closing
+  from their box and coming back from the menu; document-scoped, so it
+  greys with the desktop focused) — and then, after a second separator,
+  the menu's tail: the **open document windows**, one item per open document
   window (System 7's Window-menu idiom). Each reads the document's name
   (its window's title, so a rename or a first save relabels it); the
   **active** window's item is checked — a reading of which window holds
@@ -643,7 +644,14 @@ forward.
   reconciled off the workspace, and with no document window open it is
   absent, separator included. The three
   permanent windoids need no toggles: they're up whenever a document
-  window is active; the 3D Sprite Atlas is the one exception.
+  window is active; the 3D Sprite Atlas is the one exception. And **no
+  _Fullscreen_ item**, on purpose — built and retired the same day (Sep 4
+  2026): the browser's Fullscreen API reserves **Esc** for its own exit,
+  in every browser and beyond the page's reach, so the editor's Esc
+  bindings (drop a selection, cancel a drag) went dead in it, and Chrome's
+  top layer put the fullscreened page over the kit's page-drawn cursor
+  (clicks landed, the arrow vanished). The browser's own window fullscreen
+  (⌃⌘F on the Mac) leaves Esc to the page.
 - **The clock** — System 7.5's menu bar clock at the bar's right end
   (`shell/clock.js` over a kit `vf-label` slotted after the last menu): the
   time in the bar's own Chicago (`7:27 PM`), ticking on the minute, its em
