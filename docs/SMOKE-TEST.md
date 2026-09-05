@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 306 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 318 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -107,11 +107,28 @@ browser, `http://localhost:5173/`.
       system px — one on, one off, a dot at the top of the paper and a dot
       against the strip's bottom rule, every dot square and no gray at any
       browser zoom (the kit's own `vf-separator`, its style hook set
-      `dotted`) — running the band's full height. Pencil: swatch | slider + `N px` (one
-      rule; the slider and its readout are one cell). Rect: swatch | radius
+      `dotted`) — running the band's full height. Pencil: swatch | popup +
+      slider + `N px` (one rule; the popup, the slider and its readout are
+      one cell). Rect: swatch | radius
       | readout (two). Fill: swatch | the two checkboxes (one). Eyedropper:
       the swatch alone, no rule dangling after it. Eraser and selection: no
       swatch, no rule. The gutter either side of a rule reads even.
+- [ ] **The tip-shape popups**: with B live the strip reads swatch | a
+      System 7 popup pill reading `circle` | the slider (about half the
+      width it was — 130 system px at most) | `N px`. Press the pill: the
+      kit's popup drops with `circle` ✓ and `square`, the checked row over
+      the pill, clear of the menu bar; pick `square` — the hover footprint
+      turns into the N×N box. E: the eraser's strip carries its own popup
+      reading `circle` (the pencil's pick did not move it), its slider the
+      same width; pick `square` there, press B — the pencil's popup still
+      reads whatever you left it on; both survive a reload as `circle`
+      (session-only settings).
+- [ ] **The circle tip**: B, slide to 5 px — the hover footprint is a disc
+      (rows 3, 5, 5, 5, 3), at 3 px a plus, at 4 px a 4×4 less its corners,
+      at 1 and 2 px the same as the square; a click stamps exactly the
+      preview, a drag lays a round-ended stroke; at the tile's edge the disc
+      clips like the box. Right-button with the circle pencil: the ants ring
+      the DISC (see below), and the release erases exactly it.
 - [ ] **Right-drag erase**: right-drag a rect over painted art — the preview
       is the marching ants around the box (no fill inside it, no halo around
       it; at a nonzero radius the ring stays the box while the release
@@ -119,14 +136,20 @@ browser, `http://localhost:5173/`.
       pencil erases under the tip, the footprint wearing the ants while the
       button is down and the ink fill back the moment it comes up;
       right-click with fill deletes the clicked region.
-- [ ] **Hover previews**: pencil hover shows the exact N×N footprint filled
+- [ ] **Hover previews**: pencil hover shows the exact footprint — the disc,
+      or with `square` picked the N×N box — filled
       with the live ink under the kit's crosshair; the eraser shows the
-      marching ants around its N×N footprint — the selection's ring,
-      marching at its pace, nothing inside it, no halo, following the size
-      slider live and clamping at the canvas edge, standing still under
+      marching ants around its footprint's OWN outline — a circle eraser at
+      5 px rings the disc (a one-px-thin octagon-ish ring, its steps
+      joined diagonally, no thicker elbows, one seam at the top row's left
+      end), a square eraser the box; the selection's dashes,
+      marching at their pace, nothing inside them, no halo, following the size
+      slider live and clamping at the canvas edge (a disc pushed off the
+      edge rings its clipped shape, closing along the edge), standing still under
       reduce-motion; the eyedropper shows the same ring around the one
       texel it would sample, marching too — no halo, nothing translucent
-      anywhere on the canvas but the art.
+      anywhere on the canvas but the art. A right-drag with the rect tool
+      still rings its BOX (the rectangle walk, corners inside it).
 - [ ] **Marching ants**: S, drag a box — a 1px black/white dashed border
       marches around it (briskly, continuously, one seam at the start
       corner); zoom the browser in — every px of it is pure black or pure

@@ -221,14 +221,26 @@ template — see [UI layer: Lit](#ui-layer-lit).
   options the tool's own; no rule dangles after the eyedropper's lone
   swatch, and a strip with no swatch has none), and the rect's strip
   carries a second between its radius stepper (a setting) and its readout
-  (a value): swatch | radius | readout, three cells. The pencil's slider
-  and its `N px` are one cell, the fill's two boxes one group. For the **pencil**, a **tip-size slider** (with an
-  `N px` readout) that stamps an
-  **N×N** square footprint and **previews it filled with the active ink** on the
+  (a value): swatch | radius | readout, three cells. The pencil's popup,
+  its slider and its `N px` are one cell (two settings of one tool), the
+  fill's two boxes one group. For the **pencil**, a **tip-shape popup**
+  (`circle` / `square` — the kit's `vf-select`, System 7's popup menu, in
+  that order; **circle every load**) and a **tip-size slider** (with an
+  `N px` readout; the slider is half the width it was — 130 system px at
+  most — since the popup joined it, Sep 5 2026) that stamps an **N-texel
+  tip**: the **circle** is the disc inscribed in the N×N box — the classic
+  pixel disc, the midpoint circle's own rows (one texel, a 2×2, a plus at
+  3, a 4×4 less its corners, 3-5-5-5-3 at 5, …), so a stroke lays a
+  round-ended line — and the **square** the whole box; one pure primitive
+  states which texels of the box a shape covers (`brushRows` in
+  `src/lib/brush.js`, Node-tested), and the stamp, the stroke and the hover
+  preview all read it, so what you see is what you paint. The pencil
+  **previews the tip filled with the active ink** on the
   canvas as you hover — the exact texels a stamp will cover, looking exactly as
   the art would after the click (under a **right button** — the momentary
   erase — the footprint wears the **erase treatment** instead for the
-  stroke's length: the marching ants, see the eraser below) — with the **OS
+  stroke's length: the marching ants around the tip's own outline, see the
+  eraser below) — with the **OS
   crosshair kept on top** marking the position. For the **rect**, a **corner-radius
   stepper** (`radius: N px`, `0` = sharp) and, across a rule, a **readout** of the drag
   in flight — the box's `width × height` in texels, the square-locked box
@@ -321,17 +333,26 @@ template — see [UI layer: Lit](#ui-layer-lit).
   load). The **eraser** (`E`) is a formal _tool_ mode, a full sibling
   of the drawing ops in the strip — not a "transparent color" in the wells: a
   pencil that writes **transparency**, sharing the pencil's stroke path but
-  carrying its **own tip-size** setting (a separate slider and a separately
-  persisted value — the two tools' settings are deliberately independent), its
+  carrying its **own tip-size** setting and its **own tip-shape** popup (a
+  separate slider and popup, separately persisted values — the two tools'
+  settings are deliberately independent; circle every load for both), its
   hover footprint the **erase treatment**: the selection's own **marching
   ants** around the texels the tip would clear — the same 1-bit ring
   (`src/lib/ants.js`, whole-px black and white runs), marching at the same
   pace on the same ticker, standing still under reduce-motion — with **no
   fill** inside it (transparency can't be previewed on an overlay) and **no
   outline** around it; the translucent red block under a haloed hairline that
-  erasing wore went Sep 5 2026. It is the one treatment every erase wears:
-  the eraser's hover and stroke, a right-button pencil stroke, the rect
-  tool's right-drag. The ink stays a solid color throughout, and **picking any
+  erasing wore went Sep 5 2026. **The ring is the tip's own outline**: a
+  circle eraser's ants ring the **disc** — `antsOutlineRuns` walks the thin
+  boundary of any row-convex shape (every px with a neighbour outside, each
+  once, clockwise from the top row's left end, treads walked and risers
+  stepped diagonally so the ring stays one px thin and 8-connected the way a
+  circle outline is drawn), the rectangle's walk its exact special case —
+  over the tip's clipped system-px rows (`brushSpans`), so at the tile's
+  edge the ring closes along the edge. It is the one treatment every erase
+  wears: the eraser's hover and stroke, a right-button pencil stroke (the
+  pencil's own disc), the rect tool's right-drag (its box). The ink stays a
+  solid color throughout, and **picking any
   color while the eraser is held returns to the pencil** — a pick means "paint
   with this". A **right-click** is the _momentary_ erase with any tool (the
   right-drag rect is the rectangular erase; a right-click fill deletes a
@@ -474,8 +495,9 @@ capture's model is at rest and smooth with nothing said), `?cam=top|front|fq|bq`
 `?tile=<N>` (or `<W>x<H>` to force an asymmetric, out-of-registration resize the
 locked-square UI can't produce) to apply one **centered** tile resize (the same
 `anchor:'center'` path the stepper drives) after the first build,
-`?palette=1` to open the 168-color "Colors" dialog on the first mount, `?cursor=<N>`
-to set the pencil size to N and draw its filled footprint preview at the tile center
+`?palette=1` to open the 168-color "Colors" dialog on the first mount, `?cursor=<N>[,<shape>]`
+to set the pencil size to N (and its tip shape, `circle` or `square`; an
+unknown name leaves the session's) and draw its filled footprint preview at the tile center
 on mount, `?pick=<N>` to select `PALETTE_168[N]` as the ink on mount (as if picked
 from the dialog) so a shot can show it landing as the current-ink swatch, and
 `?rect=<x0,y0,x1,y1[,r[,sq]]>` to select the rect tool and draw its live drag preview
@@ -1367,7 +1389,14 @@ grayscale ramp is row 1), and the exact set of within-wedge-tolerance color
 pairs (all same-hue neighbors — no gray pair merges) so the wedge-safety note
 can't drift.
 `test/brush.test.mjs` pins the pencil primitives (Bresenham continuity, footprint
-anchoring, the transparent-idempotence rule). `test/png-chunks.test.mjs` pins
+anchoring, the two tip shapes — the circle's rows the classic pixel disc at
+every size, centered and never empty, the square the box — the clipped
+system-px spans the erase ring walks, the transparent-idempotence rule), and
+`test/ants.test.mjs` the marching ants' 1-bit raster (the clockwise ring
+walk, the dash cycle, the march, the seam — and the outline ring: a box's
+spans reproduce the rectangle's runs exactly, a disc's walk is its thin
+boundary once, 8-connected, closed, clockwise and inked, clipped discs
+included). `test/png-chunks.test.mjs` pins
 the document format's chunk surgery (round-trip, CRC against the published
 IEND reference, splice position, replace semantics, unknown-chunk
 passthrough).
@@ -1375,7 +1404,8 @@ passthrough).
 The **app-state layer** (`src/state/`) is pure JS with the same treatment:
 `test/store.test.mjs` (the observable store: by-reference values, silent no-op
 patches), `test/session.test.mjs` (tool/ink semantics,
-clamp-on-resize), `test/doc.test.mjs` (the two-channel canonical document: silent
+clamp-on-resize, the two tools' independent tip shapes and their setters'
+two-name gate), `test/doc.test.mjs` (the two-channel canonical document: silent
 stroke writes, rAF-coalesced blit-then-notify via an injectable scheduler, the
 drain-before-consume guard, blank-revert, the sheet generation), `test/derive.test.mjs`
 (the per-face view model: tile identity, derived faces, mirrored onion-skin),
@@ -1453,7 +1483,13 @@ src/lib/
   fill.js         editor fill tool: contiguous flood + global color replace (pure)
   select.js       editor selection tool: bounds helpers, the axis lock, lift / clear / composite —
                   the base + float model with the transparency rule and the no-wrap clip (pure)
-  brush.js        editor pencil primitives: writeTexel / stampBrush / strokeLine (Bresenham) (pure)
+  brush.js        editor pencil primitives: PENCIL_SHAPES (circle / square) + brushRows (the tip's
+                  texels per row — the disc or the box) + brushSpans (those rows clipped to the tile
+                  as system-px spans, the erase ring's input) / writeTexel / stampBrush / strokeLine
+                  (Bresenham) (pure)
+  ants.js         the marching ants' 1-bit raster: antsRuns (a frame's ring as whole-px black/white
+                  runs, the dash cycle + march + seam) and antsOutlineRuns (the same dashes around any
+                  row-convex shape's thin boundary — a circle tip's disc; the box its special case) (pure)
   pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
   t-junction.js   lattice-exact T-junction repair for merged+wedge meshes (pure)
   mesh-util.js    shared vertex-color linearizer + mesh finishing (THREE)
@@ -1481,7 +1517,8 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
                       activeKey (the kit's vf-activate mirrored in), untitled naming, per-context
                       dirty tracking, the stored flows (openStored/save/duplicate/rename/export),
                       and followActive() — the follow-the-active-document primitive
-  session.js          editor session (app-level): tool, ink, per-tool options, picker
+  session.js          editor session (app-level): tool, ink, per-tool options (the pencil's and the
+                      eraser's tip size AND tip shape, each tool's its own; circle every load), picker
                       flag — one palette, one ink, however many documents are open
   prefs.js            autoRotate (the one render toggle — the 3D View's controls strip writes it; OFF
                       every load. The low-poly pass has no toggle: always on) + showRing (the 3D
@@ -1613,10 +1650,11 @@ src/
                        selection/pencil/rect/fill gestures (the selection's base + float + offset
                        composited in place, its ants on their own layer), integer-scale layout,
                        overlay layers, gesture-scoped keys, per-gesture undo capture (sm-commit)
-    draw-overlays.js   pure canvas painters for the hover footprint / rect drag preview / the
-                       marching ants — the selection's ring, and the same ring around a footprint:
-                       the erase treatment's (the eraser's footprint, a right-button stroke, a rect
-                       drag erasing) and the eyedropper's sample target
+    draw-overlays.js   pure canvas painters for the hover footprint (the tip's disc or box, row by
+                       row) / rect drag preview / the marching ants — the selection's ring, and the
+                       same dashes around a footprint's OWN outline (a circle tip's disc as a disc):
+                       the erase treatment's (the eraser's footprint, a right-button stroke; a rect
+                       drag erasing rings its box) and the eyedropper's sample target
     sm-face-picker.js, sm-tool-strip.js, sm-tool-options.js
                        presentational leaves: props down, bubbling sm-* events up, no store imports
     sm-options-bar.js, sm-tools-panel.js, sm-atlas-controls.js, sm-atlas-view.js,

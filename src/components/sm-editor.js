@@ -180,7 +180,9 @@ export class SmEditor extends LitElement {
             .tool=${s.tool}
             .ink=${s.ink}
             .pencilSize=${s.pencilSize}
+            .pencilShape=${s.pencilShape}
             .eraserSize=${s.eraserSize}
+            .eraserShape=${s.eraserShape}
             .cornerRadius=${s.cornerRadius}
             .fillContiguous=${s.fillContiguous}
             .fillAllFaces=${s.fillAllFaces}

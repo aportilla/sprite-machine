@@ -1,8 +1,12 @@
 // ---------------------------------------------------------------------------
 // <sm-tool-options> — the draw box's per-tool options bar: the pencil's
-// tip-size slider (with a live readout), the eraser's OWN tip-size slider (an
-// independent setting and a deliberately separate branch — not a DRY slip; the
-// two tools' options may diverge), the rect's corner-radius field beside a
+// TIP-SHAPE POPUP (`circle` / `square` — the kit's vf-select, System 7's
+// popup menu, in the two options' order with circle the boot value) and its
+// tip-size slider (with a live readout; the slider half the width it had —
+// 130 system px at most, 260 before the popup joined it, Sep 5 2026), the
+// eraser's OWN popup and slider (independent settings, both, and a
+// deliberately separate branch — not a DRY slip; the two tools' options may
+// diverge), the rect's corner-radius field beside a
 // READOUT of the drag in flight (its box's width × height in texels, live
 // through the drag, `0 × 0` at rest), the fill's two checkboxes, or the
 // selection's READOUT alone — a tool with no settings: its strip states the
@@ -21,17 +25,19 @@
 // tool's options whenever both are up (sm-options-bar), and the rect's
 // branch here puts one between the radius stepper (a setting) and the
 // readout (a value); never between a control and its own readout — the
-// pencil's slider and its `N px` are one cell, the fill's two boxes one
-// group. For a wall in this leaf to reach the band the host itself
+// pencil's popup, its slider and its `N px` are one cell (two settings of
+// one tool, the fill's idiom — the eraser's the same), the fill's two boxes
+// one group. For a wall in this leaf to reach the band the host itself
 // stretches to the row's height (its own `align-self: stretch` below — the
 // bar centers its children, which would otherwise shrink-wrap the host to
 // its tallest control). A presentational LEAF: props down (`tool`, values +
 // clamp BOUNDS — the clamping itself lives in the session actions the
 // container calls — and the two outlines, `selection` / `rectDrag`),
-// bubbling `sm-set-pencil-size {n}` / `sm-set-eraser-size {n}` /
+// bubbling `sm-set-pencil-size {n}` / `sm-set-pencil-shape {shape}` /
+// `sm-set-eraser-size {n}` / `sm-set-eraser-shape {shape}` /
 // `sm-set-corner-radius {n}` / `sm-set-fill-opts {contiguous?|allFaces?}`
 // events up. `live()` bindings throughout, so a re-render can't skip a
-// re-sync after typing.
+// re-sync after typing (or a popup pick the session rejects).
 //
 // This element IS the options area (`:host` carries the box — it fills the
 // desktop's options strip beside the current-ink swatch); its shadow root
@@ -42,6 +48,7 @@
 import 'vintage-frames';
 import { css, LitElement, html, nothing } from 'lit';
 import { live } from 'lit/directives/live.js';
+import { PENCIL_SHAPES } from '../lib/brush.js';
 import { baseStyles } from './base-styles.js';
 
 export class SmToolOptions extends LitElement {
@@ -66,9 +73,14 @@ export class SmToolOptions extends LitElement {
         align-items: center;
         gap: calc(var(--vf-scale, 1) * 12px);
       }
+      /* The tip slider: half the width it had (260 → 130, Sep 5 2026 — "much
+         less wide, say about half") now that the shape popup shares its
+         cell; the eraser's rides the same class so the two strips match.
+         Still flex: 1 under the cap, so a tiny raster shrinks it rather
+         than overflowing the band. */
       .editor-size-slider {
         flex: 1;
-        max-width: calc(var(--vf-scale, 1) * 260px);
+        max-width: calc(var(--vf-scale, 1) * 130px);
       }
     `,
   ];
@@ -76,7 +88,11 @@ export class SmToolOptions extends LitElement {
   static properties = {
     tool: {},
     pencilSize: { type: Number },
+    /** The pencil's tip shape: one of lib/brush.js PENCIL_SHAPES. */
+    pencilShape: {},
     eraserSize: { type: Number },
+    /** The eraser's own tip shape, the same two names. */
+    eraserShape: {},
     brushMax: { type: Number },
     cornerRadius: { type: Number },
     radiusMax: { type: Number },
@@ -95,7 +111,9 @@ export class SmToolOptions extends LitElement {
     super();
     this.tool = 'pencil';
     this.pencilSize = 1;
+    this.pencilShape = 'circle';
     this.eraserSize = 1;
+    this.eraserShape = 'circle';
     this.brushMax = 1;
     this.cornerRadius = 0;
     this.radiusMax = 0;
@@ -119,11 +137,30 @@ export class SmToolOptions extends LitElement {
     return tool !== 'eyedropper';
   }
 
+  // The tip-shape popup — the kit's popup menu over the two names, in
+  // PENCIL_SHAPES' order; it hugs its widest option, so the pill holds one
+  // width whichever is picked. Both tip tools open their cell with it, each
+  // bound to its own setting; the popup commits on the pick (vf-change).
+  #shapePopup(value, label, event) {
+    return html`
+      <vf-select
+        class="editor-tip-shape"
+        .value=${live(value)}
+        label=${label}
+        @vf-change=${(e) => this.#emit(event, { shape: e.detail.value })}
+      >
+        ${PENCIL_SHAPES.map((s) => html`<vf-option value=${s}>${s}</vf-option>`)}
+      </vf-select>
+    `;
+  }
+
   render() {
     if (this.tool === 'pencil') {
-      // vf-input fires on every drag move / key change, so the hover footprint
-      // tracks the slider in real time.
+      // The tip's shape first, then its size. vf-input fires on every drag
+      // move / key change, so the hover footprint tracks the slider in real
+      // time.
       return html`
+        ${this.#shapePopup(this.pencilShape, 'pencil tip shape', 'sm-set-pencil-shape')}
         <vf-slider
           class="editor-size-slider"
           min="1"
@@ -137,9 +174,10 @@ export class SmToolOptions extends LitElement {
       `;
     }
     if (this.tool === 'eraser') {
-      // Mirrors the pencil's slider but binds the eraser's own size — kept as
-      // its own branch on purpose (see the header note).
+      // Mirrors the pencil's cell but binds the eraser's own shape and size —
+      // kept as its own branch on purpose (see the header note).
       return html`
+        ${this.#shapePopup(this.eraserShape, 'eraser tip shape', 'sm-set-eraser-shape')}
         <vf-slider
           class="editor-size-slider"
           min="1"

@@ -95,6 +95,8 @@ import {
 import { ringFrame, ringSheet } from '../src/lib/ring.js';
 import { RING_DEFAULTS, RING_PAPERS } from '../src/state/ring.js';
 import { readTextChunks } from '../src/lib/png-chunks.js';
+import { brushBounds, brushRows, brushSpans, PENCIL_SHAPES } from '../src/lib/brush.js';
+import { antsOutlineRuns } from '../src/lib/ants.js';
 
 const APP_PORT = process.argv[2] || '5173';
 const DBG_PORT = +(process.env.DRIVE_DEBUG_PORT || 9333);
@@ -217,6 +219,8 @@ const NAMED_KEYS = {
   Enter: { key: 'Enter', code: 'Enter', vk: 13, text: '\r' },
   Backspace: { key: 'Backspace', code: 'Backspace', vk: 8, text: '' },
   Space: { key: ' ', code: 'Space', vk: 32, text: ' ' },
+  Home: { key: 'Home', code: 'Home', vk: 36, text: '' },
+  ArrowRight: { key: 'ArrowRight', code: 'ArrowRight', vk: 39, text: '' },
 };
 
 // A key descriptor: named keys from the table, or any single printable char.
@@ -450,6 +454,19 @@ const PROBE = `(() => {${DEEP}
     opts: (() => {
       const o = __q('sm-tool-options');
       return o ? [...o.shadowRoot.children].map((c) => c.tagName.toLowerCase()) : null;
+    })(),
+    // The pencil's tip-shape popup in the strip (the kit's vf-select, the
+    // pencil's strip alone): its value, and its options' values in order —
+    // both null with no popup up (another tool's strip, or the strip hidden).
+    tipShape: (() => {
+      const o = __q('sm-tool-options');
+      const sel = o ? o.shadowRoot.querySelector('vf-select') : null;
+      return sel ? sel.value : null;
+    })(),
+    tipShapeOptions: (() => {
+      const o = __q('sm-tool-options');
+      const sel = o ? o.shadowRoot.querySelector('vf-select') : null;
+      return sel ? [...sel.querySelectorAll('vf-option')].map((op) => op.value) : null;
     })(),
     // The strip's trailing readout ("N px" for the size sliders) — how the checks
     // see a slider's value without reaching into the kit's internals.
@@ -1304,14 +1321,25 @@ async function main() {
       ts.win.height === TOOLS_BOX.height,
     JSON.stringify(ts)
   );
+  // The pencil's strip: the tip-shape popup (the kit's vf-select), the tip
+  // slider and its readout — the popup's options the lib's two shape names
+  // in its order, circle the boot value.
   check(
-    'the options strip shows the pencil slider',
-    s.opts.join(',') === 'vf-slider,vf-label'
+    "the options strip shows the pencil's tip-shape popup, slider and readout",
+    s.opts.join(',') === 'vf-select,vf-slider,vf-label',
+    s.opts.join(',')
+  );
+  check(
+    'the tip-shape popup boots on circle, its options the two shape names in order',
+    s.tipShape === 'circle' &&
+      !!s.tipShapeOptions &&
+      s.tipShapeOptions.join(',') === PENCIL_SHAPES.join(','),
+    JSON.stringify({ shape: s.tipShape, options: s.tipShapeOptions })
   );
   // The strip's cells are walled by the kit's vertical rule: one between the
-  // ink swatch and the tool's options (the slider and its readout are one
-  // cell — no rule inside the leaf for the pencil), drawn dotted through the
-  // kit's own hook, which reaches the leaf's shadow root too.
+  // ink swatch and the tool's options (the popup, the slider and its readout
+  // are one cell — no rule inside the leaf for the pencil), drawn dotted
+  // through the kit's own hook, which reaches the leaf's shadow root too.
   check(
     "one dotted rule walls the ink swatch off from the pencil's options",
     s.stripRules === 1 && s.stripRuleStyle === 'dotted',
@@ -1443,9 +1471,9 @@ async function main() {
   s = await probe();
   check('E selects the eraser tool', s.drawTool === 'eraser', s.drawTool);
   check(
-    'eraser options are its own size slider',
-    s.opts.join(',') === 'vf-slider,vf-label',
-    s.opts.join(',')
+    'eraser options are its own tip-shape popup, slider and readout — the popup on circle',
+    s.opts.join(',') === 'vf-select,vf-slider,vf-label' && s.tipShape === 'circle',
+    JSON.stringify({ opts: s.opts, popup: s.tipShape })
   );
   check(
     'the eraser hides the ink swatch (and no rule stands in a strip with no swatch)',
@@ -1493,6 +1521,62 @@ async function main() {
     `dim labels: ${s.optsDim}`
   );
 
+  // THE RING FOLLOWS THE TIP'S SHAPE: at this size the circle eraser's hover
+  // ring is the DISC's thin outline — lib/ants.js antsOutlineRuns over the
+  // clipped spans lib/brush.js brushSpans states, the oracle here — not the
+  // box's 4Nk − 4, and still 1-bit, nothing inside it.
+  const eraserN = Number(readoutNums(s));
+  const ringPx = (shape) =>
+    antsOutlineRuns(brushSpans(20, 20, eraserN, shape, TILE, TILE, kE), 0).reduce(
+      (n, r) => n + r.w * r.h,
+      0
+    );
+  const kE = await evaluate(
+    `(() => {${DEEP} return __qd('.editor-canvas-cursor').width / ${TILE}; })()`
+  );
+  await mouse('mouseMoved', at(20, 20).x, at(20, 20).y, { buttons: 0 });
+  await sleep(100);
+  const discInks = await layerInks('.editor-canvas-cursor');
+  check(
+    "the circle eraser's ring is the disc's own outline — 1-bit, and not the box's ring",
+    eraserN > 2 &&
+      discInks.other === 0 &&
+      discInks.black + discInks.white === ringPx('circle') &&
+      discInks.black + discInks.white !== 4 * eraserN * kE - 4,
+    JSON.stringify({ inks: discInks, n: eraserN, k: kE, disc: ringPx('circle') })
+  );
+
+  // The eraser's tip SHAPE is its own setting too: pick square in ITS popup
+  // (through the kit's control — a quick click drops the list, a second
+  // click picks), flip to the pencil, and the pencil's popup still reads
+  // circle; flip back and the eraser's square held.
+  const pickShape = async (shape) => {
+    const pill = await centreOf('.editor-tip-shape');
+    await click(pill.x, pill.y);
+    await sleep(250);
+    const opt = await centreOf(`vf-option[value="${shape}"]`);
+    await click(opt.x, opt.y);
+    await sleep(500); // the kit's selection blink (~250 ms), then the commit
+  };
+  await pickShape('square');
+  s = await probe();
+  check(
+    "picking square in the eraser's popup sets the eraser's tip shape",
+    s.tipShape === 'square',
+    s.tipShape
+  );
+  // …and the same hover now rings the box: 4Nk − 4 px, the frame's walk.
+  await mouse('mouseMoved', at(20, 20).x, at(20, 20).y, { buttons: 0 });
+  await sleep(100);
+  const boxInks = await layerInks('.editor-canvas-cursor');
+  check(
+    "the square eraser's ring is the box's: 4Nk − 4 px",
+    boxInks.other === 0 &&
+      boxInks.black + boxInks.white === 4 * eraserN * kE - 4 &&
+      boxInks.black + boxInks.white === ringPx('square'),
+    JSON.stringify({ inks: boxInks, n: eraserN, k: kE })
+  );
+
   await keyPress('b');
   s = await probe();
   check('B returns to the pencil', s.drawTool === 'pencil', s.drawTool);
@@ -1502,10 +1586,20 @@ async function main() {
     s.optsReadout
   );
   check(
+    "…nor its shape the eraser's popup: the pencil's reads circle",
+    s.tipShape === 'circle',
+    s.tipShape
+  );
+  check(
     "…and the pencil's readout is plain ink too (no dim label)",
     s.optsDim === 0,
     `dim labels: ${s.optsDim}`
   );
+  await keyPress('e');
+  s = await probe();
+  check("E again: the eraser's own square held", s.tipShape === 'square', s.tipShape);
+  await pickShape('circle'); // back as it booted
+  await keyPress('b');
 
   // --- pencil ---------------------------------------------------------------
   section('pencil');
@@ -1517,6 +1611,125 @@ async function main() {
     'a drag paints the whole Bresenham run',
     strokeStart[3] === 255 && strokeEnd[3] === 255,
     `start=${strokeStart} end=${strokeEnd}`
+  );
+
+  // THE TIP SHAPE (Sep 5 2026): the strip's popup — the kit's vf-select —
+  // switches the pencil between the disc inscribed in the N×N box (circle,
+  // the boot shape) and the box itself. The checks reach the app's wiring —
+  // the canvas reading the session's shape for the hover preview and the
+  // stamp — with lib/brush.js brushRows as the oracle: the same primitive
+  // the canvas paints from, so the check is that the canvas follows the
+  // popup, not the disc's arithmetic (test/brush.test.mjs pins that). The
+  // popup is driven through the kit's control (pickShape, above).
+  //
+  // A mid-track click sets a tip big enough for the disc to differ from its
+  // box (a 1 or 2 px tip IS its box under either shape).
+  const pencilSlider = await centreOf('.editor-size-slider');
+  await click(pencilSlider.x, pencilSlider.y);
+  await sleep(150);
+  s = await probe();
+  const tipN = Number(readoutNums(s));
+  check(
+    'the pencil slider sets a tip past 2 px for the disc checks',
+    tipN > 2,
+    s.optsReadout
+  );
+  // The disc's texels inside the tile, the oracle's clipped count.
+  const discTexels = (n, cx, cy) => {
+    let c = 0;
+    brushRows(cx, cy, n, 'circle', (y, xl, xr) => {
+      if (y < 0 || y >= TILE) return;
+      c += Math.max(0, Math.min(TILE - 1, xr) - Math.max(0, xl) + 1);
+    });
+    return c;
+  };
+  // The hover preview at the tile center: exactly the disc's texels at k
+  // system px per texel (the cursor layer's backing is tileW·k wide), in the
+  // ink, one color, full alpha — and fewer than the box's. A hover paints
+  // nothing, so the art the later sections read stays as shipped.
+  const hoverAt = at(20, 20);
+  await mouse('mouseMoved', hoverAt.x, hoverAt.y, { buttons: 0 });
+  await sleep(100);
+  const k = await evaluate(
+    `(() => {${DEEP} return __qd('.editor-canvas-cursor').width / ${TILE}; })()`
+  );
+  const discPreview = await layerSolid('.editor-canvas-cursor');
+  check(
+    'the circle hover preview is exactly the disc in the ink — fewer texels than the box',
+    discPreview.painted === discTexels(tipN, 20, 20) * k * k &&
+      discPreview.painted < tipN * tipN * k * k &&
+      discPreview.distinct === 1 &&
+      discPreview.translucent === 0,
+    JSON.stringify({ preview: discPreview, n: tipN, k, disc: discTexels(tipN, 20, 20) })
+  );
+  // The stamp: a 5 px disc (rows 3, 5, 5, 5, 3) in the tile's bottom-right
+  // corner, clear of every texel the eyedropper and rect sections read —
+  // the slider still has focus from its click, so Home then four steps set
+  // the size. The box's corner texel is spared (unchanged), the top arm's
+  // texel and the center painted in the ink.
+  await keyPress('Home');
+  for (let i = 0; i < 4; i++) await keyPress('ArrowRight');
+  await sleep(150);
+  s = await probe();
+  const stampAt = { px: 37, py: 36 };
+  const discBox = brushBounds(stampAt.px, stampAt.py, 5);
+  const cornerBefore = await texelAt(discBox.x0, discBox.y0);
+  await click(at(stampAt.px, stampAt.py).x, at(stampAt.px, stampAt.py).y);
+  await sleep(150);
+  const cornerAfter = await texelAt(discBox.x0, discBox.y0);
+  const armAfter = await texelAt(stampAt.px, discBox.y0);
+  const centerAfter = await texelAt(stampAt.px, stampAt.py);
+  const inkNow = (await probe()).inkColor;
+  check(
+    "a click stamps the 5 px disc: the box's corner texel untouched, the top arm and the center in the ink",
+    s.optsReadout === '5 px' &&
+      cornerAfter.join() === cornerBefore.join() &&
+      armAfter[3] === 255 &&
+      hex(armAfter) === inkNow &&
+      centerAfter[3] === 255 &&
+      hex(centerAfter) === inkNow,
+    JSON.stringify({
+      readout: s.optsReadout,
+      corner: [cornerBefore, cornerAfter],
+      arm: armAfter,
+      center: centerAfter,
+      ink: inkNow,
+    })
+  );
+  // The square through the popup: the same hover is the whole 5×5 box, the
+  // pill reading square; then circle back through it — the disc again (21
+  // texels), the popup switching both ways with the canvas following.
+  await pickShape('square');
+  await mouse('mouseMoved', hoverAt.x, hoverAt.y, { buttons: 0 });
+  await sleep(100);
+  const boxPreview = await layerSolid('.editor-canvas-cursor');
+  s = await probe();
+  check(
+    'picking square: the hover preview is the whole 5×5 box, the pill reading square',
+    s.tipShape === 'square' && boxPreview.painted === 25 * k * k,
+    JSON.stringify({ shape: s.tipShape, preview: boxPreview, k })
+  );
+  await pickShape('circle');
+  await mouse('mouseMoved', hoverAt.x, hoverAt.y, { buttons: 0 });
+  await sleep(100);
+  const discAgain = await layerSolid('.editor-canvas-cursor');
+  s = await probe();
+  check(
+    'picking circle back: the hover preview is the 5 px disc again (21 texels)',
+    s.tipShape === 'circle' && discAgain.painted === 21 * k * k,
+    JSON.stringify({ shape: s.tipShape, preview: discAgain, k })
+  );
+  // Leave the pencil as it booted for the sections that follow: the slider
+  // back to 1 px (Home on the focused slider — a click focuses it).
+  await click(pencilSlider.x, pencilSlider.y);
+  await sleep(100);
+  await keyPress('Home');
+  await sleep(150);
+  s = await probe();
+  check(
+    'the pencil leaves the section at 1 px, circle',
+    s.optsReadout === '1 px' && s.tipShape === 'circle',
+    JSON.stringify({ readout: s.optsReadout, shape: s.tipShape })
   );
 
   // --- eyedropper -----------------------------------------------------------

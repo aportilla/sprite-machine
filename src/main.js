@@ -72,12 +72,14 @@ if (boot.ring) {
   ring.setSize(boot.ring.size);
   ring.setPaper(boot.ring.paper);
 }
-// The on-mount hook order, preserved: pencil size, then pick (so ?palette
+// The on-mount hook order, preserved: pencil size (and its tip shape, when
+// ?cursor names one), then pick (so ?palette
 // reflects it and ?fill fills with it), then the dialog, then rect, then
 // fill, then select (the last tool seed wins the session's one tool).
 // The size/radius seeds are clamped for real against the tile geometry when
 // the editor first mounts (it re-clamps on any tile-geometry change).
 if (boot.cursor != null) session.setPencilSize(boot.cursor, Number.MAX_SAFE_INTEGER);
+if (boot.cursorShape) session.setPencilShape(boot.cursorShape);
 if (boot.pick != null) session.pickColor(PALETTE_168[boot.pick].rgb);
 if (boot.palette) session.openPicker();
 if (boot.rect) {

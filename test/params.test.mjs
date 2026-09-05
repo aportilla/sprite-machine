@@ -18,6 +18,7 @@ test('defaults: everything off / null on an empty query', () => {
       palette: b.palette,
       pick: b.pick,
       cursor: b.cursor,
+      cursorShape: b.cursorShape,
       rect: b.rect,
       fill: b.fill,
       select: b.select,
@@ -40,6 +41,7 @@ test('defaults: everything off / null on an empty query', () => {
       palette: false,
       pick: null,
       cursor: null,
+      cursorShape: null,
       rect: null,
       fill: null,
       select: null,
@@ -54,6 +56,31 @@ test('defaults: everything off / null on an empty query', () => {
       ring: null,
     }
   );
+});
+
+test('?cursor: the tip size, then an optional tip shape — one of the two names, riding a valid size', () => {
+  const size = (q) => {
+    const b = parseBootParams(q);
+    return { cursor: b.cursor, cursorShape: b.cursorShape };
+  };
+  assert.deepEqual(
+    size('?cursor=5'),
+    { cursor: 5, cursorShape: null },
+    'size alone: the shape unseeded'
+  );
+  assert.deepEqual(size('?cursor=5,circle'), { cursor: 5, cursorShape: 'circle' });
+  assert.deepEqual(size('?cursor=3,square'), { cursor: 3, cursorShape: 'square' });
+  assert.deepEqual(
+    size('?cursor=5,blob'),
+    { cursor: 5, cursorShape: null },
+    'an unknown shape is ignored'
+  );
+  assert.deepEqual(
+    size('?cursor=0,circle'),
+    { cursor: null, cursorShape: null },
+    'no size, no shape'
+  );
+  assert.deepEqual(size('?cursor=x'), { cursor: null, cursorShape: null });
 });
 
 test('?ring: the view count, then optional elevation / offset / size / paper (defaults fill in)', () => {

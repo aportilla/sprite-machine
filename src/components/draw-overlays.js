@@ -17,9 +17,9 @@
 // sprite is the only color on the page.
 // ---------------------------------------------------------------------------
 
-import { brushBounds } from '../lib/brush.js';
+import { brushRows, brushSpans } from '../lib/brush.js';
 import { roundedRectRows } from '../lib/rect.js';
-import { antsRuns } from '../lib/ants.js';
+import { antsRuns, antsOutlineRuns } from '../lib/ants.js';
 
 /** `scale` is whole system px per texel; `sysW`/`sysH` the layer in system px.
  *  @typedef {{tileW:number, tileH:number, scale:number, sysW:number, sysH:number}} OverlayView */
@@ -27,61 +27,59 @@ import { antsRuns } from '../lib/ants.js';
 // There are no lines over the art — no texel lattice: the dotted paper alone
 // shows through unpainted texels.
 
-// The clamped TEXEL bounds of the brush footprint at `t`, or null when the
-// whole footprint is off-tile. Every footprint painter below reads it.
-function footprintBounds(v, t, size) {
-  const b = brushBounds(t.px, t.py, size);
-  const x0 = Math.max(0, b.x0);
-  const y0 = Math.max(0, b.y0);
-  const x1 = Math.min(v.tileW - 1, b.x1);
-  const y1 = Math.min(v.tileH - 1, b.y1);
-  if (x1 < x0 || y1 < y0) return null;
-  return { x0, y0, x1, y1 };
-}
-
-// The same footprint as a system-px rect.
-function footprintRect(v, t, size) {
-  const b = footprintBounds(v, t, size);
-  if (!b) return null;
-  const s = v.scale;
-  return { x: b.x0 * s, y: b.y0 * s, w: (b.x1 - b.x0 + 1) * s, h: (b.y1 - b.y0 + 1) * s };
-}
-
 // Filled preview of the footprint the pencil would stamp: the exact texels in
 // the active ink at full opacity, so the hover shows precisely what a click
-// would leave behind (the OS crosshair marks the position — no outline). An
-// erasing footprint is drawFootprintAnts's. `t` null clears.
+// would leave behind (the OS crosshair marks the position — no outline) —
+// the N×N box, or with a `'circle'` tip the disc inscribed in it, row by row
+// through the same brushRows the stamp reads (lib/brush.js), clipped to the
+// tile. An erasing footprint is drawFootprintAnts's. `t` null clears.
 /** @param {CanvasRenderingContext2D} g @param {OverlayView} v
  *  @param {{px:number,py:number}|null} t @param {number} size
- *  @param {{r:number,g:number,b:number}} ink */
-export function drawPencilPreview(g, v, t, size, ink) {
+ *  @param {{r:number,g:number,b:number}} ink
+ *  @param {string} [shape]  one of PENCIL_SHAPES; the square when omitted */
+export function drawPencilPreview(g, v, t, size, ink, shape = 'square') {
   g.clearRect(0, 0, v.sysW, v.sysH);
   if (!t) return;
-  const r = footprintRect(v, t, size);
-  if (!r) return;
+  const s = v.scale;
   g.fillStyle = `rgb(${ink.r}, ${ink.g}, ${ink.b})`;
-  g.fillRect(r.x, r.y, r.w, r.h);
+  brushRows(t.px, t.py, size, shape, (y, xl, xr) => {
+    if (y < 0 || y >= v.tileH) return;
+    const x0 = Math.max(0, xl);
+    const x1 = Math.min(v.tileW - 1, xr);
+    if (x1 < x0) return;
+    g.fillRect(x0 * s, y * s, (x1 - x0 + 1) * s, s);
+  });
 }
 
-// The ants around a FOOTPRINT: the selection's own 1-bit ring
-// (drawMarchingAnts below: whole-px black and white runs, marching as
-// `phase` grows) on the texels a tip covers — no fill inside it, no halo
-// around it, nothing translucent. Two wearers:
+// The ants around a FOOTPRINT: the selection's own 1-bit ring (whole-px black
+// and white runs, marching as `phase` grows) around the texels a tip covers
+// — the tip's OWN outline: a circle tip's disc is ringed as a disc
+// (lib/ants.js antsOutlineRuns walks the thin boundary of the clipped px
+// spans lib/brush.js brushSpans states, the square's spans giving the
+// selection's rectangle walk exactly) — no fill inside it, no halo around
+// it, nothing translucent. Two wearers:
 //   - THE ERASE TREATMENT: transparency can't be previewed on an overlay, so
 //     an erase shows the ring around the texels it would clear (a translucent
 //     red block under a red-lined haloed hairline said "something happens
 //     here" where the ring says "this goes"; it went Sep 5 2026) — the
 //     eraser's footprint under the pointer (hover and stroke), a right-button
-//     pencil stroke's, and, through drawRectPreview, a rect drag erasing;
+//     pencil stroke's, and, through drawRectPreview, a rect drag erasing (a
+//     box — drawMarchingAnts);
 //   - the EYEDROPPER's sample target: the one texel a click would read (a
 //     haloed hairline — a 45% black halo under a 95% white line, the last
 //     translucent mark on the canvas — went the same day).
-// `t` null clears.
+// `t` null clears; a footprint wholly off the tile draws nothing.
 /** @param {CanvasRenderingContext2D} g @param {OverlayView} v
  *  @param {{px:number,py:number}|null} t @param {number} size
- *  @param {number} phase  the ants' phase — the canvas's one ticker's */
-export function drawFootprintAnts(g, v, t, size, phase) {
-  drawMarchingAnts(g, v, t ? footprintBounds(v, t, size) : null, phase);
+ *  @param {number} phase  the ants' phase — the canvas's one ticker's
+ *  @param {string} [shape]  one of PENCIL_SHAPES; the square when omitted */
+export function drawFootprintAnts(g, v, t, size, phase, shape = 'square') {
+  g.clearRect(0, 0, v.sysW, v.sysH);
+  if (!t) return;
+  fillRuns(
+    g,
+    antsOutlineRuns(brushSpans(t.px, t.py, size, shape, v.tileW, v.tileH, v.scale), phase)
+  );
 }
 
 // Live preview of a rect drag: the exact texels a commit will fill (via the
@@ -134,15 +132,25 @@ export function drawMarchingAnts(g, v, bounds, phase) {
   g.clearRect(0, 0, v.sysW, v.sysH);
   if (!bounds) return;
   const s = v.scale;
-  const runs = antsRuns(
-    {
-      x: bounds.x0 * s,
-      y: bounds.y0 * s,
-      w: (bounds.x1 - bounds.x0 + 1) * s,
-      h: (bounds.y1 - bounds.y0 + 1) * s,
-    },
-    phase
+  fillRuns(
+    g,
+    antsRuns(
+      {
+        x: bounds.x0 * s,
+        y: bounds.y0 * s,
+        w: (bounds.x1 - bounds.x0 + 1) * s,
+        h: (bounds.y1 - bounds.y0 + 1) * s,
+      },
+      phase
+    )
   );
+}
+
+// The ring's runs onto the layer: every white run in one fill, every black
+// run in another — whole-px rects, so nothing can anti-alias.
+/** @param {CanvasRenderingContext2D} g
+ *  @param {import('../lib/ants.js').AntsRun[]} runs */
+function fillRuns(g, runs) {
   for (const black of [false, true]) {
     g.fillStyle = black ? '#000' : '#fff';
     g.beginPath();

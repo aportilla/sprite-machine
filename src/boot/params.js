@@ -13,6 +13,7 @@
 import { clampTile } from '../lib/atlas.js';
 import { VIEW_NAMES } from '../lib/views.js';
 import { PALETTE_168 } from '../lib/constants.js';
+import { PENCIL_SHAPES } from '../lib/brush.js';
 import { RING_DEFAULTS, RING_PAPERS } from '../state/ring.js';
 
 /**
@@ -48,11 +49,22 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     if (m) tile = { w: clampTile(+m[1]), h: clampTile(+(m[2] ?? m[1])) };
   }
 
+  // ?cursor=<N>[,<shape>]: the pencil's tip size (and, optionally, its shape
+  // — one of PENCIL_SHAPES; anything else leaves the session's square) with
+  // the footprint previewed at the tile center on mount. The shape rides the
+  // size: with no valid size neither seeds.
   let cursor = null;
+  /** @type {string|null} */
+  let cursorShape = null;
   const cursorParam = params.get('cursor');
   if (cursorParam) {
-    const n = parseInt(cursorParam, 10);
-    if (n > 0) cursor = n;
+    const [sizeStr, shapeStr = ''] = cursorParam.split(',');
+    const n = parseInt(sizeStr, 10);
+    if (n > 0) {
+      cursor = n;
+      const shape = shapeStr.trim();
+      if (PENCIL_SHAPES.includes(/** @type {any} */ (shape))) cursorShape = shape;
+    }
   }
 
   let pick = null;
@@ -181,6 +193,8 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     palette: params.get('palette') === '1',
     pick,
     cursor,
+    /** @type {string|null} the ?cursor hook's optional tip shape */
+    cursorShape,
     rect,
     fill,
     select,

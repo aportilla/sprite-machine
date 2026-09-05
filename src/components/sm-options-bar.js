@@ -2,7 +2,8 @@
 // <sm-options-bar> — the settings strip under the menu bar: the current-ink
 // swatch (every tool that paints — the eraser and the selection hide it;
 // clicking it opens the Colors dialog) and the per-tool options
-// (<sm-tool-options>: pencil/eraser tip sliders, the rect's radius stepper
+// (<sm-tool-options>: the pencil's tip-shape popup + tip slider, the
+// eraser's own pair of the same, the rect's radius stepper
 // beside a READOUT of its drag in flight, fill checkboxes, the selection's
 // READOUT alone — a tool with no settings, whose strip says what it has
 // instead: the active window's marquee, live; each readout the box's size
@@ -136,7 +137,9 @@ export class SmOptionsBar extends LitElement {
       <sm-tool-options
         .tool=${s.tool}
         .pencilSize=${s.pencilSize}
+        .pencilShape=${s.pencilShape}
         .eraserSize=${s.eraserSize}
+        .eraserShape=${s.eraserShape}
         .brushMax=${this.#brushMax}
         .cornerRadius=${s.cornerRadius}
         .radiusMax=${this.#radiusMax}
@@ -145,7 +148,9 @@ export class SmOptionsBar extends LitElement {
         .selection=${this.#activeSelection}
         .rectDrag=${this.#activeRectDrag}
         @sm-set-pencil-size=${(e) => session.setPencilSize(e.detail.n, this.#brushMax)}
+        @sm-set-pencil-shape=${(e) => session.setPencilShape(e.detail.shape)}
         @sm-set-eraser-size=${(e) => session.setEraserSize(e.detail.n, this.#brushMax)}
+        @sm-set-eraser-shape=${(e) => session.setEraserShape(e.detail.shape)}
         @sm-set-corner-radius=${(e) =>
           session.setCornerRadius(e.detail.n, this.#radiusMax)}
         @sm-set-fill-opts=${this.#onFillOpts}

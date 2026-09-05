@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 
 import { createSession } from '../src/state/session.js';
 import { PENCIL_PALETTE } from '../src/lib/constants.js';
+import { PENCIL_SHAPES } from '../src/lib/brush.js';
 
 const RED = { r: 255, g: 0, b: 0 };
 const GREEN = { r: 0, g: 255, b: 0 };
@@ -67,6 +68,76 @@ test('setEraserSize clamps and rounds like the pencil (its own code path)', () =
   assert.equal(s.get().eraserSize, 4, 'rounded');
   s.setEraserSize(NaN, 40);
   assert.equal(s.get().eraserSize, 1, 'garbage falls back to 1');
+});
+
+test('the tip shapes: circle every load for both tools; the setters take the two names and nothing else', () => {
+  const s = createSession();
+  assert.equal(s.get().pencilShape, 'circle');
+  assert.equal(s.get().eraserShape, 'circle');
+  assert.deepEqual(
+    [...PENCIL_SHAPES],
+    ['circle', 'square'],
+    "the popups' two options, in order"
+  );
+  s.setPencilShape('square');
+  assert.equal(s.get().pencilShape, 'square');
+  s.setPencilShape('triangle');
+  assert.equal(s.get().pencilShape, 'square', 'an unknown shape is a no-op');
+  s.setPencilShape(/** @type {any} */ (undefined));
+  assert.equal(s.get().pencilShape, 'square', 'so is a missing one');
+  s.setPencilShape('circle');
+  assert.equal(s.get().pencilShape, 'circle');
+  s.setEraserShape('square');
+  assert.equal(s.get().eraserShape, 'square');
+  s.setEraserShape('blob');
+  assert.equal(s.get().eraserShape, 'square', 'the eraser setter is as strict');
+  s.setEraserShape('circle');
+  assert.equal(s.get().eraserShape, 'circle');
+});
+
+test('eraserShape is its own setting — independent of pencilShape both ways (the sizes’ rule)', () => {
+  const s = createSession();
+  s.setPencilShape('square');
+  assert.equal(
+    s.get().eraserShape,
+    'circle',
+    'setting the pencil leaves the eraser alone'
+  );
+  s.setEraserShape('square');
+  s.setPencilShape('circle');
+  assert.equal(s.get().eraserShape, 'square', 'and vice versa');
+  assert.equal(s.get().pencilShape, 'circle');
+});
+
+test('the shapes survive the sizes, the clamp, a tool switch and a color pick', () => {
+  const s = createSession();
+  s.setPencilShape('square');
+  s.setEraserShape('square');
+  s.setPencilSize(9, 40);
+  s.setEraserSize(3, 40);
+  s.clampTools(8, 4);
+  s.setTool('eraser');
+  s.pickColor(RED); // returns to the pencil — both shapes intact
+  assert.equal(s.get().tool, 'pencil');
+  assert.equal(s.get().pencilShape, 'square');
+  assert.equal(s.get().eraserShape, 'square');
+});
+
+test('the shape setters are silent on an unchanged value (the store discipline)', () => {
+  const s = createSession();
+  let fired = 0;
+  s.subscribe(() => fired++);
+  s.setPencilShape('circle'); // already circle
+  s.setEraserShape('circle');
+  assert.equal(fired, 0);
+  s.setPencilShape('square');
+  assert.equal(fired, 1);
+  s.setPencilShape('square');
+  assert.equal(fired, 1, 'a repeat pick notifies nobody');
+  s.setEraserShape('square');
+  assert.equal(fired, 2);
+  s.setEraserShape('square');
+  assert.equal(fired, 2);
 });
 
 test('the eraser is a sticky tool: selecting it leaves the ink untouched', () => {

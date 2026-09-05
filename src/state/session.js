@@ -16,6 +16,7 @@
 
 import { createStore } from './store.js';
 import { PENCIL_PALETTE } from '../lib/constants.js';
+import { PENCIL_SHAPES } from '../lib/brush.js';
 
 const clampBrush = (n, max) => Math.max(1, Math.min(max, Math.round(Number(n) || 1)));
 const clampRadius = (n, max) => Math.max(0, Math.min(max, Math.round(Number(n) || 0)));
@@ -31,9 +32,16 @@ export function createSession() {
     // The active color. Seeded from the pencil palette so it is never null.
     ink: { ...PENCIL_PALETTE[0].rgb },
     pencilSize: 1, // the pencil's N×N tip footprint, in texels
+    // The pencil's tip SHAPE — 'circle' (the disc inscribed in the N×N box,
+    // lib/brush.js brushRows) or 'square' (the whole box), the strip's popup.
+    // Circle every load. A right-button pencil stroke erases with it.
+    pencilShape: 'circle',
     // The eraser's N×N tip footprint — its OWN setting, deliberately
     // independent of the pencil's (not a DRY slip: the two may diverge).
     eraserSize: 1,
+    // …and its own tip shape, the same two names, the same independence:
+    // the eraser's popup writes this one alone. Circle every load.
+    eraserShape: 'circle',
     cornerRadius: 0, // the rect tool's corner radius, in texels (0 = sharp)
     // The fill tool's two checkboxes: a contiguous 4-connected flood by
     // default; contiguous OFF recolors every matching texel on the face, and
@@ -75,9 +83,25 @@ export function createSession() {
       store.patch({ pencilSize: clampBrush(n, max) });
     },
 
+    // The pencil's tip shape: one of PENCIL_SHAPES, anything else a no-op
+    // (the ring slice's paper setter's discipline — a stray value can never
+    // land in the store; the store itself is silent on an unchanged one).
+    /** @param {string} shape */
+    setPencilShape(shape) {
+      if (!PENCIL_SHAPES.includes(/** @type {any} */ (shape))) return;
+      store.patch({ pencilShape: shape });
+    },
+
     /** @param {number} n  @param {number} max */
     setEraserSize(n, max) {
       store.patch({ eraserSize: clampBrush(n, max) });
+    },
+
+    // The eraser's tip shape — its own code path, the size setters' idiom.
+    /** @param {string} shape */
+    setEraserShape(shape) {
+      if (!PENCIL_SHAPES.includes(/** @type {any} */ (shape))) return;
+      store.patch({ eraserShape: shape });
     },
 
     /** @param {number} n  @param {number} max */

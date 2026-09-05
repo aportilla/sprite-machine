@@ -1,10 +1,19 @@
 // Node-runnable tests for the pure pencil primitives (lib/brush.js): footprint
-// anchoring, the transparent-idempotence rule, clipping, and Bresenham
-// continuity. Run: node --test
+// anchoring, the tip's two shapes (the square box, the circle inscribed in it
+// — the classic pixel disc), the transparent-idempotence rule, clipping, and
+// Bresenham continuity. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { brushBounds, writeTexel, stampBrush, strokeLine } from '../src/lib/brush.js';
+import {
+  brushBounds,
+  brushRows,
+  brushSpans,
+  writeTexel,
+  stampBrush,
+  strokeLine,
+  PENCIL_SHAPES,
+} from '../src/lib/brush.js';
 
 const PAINT = { r: 10, g: 20, b: 30, a: 255 };
 const ERASE = { r: 0, g: 0, b: 0, a: 0 };
@@ -23,6 +32,120 @@ test('brushBounds: odd sizes center exactly, even sizes bias up-left', () => {
   assert.deepEqual(brushBounds(5, 5, 3), { x0: 4, y0: 4, x1: 6, y1: 6 });
   assert.deepEqual(brushBounds(5, 5, 2), { x0: 5, y0: 5, x1: 6, y1: 6 });
   assert.deepEqual(brushBounds(5, 5, 4), { x0: 4, y0: 4, x1: 7, y1: 7 });
+});
+
+// A tip's rows as their widths, top to bottom (the center is immaterial to
+// the shape), and their total — the texels the tip covers.
+const widths = (size, shape) => {
+  const out = [];
+  brushRows(10, 10, size, shape, (y, xl, xr) => out.push(xr - xl + 1));
+  return out;
+};
+const covered = (size, shape) => widths(size, shape).reduce((a, b) => a + b, 0);
+
+test('PENCIL_SHAPES: the two names, circle first (the popup order), frozen', () => {
+  assert.deepEqual([...PENCIL_SHAPES], ['circle', 'square']);
+  assert.ok(Object.isFrozen(PENCIL_SHAPES));
+});
+
+test('brushRows: a square tip covers its whole box on every row, at the footprint bounds', () => {
+  assert.deepEqual(widths(1, 'square'), [1]);
+  assert.deepEqual(widths(4, 'square'), [4, 4, 4, 4]);
+  const b = brushBounds(10, 10, 4);
+  const ys = [];
+  brushRows(10, 10, 4, 'square', (y, xl, xr) => {
+    ys.push(y);
+    assert.equal(xl, b.x0);
+    assert.equal(xr, b.x1);
+  });
+  assert.deepEqual(ys, [b.y0, b.y0 + 1, b.y0 + 2, b.y1]);
+  // An unknown shape reads as the square.
+  assert.deepEqual(widths(3, 'blob'), [3, 3, 3]);
+});
+
+test('brushRows: the circle is the classic pixel disc — one texel, a 2×2, the plus at 3, then rounded boxes', () => {
+  assert.deepEqual(widths(1, 'circle'), [1]);
+  assert.deepEqual(widths(2, 'circle'), [2, 2]);
+  assert.deepEqual(widths(3, 'circle'), [1, 3, 1], 'a plus, not a box');
+  assert.deepEqual(widths(4, 'circle'), [2, 4, 4, 2], 'a 4×4 less its corners');
+  assert.deepEqual(widths(5, 'circle'), [3, 5, 5, 5, 3]);
+  assert.deepEqual(widths(6, 'circle'), [4, 6, 6, 6, 6, 4]);
+  assert.deepEqual(
+    widths(7, 'circle'),
+    [3, 5, 7, 7, 7, 5, 3],
+    "the midpoint circle's rows"
+  );
+  assert.deepEqual(widths(8, 'circle'), [4, 6, 8, 8, 8, 8, 6, 4]);
+  assert.deepEqual(widths(9, 'circle'), [3, 7, 7, 9, 9, 9, 7, 7, 3]);
+  assert.deepEqual(
+    [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => covered(n, 'circle')),
+    [1, 4, 5, 12, 21, 32, 37, 52, 61]
+  );
+});
+
+test('brushRows: every circle row is centered in its box, symmetric, inside the square, never empty — up to the 64 tile cap', () => {
+  for (let n = 1; n <= 64; n++) {
+    const b = brushBounds(7, 7, n);
+    const spans = [];
+    let expectY = b.y0;
+    brushRows(7, 7, n, 'circle', (y, xl, xr) => {
+      assert.equal(y, expectY++, `size ${n}: rows in order, one per box row`);
+      assert.ok(xl <= xr, `size ${n}: row ${y} is empty`);
+      assert.ok(xl >= b.x0 && xr <= b.x1, `size ${n}: row ${y} leaves the box`);
+      assert.equal(xl - b.x0, b.x1 - xr, `size ${n}: row ${y} is off-center`);
+      spans.push(xr - xl + 1);
+    });
+    assert.equal(spans.length, n, `size ${n}: one span per row`);
+    assert.deepEqual(spans, [...spans].reverse(), `size ${n}: top/bottom symmetric`);
+    assert.equal(Math.max(...spans), n, `size ${n}: the equator spans the box`);
+    const total = spans.reduce((a, c) => a + c, 0);
+    if (n <= 2) assert.equal(total, n * n, `size ${n}: the disc IS the box`);
+    else assert.ok(total < n * n, `size ${n}: a real disc spares the corners`);
+    // A disc's area is π/4 of its box — the integer rasterization lands near it.
+    if (n >= 8) {
+      const fill = total / (n * n);
+      assert.ok(
+        Math.abs(fill - Math.PI / 4) < 0.05,
+        `size ${n}: fill ${fill.toFixed(3)}`
+      );
+    }
+  }
+});
+
+test('brushSpans: the tip’s rows as clipped system-px spans, scaled', () => {
+  // The square at 1 px per texel IS its box, row by row.
+  assert.deepEqual(brushSpans(5, 5, 3, 'square', 10, 10), [
+    { y: 4, x0: 4, x1: 6 },
+    { y: 5, x0: 4, x1: 6 },
+    { y: 6, x0: 4, x1: 6 },
+  ]);
+  // The plus, then the plus at 2 px per texel: every texel row twice, the
+  // x span scaled to the texel's far edge.
+  assert.deepEqual(brushSpans(5, 5, 3, 'circle', 10, 10), [
+    { y: 4, x0: 5, x1: 5 },
+    { y: 5, x0: 4, x1: 6 },
+    { y: 6, x0: 5, x1: 5 },
+  ]);
+  assert.deepEqual(brushSpans(5, 5, 3, 'circle', 10, 10, 2), [
+    { y: 8, x0: 10, x1: 11 },
+    { y: 9, x0: 10, x1: 11 },
+    { y: 10, x0: 8, x1: 13 },
+    { y: 11, x0: 8, x1: 13 },
+    { y: 12, x0: 10, x1: 11 },
+    { y: 13, x0: 10, x1: 11 },
+  ]);
+  // Clipping: a 5 px disc on the tile's corner keeps only its in-tile rows,
+  // each cut at the edge — and a tip wholly off the tile has no spans.
+  assert.deepEqual(brushSpans(0, 0, 5, 'circle', 10, 10), [
+    { y: 0, x0: 0, x1: 2 },
+    { y: 1, x0: 0, x1: 2 },
+    { y: 2, x0: 0, x1: 1 },
+  ]);
+  assert.deepEqual(brushSpans(12, 12, 5, 'circle', 10, 10), []);
+  // A scale-k tip has k spans per surviving texel row, spanning k px each.
+  const s = brushSpans(20, 20, 7, 'circle', 40, 40, 3);
+  assert.equal(s.length, 7 * 3);
+  assert.ok(s.every((r) => (r.x1 - r.x0 + 1) % 3 === 0));
 });
 
 test('writeTexel: hard-pixel write, change-flag semantics', () => {
@@ -57,6 +180,37 @@ test('stampBrush: full footprint, clipped at the tile edge', () => {
   assert.equal(stampBrush(d, 5, 5, 0, 0, 3, PAINT), false, 'repaint → no change');
 });
 
+test('stampBrush: a circle tip stamps the disc (the plus at 3), clipped at the edge; no shape means the square', () => {
+  const d = tile(5, 5);
+  assert.equal(stampBrush(d, 5, 5, 2, 2, 3, PAINT, 'circle'), true);
+  assert.deepEqual(painted(d, 5, 5), [
+    [2, 1],
+    [1, 2],
+    [2, 2],
+    [3, 2],
+    [2, 3],
+  ]);
+  assert.equal(
+    stampBrush(d, 5, 5, 2, 2, 3, PAINT, 'circle'),
+    false,
+    'restamp → no change'
+  );
+  // The plus on the corner: only its in-bounds arm texels land.
+  const e = tile(5, 5);
+  assert.equal(stampBrush(e, 5, 5, 0, 0, 3, PAINT, 'circle'), true);
+  assert.deepEqual(painted(e, 5, 5), [
+    [0, 0],
+    [1, 0],
+    [0, 1],
+  ]);
+  // The default shape is the square — the call every pre-shape caller makes.
+  const f = tile(5, 5);
+  stampBrush(f, 5, 5, 2, 2, 3, PAINT);
+  assert.equal(painted(f, 5, 5).length, 9);
+  // A disc wholly off-tile changes nothing.
+  assert.equal(stampBrush(tile(5, 5), 5, 5, 9, 9, 3, PAINT, 'circle'), false);
+});
+
 test('strokeLine: a steep drag paints a continuous (gap-free) run', () => {
   const d = tile(16, 16);
   assert.equal(strokeLine(d, 16, 16, 1, 1, 6, 13, 1, PAINT), true);
@@ -74,6 +228,24 @@ test('strokeLine: a steep drag paints a continuous (gap-free) run', () => {
     );
     assert.ok(hasPrev, `texel ${x},${y} is isolated`);
   }
+});
+
+test('strokeLine: the tip shape rides the whole run — a round-ended stroke', () => {
+  const d = tile(12, 12);
+  assert.equal(strokeLine(d, 12, 12, 2, 5, 9, 5, 3, PAINT, 'circle'), true);
+  const pts = painted(d, 12, 12);
+  const row = (y) => pts.filter(([, py]) => py === y).map(([x]) => x);
+  // A horizontal run of plus signs: the center row reaches one past each end,
+  // the rows above and below stop at the endpoints, nothing beyond them.
+  assert.deepEqual(row(5), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(row(4), [2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(row(6), [2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.equal(row(3).length + row(7).length, 0, 'a 3 px disc is three rows tall');
+  // The same run with the square tip fills the 3-row band end to end: the
+  // box reaches one past each endpoint on every row, x 1..10.
+  const e = tile(12, 12);
+  strokeLine(e, 12, 12, 2, 5, 9, 5, 3, PAINT);
+  assert.equal(painted(e, 12, 12).length, 3 * 10);
 });
 
 test('strokeLine: a single point stamps once; erase strokes report change honestly', () => {

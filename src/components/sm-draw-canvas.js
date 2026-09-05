@@ -3,9 +3,15 @@
 // background, the editable pixel canvas, the cursor overlay, the selection's
 // marching-ants overlay), the working
 // buffer, the selection/pencil/rect/fill/eraser/eyedropper gestures (the
+// pencil's tip is its size AND its shape — the disc inscribed in the N×N box,
+// or the box itself, lib/brush.js brushRows, one primitive under the stamp
+// and the hover preview; the
 // eraser is a pencil that writes transparency — it shares the stroke path but
-// carries its OWN tip size; every erase previews as the ERASE TREATMENT, the
-// marching ants around what it would clear), the whole-system-px layout fitting, and the
+// carries its OWN tip size and its OWN tip shape; every erase
+// previews as the ERASE TREATMENT, the marching ants around what it would
+// clear — the tip's own outline, a disc ringed as a disc; the rect tool's
+// right-drag rings its box), the
+// whole-system-px layout fitting, and the
 // gesture-scoped keys (Esc cancels an in-flight rect or drops a selection,
 // Shift square-locks a rect or axis-locks a selection move — document-level,
 // but canvas business).
@@ -72,7 +78,8 @@
 //
 // One-shot dev-hook props (plain fields, consumed on the first update; the
 // capture tool can't hover/drag/click):
-//   - previewCursor: draw the pencil footprint at the tile center.
+//   - previewCursor: draw the pencil footprint at the tile center (at the
+//     session's size and shape — ?cursor=<N>[,<shape>] seeds both).
 //   - previewRect {x0,y0,x1,y1,square}: draw the rect tool's live drag preview
 //     (modeled as an active drag with no captured pointer, so ESC still
 //     demonstrates cancel).
@@ -237,7 +244,11 @@ export class SmDrawCanvas extends LitElement {
     tool: {},
     ink: { attribute: false },
     pencilSize: { type: Number },
+    /** The pencil's tip shape, 'circle' | 'square' (lib/brush.js PENCIL_SHAPES). */
+    pencilShape: {},
     eraserSize: { type: Number },
+    /** The eraser's own tip shape, the same two names. */
+    eraserShape: {},
     cornerRadius: { type: Number },
     fillContiguous: { type: Boolean },
     fillAllFaces: { type: Boolean },
@@ -256,7 +267,9 @@ export class SmDrawCanvas extends LitElement {
     this.tool = 'pencil';
     this.ink = null;
     this.pencilSize = 1;
+    this.pencilShape = 'circle';
     this.eraserSize = 1;
+    this.eraserShape = 'circle';
     this.cornerRadius = 0;
     this.fillContiguous = true;
     this.fillAllFaces = false;
@@ -444,7 +457,9 @@ export class SmDrawCanvas extends LitElement {
     if (
       changed.has('tool') ||
       changed.has('pencilSize') ||
+      changed.has('pencilShape') ||
       changed.has('eraserSize') ||
+      changed.has('eraserShape') ||
       changed.has('cornerRadius') ||
       changed.has('ink') // the pencil's and the rect drag's previews are painted in the ink
     ) {
@@ -926,6 +941,13 @@ export class SmDrawCanvas extends LitElement {
     return this.tool === 'eraser' ? this.eraserSize : this.pencilSize;
   }
 
+  // …and its shape, the same split: the eraser's own popup setting under
+  // the eraser tool, the pencil's for every other stroke (a right-button
+  // pencil stroke erases with the same disc it would paint).
+  get #tipShape() {
+    return this.tool === 'eraser' ? this.eraserShape : this.pencilShape;
+  }
+
   // Is the footprint under the pointer an erasing one — the eraser tool's, or
   // any stroke's under the right button (the momentary erase)?
   get #erasing() {
@@ -963,7 +985,8 @@ export class SmDrawCanvas extends LitElement {
       px,
       py,
       this.#tipSize,
-      color
+      color,
+      this.#tipShape
     );
     this.#prev = { px, py };
     if (changed) this.#commitPixels();
@@ -991,11 +1014,13 @@ export class SmDrawCanvas extends LitElement {
 
   // The hover preview on the topmost overlay, under the cursor: the pencil fills
   // the exact texels a stamp would paint with the active ink (WYSIWYG — the OS
-  // crosshair marks the position); an ERASING footprint — the eraser tool's,
+  // crosshair marks the position) — the box, or the circle tip's disc; an
+  // ERASING footprint — the eraser tool's,
   // or the pencil's under a right button (the momentary erase, for the
   // stroke's length) — is the erase treatment, the marching ants around the
   // texels the tip would clear (draw-overlays.js drawFootprintAnts, at the
-  // ticker's phase); the eyedropper wears the same ring around the single
+  // ticker's phase — the tip's own outline, a circle tip's disc ringed as a
+  // disc); the eyedropper wears the same ring around the single
   // cell it would sample. Cleared with t == null when the pointer leaves the
   // canvas. Only these have a hover preview — the rect tool relies on the OS
   // crosshair when idle and its own drag preview when dragging — so for any
@@ -1009,14 +1034,22 @@ export class SmDrawCanvas extends LitElement {
     if (this.tool === 'eyedropper') {
       drawFootprintAnts(g, this.#overlayView, t, 1, this.#antsPhase);
     } else if (this.#erasing) {
-      drawFootprintAnts(g, this.#overlayView, t, this.#tipSize, this.#antsPhase);
+      drawFootprintAnts(
+        g,
+        this.#overlayView,
+        t,
+        this.#tipSize,
+        this.#antsPhase,
+        this.#tipShape // the ring is the tip's own outline: a disc for a circle tip
+      );
     } else {
       drawPencilPreview(
         g,
         this.#overlayView,
         this.tool === 'pencil' ? t : null,
         this.#tipSize,
-        this.ink
+        this.ink,
+        this.#tipShape
       );
     }
     this.#syncAnts();
