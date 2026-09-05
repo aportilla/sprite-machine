@@ -33,12 +33,26 @@
 // under capture.sh's own root and matching its `run.*` glob, so
 // `tools/capture.sh clean` sweeps it up too.
 //
+// THE READINESS CONTRACT, before anything else: every wait here is on the
+// app's own boot-complete signal — `data-sm-boot="ready"` on the root
+// element, which main.js sets once the whole boot chain has landed (the boot
+// document or the About box, the seeding stored and recorded, the library
+// listing rendered as icons) — plus whatever state the section then needs
+// (an About box open, a canvas with build stats). Never a visual proxy plus
+// a pause: a fixed settle is a guess about timing, and the runs that guessed
+// wrong read pages mid-boot. A reload yields a document WITHOUT the
+// attribute until its own boot completes, so the same predicate also waits
+// out a reload landing under the run (probe(), below).
+//
 // TWO TRAPS, learned the hard way — read before adding checks:
-//   1. Headless Chrome intermittently RELOADS the page mid-run under synthesized
-//      input (it does so on any build; it is not app behaviour). A reload wipes
-//      tool / ink state, which reads as a pile of false failures. Every probe
-//      re-checks a `window.__stamp` and reports the reload, and each section that
-//      asserts carried state starts from a deliberate fresh load.
+//   1. Headless Chrome reloads the FIRST page a launch loads exactly once, on
+//      its own (absorbPhantomReload, below, gives it a throwaway page to hit).
+//      Should one land on the app anyway, the app's boot is idempotent under
+//      it (the first-boot seeding records itself only when complete —
+//      shell/desktop-state.js), every probe re-checks a `window.__stamp` and,
+//      finding the document replaced, WAITS for the new boot and probes
+//      again rather than reading a page mid-boot; a section that asserts
+//      carried state starts from a deliberate fresh load.
 //   2. Erasing part of FRONT does NOT lower the voxel count — opposite views are
 //      plane-UNIONed by the carve, so BACK still covers the silhouette. What moves
 //      is the surface colouring and with it the triangle count, so the live-rebuild
@@ -660,28 +674,31 @@ const PROBE = `(() => {${DEEP}
 
 let reloads = 0;
 async function probe() {
-  let s;
   for (let attempt = 0; ; attempt++) {
+    let s;
     try {
       s = await evaluate(PROBE);
-      break;
     } catch (err) {
-      // The headless reload can land DURING a probe: the page is mid-navigation,
-      // `.editor-canvas` is null, and the probe throws. That is the same artifact
-      // the __stamp check reports, just caught earlier — wait the app back in and
-      // retry instead of crashing the run. (waitForApp re-stamps, so count it here.)
+      // A reload can land DURING a probe: the page is mid-navigation and the
+      // probe throws. The same artifact the __stamp check catches below, a
+      // beat earlier — wait the new boot in and probe again.
       if (attempt >= 3) throw err;
       reloads++;
-      console.log('  !!   page reloaded mid-probe (headless artifact) — waiting');
-      await waitForApp();
+      console.log(
+        '  !!   page reloaded mid-probe (headless artifact) — waiting for the new boot'
+      );
+      await waitForBoot();
+      continue;
     }
-  }
-  if (s.stamp === 'RELOADED') {
+    if (s.stamp !== 'RELOADED') return s;
+    // The document under us was replaced since the last wait (no stamp): a
+    // snapshot of it may be mid-boot — never hand that to the checks. Wait
+    // for the new document's own READY, stamp it, and read it again.
+    if (attempt >= 3) return s;
     reloads++;
-    console.log('  !!   page reloaded (headless artifact) — re-stamping');
-    await evaluate(`window.__stamp = 'S'`);
+    console.log('  !!   page reloaded (headless artifact) — waiting for the new boot');
+    await waitForBoot();
   }
-  return s;
 }
 
 // One texel of the ACTIVE document's live pixel canvas, as [r,g,b,a].
@@ -775,12 +792,36 @@ const hex = ([r, g, b]) =>
 // absorbPhantomReload below; the guard stays, cheap insurance.)
 const NAV_QUIET = 700;
 const quiet = () => Date.now() - lastNavAt >= NAV_QUIET;
+
+// THE READINESS PREDICATES (the header's contract). Every one begins with the
+// app's own boot-complete mark on an UNSTAMPED document — `data-sm-boot`
+// "ready" on the root, which main.js sets only once the whole boot chain
+// has landed — and then states what the section needs of that boot. No
+// settle follows a wait: the mark IS the settle.
+const BOOT_READY = `(!window.__stamp && document.documentElement.dataset.smBoot === 'ready')`;
+// A document boot: the editor canvas up and the 3D View's first build in
+// its stats (the rebuilder lands a frame after the open).
 const APP_READY = `(() => {${DEEP}
-  if (window.__stamp) return false;
+  if (!${BOOT_READY}) return false;
   const build = __q('sm-status-line[kind="build"]');
   const lb = build && build.shadowRoot && build.shadowRoot.querySelector('vf-label');
   return !!(__q('.editor-canvas') && lb &&
     (lb.getAttribute('title') || '').includes('voxels'));
+})()`;
+// The plain boot (no ?sample, no ?file) opens NO document — it parks at the
+// About box (the launch splash), so APP_READY never comes true there: its
+// state is the box open. GREET_UP is the plain "is the About box open?" test
+// (dismissGreet asks it of a page already waited for — stamped — so it must
+// NOT carry the stamp guard); GREET_READY is the wait's predicate, which
+// does, through BOOT_READY.
+const GREET_UP = `(() => {${DEEP}
+  const d = __q('#dlg-about');
+  return !!(d && d.open);
+})()`;
+const GREET_READY = `(() => {${DEEP}
+  if (!${BOOT_READY}) return false;
+  const d = __q('#dlg-about');
+  return !!(d && d.open);
 })()`;
 
 // A wait that runs out is a FAILURE with a diagnosis of the page it found,
@@ -791,6 +832,7 @@ async function reportStuck(what) {
       const d = __q('#dlg-about');
       return JSON.stringify({
         url: location.href, ready: document.readyState,
+        boot: document.documentElement.dataset.smBoot || null,
         about: !!(d && d.open),
         version: ((__q('#about-version') || {}).textContent || '').trim(),
         canvas: !!__q('.editor-canvas'), stamp: window.__stamp || null,
@@ -800,52 +842,32 @@ async function reportStuck(what) {
   check(`the page came up within 20 s (${what})`, false, String(state));
 }
 
-async function waitForApp() {
+// One wait for every boot kind: poll the predicate on a navigation-quiet
+// page until it holds (20 s at most, then a failing check), then stamp the
+// document so the next wait and every probe can tell it from its successor.
+async function waitFor(predicate, what) {
   let ready = false;
   for (let i = 0; i < 100; i++) {
-    if (quiet() && (await evaluate(APP_READY).catch(() => false))) {
+    if (quiet() && (await evaluate(predicate).catch(() => false))) {
       ready = true;
       break;
     }
     await sleep(200);
   }
-  if (!ready) await reportStuck('an editor canvas with build stats');
-  await sleep(400);
+  if (!ready) await reportStuck(what);
   await evaluate(`window.__stamp = 'S'`);
 }
-
-// The plain boot (no ?sample, no ?file) opens NO document — it parks at the
-// About box (the launch splash), so APP_READY (an editor canvas + build
-// stats) never comes true there. This is that boot's readiness signal.
-// GREET_UP is the plain "is the About box open?" test (dismissGreet asks it
-// of a page already waited for — stamped — so it must NOT carry the stamp
-// guard); GREET_READY is the wait's predicate, which does.
-const GREET_UP = `(() => {${DEEP}
-  const d = __q('#dlg-about');
-  return !!(d && d.open);
-})()`;
-const GREET_READY = `(() => {${DEEP}
-  if (window.__stamp) return false;
-  const d = __q('#dlg-about');
-  return !!(d && d.open);
-})()`;
-async function waitForGreet() {
-  let ready = false;
-  for (let i = 0; i < 100; i++) {
-    if (quiet() && (await evaluate(GREET_READY).catch(() => false))) {
-      ready = true;
-      break;
-    }
-    await sleep(200);
-  }
-  if (!ready) await reportStuck('the About box');
-  await sleep(400);
-  await evaluate(`window.__stamp = 'S'`);
-}
+const waitForApp = () =>
+  waitFor(APP_READY, 'an editor canvas with build stats, boot ready');
+const waitForGreet = () => waitFor(GREET_READY, 'the About box, boot ready');
+// The bare contract — what a probe waits for when it finds the document
+// replaced under it, whichever boot the new document is running.
+const waitForBoot = () => waitFor(`(() => ${BOOT_READY})()`, 'boot ready after a reload');
 
 // CHROME'S PHANTOM RELOAD. Headless Chrome (--headless=new on a fresh
 // profile) reloads the FIRST page a launch loads exactly once — browser-
-// initiated, 0.6–1.2 s after that page finishes loading. No script asks for
+// initiated, 0.6–1.2 s after that page finishes loading on an idle machine,
+// later under load. No script asks for
 // it (no Page.frameRequestedNavigation fires), no HMR frame carries it, a
 // bare data: page gets it with every launch flag stripped, the startup tab
 // and a created target alike, and later navigations in the same target
@@ -857,16 +879,21 @@ async function waitForGreet() {
 // never was: a build running alongside only shifted the timing by the beat
 // that decided the race, which made it look edit-shaped. So the run loads a
 // THROWAWAY page first and waits for its second commit — the reload
-// absorbed, the app's first boot is clean, its seeding included.
+// absorbed, the app's first boot is clean, its seeding included. This is
+// belt and braces now, not the fix: a reload that slips past (one run saw it
+// land four seconds late, mid-seeding, under load) meets an app whose first
+// boot is idempotent under a reload (the seeding records itself only when
+// complete — shell/desktop-state.js) and probes that wait for the new boot
+// (probe(), the readiness contract). The cap here only bounds the wait.
 async function absorbPhantomReload() {
   const before = navCount;
   await send('Page.navigate', { url: 'data:text/html,<title>drive</title>' });
   const t = Date.now();
-  while (navCount < before + 2 && Date.now() - t < 3000) await sleep(50);
+  while (navCount < before + 2 && Date.now() - t < 10000) await sleep(50);
   console.log(
     navCount >= before + 2
-      ? '  ..   [phantom reload absorbed on the throwaway page]'
-      : '  ..   [no phantom reload within 3 s — proceeding]'
+      ? `  ..   [phantom reload absorbed on the throwaway page, ${Date.now() - t} ms in]`
+      : '  ..   [no phantom reload within 10 s — proceeding; the boot is idempotent under one]'
   );
   await sleep(200);
 }
@@ -956,12 +983,23 @@ async function main() {
   // documents (real PNGs, generated icons, `doc:` keys like any save), and
   // with no ?file=<name> in the url the boot parks at the About box (the
   // launch splash — the same dialog as Sprite Machine → About…), no document
-  // window open and no New Document dialog. A reload then finds persisted
-  // state and must NOT seed again — and greets with the About box again (a
-  // prior session's open windows deliberately don't reopen; the URL says
-  // what a load shows). ?file=<name> is that URL: it opens the named stored
-  // doc, case-insensitively.
+  // window open and no New Document dialog. The boot RECORDS the seeding
+  // (the desktop state's `seeded` flag, written once the last built-in is
+  // stored — shell/desktop-state.js), so a reload finds the record and must
+  // NOT seed again — and greets with the About box again (a prior session's
+  // open windows deliberately don't reopen; the URL says what a load shows).
+  // And the record is the whole gate: a blob with the flag FALSE — what a
+  // first boot cut short by a reload leaves behind — asks the next boot to
+  // seed again, which skips the built-ins already stored by name and sets
+  // the flag; this section stages exactly that blob and reloads into it.
+  // ?file=<name> is that URL: it opens the named stored doc,
+  // case-insensitively.
   section('virgin boot seeds the defaults');
+  // The seeding's record, read off the blob the app writes.
+  const seededFlag = () =>
+    evaluate(
+      `(() => { try { return JSON.parse(localStorage.getItem('sprite-machine:desktop')).seeded; } catch { return null; } })()`
+    );
   const seedProbe = () =>
     evaluate(`(() => {${DEEP}
       const icons = __qa('vf-icon[data-key]').map((i) => ({
@@ -992,6 +1030,14 @@ async function main() {
         .sort()
         .join(',') === 'Car,Cube',
     JSON.stringify(seed.icons)
+  );
+  // …and RECORDS it: the desktop-state blob's `seeded` flag, the transaction's
+  // commit, written the moment the last built-in was stored.
+  const recorded = await seededFlag();
+  check(
+    'the boot records the seeding: the desktop-state blob carries seeded: true',
+    recorded === true,
+    `seeded=${recorded}`
   );
   check(
     'the boot parks at the About box — no document window, no New Document dialog',
@@ -1034,7 +1080,6 @@ async function main() {
       greet.menuEnabled.toolPencil === false,
     JSON.stringify(greet.menuEnabled)
   );
-  await sleep(600); // let the desktop-state debounce land before navigating
   await send('Page.navigate', { url: SEED_URL });
   await waitForGreet();
   seed = await seedProbe();
@@ -1046,6 +1091,30 @@ async function main() {
       about: seed.aboutOpen,
       docWindows: seed.docWindows,
     })
+  );
+  // THE INTERRUPTED FIRST BOOT, staged: a blob whose record reads FALSE is
+  // what a reload mid-seeding leaves behind (the persist layer's own snapshot,
+  // before the commit). The next boot must seed again — skipping the
+  // built-ins already stored by name, so nothing doubles — and set the
+  // record. (The old gate, "any blob exists", read this very blob as "seeded"
+  // and left the profile without Car and Cube for good.)
+  await evaluate(
+    `(() => { const k = 'sprite-machine:desktop'; const b = JSON.parse(localStorage.getItem(k));
+      b.seeded = false; localStorage.setItem(k, JSON.stringify(b)); return b.seeded; })()`
+  );
+  await send('Page.navigate', { url: SEED_URL });
+  await waitForGreet();
+  seed = await seedProbe();
+  check(
+    'a boot finding the record FALSE seeds again without doubling — Car and Cube once — and records it',
+    seed.icons.length === 2 &&
+      seed.icons
+        .map((i) => i.label)
+        .sort()
+        .join(',') === 'Car,Cube' &&
+      seed.aboutOpen === true &&
+      (await seededFlag()) === true,
+    JSON.stringify({ icons: seed.icons.map((i) => i.label), seeded: await seededFlag() })
   );
   // The reload finds persisted state (the icons) — a different boot path
   // from the virgin greet — and must land desktop-focused all the same.

@@ -117,17 +117,22 @@ export const loadBlank = (tile = 40) => {
 /**
  * Seed the document library with the built-in defaults — one ORDINARY stored
  * document per sample, through the same files.save path a user's ⌘S takes
- * (real PNG bytes, metadata chunks, generated icon). Run only on a truly
- * virgin boot (main.js: no persisted desktop state AND an empty library), so
- * the seeds are created exactly once and live as normal mutable documents
- * from then on — edited, renamed or deleted, they never come back.
- * Resolves the first seeded doc's id (the boot document), or null when
- * nothing could be seeded.
+ * (real PNG bytes, metadata chunks, generated icon). Run only while the
+ * profile has no record of having seeded (main.js, the desktop state's
+ * `seeded` flag — shell/desktop-state.js header), so the seeds are created
+ * exactly once and live as normal mutable documents from then on — edited,
+ * renamed or deleted, they never come back. A first boot interrupted
+ * mid-seeding (a reload) runs this again on the next boot: `existing` — the
+ * names already in the library — skips the built-ins that did land, so
+ * nothing doubles. Resolves the first seeded doc's id (the boot document),
+ * or null when nothing could be seeded.
  * @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}[]} samples
+ * @param {Set<string>} [existing]  document names already stored
  */
-export async function seedDefaultDocs(samples) {
+export async function seedDefaultDocs(samples, existing = new Set()) {
   let firstId = null;
   for (const sample of samples) {
+    if (existing.has(sample.name)) continue;
     try {
       const image = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
       if (validateSheet(image)) continue;

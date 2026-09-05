@@ -5,9 +5,27 @@
 // (untitled windows are deliberately absent — no autosave, explicit Save is
 // the contract) plus which document was active, and the DESKTOP PATTERN
 // (the Desktop Patterns panel's setting — System 7 kept it in the System
-// file; here it's the one desktop setting that persists). An older v3 blob
-// may still carry the retired `showGrid` flag (it parses fine and drops on
-// the next write) or lack `pattern` (it reads null — the dither).
+// file; here it's the one desktop setting that persists) — and the SEEDED
+// flag: whether the profile's first-ever boot has stored the built-in
+// defaults (Car, Cube). An older v3 blob may still carry the retired
+// `showGrid` flag (it parses fine and drops on the next write) or lack
+// `pattern` (it reads null — the dither).
+//
+// THE SEEDED FLAG (Sep 5 2026) is the seeding's transaction record. The
+// first-boot seeding used to be gated on "no desktop-state blob exists" —
+// but this module writes a blob on its own schedule (a debounced snapshot
+// on any store change, a synchronous one on beforeunload), so a reload that
+// landed DURING the seeding's IndexedDB round-trips (a crash, Chrome's
+// one-time phantom reload under tools/drive.mjs) wrote a blob first, and the
+// next boot read "prior state", never seeded, and left a profile with no
+// Car and no Cube for good. Now the gate is `seeded`, which main.js sets —
+// through markSeeded(), written at once, not debounced — only after every
+// built-in is stored: an interrupted first boot carries `seeded: false` and
+// completes on the next boot (the loader skips the built-ins already
+// stored, by name, so nothing doubles), and deleting or emptying later still
+// never resurrects them (the flag stays true). A blob from before the flag
+// reads as seeded (migrate — under the old rule its very existence had
+// already decided that), as do v1 / v2 blobs.
 //
 // WINDOW GEOMETRY IS NOT HERE — not the windoids', not the document
 // windows'. A browser is resized and reopened on another monitor all the
@@ -45,14 +63,22 @@ function docEntry(d) {
   return { fileId: d.fileId, face: d.face ?? null };
 }
 
-function migrate(parsed) {
-  if (parsed?.v === VERSION) return parsed;
+/**
+ * A parsed blob of any version → the current shape, or null for nothing
+ * usable. Exported for its Node test: the `seeded` reading is the seeding's
+ * transaction record (header) — a blob that states the flag keeps it, a
+ * blob from before the flag (any version) reads as seeded.
+ * @param {any} parsed
+ */
+export function migrateDesktopState(parsed) {
+  if (parsed?.v === VERSION) return { ...parsed, seeded: parsed.seeded !== false };
   if (parsed?.v === 2) {
     return {
       v: VERSION,
       docs: (parsed.docs ?? []).filter((d) => d && d.fileId).map(docEntry),
       activeFileId: parsed.activeFileId ?? null,
       icons: parsed.icons ?? {},
+      seeded: true,
     };
   }
   if (parsed?.v === 1) {
@@ -61,6 +87,7 @@ function migrate(parsed) {
       docs: parsed.lastDocId ? [docEntry({ fileId: parsed.lastDocId })] : [],
       activeFileId: parsed.lastDocId ?? null,
       icons: parsed.icons ?? {},
+      seeded: true,
     };
   }
   return null;
@@ -68,7 +95,7 @@ function migrate(parsed) {
 
 function load() {
   try {
-    return migrate(JSON.parse(localStorage.getItem(KEY) ?? 'null'));
+    return migrateDesktopState(JSON.parse(localStorage.getItem(KEY) ?? 'null'));
   } catch {
     return null;
   }
@@ -77,10 +104,26 @@ function load() {
 /** @param {boolean} fresh  ?fresh=1 — neither restore nor persist */
 export function createDesktopState(fresh) {
   const saved = fresh ? null : load();
+  // The seeding's record (header): false on a brand-new profile, or one
+  // whose first boot was interrupted; true once main.js marks it — or on a
+  // blob from before the flag.
+  let seeded = saved?.seeded === true;
+  /** The synchronous writer, once start() has wired one. */
+  let writeNow = () => {};
 
   return {
     /** The restored state, or null (fresh boot / nothing stored / ?fresh). */
     saved,
+
+    /** Has this profile's first-ever boot stored the built-in defaults? */
+    seeded: () => seeded,
+
+    /** Record that it has — written at once, so a reload a beat later finds
+     *  the record and does not seed again. */
+    markSeeded() {
+      seeded = true;
+      writeNow();
+    },
 
     /** A saved icon position by key ("doc:<id>"), or null. (A stale blob
      *  may still carry retired "sample:*" entries; they simply never match
@@ -126,6 +169,7 @@ export function createDesktopState(fresh) {
           activeFileId: workspace.active()?.fileId ?? null,
           icons,
           pattern: shell.get().desktopPattern,
+          seeded,
         };
       }
 
@@ -136,6 +180,7 @@ export function createDesktopState(fresh) {
           // Quota/private-mode failures cost only icon memory.
         }
       };
+      writeNow = write;
 
       let timer = 0;
       const writeSoon = () => {
@@ -164,6 +209,7 @@ export function createDesktopState(fresh) {
 
       return () => {
         clearTimeout(timer);
+        writeNow = () => {};
         for (const u of unsubs) u();
         document.removeEventListener('pointerup', onPointerUp);
         document.removeEventListener('visibilitychange', onHide);

@@ -253,11 +253,19 @@ if (hot) {
 //      listing refresh — these paths must not wait on an IndexedDB
 //      round-trip (which can stall the whole boot under the capture tool's
 //      virtual-time budget), and must never seed. No dialog.
-//   2. TRULY VIRGIN (storage works, no persisted desktop state AND an empty
-//      library): seed the built-in defaults as ordinary stored documents
-//      (loaders.js seedDefaultDocs — a one-shot; from then on they're normal
-//      files the user may edit, rename or delete), then resolve like any
-//      other boot — ?file can name a just-seeded default.
+//   2. UNSEEDED (storage works and the desktop state carries no record of
+//      the seeding — shell/desktop-state.js's `seeded` flag: a brand-new
+//      profile, or one whose first boot was interrupted): seed the built-in
+//      defaults as ordinary stored documents (loaders.js seedDefaultDocs,
+//      skipping any already stored by name — an interrupted seeding
+//      completes, nothing doubles), then RECORD it — written at once, after
+//      the last save, never before: the record is the transaction's commit,
+//      and a reload at any earlier moment leaves a profile that seeds again
+//      next boot rather than one that never seeds (the old gate, "any
+//      desktop-state blob exists", was written by the persist layer's own
+//      schedule mid-boot and poisoned exactly that way). From then on they're
+//      normal files the user may edit, rename or delete; then resolve like
+//      any other boot — ?file can name a just-seeded default.
 //   3. RESOLVE THE URL: a ?file naming a stored doc (case-insensitive; the
 //      most recently modified wins a name collision) opens it — on its
 //      remembered edited face, its window placed fresh from the live raster
@@ -272,6 +280,10 @@ if (hot) {
 // menu; the panel lands on top, the newest window), and ?about=1 the About
 // box (the plain boot's own greet, but that boot's seeding stalls under the
 // capture tool's virtual-time budget — this reaches the box under ?fresh).
+/** Work the boot leaves running (the test path's listing refresh) that the
+ *  READY mark below still waits for. */
+let bootBackground = Promise.resolve();
+
 async function bootDocuments() {
   // ?edit seeds the sample path's context face AT open — a post-open setFace
   // would race the one-shot mount hooks (the mount fill commits against
@@ -289,14 +301,18 @@ async function bootDocuments() {
   };
 
   if (boot.fresh || boot.sampleExplicit) {
-    if (!boot.fresh) files.refresh();
+    // The listing refresh runs in the background — the document must not
+    // wait on it — but the boot is not READY (below) until it has landed:
+    // the icons it renders are part of the desktop a driver reads.
+    if (!boot.fresh) bootBackground = files.refresh();
     await openBootSample();
     return;
   }
 
   await files.refresh();
-  if (files.get().available && !dstate.saved && files.get().list.length === 0) {
-    await seedDefaultDocs(SAMPLES);
+  if (files.get().available && !dstate.seeded()) {
+    await seedDefaultDocs(SAMPLES, new Set(files.get().list.map((r) => r.name)));
+    dstate.markSeeded();
   }
 
   if (boot.file && files.get().available) {
@@ -325,8 +341,16 @@ async function bootDocuments() {
   menus.actions.showAbout();
 }
 
+// THE READINESS CONTRACT: `data-sm-boot="ready"` lands on the root element
+// once the whole boot chain has — the boot document open or the About box up,
+// the seeding stored and recorded, the post-boot hooks applied, the library
+// listing landed (so every desktop icon is rendered). A driver waits on this
+// attribute, never on a visual proxy plus a pause (tools/drive.mjs); a reload
+// yields a document without it until that document's own boot completes.
 (async () => {
   await bootDocuments();
   if (boot.patterns) patterns.open();
   if (boot.about) menus.actions.showAbout();
+  await bootBackground.catch(() => {});
+  document.documentElement.dataset.smBoot = 'ready';
 })();

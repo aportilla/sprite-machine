@@ -38,7 +38,14 @@ desktop skeleton and `<title>`, never the components' shadow internals).
 DevTools Protocol with real trusted input (keys, menu picks, ⌘-equivalents,
 drags, window moves and grow-box resizes, the dialogs, a save → reopen
 round-trip through IndexedDB), probing through the components' shadow roots,
-and exits non-zero on any failure. The residue neither can cover reliably is
+and exits non-zero on any failure. Its waits are on **the app's own
+readiness contract**, never a pause: `main.js` marks the root element
+`data-sm-boot="ready"` once the whole boot chain has landed (the boot
+document open or the About box up, the first-boot seeding stored and
+recorded, the library listing rendered as icons), a reload yields a document
+without the mark until its own boot completes, and a probe that finds the
+document replaced under it waits for the new boot rather than reading a page
+mid-boot. The residue neither can cover reliably is
 a short manual checklist: `docs/SMOKE-TEST.md`.
 
 The app is a **System 7 virtual desktop**, drawn end to end with the
@@ -59,8 +66,12 @@ grammar. See [The desktop](#the-desktop).
 
 The first-ever boot **seeds two starter documents** (Car, Cube) into the
 library as perfectly ordinary saved files — edit, rename or delete them like
-anything you saved yourself; they're created once and never come back (any
-persisted state, even an emptied desktop, suppresses the seeding). Every
+anything you saved yourself; they're created once and never come back (the
+profile records the seeding once every built-in is stored — a `seeded` flag
+in the desktop state — and that record, not the mere presence of state, is
+what suppresses it: a first boot cut short by a reload finishes seeding on
+the next one, nothing doubled, while deleting or emptying later never
+resurrects them). Every
 load **boots to the About box** — the classic launch splash: the icon, the
 version, the blurb, the same dialog as Sprite Machine → About… (see
 [The About box](#the-about-box)); OK it — or click anywhere outside it —
@@ -1209,8 +1220,16 @@ docs are the ONLY icons: the built-in defaults (Car, Cube) are **seeded
 into the library at the first-ever boot** (`seedDefaultDocs` in
 `loaders.js`, through the same save path as ⌘S — real PNG bytes, chunks,
 generated icon) and are ordinary mutable documents from then on; the
-seeding runs only when NO prior state persists (no desktop-state blob AND
-an empty library — deleting or emptying later never resurrects them); the
+seeding runs while the profile carries **no record of having seeded** —
+the desktop state's `seeded` flag, which `main.js` sets and writes at once
+only after the last built-in is stored (the transaction's commit; the old
+gate, "any desktop-state blob exists", was a snapshot the persist layer
+wrote on its own schedule mid-boot, so a reload during the seeding's
+IndexedDB round-trips — a crash, Chrome's phantom reload under the drive —
+left a profile that never seeded); a boot interrupted mid-seeding seeds
+again next time, skipping the built-ins already stored by name, and
+deleting or emptying later never resurrects them — the flag stays; a blob
+from before the flag reads as seeded. The
 virgin boot then greets like any other — the About box, unless
 `?file` names a doc (the just-seeded Car and Cube are already nameable).
 Double-click opens
@@ -1250,7 +1269,11 @@ setting — the one desktop setting that persists; see
 persist in one versioned localStorage key (`shell/desktop-state.js`, v3 —
 a v1 or v2 blob migrates shallowly, the window geometry those versions
 persisted simply dropped, and a v3 blob from before the pattern reads the
-dither), snapshotted on change/exit. **No window
+dither), beside the **`seeded` flag** — the first-boot seeding's record,
+above (`migrateDesktopState` is exported and Node-tested:
+`test/desktop-state.test.mjs` pins that a stated flag keeps, a blob from
+before it reads seeded, and only an explicit `false` — an interrupted first
+boot's mark — asks the next boot to seed), snapshotted on change/exit. **No window
 geometry is in it**: the windoids and the document windows place fresh
 from the live raster every session (see [Windows](#windows)) — the
 persistence layer never sees a window. Icons restore at
