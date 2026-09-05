@@ -25,14 +25,19 @@
 // exactly one load, so "a new sheet arrived in an existing doc" stopped
 // being a thing the tracker has to disambiguate.
 //
-// THE SELECTION is a per-context STORE of its own (`ctx.selection`, bounds
-// or null), not a field published through the workspace store: the canvas
-// reports its marquee at pointer-move rate during a drag, and a `touch()`
-// per move would re-render every workspace subscriber (windows, menus, the
-// atlas view) for a value only the options strip's readout — and, coming,
-// the Edit menu's Cut/Copy gating — reads. Its subscribers follow the active
-// context like everything else (followActive). The pixels are never here:
-// the selection's float and base are the canvas's own; this is its OUTLINE.
+// THE SELECTION is a per-context STORE of its own (`ctx.selection`: `bounds`,
+// the marquee's outline or null), not a field published through the
+// workspace store: the canvas reports its marquee at pointer-move rate
+// during a drag, and a `touch()` per move would re-render every workspace
+// subscriber (windows, menus, the atlas view) for a value only the options
+// strip's readout — and, coming, the Edit menu's Cut/Copy gating — reads.
+// Its subscribers follow the active context like everything else
+// (followActive). The pixels are never here: the selection's float and base
+// are the canvas's own; this is its OUTLINE. The same store carries the
+// canvas's OTHER live outline, `rect` — the rect tool's drag in flight (the
+// box as the release would paint it), null between drags — for the same
+// reader at the same rate: the strip's rect readout (Sep 5 2026), and
+// nothing else will ever read it (a drag is no selection).
 // ---------------------------------------------------------------------------
 
 import { createStore } from './store.js';
@@ -50,16 +55,19 @@ import { files as filesSingleton, UNTITLED } from './files.js';
  *   name: string,
  *   dirty: boolean,
  *   hooks: object|null,
- *   selection: ReturnType<typeof createStore<{bounds: SelectionBounds|null}>>,
+ *   selection: ReturnType<typeof createStore<{bounds: SelectionBounds|null, rect: SelectionBounds|null}>>,
  * }} DocContext
  */
 /** The canvas's CURRENT selection rectangle in tile texels, inclusive — it
- *  may hang off the tile (a float pushed past the edge).
+ *  may hang off the tile (a float pushed past the edge). The rect tool's
+ *  drag box is the same shape (always on the tile: the drag clamps).
  *  @typedef {{x0:number,y0:number,x1:number,y1:number}} SelectionBounds */
 
 const sameBounds = (a, b) =>
   a === b ||
   (!!a && !!b && a.x0 === b.x0 && a.y0 === b.y0 && a.x1 === b.x1 && a.y1 === b.y1);
+/** @param {SelectionBounds|null} b  A copy of the caller's box, or null. */
+const copyBounds = (b) => (b ? { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 } : null);
 
 /**
  * @param {{
@@ -152,7 +160,10 @@ export function createWorkspace(deps = {}) {
         name: name ?? this.nextUntitledName(),
         dirty: false,
         hooks,
-        selection: createStore({ bounds: /** @type {SelectionBounds|null} */ (null) }),
+        selection: createStore({
+          bounds: /** @type {SelectionBounds|null} */ (null),
+          rect: /** @type {SelectionBounds|null} */ (null),
+        }),
       };
       let lastSheet = doc.get().sheet;
       const unsubs = [
@@ -230,11 +241,22 @@ export function createWorkspace(deps = {}) {
       const ctx = byKey(key);
       if (!ctx) return;
       if (sameBounds(ctx.selection.get().bounds, bounds)) return;
-      ctx.selection.patch({
-        bounds: bounds
-          ? { x0: bounds.x0, y0: bounds.y0, x1: bounds.x1, y1: bounds.y1 }
-          : null,
-      });
+      ctx.selection.patch({ bounds: copyBounds(bounds) });
+    },
+
+    /**
+     * The canvas's rect drag in flight for a window — the box as the release
+     * would paint it, or null between drags. Written by the window's editor
+     * from the canvas's `sm-rect-drag` event; the selection's discipline
+     * exactly (the context's own store, silent on an unchanged value),
+     * sharing its store — the strip's other readout, nothing else's.
+     * @param {string} key  @param {SelectionBounds|null} bounds
+     */
+    setRectDrag(key, bounds) {
+      const ctx = byKey(key);
+      if (!ctx) return;
+      if (sameBounds(ctx.selection.get().rect, bounds)) return;
+      ctx.selection.patch({ rect: copyBounds(bounds) });
     },
 
     /**

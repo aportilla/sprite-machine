@@ -209,6 +209,47 @@ test('setSelection is per-context, on the context’s OWN store, silent when unc
   assert.equal(wsNotes, 0);
 });
 
+test('setRectDrag rides the same per-context store, silent when unchanged, never touching bounds', () => {
+  const { ws } = makeWorld();
+  const a = openLoaded(ws);
+  const b = openLoaded(ws);
+  assert.equal(a.selection.get().rect, null, 'no drag at birth');
+  let aNotes = 0;
+  let bNotes = 0;
+  let wsNotes = 0;
+  a.selection.subscribe(() => aNotes++);
+  b.selection.subscribe(() => bNotes++);
+  ws.subscribe(() => wsNotes++);
+  const sel = { x0: 1, y0: 1, x1: 4, y1: 4 };
+  ws.setSelection(a.key, sel);
+  assert.equal(aNotes, 1);
+  const box = { x0: 2, y0: 3, x1: 7, y1: 9 };
+  ws.setRectDrag(a.key, box);
+  assert.deepEqual(a.selection.get().rect, box);
+  assert.notEqual(a.selection.get().rect, box, 'stored as a copy');
+  assert.deepEqual(a.selection.get().bounds, sel, 'the selection outline is untouched');
+  assert.equal(b.selection.get().rect, null, 'the other context is untouched');
+  assert.equal(aNotes, 2);
+  assert.equal(bNotes, 0);
+  assert.equal(wsNotes, 0, 'never published through the workspace store');
+  ws.setRectDrag(a.key, { ...box });
+  assert.equal(aNotes, 2, 'an equal-valued write is silent');
+  ws.setRectDrag(a.key, { ...box, y1: 10 });
+  assert.equal(aNotes, 3, 'a changed edge notifies');
+  ws.setRectDrag(a.key, null);
+  assert.equal(a.selection.get().rect, null);
+  assert.equal(aNotes, 4);
+  ws.setRectDrag(a.key, null);
+  assert.equal(aNotes, 4, 'null → null is silent');
+  assert.deepEqual(
+    a.selection.get().bounds,
+    sel,
+    'the drag ending leaves the selection alone'
+  );
+  ws.setRectDrag('nope', box); // an unknown key is a no-op
+  assert.equal(wsNotes, 0);
+});
+
 // --- dirty tracking --------------------------------------------------------------
 
 test('the birth load leaves a context clean; strokes and structure dirty it', () => {

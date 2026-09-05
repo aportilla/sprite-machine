@@ -200,8 +200,29 @@ template — see [UI layer: Lit](#ui-layer-lit).
   the Tools menu's checkmark already say which tool is live, an
   eyedropper strip is just the swatch, and the selection's strip (no
   swatch — the one tool besides the eraser that lays no color) is a
-  **readout**: the active window's marquee as `left, top · width × height`
-  in texels, live through a drag, "no selection" at rest. For the **pencil**, a **tip-size slider** (with an
+  **readout**: the active window's marquee as `width × height` in texels —
+  the size alone, never the position — live through a drag, `0 × 0` at
+  rest (the `left, top ·` prefix and the "no selection" caption both went
+  Sep 5 2026). **Every label in the strip is plain ink** — the pencil's and
+  the eraser's `N px`, the `radius` caption, the two readouts: none wears
+  the kit's `dim` (it went the same day: dim is the disabled look, and
+  nothing in the strip is disabled). And **the strip's cells are walled**
+  by the kit's own rule — `<vf-separator vertical>`, a 1-system-px line
+  that stretches itself to its row's height, so each wall runs from the
+  band's top to its bottom rule (the options area stretches to the band for
+  it; the controls still center), drawn **dotted** — one px on, one off, in
+  the kit's black — through the separator's own restyle hook
+  (`--vf-separator-style`, the one the kit's menus set for their rule),
+  declared once on the strip's row and inherited into the options leaf —
+  with one grammar: a rule stands between
+  **different things**, never between a control and its own readout. The
+  bar puts one between the ink swatch and the tool's options whenever both
+  are up (the pencil, the rect, the fill — the ink is app-level, the
+  options the tool's own; no rule dangles after the eyedropper's lone
+  swatch, and a strip with no swatch has none), and the rect's strip
+  carries a second between its radius stepper (a setting) and its readout
+  (a value): swatch | radius | readout, three cells. The pencil's slider
+  and its `N px` are one cell, the fill's two boxes one group. For the **pencil**, a **tip-size slider** (with an
   `N px` readout) that stamps an
   **N×N** square footprint and **previews it filled with the active ink** on the
   canvas as you hover — the exact texels a stamp will cover, looking exactly as
@@ -209,7 +230,10 @@ template — see [UI layer: Lit](#ui-layer-lit).
   erase — the footprint wears the **erase treatment** instead for the
   stroke's length: the marching ants, see the eraser below) — with the **OS
   crosshair kept on top** marking the position. For the **rect**, a **corner-radius
-  stepper** (`radius: N px`, `0` = sharp): **drag** a box and a **live preview**
+  stepper** (`radius: N px`, `0` = sharp) and, across a rule, a **readout** of the drag
+  in flight — the box's `width × height` in texels, the square-locked box
+  the release would paint, `0 × 0` between drags (the label always there,
+  so nothing in the strip shifts when a drag begins): **drag** a box and a **live preview**
   (the exact filled texels in the ink at **full opacity** — the box exactly as
   the release will leave it, with no outline around it: the 50% tint under a
   haloed bounding box went Sep 5 2026, the paint itself being the extent's
@@ -277,7 +301,8 @@ template — see [UI layer: Lit](#ui-layer-lit).
   own**: switching windows leaves both up, ants marching; Esc drops only the
   active window's, a tool switch drops every window's — and the options
   strip's readout follows the active one (the canvas reports its outline
-  through `sm-selection` onto its context's own per-window selection store,
+  through `sm-selection` — and the rect tool its drag box through
+  `sm-rect-drag` — onto its context's own per-window selection store,
   the plumbing Edit → Cut/Copy will gate on). A move edits **this face
   alone** today — which can break the carve's registration (a roof shifted
   on FRONT no longer lines up with TOP); the **registered move** ("on all
@@ -1450,8 +1475,9 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
                       / restoreTile / restoreAtlas (the undo paths). A FACTORY — one instance per
                       open document (no singleton)
   workspace.js        the OPEN documents: DocContexts (own doc + history + face + fileId/name/dirty
-                      + a per-context selection store: the canvas's marquee OUTLINE, for the strip's
-                      readout — never through the workspace store, it moves at pointer rate),
+                      + a per-context selection store: the canvas's marquee OUTLINE and the rect
+                      tool's drag box, for the strip's readouts — never through the workspace
+                      store, they move at pointer rate),
                       activeKey (the kit's vf-activate mirrored in), untitled naming, per-context
                       dirty tracking, the stored flows (openStored/save/duplicate/rename/export),
                       and followActive() — the follow-the-active-document primitive

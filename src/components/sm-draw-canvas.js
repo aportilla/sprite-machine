@@ -37,6 +37,12 @@
 //                    whenever it changes (a marquee corner, a float offset,
 //                    a drop) — never per ants tick, never twice for the
 //                    same value; the container mirrors it onto its context
+//   - sm-rect-drag   { bounds | null }  the rect tool's drag in flight — the
+//                    box as the release would paint it (square-locked) —
+//                    whenever it changes (the press, a corner move, Shift
+//                    down / up) and null when it ends (commit, Esc, cancel,
+//                    a tool switch); the same dedupe, the same mirror — for
+//                    the options strip's readout
 //   - sm-pick-color  { rgb }          an eyedrop hit a painted texel
 //   - sm-pick-transparent             an eyedrop hit empty space
 //   - sm-replace-all-tiles { target, fill }  a fill click with contiguous off
@@ -284,6 +290,7 @@ export class SmDrawCanvas extends LitElement {
   #rectEnd = null; // raw moving corner texel {px,py} (pre square-lock)
   #rectPointer = null; // captured pointerId, for release on cancel
   #shiftLock = false; // Shift held → constrain the drag to a square
+  #rectNotified = null; // the box last reported through sm-rect-drag (dedupes emits)
 
   // Selection-tool state (the header's base + float model). `#sel` is the
   // marquee in TILE texels, inclusive — the LIFT ORIGIN, never translated in
@@ -478,6 +485,7 @@ export class SmDrawCanvas extends LitElement {
     this.#rectEnd = null;
     this.#rectPointer = null;
     this.#shiftLock = false;
+    this.#notifyRectDrag(); // a box in flight went with the buffer (a no-op when none was)
     // A selection dies with the buffer it was lifted from (the pixels it
     // moved are already in the document): null the fields outright — no
     // cancel, nothing to revert into a buffer being replaced — and stop the
@@ -1044,6 +1052,11 @@ export class SmDrawCanvas extends LitElement {
   // around the box, at the ticker's phase. Nothing is written to `#work`
   // until #commitRect() on pointer-up.
   #drawRectPreview() {
+    // Every change to the box routes through a preview redraw (the press, a
+    // corner move, Shift down / up, the ?rect hook) — so the readout's report
+    // rides here, ahead of the overlay (a re-fit's redraw reports nothing
+    // new: the emit dedupes on the box's value).
+    this.#notifyRectDrag();
     const g = this.#cursorCtx;
     if (!g) return;
     drawRectPreview(
@@ -1086,10 +1099,33 @@ export class SmDrawCanvas extends LitElement {
     this.#gestureChanged = false;
     this.#cursorCtx?.clearRect(0, 0, this.#sysW, this.#sysH);
     this.#syncAnts(); // an erasing drag's ring went with it
+    this.#notifyRectDrag(); // …and the readout's box
     if (this.#rectPointer != null) {
       this.#canvas.value?.releasePointerCapture?.(this.#rectPointer);
       this.#rectPointer = null;
     }
+  }
+
+  // Report the rect drag's box to the container — the box as the release
+  // would paint it while a drag is in flight, null otherwise — only when it
+  // actually changed (a same-texel move, a re-fit's redraw report nothing),
+  // so the per-context store downstream sees one patch per real change:
+  // #notifySelection's discipline for the other outline.
+  #notifyRectDrag() {
+    const next = this.#rectDragging ? this.#rectBounds() : null;
+    const last = this.#rectNotified;
+    if (
+      next === last ||
+      (next &&
+        last &&
+        next.x0 === last.x0 &&
+        next.y0 === last.y0 &&
+        next.x1 === last.x1 &&
+        next.y1 === last.y1)
+    )
+      return;
+    this.#rectNotified = next;
+    this.#emit('sm-rect-drag', { bounds: next });
   }
 
   // Redraw the top (cursor) overlay for the current state: the rect drag preview
@@ -1610,6 +1646,7 @@ export class SmDrawCanvas extends LitElement {
       this.#rectPointer = null;
       this.#cursorCtx.clearRect(0, 0, this.#sysW, this.#sysH); // commit is on `#work`
       this.#syncAnts(); // an erasing drag's ring went with it
+      this.#notifyRectDrag(); // …and the readout's box: the strip reads 0 × 0 again
       return;
     }
     this.#endGesture();

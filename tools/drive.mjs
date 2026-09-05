@@ -332,6 +332,11 @@ async function drag(
   await mouse('mouseReleased', b.x, b.y, { buttons: 0, modifiers, button });
 }
 
+// The strip readout's numbers alone, joined — a value-shape read of a probe
+// ("5 × 5" → "5,5"; a size readout is exactly two numbers, never a position
+// in front of them), never its copy.
+const readoutNums = (s) => ((s.optsReadout || '').match(/\d+/g) || []).join(',');
+
 // --- assertions -------------------------------------------------------------
 let passed = 0;
 const failures = [];
@@ -453,6 +458,30 @@ const PROBE = `(() => {${DEEP}
       if (!o) return null;
       const ls = o.shadowRoot.querySelectorAll('vf-label');
       return ls.length ? ls[ls.length - 1].textContent.trim() : null;
+    })(),
+    // The strip's labels are plain ink — no \`dim\` on a caption or a readout
+    // (Sep 5 2026: dim is the kit's disabled look, and nothing in the strip
+    // is disabled) — the count of dim labels, for the checks to pin at zero.
+    optsDim: (() => {
+      const o = __q('sm-tool-options');
+      return o ? o.shadowRoot.querySelectorAll('vf-label[dim]').length : null;
+    })(),
+    // The strip's cell walls in the BAR: the kit's vertical rules between the
+    // ink swatch and the tool's options (one whenever both are up, none
+    // otherwise). The rect's inner wall is in the leaf, listed in \`opts\`.
+    stripRules: (() => {
+      const bar = __q('sm-options-bar');
+      const row = bar && bar.shadowRoot ? bar.shadowRoot.querySelector('.strip') : null;
+      return row
+        ? [...row.children].filter((c) => c.tagName.toLowerCase() === 'vf-separator').length
+        : null;
+    })(),
+    // The walls' line style, the kit's restyle hook the row declares (dotted:
+    // one px on, one off); read off the leaf's host, so the check sees the
+    // property reach the rect's inner wall through the shadow boundary.
+    stripRuleStyle: (() => {
+      const o = __q('sm-tool-options');
+      return o ? getComputedStyle(o).getPropertyValue('--vf-separator-style').trim() : null;
     })(),
     // The face picker is app-level chrome now: the strip across the Full
     // Sprite View windoid, serving the ACTIVE document (one picker, so the
@@ -1279,6 +1308,15 @@ async function main() {
     'the options strip shows the pencil slider',
     s.opts.join(',') === 'vf-slider,vf-label'
   );
+  // The strip's cells are walled by the kit's vertical rule: one between the
+  // ink swatch and the tool's options (the slider and its readout are one
+  // cell — no rule inside the leaf for the pencil), drawn dotted through the
+  // kit's own hook, which reaches the leaf's shadow root too.
+  check(
+    "one dotted rule walls the ink swatch off from the pencil's options",
+    s.stripRules === 1 && s.stripRuleStyle === 'dotted',
+    JSON.stringify({ rules: s.stripRules, style: s.stripRuleStyle })
+  );
   check('face picker reflects ?edit=front', s.face === 'front', s.face);
   check('the checked radio follows the face', s.checkedRadio === 'front');
   check('the document window is titled for the sample', s.heading === 'Car', s.heading);
@@ -1318,10 +1356,23 @@ async function main() {
   await keyPress('r');
   s = await probe();
   check('R selects the rect tool', s.drawTool === 'rectangle', s.drawTool);
+  // The caption, the field, a rule, then the drag readout — 0 × 0 with no
+  // drag in flight (a value-shape check: two numbers, both zero).
   check(
-    'rect options are the radius field',
-    s.opts.join(',') === 'vf-label,vf-number-field',
-    s.opts.join(',')
+    'rect options are the radius field, a rule, then the drag readout at rest (0 × 0)',
+    s.opts.join(',') === 'vf-label,vf-number-field,vf-separator,vf-label' &&
+      readoutNums(s) === '0,0',
+    JSON.stringify({ opts: s.opts, readout: s.optsReadout })
+  );
+  check(
+    'the rect strip is three cells — swatch | radius | readout — the bar walling the swatch off',
+    s.stripRules === 1 && s.inkSwatchShown === true,
+    JSON.stringify({ rules: s.stripRules, swatch: s.inkSwatchShown })
+  );
+  check(
+    "the rect strip's caption and readout are plain ink (no dim label)",
+    s.optsDim === 0,
+    `dim labels: ${s.optsDim}`
   );
 
   // The kit hosts its <input> in shadow DOM, so the tool-shortcut guard has to
@@ -1346,9 +1397,9 @@ async function main() {
   s = await probe();
   check('G selects the fill tool', s.drawTool === 'fill', s.drawTool);
   check(
-    'fill options are the two checkboxes',
-    s.opts.join(',') === 'vf-checkbox,vf-checkbox',
-    s.opts.join(',')
+    'fill options are the two checkboxes (one group, walled off from the swatch)',
+    s.opts.join(',') === 'vf-checkbox,vf-checkbox' && s.stripRules === 1,
+    JSON.stringify({ opts: s.opts, rules: s.stripRules })
   );
 
   await keyPress('i');
@@ -1363,6 +1414,11 @@ async function main() {
     'the eyedropper still shows the ink swatch',
     s.inkSwatchShown && /^#[0-9a-f]{6}$/.test(s.inkColor || ''),
     s.inkColor
+  );
+  check(
+    '…standing alone: no rule dangles after it with no options cell',
+    s.stripRules === 0,
+    `rules in the bar: ${s.stripRules}`
   );
   // The sampler's target wears the same ring as an erase: hovering with the
   // eyedropper puts the marching ants around the one texel a click would
@@ -1391,7 +1447,11 @@ async function main() {
     s.opts.join(',') === 'vf-slider,vf-label',
     s.opts.join(',')
   );
-  check('the eraser hides the ink swatch', s.inkSwatchShown === false, s.inkColor);
+  check(
+    'the eraser hides the ink swatch (and no rule stands in a strip with no swatch)',
+    s.inkSwatchShown === false && s.stripRules === 0,
+    JSON.stringify({ swatch: s.inkSwatchShown, rules: s.stripRules })
+  );
 
   // The erase treatment: hovering with the eraser puts the marching ants
   // around the texels the tip would clear — the selection's own 1-bit ring,
@@ -1427,6 +1487,11 @@ async function main() {
     /^\d+ px$/.test(s.optsReadout || '') && s.optsReadout !== '1 px',
     s.optsReadout
   );
+  check(
+    "…read out in plain ink (no dim label in the eraser's strip)",
+    s.optsDim === 0,
+    `dim labels: ${s.optsDim}`
+  );
 
   await keyPress('b');
   s = await probe();
@@ -1435,6 +1500,11 @@ async function main() {
     "…whose own size the eraser's slider did not touch",
     s.optsReadout === '1 px',
     s.optsReadout
+  );
+  check(
+    "…and the pencil's readout is plain ink too (no dim label)",
+    s.optsDim === 0,
+    `dim labels: ${s.optsDim}`
   );
 
   // --- pencil ---------------------------------------------------------------
@@ -1517,14 +1587,17 @@ async function main() {
   // texels in the ink at full alpha, ONE color, no translucent tint and no
   // outline around it (a 50% tint under a haloed hairline went Sep 5 2026).
   let rectPreview = null;
+  let rectMid = null; // the probe mid-drag, for the strip's readout
   await drag(at(30, 4), at(34, 8), {
     beforeRelease: async () => {
       await sleep(50);
       rectPreview = await layerSolid('.editor-canvas-cursor');
+      rectMid = await probe();
       await keyPress('Escape');
     },
   });
   await sleep(150);
+  s = await probe();
   check(
     'mid-drag the preview is the box in the ink alone: one color, full alpha, no outline',
     !!rectPreview &&
@@ -1534,6 +1607,15 @@ async function main() {
       rectPreview.color === rectInk,
     JSON.stringify({ preview: rectPreview, ink: rectInk })
   );
+  // The strip's readout is the drag's size — 5 × 5 for this box, its
+  // position never in it — and 0 × 0 the moment the drag ends (a
+  // value-shape check on the numbers, not the copy).
+  check(
+    'mid-drag the strip reads the box as width × height alone',
+    !!rectMid && readoutNums(rectMid) === '5,5',
+    rectMid ? rectMid.optsReadout : 'no mid-drag probe'
+  );
+  check('Esc returns the rect readout to 0 × 0', readoutNums(s) === '0,0', s.optsReadout);
   const escaped = await texelAt(32, 6);
   check('Esc mid-drag writes nothing', escaped[3] === 0, `texel=${escaped}`);
 
@@ -1559,13 +1641,26 @@ async function main() {
     JSON.stringify({ strip: s.drawTool, menu: s.menuChecks.tool })
   );
   // The strip: no ink swatch (the tool lays no color) and a lone readout
-  // label (a mechanism check: one label, no digits while nothing is up).
+  // label reading 0 × 0 with nothing up (a value-shape check: one label,
+  // two numbers, both zero — a "no selection" caption stood here until Sep
+  // 5 2026), in plain ink.
   check(
-    'the selection tool hides the ink swatch and shows only its readout',
+    'the selection tool hides the ink swatch and shows only its readout, 0 × 0 at rest, no rule',
     s.inkSwatchShown === false &&
+      s.stripRules === 0 &&
       s.opts.join(',') === 'vf-label' &&
-      !/\d/.test(s.optsReadout || ''),
-    JSON.stringify({ opts: s.opts, swatch: s.inkSwatchShown, readout: s.optsReadout })
+      readoutNums(s) === '0,0',
+    JSON.stringify({
+      opts: s.opts,
+      swatch: s.inkSwatchShown,
+      rules: s.stripRules,
+      readout: s.optsReadout,
+    })
+  );
+  check(
+    "the selection strip's readout is plain ink (no dim label)",
+    s.optsDim === 0,
+    `dim labels: ${s.optsDim}`
   );
   await drag(at(30, 4), at(34, 8));
   await sleep(150);
@@ -1581,11 +1676,12 @@ async function main() {
     antsInks.other === 0 && antsInks.black > 0 && antsInks.white > 0,
     JSON.stringify(antsInks)
   );
-  // The readout carries the marquee's numbers in order: left 30, top 4, then
-  // 5 × 5 (a value-shape check, not copy).
+  // The readout carries the marquee's SIZE alone — 5 × 5 — never its
+  // position (the `left, top ·` prefix went Sep 5 2026): a value-shape
+  // check, exactly two numbers.
   check(
-    'the readout states the marquee (left, top, then width × height)',
-    /\b30\b.*\b4\b.*\b5\b.*\b5\b/.test(s.optsReadout || ''),
+    'the readout states the marquee as width × height alone (no position)',
+    readoutNums(s) === '5,5',
     s.optsReadout
   );
   check(
@@ -1609,11 +1705,7 @@ async function main() {
   await sleep(100);
   s = await probe();
   check('Esc drops the selection (ants gone)', !(await antsUp()));
-  check(
-    '…and the readout empties with it',
-    !/\d/.test(s.optsReadout || ''),
-    s.optsReadout
-  );
+  check('…and the readout returns to 0 × 0', readoutNums(s) === '0,0', s.optsReadout);
 
   // The smallest selection is ONE texel: a press is a click until the pointer
   // moves past a few px (or onto another texel) — then it is a marquee whose
@@ -1630,7 +1722,7 @@ async function main() {
   s = await probe();
   check(
     'a drag inside one texel selects that texel (1 × 1 the smallest)',
-    (await antsUp()) && /\b20\b.*\b20\b.*\b1\b.*\b1\b/.test(s.optsReadout || ''),
+    (await antsUp()) && readoutNums(s) === '1,1',
     JSON.stringify({ ants: await antsUp(), readout: s.optsReadout, wiggle, texelPx })
   );
   await keyPress('Escape');
@@ -1694,10 +1786,11 @@ async function main() {
     `${keptB}`
   );
   check('the ants follow the float', await antsUp());
-  // The float moved +10 rows: the readout's top is 14 now, its size unchanged.
+  // The float moved +10 rows: the readout still reads 5 × 5 — the size is
+  // the whole float's, and the position is not in it.
   check(
-    'the readout follows the float (top 4 → 14, size held)',
-    /\b30\b.*\b14\b.*\b5\b.*\b5\b/.test(s.optsReadout || ''),
+    'the readout holds the size through the move (no position in it)',
+    readoutNums(s) === '5,5',
     s.optsReadout
   );
   check('a move is one undo step', s.menuChecks.undoEnabled === true);

@@ -2,9 +2,22 @@
 // <sm-options-bar> — the settings strip under the menu bar: the current-ink
 // swatch (every tool that paints — the eraser and the selection hide it;
 // clicking it opens the Colors dialog) and the per-tool options
-// (<sm-tool-options>: pencil/eraser tip sliders, rect radius stepper, fill
-// checkboxes, the selection's bounds READOUT — a tool with no settings, whose
-// strip says what it has instead: the active window's marquee, live). No
+// (<sm-tool-options>: pencil/eraser tip sliders, the rect's radius stepper
+// beside a READOUT of its drag in flight, fill checkboxes, the selection's
+// READOUT alone — a tool with no settings, whose strip says what it has
+// instead: the active window's marquee, live; each readout the box's size
+// as width × height, `0 × 0` for none). THE CELLS ARE WALLED: the kit's own
+// `<vf-separator vertical>` — a 1-system-px rule that stretches itself to
+// the row's height, so the wall runs from the band's top to its bottom rule,
+// drawn DOTTED (one px on, one off — `--vf-separator-style`, the kit's
+// restyle hook, set on the row below; the color the kit's black) —
+// stands between the swatch and the tool's options whenever BOTH are up
+// (the pencil, the rect, the fill; never a rule dangling after the
+// eyedropper's lone swatch, and none in a strip with no swatch), the seam
+// between the ink (app-level) and the tool's own settings; the rect's
+// second wall, between its stepper and its readout, is the leaf's
+// (sm-tool-options, whose header states the grammar: a rule separates
+// different things, never a control from its own readout). No
 // tool-name caption: the Tools palette's inverted cell and the Tools menu's
 // checkmark already say which tool is live. A fixed strip, not a window —
 // blank when a tool has no options (the standing preference for persistent,
@@ -37,7 +50,7 @@ import { shell } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
 import { StoreController, ActiveDocController } from '../state/store-controller.js';
 import { baseStyles } from './base-styles.js';
-import './sm-tool-options.js'; // registers <sm-tool-options>
+import { SmToolOptions } from './sm-tool-options.js'; // registers <sm-tool-options>
 
 export class SmOptionsBar extends LitElement {
   static styles = [
@@ -47,12 +60,23 @@ export class SmOptionsBar extends LitElement {
         display: block;
       }
       /* The row inside the band (see header): fills the paper to the rule and
-       lays the controls out; every length in system px rides --vf-scale. */
+       lays the controls out; every length in system px rides --vf-scale. The
+       gap is the gutter on either side of a cell wall (12, the leaf's own —
+       it was 24 while the space alone stood in for a rule); the wall itself
+       stretches to this row's height, the band's paper. */
       .strip {
         display: flex;
         align-items: center;
-        gap: calc(var(--vf-scale, 1) * 24px);
+        gap: calc(var(--vf-scale, 1) * 12px);
         padding: 0 calc(var(--vf-scale, 1) * 14px);
+        /* The walls are DOTTED — one px on, one off — through the kit's own
+           restyle hook for its separator (the one vf-menu sets for its rule);
+           the color stays the kit's black (the menu dims its own). A custom
+           property, so it inherits into the leaf's shadow root and the rect's
+           inner wall reads the same. At 1 system px a CSS dotted border is a
+           1×1 on/off run, and the band's 35 rows (70 at 2×) are an odd count,
+           so the run fits with a dot at each end and nothing stretched. */
+        --vf-separator-style: dotted;
       }
     `,
   ];
@@ -63,14 +87,19 @@ export class SmOptionsBar extends LitElement {
     new StoreController(this, shell.store);
     // The clamp bounds derive from the ACTIVE document's tile geometry — the
     // strip's controls apply to whichever window is being edited — and the
-    // selection readout follows its marquee (opt-in: this strip is the one
-    // host that shows it, so the per-move re-render lands here alone).
+    // readouts follow its outlines, the marquee and the rect drag (opt-in:
+    // this strip is the one host that shows them, so the per-move re-render
+    // lands here alone).
     new ActiveDocController(this, workspace, { selection: true });
   }
 
   /** The active window's selection outline, for the readout (null: none). */
   get #activeSelection() {
     return workspace.active()?.selection.get().bounds ?? null;
+  }
+  /** The active window's rect drag in flight, for the readout (null: none). */
+  get #activeRectDrag() {
+    return workspace.active()?.selection.get().rect ?? null;
   }
 
   // The same geometric bounds the editor derives: tips capped at the tile
@@ -103,7 +132,7 @@ export class SmOptionsBar extends LitElement {
   #content() {
     const s = session.get();
     return html`
-      ${this.#inkSwatch(s)}
+      ${this.#inkSwatch(s)}${this.#wall(s)}
       <sm-tool-options
         .tool=${s.tool}
         .pencilSize=${s.pencilSize}
@@ -114,6 +143,7 @@ export class SmOptionsBar extends LitElement {
         .fillContiguous=${s.fillContiguous}
         .fillAllFaces=${s.fillAllFaces}
         .selection=${this.#activeSelection}
+        .rectDrag=${this.#activeRectDrag}
         @sm-set-pencil-size=${(e) => session.setPencilSize(e.detail.n, this.#brushMax)}
         @sm-set-eraser-size=${(e) => session.setEraserSize(e.detail.n, this.#brushMax)}
         @sm-set-corner-radius=${(e) =>
@@ -128,8 +158,21 @@ export class SmOptionsBar extends LitElement {
   // it — a lone well standing in for the current color, the case the kit
   // says wants the hard `shadow`. Clicking it opens the Colors dialog (⌘K
   // still works with any tool; an Alt-sample still changes the ink).
+  static showsSwatch(tool) {
+    return tool !== 'eraser' && tool !== 'select';
+  }
+
+  // The wall between the swatch and the tool's options: the kit's vertical
+  // rule, only when both cells are up (see the header) — the leaf says
+  // whether the tool has options at all.
+  #wall(s) {
+    if (!SmOptionsBar.showsSwatch(s.tool) || !SmToolOptions.hasOptions(s.tool))
+      return nothing;
+    return html`<vf-separator vertical></vf-separator>`;
+  }
+
   #inkSwatch(s) {
-    if (s.tool === 'eraser' || s.tool === 'select') return nothing;
+    if (!SmOptionsBar.showsSwatch(s.tool)) return nothing;
     return html`
       <vf-swatch
         class="editor-selected"

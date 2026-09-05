@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 297 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 306 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -95,6 +95,23 @@ browser, `http://localhost:5173/`.
       Shift mid-drag — the preview snaps to a square anchored at the start
       corner; release Shift and it un-snaps; commit while held → a square
       lands.
+- [ ] **The rect strip reads the drag**: with R live the options strip is
+      the swatch, a rule, `radius`, its field, a rule, then `0 × 0`; drag a
+      box — the readout reads its `width × height` and tracks the corner;
+      press Shift mid-drag — it re-fits to the square with the preview;
+      release (or Esc) — back to `0 × 0`, nothing in the strip shifting.
+      Every label in the strip is plain black — the `radius` caption, this
+      readout, the pencil's and the eraser's `N px` — none greyed like a
+      disabled control.
+- [ ] **The strip's cell walls**: each rule is a dotted line of pure-black
+      system px — one on, one off, a dot at the top of the paper and a dot
+      against the strip's bottom rule, every dot square and no gray at any
+      browser zoom (the kit's own `vf-separator`, its style hook set
+      `dotted`) — running the band's full height. Pencil: swatch | slider + `N px` (one
+      rule; the slider and its readout are one cell). Rect: swatch | radius
+      | readout (two). Fill: swatch | the two checkboxes (one). Eyedropper:
+      the swatch alone, no rule dangling after it. Eraser and selection: no
+      swatch, no rule. The gutter either side of a rule reads even.
 - [ ] **Right-drag erase**: right-drag a rect over painted art — the preview
       is the marching ants around the box (no fill inside it, no halo around
       it; at a nonzero radius the ring stays the box while the release
@@ -122,12 +139,13 @@ browser, `http://localhost:5173/`.
       (a frame late with the pointer still — the kit re-hit-tests on the
       next move).
 - [ ] **The strip is a readout**: with S live the options strip shows no
-      ink swatch and a dim `no selection`; drag a marquee — it reads
-      `left, top · width × height` and the numbers track the corner as you
-      drag; move the float — the position follows per texel, the size holds;
-      push it off the left edge — the position goes negative; drop — back
-      to `no selection`. Two documents with a selection each: the readout
-      follows the ACTIVE window as you click between them.
+      ink swatch and a plain black `0 × 0` (no greyed "no selection"); drag
+      a marquee — it reads `width × height`, no position in front of it,
+      and the numbers track the corner as you drag; move the float — the
+      readout holds; push it off the left edge — it still holds (the size
+      is the whole float's); drop — back to `0 × 0`. Two documents with a
+      selection each: the readout follows the ACTIVE window as you click
+      between them.
 - [ ] **Shift constrains a move**: drag the float diagonally, press Shift —
       it snaps to the dominant axis; release Shift — it follows freely
       again.

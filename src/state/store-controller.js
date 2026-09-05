@@ -36,9 +36,10 @@ export class StoreController {
  * followActive. For hosts that render FROM the active document (the atlas
  * status readout, the options strip's tile bounds) without owning a context
  * of their own. `selection: true` also follows the active context's
- * selection store (the canvas's marquee outline — pointer-move rate during
- * a drag): OPT-IN, so only a host that actually shows it (the options
- * strip's readout) re-renders per move, never every follower.
+ * selection store (the canvas's two live outlines — the marquee and the
+ * rect tool's drag in flight — pointer-move rate during a drag): OPT-IN, so
+ * only a host that actually shows them (the options strip's readouts)
+ * re-renders per move, never every follower.
  */
 export class ActiveDocController {
   /**
