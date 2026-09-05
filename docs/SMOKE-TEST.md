@@ -1,7 +1,7 @@
 # Manual smoke test — the desktop shell
 
 The automated surfaces cover most of the app (`npm test` for every pure
-contract, `tools/drive.mjs` for 292 trusted-input checks, `tools/capture.sh`
+contract, `tools/drive.mjs` for 297 trusted-input checks, `tools/capture.sh`
 for byte-stable screenshots). This guide covers the residue: gestures and
 flows that headless Chrome runs unreliably (chorded drags wedge its
 renderer) or that need a human eye. Run against `npm run dev`, normal
@@ -86,16 +86,30 @@ browser, `http://localhost:5173/`.
 
 ## Drawing gestures (document window)
 
+- [ ] **Rect preview is the paint**: with the rect tool (R), drag a box across
+      paper and painted art — the preview is the box in the ink, opaque,
+      exactly as the release leaves it: no lighter tint over the art, no
+      hairline or halo around its edge; release, and nothing on the canvas
+      changes but the overlay going away.
 - [ ] **Rect + Shift**: with the rect tool (R), drag a wide box, then press
       Shift mid-drag — the preview snaps to a square anchored at the start
       corner; release Shift and it un-snaps; commit while held → a square
       lands.
 - [ ] **Right-drag erase**: right-drag a rect over painted art — the preview
-      tints red, release erases the box. Right-click with the pencil erases
-      under the tip; right-click with fill deletes the clicked region.
+      is the marching ants around the box (no fill inside it, no halo around
+      it; at a nonzero radius the ring stays the box while the release
+      spares the corners), release erases the box. Right-click with the
+      pencil erases under the tip, the footprint wearing the ants while the
+      button is down and the ink fill back the moment it comes up;
+      right-click with fill deletes the clicked region.
 - [ ] **Hover previews**: pencil hover shows the exact N×N footprint filled
-      with the live ink under the kit's crosshair; eraser shows the red
-      treatment; eyedropper shows the 1-cell outline.
+      with the live ink under the kit's crosshair; the eraser shows the
+      marching ants around its N×N footprint — the selection's ring,
+      marching at its pace, nothing inside it, no halo, following the size
+      slider live and clamping at the canvas edge, standing still under
+      reduce-motion; the eyedropper shows the same ring around the one
+      texel it would sample, marching too — no halo, nothing translucent
+      anywhere on the canvas but the art.
 - [ ] **Marching ants**: S, drag a box — a 1px black/white dashed border
       marches around it (briskly, continuously, one seam at the start
       corner); zoom the browser in — every px of it is pure black or pure
@@ -123,11 +137,14 @@ browser, `http://localhost:5173/`.
       back (and drops the selection).
 - [ ] **Reduced motion**: with the OS "reduce motion" on, the ants stand
       still (phase 0); the tool otherwise behaves the same.
-- [ ] **A click is no selection**: click (no drag) on the canvas — nothing
-      appears (not even a one-texel flash during the press); click outside
-      an existing selection — it drops; drag from outside — the old drops
-      and a new marquee starts in the same gesture. Esc mid-marquee cancels
-      it; Esc mid-move puts the float back where it was grabbed.
+- [ ] **A click is no selection, a wiggle is one texel**: click (no drag) on
+      the canvas — nothing appears (not even a one-texel flash during the
+      press); press and move a few px inside one texel — the ants ring that
+      texel as you move and hold on release, the readout reading `1 × 1`;
+      click outside an existing selection — it drops; drag from outside —
+      the old drops and a new marquee starts in the same gesture. Esc
+      mid-marquee cancels it; Esc mid-move puts the float back where it was
+      grabbed.
 - [ ] **Esc respects a dialog**: with a selection up, ⌘K (or the swatch)
       then Esc — the Colors dialog closes, the ants stay; a second Esc on
       the canvas drops them. Drop a menu and press Esc — the menu closes

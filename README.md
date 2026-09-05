@@ -205,12 +205,19 @@ template — see [UI layer: Lit](#ui-layer-lit).
   `N px` readout) that stamps an
   **N×N** square footprint and **previews it filled with the active ink** on the
   canvas as you hover — the exact texels a stamp will cover, looking exactly as
-  the art would after the click (a translucent red block while erasing, since
-  transparency can't be previewed on an overlay) — with the **OS crosshair kept
-  on top** marking the position. For the **rect**, a **corner-radius
+  the art would after the click (under a **right button** — the momentary
+  erase — the footprint wears the **erase treatment** instead for the
+  stroke's length: the marching ants, see the eraser below) — with the **OS
+  crosshair kept on top** marking the position. For the **rect**, a **corner-radius
   stepper** (`radius: N px`, `0` = sharp): **drag** a box and a **live preview**
-  (the exact filled texels, tinted by the ink — red while erasing — under a haloed
-  bounding box) tracks the drag on the top overlay; **release** commits it, and
+  (the exact filled texels in the ink at **full opacity** — the box exactly as
+  the release will leave it, with no outline around it: the 50% tint under a
+  haloed bounding box went Sep 5 2026, the paint itself being the extent's
+  readout; a **right-drag**, erasing, wears the **erase treatment** instead —
+  the marching ants around the drag's bounding box, the rectangle walk the
+  selection's ring is, so the corner texels a radius spares sit inside the
+  ring rather than traced) tracks the drag on the top overlay; **release**
+  commits it, and
   **Esc** (or switching tool with `B`/`R`) **cancels** the in-flight box with
   nothing written. Hold **Shift** while dragging to lock the box to a **square** (the
   shorter extent wins, anchored at the start corner) — toggleable mid-drag, so the
@@ -250,8 +257,13 @@ template — see [UI layer: Lit](#ui-layer-lit).
   only where it is painted, so art under its empty texels shows through
   untouched — the lasso's most useful property, for free. Click outside,
   press **Esc**, or pick another tool and the selection **drops** where it
-  sits (a click with no drag makes no selection — the smallest is 1×2 — and
-  never flashes a one-texel box; Esc mid-drag cancels the marquee, or puts a
+  sits (a click with no drag makes no selection and never flashes a
+  one-texel box: a press is a click until the pointer moves a few px — the
+  OS's own drag threshold — or onto another texel, and from then on it is a
+  marquee whose box runs anchor to corner inclusive, so **one texel** is the
+  smallest selection, a wiggle inside it; the 1×2 floor of the earlier rule,
+  "a marquee that ends on its anchor is a click", went Sep 5 2026. Esc
+  mid-drag cancels the marquee, or puts a
   moving float back where it was grabbed). Push the float off the canvas
   and what's off-tile at the drop is gone, as MacPaint lost what you dragged
   off the page (Undo has it). A right-click does nothing with this tool; an
@@ -286,7 +298,15 @@ template — see [UI layer: Lit](#ui-layer-lit).
   pencil that writes **transparency**, sharing the pencil's stroke path but
   carrying its **own tip-size** setting (a separate slider and a separately
   persisted value — the two tools' settings are deliberately independent), its
-  hover footprint drawn in the red-tinted erase treatment. The ink stays a solid color throughout, and **picking any
+  hover footprint the **erase treatment**: the selection's own **marching
+  ants** around the texels the tip would clear — the same 1-bit ring
+  (`src/lib/ants.js`, whole-px black and white runs), marching at the same
+  pace on the same ticker, standing still under reduce-motion — with **no
+  fill** inside it (transparency can't be previewed on an overlay) and **no
+  outline** around it; the translucent red block under a haloed hairline that
+  erasing wore went Sep 5 2026. It is the one treatment every erase wears:
+  the eraser's hover and stroke, a right-button pencil stroke, the rect
+  tool's right-drag. The ink stays a solid color throughout, and **picking any
   color while the eraser is held returns to the pencil** — a pick means "paint
   with this". A **right-click** is the _momentary_ erase with any tool (the
   right-drag rect is the rectangular erase; a right-click fill deletes a
@@ -300,8 +320,11 @@ template — see [UI layer: Lit](#ui-layer-lit).
   selected, and every canvas click samples the clicked texel — a painted texel's
   color becomes the **ink**, and **empty space hands you the eraser** (sampling
   emptiness selects the eraser tool) — until another tool is picked (while it's
-  active a 1-cell hairline outline marks its sample target under the OS
-  crosshair). Hold **Alt** instead for a momentary sample that doesn't leave the
+  active the **marching ants** ring the one texel it would sample, under the
+  OS crosshair — the selection's ring, the erase treatment's, marching on the
+  same ticker, nothing inside it and nothing translucent; the haloed hairline
+  that marked the target went Sep 5 2026, the last translucent mark on the
+  canvas). Hold **Alt** instead for a momentary sample that doesn't leave the
   current tool (with the same two exceptions: a color pick leaves the eraser, an
   empty sample selects it). The
   dialog is a System 7 movable modal (`vf-dialog`) laid out as a traditional
@@ -1565,7 +1588,9 @@ src/
                        composited in place, its ants on their own layer), integer-scale layout,
                        overlay layers, gesture-scoped keys, per-gesture undo capture (sm-commit)
     draw-overlays.js   pure canvas painters for the hover footprint / rect drag preview / the
-                       selection's marching ants
+                       marching ants — the selection's ring, and the same ring around a footprint:
+                       the erase treatment's (the eraser's footprint, a right-button stroke, a rect
+                       drag erasing) and the eyedropper's sample target
     sm-face-picker.js, sm-tool-strip.js, sm-tool-options.js
                        presentational leaves: props down, bubbling sm-* events up, no store imports
     sm-options-bar.js, sm-tools-panel.js, sm-atlas-controls.js, sm-atlas-view.js,

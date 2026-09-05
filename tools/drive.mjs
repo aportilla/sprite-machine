@@ -189,6 +189,7 @@ const downloads = new Map();
 // When the main frame last navigated: the readiness waits below hold until
 // the page has been quiet for a moment past its predicate (see them).
 let lastNavAt = 0;
+let navCount = 0; // main-frame commits seen since the session attached
 
 function send(method, params = {}) {
   const id = nextId++;
@@ -673,6 +674,28 @@ const layerInks = (sel) =>
     return n;
   })()`);
 
+// A layer as ONE paint: how many px are painted, how many distinct colors
+// they carry, how many are translucent, and — with exactly one color — that
+// color as hex. The rect drag's preview is the box as the release would paint
+// it and nothing else, so it reads as one color, no translucent px.
+const layerSolid = (sel) =>
+  evaluate(`(() => {${DEEP}
+    const c = __qd('${sel}');
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    const seen = new Set();
+    let painted = 0, translucent = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const a = d[i + 3];
+      if (a === 0) continue;
+      painted++;
+      if (a !== 255) translucent++;
+      seen.add((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
+    }
+    const one = seen.size === 1 ? [...seen][0] : null;
+    return { painted, distinct: seen.size, translucent,
+      color: one == null ? null : '#' + one.toString(16).padStart(6, '0') };
+  })()`);
+
 // The viewport rect of an element, and its centre — how a click finds a control.
 const centreOf = (sel) =>
   evaluate(`(() => {${DEEP}
@@ -697,13 +720,13 @@ const hex = ([r, g, b]) =>
 // a same-URL navigation could return on the old page and the next probe
 // land on the new one mid-boot (icons 0, no greet: a flake seen 3 runs in
 // 5 on the plain-reload greet check). A fresh document carries no stamp.
-// AND both waits hold for a QUIET window past the predicate: a same-URL
-// Page.navigate lands as TWO main-frame navigations in headless Chrome,
-// the second a beat after the first, and a predicate that came true on the
-// first page — stamped, probed — reads a mid-boot second page (the same
-// flake, seen again once the plain boot got faster). The wait ends only
-// when the predicate holds AND the main frame has not navigated for
-// NAV_QUIET ms, so the second navigation is always the one waited for.
+// AND both waits hold for a QUIET window past the predicate — the main
+// frame must not have navigated for NAV_QUIET ms — belt and braces against
+// a navigation landing a beat after the one waited for. (The "second
+// navigation a beat after the first" this guard was written for was
+// Chrome's one phantom reload of a launch's first page, which is now
+// absorbed on a throwaway page before the app ever loads — see
+// absorbPhantomReload below; the guard stays, cheap insurance.)
 const NAV_QUIET = 700;
 const quiet = () => Date.now() - lastNavAt >= NAV_QUIET;
 const APP_READY = `(() => {${DEEP}
@@ -714,11 +737,33 @@ const APP_READY = `(() => {${DEEP}
     (lb.getAttribute('title') || '').includes('voxels'));
 })()`;
 
+// A wait that runs out is a FAILURE with a diagnosis of the page it found,
+// never a silent hand-off to probes that then fail five ways at once.
+async function reportStuck(what) {
+  const state = await evaluate(
+    `(() => {${DEEP}
+      const d = __q('#dlg-about');
+      return JSON.stringify({
+        url: location.href, ready: document.readyState,
+        about: !!(d && d.open),
+        version: ((__q('#about-version') || {}).textContent || '').trim(),
+        canvas: !!__q('.editor-canvas'), stamp: window.__stamp || null,
+      });
+    })()`
+  ).catch((e) => 'unreadable: ' + e.message);
+  check(`the page came up within 20 s (${what})`, false, String(state));
+}
+
 async function waitForApp() {
+  let ready = false;
   for (let i = 0; i < 100; i++) {
-    if (quiet() && (await evaluate(APP_READY).catch(() => false))) break;
+    if (quiet() && (await evaluate(APP_READY).catch(() => false))) {
+      ready = true;
+      break;
+    }
     await sleep(200);
   }
+  if (!ready) await reportStuck('an editor canvas with build stats');
   await sleep(400);
   await evaluate(`window.__stamp = 'S'`);
 }
@@ -739,12 +784,45 @@ const GREET_READY = `(() => {${DEEP}
   return !!(d && d.open);
 })()`;
 async function waitForGreet() {
+  let ready = false;
   for (let i = 0; i < 100; i++) {
-    if (quiet() && (await evaluate(GREET_READY).catch(() => false))) break;
+    if (quiet() && (await evaluate(GREET_READY).catch(() => false))) {
+      ready = true;
+      break;
+    }
     await sleep(200);
   }
+  if (!ready) await reportStuck('the About box');
   await sleep(400);
   await evaluate(`window.__stamp = 'S'`);
+}
+
+// CHROME'S PHANTOM RELOAD. Headless Chrome (--headless=new on a fresh
+// profile) reloads the FIRST page a launch loads exactly once — browser-
+// initiated, 0.6–1.2 s after that page finishes loading. No script asks for
+// it (no Page.frameRequestedNavigation fires), no HMR frame carries it, a
+// bare data: page gets it with every launch flag stripped, the startup tab
+// and a created target alike, and later navigations in the same target
+// never see it (measured Sep 5 2026 with a CDP timeline). It used to land on
+// the app's virgin boot and race the greet wait: the wait broke on the About
+// box, the reload committed during the 400 ms settle, and the probes read a
+// page mid-boot — icons [], no greet, an empty version line — the "cold-run
+// flake" the commit trail blamed on Vite re-transforming edited modules. It
+// never was: a build running alongside only shifted the timing by the beat
+// that decided the race, which made it look edit-shaped. So the run loads a
+// THROWAWAY page first and waits for its second commit — the reload
+// absorbed, the app's first boot is clean, its seeding included.
+async function absorbPhantomReload() {
+  const before = navCount;
+  await send('Page.navigate', { url: 'data:text/html,<title>drive</title>' });
+  const t = Date.now();
+  while (navCount < before + 2 && Date.now() - t < 3000) await sleep(50);
+  console.log(
+    navCount >= before + 2
+      ? '  ..   [phantom reload absorbed on the throwaway page]'
+      : '  ..   [no phantom reload within 3 s — proceeding]'
+  );
+  await sleep(200);
 }
 
 async function freshPage() {
@@ -762,10 +840,12 @@ async function main() {
       await sleep(200);
     }
   }
-  const target = await fetch(
-    `http://127.0.0.1:${DBG_PORT}/json/new?${encodeURIComponent(SEED_URL)}`,
-    { method: 'PUT' }
-  ).then((r) => r.json());
+  // The target opens at about:blank and is ATTACHED before anything real
+  // loads, so every navigation of the run is seen and waited for (the first
+  // load used to be the target's own, under way before the session existed).
+  const target = await fetch(`http://127.0.0.1:${DBG_PORT}/json/new?about:blank`, {
+    method: 'PUT',
+  }).then((r) => r.json());
 
   ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => {
@@ -790,6 +870,7 @@ async function main() {
     }
     if (msg.method === 'Page.frameNavigated' && !msg.params.frame.parentId) {
       lastNavAt = Date.now();
+      navCount++;
       console.log('  ..   [navigated]', msg.params.frame.url);
     }
     if (msg.method === 'Page.javascriptDialogOpening') {
@@ -819,6 +900,8 @@ async function main() {
   });
   await send('Runtime.enable');
   await send('Page.enable');
+  await absorbPhantomReload();
+  await send('Page.navigate', { url: SEED_URL });
   await waitForGreet();
 
   // --- virgin boot: the defaults seed, the About box greets -------------------
@@ -1281,6 +1364,24 @@ async function main() {
     s.inkSwatchShown && /^#[0-9a-f]{6}$/.test(s.inkColor || ''),
     s.inkColor
   );
+  // The sampler's target wears the same ring as an erase: hovering with the
+  // eyedropper puts the marching ants around the one texel a click would
+  // read — 4k − 4 painted px at a k-system-px texel, all pure black or pure
+  // white, both inks (the haloed hairline went Sep 5 2026).
+  await mouse('mouseMoved', at(20, 20).x, at(20, 20).y, { buttons: 0 });
+  await sleep(100);
+  const sampleInks = await layerInks('.editor-canvas-cursor');
+  const sampleRing = await evaluate(
+    `(() => {${DEEP} const c = __qd('.editor-canvas-cursor'); return 4 * (c.width / ${TILE}) - 4; })()`
+  );
+  check(
+    "the eyedropper's sample target is the marching ants around one texel: a 1-bit ring",
+    sampleInks.other === 0 &&
+      sampleInks.black > 0 &&
+      sampleInks.white > 0 &&
+      sampleInks.black + sampleInks.white === sampleRing,
+    JSON.stringify({ inks: sampleInks, ring: sampleRing })
+  );
 
   await keyPress('e');
   s = await probe();
@@ -1291,6 +1392,28 @@ async function main() {
     s.opts.join(',')
   );
   check('the eraser hides the ink swatch', s.inkSwatchShown === false, s.inkColor);
+
+  // The erase treatment: hovering with the eraser puts the marching ants
+  // around the texels the tip would clear — the selection's own 1-bit ring,
+  // on the cursor layer, no fill inside it and no halo around it (the
+  // translucent red block under a haloed hairline went Sep 5 2026). At the
+  // boot 1 px tip the ring is one texel's frame: 4k − 4 painted px for a
+  // k-system-px texel (the layer's backing is tileW·k wide), every one pure
+  // black or pure white, both inks present.
+  await mouse('mouseMoved', at(20, 20).x, at(20, 20).y, { buttons: 0 });
+  await sleep(100);
+  const eraseInks = await layerInks('.editor-canvas-cursor');
+  const eraseRing = await evaluate(
+    `(() => {${DEEP} const c = __qd('.editor-canvas-cursor'); return 4 * (c.width / ${TILE}) - 4; })()`
+  );
+  check(
+    'the eraser hover is the marching ants around its footprint: a 1-bit ring, nothing inside it',
+    eraseInks.other === 0 &&
+      eraseInks.black > 0 &&
+      eraseInks.white > 0 &&
+      eraseInks.black + eraseInks.white === eraseRing,
+    JSON.stringify({ inks: eraseInks, ring: eraseRing })
+  );
 
   // The eraser's tip size is its OWN persisted setting: click mid-track to
   // drive its slider, flip back to the pencil, and the pencil's size must be
@@ -1381,15 +1504,36 @@ async function main() {
   );
 
   // --- rect: drag commit + Esc cancel ---------------------------------------
-  // Kept to the two gesture-shaped checks headless Chrome runs reliably under
+  // Kept to the gesture-shaped checks headless Chrome runs reliably under
   // the desktop shell; the Shift square-lock and right-drag-erase SEMANTICS
   // are pinned in Node (test/rect.test.mjs, test/brush.test.mjs) and in the
   // manual guide (docs/SMOKE-TEST.md) — repeated synthesized chord-drags here
   // wedge the headless renderer.
   section('rect');
   await keyPress('r');
-  await drag(at(30, 4), at(34, 8), { beforeRelease: () => keyPress('Escape') });
+  s = await probe();
+  const rectInk = s.inkColor;
+  // Mid-drag the top overlay is the box as the release would paint it — the
+  // texels in the ink at full alpha, ONE color, no translucent tint and no
+  // outline around it (a 50% tint under a haloed hairline went Sep 5 2026).
+  let rectPreview = null;
+  await drag(at(30, 4), at(34, 8), {
+    beforeRelease: async () => {
+      await sleep(50);
+      rectPreview = await layerSolid('.editor-canvas-cursor');
+      await keyPress('Escape');
+    },
+  });
   await sleep(150);
+  check(
+    'mid-drag the preview is the box in the ink alone: one color, full alpha, no outline',
+    !!rectPreview &&
+      rectPreview.painted > 0 &&
+      rectPreview.distinct === 1 &&
+      rectPreview.translucent === 0 &&
+      rectPreview.color === rectInk,
+    JSON.stringify({ preview: rectPreview, ink: rectInk })
+  );
   const escaped = await texelAt(32, 6);
   check('Esc mid-drag writes nothing', escaped[3] === 0, `texel=${escaped}`);
 
@@ -1470,6 +1614,27 @@ async function main() {
     !/\d/.test(s.optsReadout || ''),
     s.optsReadout
   );
+
+  // The smallest selection is ONE texel: a press is a click until the pointer
+  // moves past a few px (or onto another texel) — then it is a marquee whose
+  // box is the anchor to the corner inclusive. A bare click selects nothing;
+  // a wiggle inside one texel selects that texel (the 1×2 floor of the
+  // ends-on-its-anchor rule went Sep 5 2026).
+  await click(at(20, 20).x, at(20, 20).y);
+  await sleep(150);
+  check('a click with no drag makes no selection', !(await antsUp()));
+  const texelPx = s.rect.width / TILE;
+  const wiggle = Math.min(5, Math.floor(texelPx / 2) - 1);
+  await drag(at(20, 20), { x: at(20, 20).x + wiggle, y: at(20, 20).y + wiggle });
+  await sleep(150);
+  s = await probe();
+  check(
+    'a drag inside one texel selects that texel (1 × 1 the smallest)',
+    (await antsUp()) && /\b20\b.*\b20\b.*\b1\b.*\b1\b/.test(s.optsReadout || ''),
+    JSON.stringify({ ants: await antsUp(), readout: s.optsReadout, wiggle, texelPx })
+  );
+  await keyPress('Escape');
+  await sleep(100);
 
   // Two pencil dots: A inside the marquee-to-be, B where a TRANSPARENT texel
   // of the float will land after the move.

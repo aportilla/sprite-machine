@@ -4,12 +4,15 @@
 // marching-ants overlay), the working
 // buffer, the selection/pencil/rect/fill/eraser/eyedropper gestures (the
 // eraser is a pencil that writes transparency — it shares the stroke path but
-// carries its OWN tip size), the whole-system-px layout fitting, and the
+// carries its OWN tip size; every erase previews as the ERASE TREATMENT, the
+// marching ants around what it would clear), the whole-system-px layout fitting, and the
 // gesture-scoped keys (Esc cancels an in-flight rect or drops a selection,
 // Shift square-locks a rect or axis-locks a selection move — document-level,
 // but canvas business).
 //
-// THE SELECTION (MacPaint's selection rectangle): drag a marquee out, drag
+// THE SELECTION (MacPaint's selection rectangle): drag a marquee out (a
+// press is a click until it moves past SELECT_SLOP or onto another texel —
+// then a marquee, anchor to corner inclusive, ONE texel the smallest), drag
 // inside it to move the selected pixels, click outside / Esc / switch tools
 // to drop it where it sits. The model is BASE + FLOAT: on the first move
 // press the marquee's texels are lifted out ONCE as their own tile
@@ -95,8 +98,8 @@ import {
 } from '../lib/select.js';
 import { ANTS_PERIOD } from '../lib/ants.js';
 import {
-  drawCursorOutline,
   drawPencilPreview,
+  drawFootprintAnts,
   drawRectPreview,
   drawMarchingAnts,
 } from './draw-overlays.js';
@@ -111,6 +114,14 @@ const MIRROR_ALPHA = 0.22;
 // way MacPaint's were; the ANTS_PERIOD-px dash cycle makes eight ticks one
 // cycle.
 const ANTS_MS = 100;
+
+// The selection tool's drag threshold, in CSS px — the OS's own click-vs-drag
+// idiom: a press that moves no further than this (and stays on its anchor
+// texel) is a CLICK, no selection; past it the press is a marquee, whose box
+// is the anchor to the corner inclusive — so a wiggle inside one texel
+// selects that texel (the earlier rule, "a marquee that ends on its anchor
+// is a click", floored a selection at 1×2; it went Sep 5 2026).
+const SELECT_SLOP = 3;
 
 // The bare-letter tool keys (shortcuts.js's map) — mid-gesture, any of them
 // abandons the drag in flight before the switch it makes lands.
@@ -200,7 +211,11 @@ export class SmDrawCanvas extends LitElement {
       /* The selection's marching ants, topmost — nothing may cover the
        boundary — and on their OWN layer: every hover / rect painter clears
        and redraws the cursor layer at pointer-move rate, and ants drawn
-       there would be wiped by the next move. */
+       there would be wiped by the next move. (The erase previews' and the
+       eyedropper target's ants ARE the cursor layer's painting — what the
+       hover draws, redrawn per move and per tick — so they live there; the
+       two rings are never up at once, a selection dropping on any tool
+       switch.) */
       .editor-canvas-select {
         z-index: 3;
         pointer-events: none;
@@ -280,13 +295,16 @@ export class SmDrawCanvas extends LitElement {
   #selOffset = { dx: 0, dy: 0 }; // the float's displacement from #sel
   #selDrag = null; // null | 'marquee' | 'move' — the gesture in flight
   #selAnchor = null; // marquee: the anchor texel · move: the grab texel
+  #selPress = null; // marquee: the press's client point, for the SELECT_SLOP test
+  #selMoved = false; // marquee: past the slop (or off the anchor texel) — a drag, so the release selects
   #selOffsetAtGrab = null; // move: #selOffset when the press landed (a cancel reverts to it)
   #selLast = null; // move: the last pointer texel (Shift with the pointer still re-derives from it)
   #selPointer = null; // the captured pointerId, released on every exit path
   #selShift = false; // Shift held during a move → the axis lock (guards keydown repeat)
   #selNotified = null; // the outline last reported through sm-selection (dedupes emits)
-  // The ants: their own overlay layer + a ticker that runs only while a
-  // selection is up. `#antsStatic` (the ?select hook) pins phase 0 with no
+  // The ants: the selection's own overlay layer, the erase previews' ring on
+  // the cursor layer, and ONE ticker that runs while either is up (#syncAnts).
+  // `#antsStatic` (the ?select hook) pins phase 0 with no
   // timer, so a capture with a selection in frame stays byte-deterministic.
   #antsPhase = 0;
   #antsTimer = null;
@@ -337,8 +355,9 @@ export class SmDrawCanvas extends LitElement {
     // disconnects and reconnects this element mid-session: the selection
     // fields survive (same instance), so the ants' ticker — stopped on
     // disconnect so it can't leak into a context whose element is gone —
-    // comes back here iff a selection is up.
-    if (this.#sel) this.#startAnts();
+    // comes back here iff a ring is up (a selection's; an erase preview's
+    // stale hover re-syncs on the next move either way).
+    this.#syncAnts();
     // Setup mirrors disconnectedCallback's teardown: raising any window makes
     // vf-desktop re-order the slotted windows in the light DOM, which
     // disconnects + reconnects this element — the observer torn down there
@@ -420,7 +439,7 @@ export class SmDrawCanvas extends LitElement {
       changed.has('pencilSize') ||
       changed.has('eraserSize') ||
       changed.has('cornerRadius') ||
-      changed.has('ink') // the pencil's filled preview is tinted by the ink
+      changed.has('ink') // the pencil's and the rect drag's previews are painted in the ink
     ) {
       this.#redrawCursorLayer();
     }
@@ -470,6 +489,8 @@ export class SmDrawCanvas extends LitElement {
     this.#selOffset = { dx: 0, dy: 0 };
     this.#selDrag = null;
     this.#selAnchor = null;
+    this.#selPress = null;
+    this.#selMoved = false;
     this.#selOffsetAtGrab = null;
     this.#selLast = null;
     this.#selPointer = null;
@@ -897,6 +918,29 @@ export class SmDrawCanvas extends LitElement {
     return this.tool === 'eraser' ? this.eraserSize : this.pencilSize;
   }
 
+  // Is the footprint under the pointer an erasing one — the eraser tool's, or
+  // any stroke's under the right button (the momentary erase)?
+  get #erasing() {
+    return this.tool === 'eraser' || this.#forceErase;
+  }
+
+  // Does the cursor layer wear the ants right now — an erasing footprint
+  // under the pointer, the eyedropper's sample target, or a rect drag
+  // erasing? The one ticker marches whichever ring is up: this one, or the
+  // selection's on its own layer.
+  get #cursorAntsUp() {
+    if (this.#rectDragging) return this.#forceErase;
+    return !!this.#hoverTexel && (this.#erasing || this.tool === 'eyedropper');
+  }
+
+  // Start or stop the ticker on demand — called wherever a ring appears or
+  // goes (every hover redraw, a rect drag's begin / end / cancel, a
+  // reconnect). Stopping resets the phase, so every ring starts at the seam.
+  #syncAnts() {
+    if (this.#sel || this.#cursorAntsUp) this.#startAnts();
+    else this.#stopAnts();
+  }
+
   // Continuous stroke: Bresenham from the previous texel (or a single stamp), so
   // a fast drag lays down a solid run rather than dotted samples.
   #stroke(px, py) {
@@ -939,29 +983,35 @@ export class SmDrawCanvas extends LitElement {
 
   // The hover preview on the topmost overlay, under the cursor: the pencil fills
   // the exact texels a stamp would paint with the active ink (WYSIWYG — the OS
-  // crosshair marks the position), and the eraser shows the same footprint in
-  // the red-tinted erase treatment; the eyedropper outlines a single cell (its
-  // sample target). Cleared with t == null when the pointer leaves the canvas.
-  // Only these have a hover preview — the rect tool relies on the OS crosshair
-  // when idle and its own drag preview when dragging — so for any other tool
-  // this just clears the overlay.
+  // crosshair marks the position); an ERASING footprint — the eraser tool's,
+  // or the pencil's under a right button (the momentary erase, for the
+  // stroke's length) — is the erase treatment, the marching ants around the
+  // texels the tip would clear (draw-overlays.js drawFootprintAnts, at the
+  // ticker's phase); the eyedropper wears the same ring around the single
+  // cell it would sample. Cleared with t == null when the pointer leaves the
+  // canvas. Only these have a hover preview — the rect tool relies on the OS
+  // crosshair when idle and its own drag preview when dragging — so for any
+  // other tool this just clears the overlay. Every call re-syncs the ants
+  // ticker: it runs while a ring is up (a selection's, an erase preview's,
+  // the sampler's target), never otherwise.
   #drawCursor(t) {
     this.#hoverTexel = t;
     const g = this.#cursorCtx;
     if (!g) return;
     if (this.tool === 'eyedropper') {
-      drawCursorOutline(g, this.#overlayView, t, 1, false);
-      return;
+      drawFootprintAnts(g, this.#overlayView, t, 1, this.#antsPhase);
+    } else if (this.#erasing) {
+      drawFootprintAnts(g, this.#overlayView, t, this.#tipSize, this.#antsPhase);
+    } else {
+      drawPencilPreview(
+        g,
+        this.#overlayView,
+        this.tool === 'pencil' ? t : null,
+        this.#tipSize,
+        this.ink
+      );
     }
-    const strokes = this.tool === 'pencil' || this.tool === 'eraser';
-    drawPencilPreview(
-      g,
-      this.#overlayView,
-      strokes ? t : null,
-      this.#tipSize,
-      this.ink,
-      this.tool === 'eraser'
-    );
+    this.#syncAnts();
   }
 
   // The moving corner after any Shift square-lock (raw corner when unlocked).
@@ -986,10 +1036,13 @@ export class SmDrawCanvas extends LitElement {
     };
   }
 
-  // Live preview of the rect on the cursor overlay: the exact filled texels,
-  // tinted by the active ink (red while erasing), under a haloed hairline of the
-  // drag bounding box so the extent reads on any art even before the fill is
-  // obvious. Nothing is written to `#work` until #commitRect() on pointer-up.
+  // Live preview of the rect on the cursor overlay: the exact filled texels in
+  // the active ink at full opacity — the box as the release would paint it and
+  // nothing more (no outline: the 50% tint under a haloed hairline bounding box
+  // went Sep 5 2026; the paint itself is the extent's readout, the pencil's
+  // hover idiom). Erasing (a right-drag) wears the erase treatment — the ants
+  // around the box, at the ticker's phase. Nothing is written to `#work`
+  // until #commitRect() on pointer-up.
   #drawRectPreview() {
     const g = this.#cursorCtx;
     if (!g) return;
@@ -999,7 +1052,8 @@ export class SmDrawCanvas extends LitElement {
       this.#rectBounds(),
       this.cornerRadius,
       this.ink,
-      this.#forceErase
+      this.#forceErase,
+      this.#antsPhase
     );
   }
 
@@ -1031,6 +1085,7 @@ export class SmDrawCanvas extends LitElement {
     this.#gestureBefore = null;
     this.#gestureChanged = false;
     this.#cursorCtx?.clearRect(0, 0, this.#sysW, this.#sysH);
+    this.#syncAnts(); // an erasing drag's ring went with it
     if (this.#rectPointer != null) {
       this.#canvas.value?.releasePointerCapture?.(this.#rectPointer);
       this.#rectPointer = null;
@@ -1040,7 +1095,10 @@ export class SmDrawCanvas extends LitElement {
   // Redraw the top (cursor) overlay for the current state: the rect drag preview
   // while dragging, else the pencil hover footprint (a no-op clear for the idle
   // rect tool). Used by #layout() and by updated() so a re-fit or a tool/ink change
-  // repaints the right thing.
+  // repaints the right thing, by the ants ticker while the cursor layer wears
+  // a ring — an erase preview, the sampler's target — (it marches through
+  // this), and by a stroke's release (a
+  // right-button stroke's ring leaves with the button).
   #redrawCursorLayer() {
     if (this.#rectDragging) this.#drawRectPreview();
     else this.#drawCursor(this.#hoverTexel);
@@ -1057,12 +1115,25 @@ export class SmDrawCanvas extends LitElement {
   }
 
   // The outline the world sees: the current rectangle — except a marquee
-  // still on its anchor texel alone, which is a click in progress, not a
-  // selection (nothing drawn, nothing reported).
+  // press that hasn't become a drag yet (#selMoved), which is a click in
+  // progress, not a selection (nothing drawn, nothing reported).
   get #selOutline() {
     const b = this.#selRect;
-    if (b && this.#selDrag === 'marquee' && b.x0 === b.x1 && b.y0 === b.y1) return null;
+    if (b && this.#selDrag === 'marquee' && !this.#selMoved) return null;
     return b;
+  }
+
+  // Has a marquee press become a drag: the pointer past SELECT_SLOP from
+  // where it went down, or on a texel other than the anchor (a 1-px texel
+  // can change under a sub-slop move)?
+  #marqueeMoved(e, t) {
+    const p = this.#selPress;
+    const a = this.#selAnchor;
+    return (
+      (!!p &&
+        Math.max(Math.abs(e.clientX - p.x), Math.abs(e.clientY - p.y)) > SELECT_SLOP) ||
+      (!!a && (t.px !== a.px || t.py !== a.py))
+    );
   }
 
   // Report the outline to the container — only when it actually changed
@@ -1132,21 +1203,28 @@ export class SmDrawCanvas extends LitElement {
     this.#sel = { x0: t.px, y0: t.py, x1: t.px, y1: t.py };
     this.#selOffset = { dx: 0, dy: 0 };
     this.#selDrag = 'marquee';
+    this.#selPress = { x: e.clientX, y: e.clientY };
+    this.#selMoved = false;
     this.#selPointer = e.pointerId;
     this.#canvas.value.setPointerCapture?.(e.pointerId);
     this.#startAnts();
-    this.#drawAnts(); // draws nothing yet: the box is still the anchor texel alone
+    this.#drawAnts(); // draws nothing yet: a press is a click until it moves
   }
 
-  // Release: a box that never left its anchor texel is a CLICK, not a
-  // selection (which is also what "click outside to deselect" means — the
-  // drop already happened on the press); anything larger becomes the
-  // selection, ants marching.
+  // Release: a press that never became a drag is a CLICK, not a selection
+  // (which is also what "click outside to deselect" means — the drop already
+  // happened on the press); a drag becomes the selection — the anchor to the
+  // release texel inclusive, ONE texel the smallest (a wiggle inside it) —
+  // ants marching. The release point counts toward the slop too, so a press
+  // and release with no move event between still reads by where it landed.
   #endMarquee(e) {
     const end = this.#toTexelClamped(e);
+    const moved = this.#selMoved || this.#marqueeMoved(e, end);
     this.#releaseSelPointer();
     this.#selDrag = null;
-    if (end.px === this.#selAnchor.px && end.py === this.#selAnchor.py) {
+    this.#selPress = null;
+    this.#selMoved = false;
+    if (!moved) {
       this.#sel = null;
       this.#selAnchor = null;
       this.#stopAnts();
@@ -1165,6 +1243,8 @@ export class SmDrawCanvas extends LitElement {
     if (this.#selDrag !== 'marquee') return;
     this.#releaseSelPointer();
     this.#selDrag = null;
+    this.#selPress = null;
+    this.#selMoved = false;
     this.#sel = null;
     this.#selAnchor = null;
     this.#stopAnts();
@@ -1303,9 +1383,9 @@ export class SmDrawCanvas extends LitElement {
   }
 
   // The ants on their own layer: the current rectangle at the current phase.
-  // A marquee still on its anchor texel alone draws NOTHING — a click never
-  // flashes a one-texel box; the ants appear the moment the moving corner
-  // leaves the anchor.
+  // A marquee press that hasn't become a drag draws NOTHING — a click never
+  // flashes a one-texel box; the ants appear the moment the press moves past
+  // the slop or onto another texel, a one-texel box included.
   #drawAnts() {
     const g = this.#antsCtx;
     if (!g) return;
@@ -1316,15 +1396,19 @@ export class SmDrawCanvas extends LitElement {
     this.#antsCtx?.clearRect(0, 0, this.#sysW, this.#sysH);
   }
 
-  // The ticker runs only while a selection is up (idle costs nothing). Under
-  // the OS's reduce-motion preference, or the ?select hook's static flag,
-  // the ants draw once at phase 0 and stand still.
+  // The ticker runs only while a ring is up — a selection's, or the cursor
+  // layer's: an erase preview, the eyedropper's target (idle costs nothing);
+  // each tick advances the phase and re-strokes whichever ring is showing:
+  // the selection's on its layer, the cursor layer's through its own redraw.
+  // Under the OS's reduce-motion preference, or the ?select hook's static
+  // flag, the ants draw once at phase 0 and stand still.
   #startAnts() {
     if (this.#antsTimer != null) return;
     if (this.#antsStatic || prefersReducedMotion()) return;
     this.#antsTimer = setInterval(() => {
       this.#antsPhase = (this.#antsPhase + 1) % ANTS_PERIOD;
-      this.#drawAnts();
+      if (this.#sel) this.#drawAnts();
+      if (this.#cursorAntsUp) this.#redrawCursorLayer();
     }, ANTS_MS);
   }
 
@@ -1445,6 +1529,7 @@ export class SmDrawCanvas extends LitElement {
       this.#rectPointer = e.pointerId;
       this.#canvas.value.setPointerCapture?.(e.pointerId);
       this.#drawRectPreview();
+      this.#syncAnts(); // an erasing drag's ring marches from the press
       return;
     }
     // The pencil and the eraser share the stroke path — #writeColor() decides
@@ -1455,6 +1540,7 @@ export class SmDrawCanvas extends LitElement {
     this.#prev = null;
     this.#canvas.value.setPointerCapture?.(e.pointerId);
     this.#stroke(t.px, t.py);
+    this.#drawCursor(t); // the footprint follows the button: a right press wears the ants at once
   };
 
   #onPointerMove = (e) => {
@@ -1466,6 +1552,9 @@ export class SmDrawCanvas extends LitElement {
       if (e.pointerId !== this.#selPointer) return;
       const t = this.#toTexelClamped(e);
       if (this.#selDrag === 'marquee') {
+        // A press becomes a marquee the moment it moves past the slop or
+        // onto another texel; until then it is a click in progress.
+        if (!this.#selMoved) this.#selMoved = this.#marqueeMoved(e, t);
         this.#sel = normalizeBounds(this.#selAnchor, t);
         this.#drawAnts();
         this.#notifySelection();
@@ -1520,6 +1609,7 @@ export class SmDrawCanvas extends LitElement {
       this.#canvas.value.releasePointerCapture?.(this.#rectPointer); // the owner
       this.#rectPointer = null;
       this.#cursorCtx.clearRect(0, 0, this.#sysW, this.#sysH); // commit is on `#work`
+      this.#syncAnts(); // an erasing drag's ring went with it
       return;
     }
     this.#endGesture();
@@ -1527,6 +1617,7 @@ export class SmDrawCanvas extends LitElement {
     this.#prev = null;
     this.#forceErase = false;
     this.#canvas.value.releasePointerCapture?.(e.pointerId);
+    this.#redrawCursorLayer(); // a right-button stroke's ring leaves with the button
   };
 
   // pointercancel (gesture interrupted) discards an in-flight rect rather than
@@ -1551,6 +1642,7 @@ export class SmDrawCanvas extends LitElement {
     this.#prev = null;
     this.#forceErase = false;
     this.#canvas.value.releasePointerCapture?.(e.pointerId);
+    this.#redrawCursorLayer(); // as the release: the ring leaves with the button
   };
 
   // Clear the pencil hover footprint when the pointer leaves — but not mid
