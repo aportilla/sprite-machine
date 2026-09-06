@@ -80,6 +80,10 @@ case "$MODE" in
   shot)
     OUT="${3:?missing out.png}"
     mkdir -p "$(dirname "$OUT")"
+    # A stale file at the target would satisfy the "did the shot land?" wait
+    # below at once and get Chrome killed before it wrote — every re-shoot
+    # onto an existing path (goldens.sh update) silently kept the old file.
+    rm -f "$OUT"
     ARGS+=(--screenshot="$OUT")
     ;;
   dom)
