@@ -15,38 +15,39 @@ npm run lint       # prettier --check .   (npm run format to fix)
 npm run build      # static bundle in dist/
 ```
 
-Two headless-Chrome tools verify what Node can't, both against a running dev
-server:
+Three headless-Chrome tools verify what Node can't, all against a running
+dev server:
 
 ```bash
 tools/capture.sh shot 'http://localhost:5173/?sample=car' /tmp/shot.png
 tools/capture.sh dom  'http://localhost:5173/?diag=1'   # light-DOM shell + title
-node tools/drive.mjs                                             # desktop + editor smoke test
+tools/goldens.sh check                                          # the look, against docs/goldens/
+node tools/drive.mjs                                             # the user journeys, on trusted input
 ```
 
 `capture.sh` shows what the app **looks** like — its shots are byte-deterministic
-(fixed window size, DSF 1, virtual time budget, the model at rest — auto-rotate
-is off every load, so no `rotate=0` — `?fresh=1` on a
-machine with saved docs or a set desktop pattern, `?now=<when>` whenever
-the menu bar's clock is in frame, and a selection only ever through
-`?select=…`, whose ants stand still — a live selection's would tick between
-shots), so `cmp` between two runs is a real
-regression check
-rather than a judgment call (its `dom` mode only serializes light DOM — the
-desktop skeleton and `<title>`, never the components' shadow internals).
-`drive.mjs` covers what no screenshot can: it drives the desktop over the
-DevTools Protocol with real trusted input (keys, menu picks, ⌘-equivalents,
-drags, window moves and grow-box resizes, the dialogs, a save → reopen
+(fixed window size, DSF 1, a virtual time budget, a fresh profile per run so
+no machine's saved docs leak into the frame, the model at rest, `?now=<when>`
+whenever the menu bar's clock is in frame, and a selection only ever through
+`?select=…`, whose ants stand still), so `cmp` between two runs is a real
+regression check rather than a judgment call (its `dom` mode only serializes
+light DOM — the desktop skeleton and `<title>`, never the components' shadow
+internals). `goldens.sh` holds eight such shots under `docs/goldens/` and
+compares a fresh set against them: every "does it look right" question — a
+label's ink, a dotted rule, a header's height, the DITL, the paper — lives
+there as pixels, and a golden changes only in a commit that changed the look
+on purpose, after an eye on the diff. `drive.mjs` covers what no screenshot
+can: about eighty checks over twenty-seven user journeys, driving the desktop
+over the DevTools Protocol with real trusted input (keys, menu picks,
+⌘-equivalents, drags, grow-box resizes, the dialogs, a save → reopen
 round-trip through IndexedDB), probing through the components' shadow roots,
-and exits non-zero on any failure. Its waits are on **the app's own
+and exiting non-zero on any failure. Its waits are on **the app's own
 readiness contract**, never a pause: `main.js` marks the root element
-`data-sm-boot="ready"` once the whole boot chain has landed (the boot
-document open or the About box up, the first-boot seeding stored and
-recorded, the library listing rendered as icons), a reload yields a document
-without the mark until its own boot completes, and a probe that finds the
-document replaced under it waits for the new boot rather than reading a page
-mid-boot. The residue neither can cover reliably is
-a short manual checklist: `docs/SMOKE-TEST.md`.
+`data-sm-boot="ready"` once the whole boot chain has landed, a reload yields
+a document without the mark until its own boot completes, and every wait
+after an input is on the outcome the next check reads. The residue none of
+them can cover is a short manual checklist: `docs/SMOKE-TEST.md`. What gets
+a test, and what does not, is stated under [Testing](#testing).
 
 The app is a **System 7 virtual desktop**, drawn end to end with the
 [`vintage-frames`](https://github.com/aportilla/vintage-frames) web component
@@ -195,8 +196,7 @@ template — see [UI layer: Lit](#ui-layer-lit).
   display scale — and the inverted cell's white glyph is a CSS `invert` of
   the same file, exact because the art is pure black; the cell IS the icon
   (`TOOL_CELL` in `shell/layout.js`, which derives the windoid's authored
-  box, `TOOLS_BOX`, from it — the markup pinned against the arithmetic by
-  the drive) in a frameless `vf-grid` lattice run
+  box, `TOOLS_BOX`, from it) in a frameless `vf-grid` lattice run
   flush to the windoid's edge — no inner padding, the cells sharing the
   window frame's own black line. A cell **picks on the press**, not the
   click — System 7's tool palettes act on mouse-down: the cell inverts the
@@ -420,7 +420,7 @@ template — see [UI layer: Lit](#ui-layer-lit).
   set, **no gray pair merges** (the grayscale ramp steps ~10–13/channel, well
   clear of the gate). An author can still place two of those eight pairs on
   adjacent staircase voxels and get an unintended (but near-imperceptible)
-  wedge. `test/palette.test.mjs` pins the exact set. Every stroke is
+  wedge (the set as of Sep 2026; no test pins it). Every stroke is
   hard-pixel: fully opaque or fully erased, never anti-aliased.
 - **Face picker** — six **cube-view icons** over a radio row (a `vf-radio-group`)
   in the **Full Sprite View windoid's** header switch which face
@@ -828,8 +828,7 @@ Patterns control panel (document tier, not a document — see
   between the title bar and the body, a positioning anchor; its
   `header-height` authored on the window in `index.html`, the kit's
   grammar, at the same number the chrome arithmetic in `shell/layout.js`
-  carries — `STAGE_STRIP`, `SPRITE_STRIP`, `RING_STRIP` — which the drive
-  pins the markup against). The **Full Sprite
+  carries — `STAGE_STRIP`, `SPRITE_STRIP`, `RING_STRIP`). The **Full Sprite
   View** carries the **face picker** in its header (`sm-atlas-controls`:
   the six cube-view radios — see the Drawing-editor bullet — in a placed
   `vf-container` at the picker block's rectangle, `SPRITE_PICKER_AT`,
@@ -1270,10 +1269,8 @@ persist in one versioned localStorage key (`shell/desktop-state.js`, v3 —
 a v1 or v2 blob migrates shallowly, the window geometry those versions
 persisted simply dropped, and a v3 blob from before the pattern reads the
 dither), beside the **`seeded` flag** — the first-boot seeding's record,
-above (`migrateDesktopState` is exported and Node-tested:
-`test/desktop-state.test.mjs` pins that a stated flag keeps, a blob from
-before it reads seeded, and only an explicit `false` — an interrupted first
-boot's mark — asks the next boot to seed), snapshotted on change/exit. **No window
+above (`migrateDesktopState` is exported and Node-tested), snapshotted on
+change/exit. **No window
 geometry is in it**: the windoids and the document windows place fresh
 from the live raster every session (see [Windows](#windows)) — the
 persistence layer never sees a window. Icons restore at
@@ -1335,9 +1332,10 @@ One, always: the **low-poly** mesh — the visual-hull voxel solid (above),
 greedy-meshed, with 45° wedges added over same-surface staircases — is
 what the 3D View, the 3D Sprite Atlas and the export all render. The
 "smooth" checkbox that could switch the wedges off (leaving the plain
-greedy-voxel solid, every step a hard step) went on Sep 4 2026; that
-builder, `voxelMesh` in `src/lib/mesh.js`, stays in the library,
-Node-tested, with no consumer in the app.
+greedy-voxel solid, every step a hard step) went on Sep 4 2026, and the
+builder it switched to, `voxelMesh` in `src/lib/mesh.js`, went with the
+test trim of Sep 5 2026 — dead code with no consumer; `lib/mesh-util.js`
+keeps the framing and color contract the wedge mesh finishes with.
 
 ### Low-poly (additive wedges)
 
@@ -1377,118 +1375,54 @@ the top row. See `src/lib/views.js` for all six projection mappings.
 
 ## Architecture
 
-The whole grid pipeline is **pure typed-array code — no THREE, no DOM** — so it's
-verified in Node (`test/pipeline.test.mjs`), including the depth-smear regression
-and asymmetric-face coloring. A companion `test/wedge-mesh.test.mjs` loads THREE
-to gate the low-poly wedge engine (the Helium canvas-farbling regression), and
-`test/atlas.test.mjs` locks the tile write-back inverse (slice → `blitTile`
-round-trip) that the drawing editor depends on. `test/views.test.mjs` pins that
-`VIEW_IMAGE_AXES` (the image-axis table the sheet resize registers by) can't
-drift from the projections it's probed from. `test/rect.test.mjs` pins the rect tool's
-rounded-rectangle rasterization (radius clamp, convex corners, per-row symmetry) and
-the Shift square-lock. `test/fill.test.mjs` pins the fill tool's flood + replace
-primitives (4-connectivity, contiguous vs. global scope, transparent-as-a-color,
-the no-op guards, and a full-tile flood that can't overflow the stack).
-`test/select.test.mjs` pins the selection tool's base + float primitives
-(the bounds helpers, Shift's axis lock, lift → clear → composite as an
-identity, the transparency rule, per-texel clipping that can never wrap a
-right-edge overflow onto the next row, and off-tile-and-back reversibility).
-`test/ring.test.mjs` pins the 3D Sprite Atlas's geometry (`lib/ring.js`:
-the yaw ring, the lattice envelope — the footprint circle swept up the
-height, bounded by the sphere — the frame that IS the tile, its larger
-extent fit to the `size` edge with the px-per-voxel scale derived, the
-camera direction and true up vector — unit, perpendicular, well defined
-straight down — and the yaw-independent anchor), and
-`test/ring-state.test.mjs` its settings slice (the defaults, every
-setter's clamp / rounding / NaN no-op / silence on an unchanged value, the
-size's 2–255 range, the offset's normalization, the paper's three names
-and the setter's no-op on anything else, the sheet channel by reference,
-and the export's metadata chunks round-tripping — the paper never in
-them).
-`test/palette.test.mjs` pins the editor's
-168-color palette: 168 entries in a 21×8 grid, all colors AND names distinct,
-valid `#rrggbb`, `packed` derived from `css`, the layout corners (the
-grayscale ramp is row 1), and the exact set of within-wedge-tolerance color
-pairs (all same-hue neighbors — no gray pair merges) so the wedge-safety note
-can't drift.
-`test/brush.test.mjs` pins the pencil primitives (Bresenham continuity, footprint
-anchoring, the two tip shapes — the circle's rows the classic pixel disc at
-every size, centered and never empty, the square the box — the clipped
-system-px spans the erase ring walks, the transparent-idempotence rule), and
-`test/ants.test.mjs` the marching ants' 1-bit raster (the clockwise ring
-walk, the dash cycle, the march, the seam — and the outline ring: a box's
-spans reproduce the rectangle's runs exactly, a disc's walk is its thin
-boundary once, 8-connected, closed, clockwise and inked, clipped discs
-included). `test/png-chunks.test.mjs` pins
-the document format's chunk surgery (round-trip, CRC against the published
-IEND reference, splice position, replace semantics, unknown-chunk
-passthrough).
+The whole grid pipeline is **pure typed-array code — no THREE, no DOM**,
+the app-state layer (`src/state/`) is pure JS, and the desktop's arithmetic
+(`shell/layout.js`) is a pure module — all of it Node-tested (`npm test`
+over `test/*.test.mjs`, about two hundred cases; `test/wedge-mesh.test.mjs`
+and `test/t-junction.test.mjs` load THREE), densest where a bug would be
+silent and expensive: the visual-hull carve and coloring (`pipeline`,
+`carve`, `colorize`, `ingest`), the wedge mesh's watertightness and its
+gate (`wedge-mesh`, `t-junction`), the rasterizers (`rect`, `fill`,
+`select`, `brush`, `ants`), the document format (`png-chunks`), the
+document and library contracts (`doc`, `files`, `workspace`, `history`,
+`desktop-state`), and the layout rules (placement, cascade, the nine-slice
+pin and its fixed point). The state slices get a few behavior tests each,
+never the store's discipline per setter; the layout tests pin relationships
+between exported values, never a number against a literal; the shared
+fixtures live in `test/helpers.mjs`.
 
-The **app-state layer** (`src/state/`) is pure JS with the same treatment:
-`test/store.test.mjs` (the observable store: by-reference values, silent no-op
-patches), `test/session.test.mjs` (tool/ink semantics,
-clamp-on-resize, the two tools' independent tip shapes and their setters'
-two-name gate), `test/doc.test.mjs` (the two-channel canonical document: silent
-stroke writes, rAF-coalesced blit-then-notify via an injectable scheduler, the
-drain-before-consume guard, blank-revert, the sheet generation), `test/derive.test.mjs`
-(the per-face view model: tile identity, derived faces, mirrored onion-skin),
-`test/files.test.mjs` (the document LIBRARY against an in-memory storage
-stub: save/load/rename/remove/export with explicit identities, the chunk
-metadata round-trip, storage degradation), `test/workspace.test.mjs` (the
-open documents: per-context doc + history + face + identity, untitled
-naming, per-context dirty tracking off the doc's channels, the activation
-mirror, the stored flows, and `followActive`),
-`test/history.test.mjs` (undo/redo: tile-gesture and whole-atlas entries,
-snapshot copy-in/copy-out, the bound, load-boundary clearing),
-`test/shell.test.mjs` (the shell slice's desktop pattern: the dither
-default, the setter's silent no-op, a trimmed custom value, empty → the
-default), `test/params.test.mjs` (the whole `?param` dev-hook surface, typed), and
-`test/layout.test.mjs` (the desktop's window + icon arithmetic, `shell/layout.js`:
-the smart placement — the one-column rail (the sprite windoid's fixed
-`SPRITE_WIDTH` × `spriteHeightFor` size, the stage as wide, absorbing the
-rest of the height on any raster), the document box top-left beside Tools
-with exactly the cascade's room at its right and bottom (every slot inside
-the vacancy, the last flush with its edges), tiny rasters degrading
-gracefully — the 3D Sprite Atlas's box (`ringHeightFor`: the chrome over
-one row of tile-size cells; `ringWidthFor`: the natural row floored at the
-strip, capped at the vacancy at placement; docked on the bottom margin at
-the doc box's left; shown, it shortens the doc box by the tile's own
-height so every cascade slot clears it and stops the zoom box above it;
-hidden, the placement is exactly as before) — the
-document-window cascade (first free slot, a freed slot
-reused, a full cascade wrapping) — the panel placement (`centeredBox`:
-centered in the open area below the strip, its top-left floored at the
-reserve on a tiny raster) — the raster-derived
-icon lattice (the column wrap), the slot re-expression Arrange Windows
-cascades by (`cascadeSlot`), and the nine-slice resize rule: struts keep
-their offsets, springs their fraction of the middle, continuity across
-every seam, edges outside the raster, a rigid corner widget, near + far
-stretching and spring + spring scaling, the fixed-size anchor rule, the
-resizable floor, the degenerate span, the frames (the windows' below the
-options strip with the rail-sized top/right bands, the icons' below the
-bare menu bar, uniform), no ratchet across a wiggle — and the test that
-licenses one rule for everything: **the placement is a fixed point**, every
-placed windoid re-pinning onto any other raster exactly where
-`initialPlacement` puts it there — the bottom-docked atlas strip's left,
-top and height included (a mixed box: its width is content), at four views
-and at sixteen, at two tile sizes — with the rail's edges still struts
-after a 2px lattice snap; `tools/drive.mjs` drives the real thing over
-CDP, where a viewport change fires a true `resize`, and imports the pure
-module as its oracle for the exact expected geometry).
+### Testing
 
-Beyond that pipeline integration, the pure modules also have direct unit suites:
-`test/carve.test.mjs` (vox/unvox round-trip, `extractSurface` masks + counts,
-`reconcileDims`, `placeView`, plane-union, and a `projectInto`↔`project` drift
-guard), `test/colorize.test.mjs` (the mirror-fill / relaxation / dominant-body
-fallback tiers, on all three axes), `test/ingest.test.mjs`
-(`applyTransform`/`flip` + the `ingestSprite` throw path), and
-`test/t-junction.test.mjs` (multi-vertex edge splits with area + colour/normal
-preservation), and `test/color.test.mjs` (the shared color helpers —
-`hexToRgb`/`rgbToHex` round-trips, `normalizeHex`, and `rgbKey`'s big-endian
-24-bit keying). `test/mesh.test.mjs` loads THREE to check `voxelMesh` welds
-watertight, centres X/Z, and leaves Y as authored, plus the shared vertex-color
-linearizer cache; `test/diag.test.mjs` exercises the `?diag=1` watertightness
-self-check on closed vs. open surfaces.
+Four layers, each doing the one thing it is cheapest at, and a rule for
+what earns a test — the trim that set them is recorded in
+[docs/test-trim-plan.md](docs/test-trim-plan.md):
+
+1. **Node unit tests** for the pure code above.
+2. **`tools/drive.mjs`**, an integration smoke of user journeys (about
+   eighty checks, a ceiling of a hundred): a check exists only when it
+   crosses a boundary a unit cannot — IndexedDB, trusted input, the real
+   canvas, the menu wiring, a reload — and names an outcome of the app's
+   own: a store value read through a control, a texel, a stored record, a
+   window opened, a handler having run.
+3. **Golden screenshots** (`tools/goldens.sh` over `capture.sh`,
+   `docs/goldens/`) for the look.
+4. **`docs/SMOKE-TEST.md`** for what none of the above can reach: chorded
+   and right-button drags, feel, the cursor, browser zoom, a dropped file.
+
+The rules. **Never assert the kit**: no check reads a `[part=…]` rect to
+assert on it, counts `vf-*` elements, reads a `--vf-*` property, pins
+`resizable` / `header-height` / a size rect, or asserts a drag's delta or
+DOM order after a raise — locating a kit control through its part to drive
+it is fine. **The drive re-derives nothing**: it imports nothing from `src/`
+but the PNG chunk reader, and checks that the app applied its arithmetic
+(a resize lands where Arrange lands, read off the page). **One home per
+fact**: no constant pinned against a literal, no default parameter, no
+dev-only URL hook, no guard that a retired feature stays absent, no literal
+UI copy. **The store's discipline is tested once**, in `test/store.test.mjs`.
+**A precondition is not a check**: a helper that cannot find its target
+throws. **No check per feature by default**: a change ships with a test
+when it adds a risk the gates do not cover, and commit messages do not
+report check or test counts.
 
 ```
 src/lib/
@@ -1516,8 +1450,6 @@ src/lib/
   pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
   t-junction.js   lattice-exact T-junction repair for merged+wedge meshes (pure)
   mesh-util.js    shared vertex-color linearizer + mesh finishing (THREE)
-  mesh.js         quads -> merged, vertex-colored THREE.Mesh    (the plain greedy builder — Node-tested,
-                  no app consumer since the smooth toggle went, Sep 4 2026; THREE)
   wedge-mesh.js   voxel solid + additive 45° wedges             (THE mesh, always on; THREE)
   sprite-data.js  built-in defaults (as atlases): first-boot seeds + New-dialog templates, + grid->ImageData helper
   png-chunks.js   PNG chunk surgery: parse + tEXt/iTXt read/replace, CRC32 — the document format (pure)
