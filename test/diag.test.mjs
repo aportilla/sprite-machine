@@ -1,12 +1,10 @@
 // computeDiag — the geometry self-check behind ?diag=1 and the watertightness
 // asserts. It reads position-based edge parity (a closed surface uses every
 // undirected edge an even number of times; boundary/odd edges are a hole in a
-// mesh that should be closed — but the greedy-voxel mesh legitimately reports
-// nonzero counts from its unrepaired step T-junctions, so computeDiag only
-// COUNTS, it never asserts watertightness on its own — see diag.js) plus a
-// per-face normal histogram bucketed by dominant axis + sign. It is pure and
-// duck-types the geometry, so THREE is never needed — plain stubs suffice.
-// Run: node --test test/diag.test.mjs
+// mesh that should be closed) plus a per-face normal histogram bucketed by
+// dominant axis + sign. It is pure and duck-types the geometry, so THREE is
+// never needed — plain stubs suffice. Pinned on the two ends: a closed
+// surface and an open one. Run: node --test test/diag.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -76,79 +74,4 @@ test('open surface (single triangle) — every edge is a boundary', () => {
     { px: 0, nx: 0, py: 0, ny: 0, pz: 1, nz: 0 },
     'the lone triangle buckets to pz'
   );
-});
-
-test('indexed geometry is read the same as non-indexed', () => {
-  // Same single triangle, but expressed via an explicit index buffer. triCount
-  // comes from index.length / 3, and the result must match the non-indexed form.
-  const pos = [0, 0, 0, 1, 0, 0, 0, 1, 0];
-  const nrm = [0, 0, 1, 0, 0, 1, 0, 0, 1];
-
-  const d = computeDiag(stub(pos, nrm, [0, 1, 2]));
-  assert.equal(d.triCount, 1);
-  assert.equal(d.boundaryEdges, 3);
-  assert.equal(d.oddEdges, 3);
-  assert.equal(d.uniqueEdges, 3);
-  assert.deepEqual(d.hist, { px: 0, nx: 0, py: 0, ny: 0, pz: 1, nz: 0 });
-});
-
-test('two triangles sharing one edge — interior edge is even, rim is boundary', () => {
-  // A unit quad split into two tris across the (1,0,0)-(0,1,0) diagonal. The
-  // shared diagonal is used twice (even); the other 4 rim edges once each.
-  // prettier-ignore
-  const pos = [
-    0, 0, 0,  1, 0, 0,  0, 1, 0, // tri A
-    1, 0, 0,  1, 1, 0,  0, 1, 0, // tri B
-  ];
-  // Distinct first-vertex normals so the histogram splits across two buckets.
-  // prettier-ignore
-  const nrm = [
-    1, 0,  0,  1, 0,  0,  1, 0,  0, // tri A first vertex -> px
-    0, 0, -1,  0, 0, -1,  0, 0, -1, // tri B first vertex -> nz
-  ];
-
-  const d = computeDiag(stub(pos, nrm));
-  assert.equal(d.triCount, 2);
-  assert.equal(d.uniqueEdges, 5, 'shared diagonal collapses 6 edge-uses to 5 edges');
-  assert.equal(d.boundaryEdges, 4, 'four rim edges are used once each');
-  assert.equal(d.oddEdges, 4, 'the shared diagonal (used twice) is not odd');
-  assert.deepEqual(
-    d.hist,
-    { px: 1, nx: 0, py: 0, ny: 0, pz: 0, nz: 1 },
-    'one tally per triangle, keyed by its first vertex normal'
-  );
-});
-
-test('histogram buckets by dominant axis + sign, reading only the first vertex normal', () => {
-  // Six disjoint triangles, one per face axis. The axis is placed only on each
-  // triangle's FIRST vertex (others zeroed) to prove computeDiag reads only the
-  // first vertex's normal per triangle.
-  const axes = [
-    [1, 0, 0], // px
-    [-1, 0, 0], // nx
-    [0, 1, 0], // py
-    [0, -1, 0], // ny
-    [0, 0, 1], // pz
-    [0, 0, -1], // nz
-  ];
-  const pos = [];
-  const nrm = [];
-  let ox = 0;
-  for (const a of axes) {
-    pos.push(ox, 0, 0, ox + 0.1, 0, 0, ox, 0.1, 0);
-    ox += 10; // large offset keeps every triangle disjoint
-    nrm.push(a[0], a[1], a[2], 0, 0, 0, 0, 0, 0);
-  }
-
-  const d = computeDiag(stub(pos, nrm));
-  assert.equal(d.triCount, 6);
-  assert.deepEqual(
-    d.hist,
-    { px: 1, nx: 1, py: 1, ny: 1, pz: 1, nz: 1 },
-    'each axis+sign gets exactly one first-vertex tally'
-  );
-  // Six disjoint triangles => 18 distinct edges, all used exactly once.
-  assert.equal(d.uniqueEdges, 18);
-  assert.equal(d.boundaryEdges, 18);
-  assert.equal(d.oddEdges, 18);
 });

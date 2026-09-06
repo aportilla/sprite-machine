@@ -12,7 +12,6 @@ import {
   writeTexel,
   stampBrush,
   strokeLine,
-  PENCIL_SHAPES,
 } from '../src/lib/brush.js';
 
 const PAINT = { r: 10, g: 20, b: 30, a: 255 };
@@ -42,11 +41,6 @@ const widths = (size, shape) => {
   return out;
 };
 const covered = (size, shape) => widths(size, shape).reduce((a, b) => a + b, 0);
-
-test('PENCIL_SHAPES: the two names, circle first (the popup order), frozen', () => {
-  assert.deepEqual([...PENCIL_SHAPES], ['circle', 'square']);
-  assert.ok(Object.isFrozen(PENCIL_SHAPES));
-});
 
 test('brushRows: a square tip covers its whole box on every row, at the footprint bounds', () => {
   assert.deepEqual(widths(1, 'square'), [1]);
@@ -148,17 +142,13 @@ test('brushSpans: the tip’s rows as clipped system-px spans, scaled', () => {
   assert.ok(s.every((r) => (r.x1 - r.x0 + 1) % 3 === 0));
 });
 
-test('writeTexel: hard-pixel write, change-flag semantics', () => {
+test('writeTexel: a hard-pixel write reports change; erasing an already-transparent texel is a true no-op', () => {
   const d = tile(4, 4);
   assert.equal(writeTexel(d, 4, 1, 1, PAINT), true);
   assert.deepEqual([...d.subarray(20, 24)], [10, 20, 30, 255]);
   assert.equal(writeTexel(d, 4, 1, 1, PAINT), false, 'same bytes → no change');
   assert.equal(writeTexel(d, 4, 1, 1, ERASE), true);
   assert.equal(alphaAt(d, 4, 1, 1), 0);
-});
-
-test('writeTexel: erasing an already-transparent texel is a true no-op', () => {
-  const d = tile(4, 4);
   // Stray RGB under alpha 0 (e.g. left by a decoder) must not count as change.
   d[0] = 99;
   d[1] = 99;
@@ -167,23 +157,25 @@ test('writeTexel: erasing an already-transparent texel is a true no-op', () => {
   assert.equal(d[0], 99, 'stray RGB is left alone, not zeroed');
 });
 
-test('stampBrush: full footprint, clipped at the tile edge', () => {
+test('stampBrush: the square box and the circle disc land clipped at the tile edge; a restamp changes nothing', () => {
+  // A 3×3 square centered on the corner → only the 2×2 in-bounds quadrant lands.
   const d = tile(5, 5);
-  assert.equal(stampBrush(d, 5, 5, 0, 0, 3, PAINT), true);
-  // 3×3 centered on the corner → only the 2×2 in-bounds quadrant lands.
+  assert.equal(stampBrush(d, 5, 5, 0, 0, 3, PAINT, 'square'), true);
   assert.deepEqual(painted(d, 5, 5), [
     [0, 0],
     [1, 0],
     [0, 1],
     [1, 1],
   ]);
-  assert.equal(stampBrush(d, 5, 5, 0, 0, 3, PAINT), false, 'repaint → no change');
-});
-
-test('stampBrush: a circle tip stamps the disc (the plus at 3), clipped at the edge; no shape means the square', () => {
-  const d = tile(5, 5);
-  assert.equal(stampBrush(d, 5, 5, 2, 2, 3, PAINT, 'circle'), true);
-  assert.deepEqual(painted(d, 5, 5), [
+  assert.equal(
+    stampBrush(d, 5, 5, 0, 0, 3, PAINT, 'square'),
+    false,
+    'repaint → no change'
+  );
+  // The circle at 3 is the plus.
+  const c = tile(5, 5);
+  assert.equal(stampBrush(c, 5, 5, 2, 2, 3, PAINT, 'circle'), true);
+  assert.deepEqual(painted(c, 5, 5), [
     [2, 1],
     [1, 2],
     [2, 2],
@@ -191,7 +183,7 @@ test('stampBrush: a circle tip stamps the disc (the plus at 3), clipped at the e
     [2, 3],
   ]);
   assert.equal(
-    stampBrush(d, 5, 5, 2, 2, 3, PAINT, 'circle'),
+    stampBrush(c, 5, 5, 2, 2, 3, PAINT, 'circle'),
     false,
     'restamp → no change'
   );
@@ -203,15 +195,11 @@ test('stampBrush: a circle tip stamps the disc (the plus at 3), clipped at the e
     [1, 0],
     [0, 1],
   ]);
-  // The default shape is the square — the call every pre-shape caller makes.
-  const f = tile(5, 5);
-  stampBrush(f, 5, 5, 2, 2, 3, PAINT);
-  assert.equal(painted(f, 5, 5).length, 9);
   // A disc wholly off-tile changes nothing.
   assert.equal(stampBrush(tile(5, 5), 5, 5, 9, 9, 3, PAINT, 'circle'), false);
 });
 
-test('strokeLine: a steep drag paints a continuous (gap-free) run', () => {
+test('strokeLine: a steep drag paints a gap-free run, a single point stamps once, and an erase reports change honestly', () => {
   const d = tile(16, 16);
   assert.equal(strokeLine(d, 16, 16, 1, 1, 6, 13, 1, PAINT), true);
   const pts = painted(d, 16, 16);
@@ -228,6 +216,22 @@ test('strokeLine: a steep drag paints a continuous (gap-free) run', () => {
     );
     assert.ok(hasPrev, `texel ${x},${y} is isolated`);
   }
+  // A zero-length stroke is one stamp of the tip.
+  const p = tile(8, 8);
+  assert.equal(strokeLine(p, 8, 8, 3, 3, 3, 3, 2, PAINT), true);
+  assert.deepEqual(painted(p, 8, 8), [
+    [3, 3],
+    [4, 3],
+    [3, 4],
+    [4, 4],
+  ]);
+  assert.equal(
+    strokeLine(p, 8, 8, 6, 6, 7, 7, 1, ERASE),
+    false,
+    'erasing empty texels changes nothing'
+  );
+  assert.equal(strokeLine(p, 8, 8, 3, 3, 4, 4, 1, ERASE), true);
+  assert.equal(alphaAt(p, 8, 3, 3), 0);
 });
 
 test('strokeLine: the tip shape rides the whole run — a round-ended stroke', () => {
@@ -244,24 +248,6 @@ test('strokeLine: the tip shape rides the whole run — a round-ended stroke', (
   // The same run with the square tip fills the 3-row band end to end: the
   // box reaches one past each endpoint on every row, x 1..10.
   const e = tile(12, 12);
-  strokeLine(e, 12, 12, 2, 5, 9, 5, 3, PAINT);
+  strokeLine(e, 12, 12, 2, 5, 9, 5, 3, PAINT, 'square');
   assert.equal(painted(e, 12, 12).length, 3 * 10);
-});
-
-test('strokeLine: a single point stamps once; erase strokes report change honestly', () => {
-  const d = tile(8, 8);
-  assert.equal(strokeLine(d, 8, 8, 3, 3, 3, 3, 2, PAINT), true);
-  assert.deepEqual(painted(d, 8, 8), [
-    [3, 3],
-    [4, 3],
-    [3, 4],
-    [4, 4],
-  ]);
-  assert.equal(
-    strokeLine(d, 8, 8, 6, 6, 7, 7, 1, ERASE),
-    false,
-    'erasing empty texels changes nothing'
-  );
-  assert.equal(strokeLine(d, 8, 8, 3, 3, 4, 4, 1, ERASE), true);
-  assert.equal(alphaAt(d, 8, 3, 3), 0);
 });

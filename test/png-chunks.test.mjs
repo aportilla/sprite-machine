@@ -1,6 +1,6 @@
 // Node-runnable tests for the PNG chunk surgery the document format rides on:
 // chunk round-trip, CRC validity, splice position (after IHDR, before IDAT),
-// replace semantics, and unknown-chunk passthrough.
+// replace semantics, unknown-chunk passthrough, and the error paths.
 // Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -107,17 +107,16 @@ test('non-Latin-1 text goes to iTXt and still round-trips', () => {
   assert.deepEqual(types(out), ['IHDR', 'iTXt', 'prVt', 'IDAT', 'IEND']);
 });
 
-test('setTextChunks replaces an existing keyword instead of duplicating it', () => {
+test('setTextChunks replaces an existing keyword instead of duplicating it, switching encodings as the value needs', () => {
   const once = setTextChunks(BASE, { Title: 'First', Software: 'sm' });
   const twice = setTextChunks(once, { Title: 'Second' });
   assert.deepEqual(readTextChunks(twice), { Title: 'Second', Software: 'sm' });
   // Still exactly one Title chunk; the untouched Software chunk survives.
   assert.deepEqual(types(twice), ['IHDR', 'tEXt', 'tEXt', 'prVt', 'IDAT', 'IEND']);
-});
-
-test('a replace can switch encodings (tEXt → iTXt and back)', () => {
+  // A replace can switch encodings (tEXt → iTXt and back).
   const a = setTextChunks(BASE, { Title: 'plain' });
   const b = setTextChunks(a, { Title: 'ünïcode ✓' });
+  assert.deepEqual(types(b), ['IHDR', 'iTXt', 'prVt', 'IDAT', 'IEND']);
   const c = setTextChunks(b, { Title: 'plain again' });
   assert.deepEqual(readTextChunks(c), { Title: 'plain again' });
   assert.deepEqual(types(c), ['IHDR', 'tEXt', 'prVt', 'IDAT', 'IEND']);
@@ -155,12 +154,13 @@ test('every written chunk carries a valid CRC', () => {
   }
 });
 
-test('keyword bounds are enforced', () => {
-  assert.throws(() => setTextChunks(BASE, { '': 'x' }), /keyword/);
-  assert.throws(() => setTextChunks(BASE, { ['k'.repeat(80)]: 'x' }), /keyword/);
-});
-
-test('a file with no IHDR cannot take a splice', () => {
+test('setTextChunks throws on an out-of-bounds keyword and on a file with no IHDR to splice after', () => {
+  assert.throws(() => setTextChunks(BASE, { '': 'x' }), /keyword/, 'an empty keyword');
+  assert.throws(
+    () => setTextChunks(BASE, { ['k'.repeat(80)]: 'x' }),
+    /keyword/,
+    'a keyword past 79'
+  );
   const headless = concat(PNG_SIGNATURE, IDAT, IEND);
-  assert.throws(() => setTextChunks(headless, { Title: 'x' }), /IHDR/);
+  assert.throws(() => setTextChunks(headless, { Title: 'x' }), /IHDR/, 'no IHDR');
 });

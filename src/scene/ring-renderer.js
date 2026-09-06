@@ -133,8 +133,8 @@ export function createRingRenderer() {
       if (!subject) return null;
       const { dims } = subject;
       const n = Math.max(1, Math.floor(views));
-      // World units per voxel — the exact expression voxelMesh / wedgeMesh
-      // scale by (their default worldSize; thread it here if it ever moves).
+      // World units per voxel — the exact expression wedgeMesh scales by
+      // (its default worldSize; thread it here if it ever moves).
       const s = DEFAULT_WORLD_SIZE / Math.max(dims.nx, dims.ny, dims.nz);
       const { px: F, half } = ringFrame(dims, elevation, size);
       const { width, height } = ringSheet(n, F);

@@ -7,24 +7,7 @@ import assert from 'node:assert/strict';
 
 import { createDoc } from '../src/state/doc.js';
 import { createHistory } from '../src/state/history.js';
-
-function fakeScheduler() {
-  let next = 1;
-  const pending = new Map();
-  return {
-    schedule: (fn) => {
-      const id = next++;
-      pending.set(id, fn);
-      return id;
-    },
-    cancel: (id) => pending.delete(id),
-    frame() {
-      const fns = [...pending.values()];
-      pending.clear();
-      for (const fn of fns) fn();
-    },
-  };
-}
+import { fakeScheduler } from './helpers.mjs';
 
 const sheet = (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) });
 

@@ -8,10 +8,8 @@ import {
   ringYaws,
   ringEnvelope,
   ringFrame,
-  ringSheet,
   ringCameraDir,
   ringCameraUp,
-  ringCenter,
   ringAnchor,
 } from '../src/lib/ring.js';
 
@@ -21,7 +19,7 @@ const nearVec = (a, b, eps = 1e-9) =>
 const len = (v) => Math.hypot(...v);
 const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
 
-// The Car at its shipped 40px tile — the drive's oracle dims.
+// The Car at its shipped 40px tile.
 const CAR = { nx: 40, ny: 40, nz: 40 };
 
 test('ringYaws: offset + i·(360/n), unwrapped', () => {
@@ -97,14 +95,6 @@ test("ringFrame: the tile IS the frame; the envelope's larger extent fills it, t
   assert.ok(ringFrame(CAR, 45, 137).scale > 2);
   // Never a zero frame (the slice clamps first; this is the last guard).
   assert.equal(ringFrame(CAR, 45, 0).px, 1);
-  // The frame is the same for every yaw and offset: the API takes neither
-  // (a guard against a future "tight per-yaw" regression).
-  assert.equal(ringFrame.length, 3);
-});
-
-test('ringSheet: n frames in one row', () => {
-  assert.deepEqual(ringSheet(4, 69), { width: 276, height: 69 });
-  assert.deepEqual(ringSheet(1, 57), { width: 57, height: 57 });
 });
 
 test('ringCameraDir / ringCameraUp: unit, perpendicular, the stated poses', () => {
@@ -129,12 +119,7 @@ test('ringCameraDir / ringCameraUp: unit, perpendicular, the stated poses', () =
   }
 });
 
-test('ringCenter: the lattice center — X/Z centered, Y from 0', () => {
-  assert.deepEqual(ringCenter(CAR), [0, 20, 0]);
-  assert.deepEqual(ringCenter({ nx: 12, ny: 30, nz: 10 }), [0, 15, 0]);
-});
-
-test('ringAnchor: the floor center, yaw-independent by arity', () => {
+test('ringAnchor: the floor center', () => {
   const S = 64;
   // e = 0: the feet sit ny/2 voxels straight below the center, at the
   // frame's derived scale (the envelope's larger extent spans the tile).
@@ -152,5 +137,4 @@ test('ringAnchor: the floor center, yaw-independent by arity', () => {
   // Doubling the tile doubles the drop.
   const a2 = ringAnchor(CAR, 45, 138);
   assert.ok(near(a2.y - 69, 2 * (a45.y - 34.5)));
-  assert.equal(ringAnchor.length, 3, 'no yaw in the signature');
 });

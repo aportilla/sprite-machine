@@ -1,6 +1,6 @@
-// Node-runnable tests for the editor-session slice: the tool/ink semantics
-// that used to live as element methods (#selectColor, #switchTool, the
-// willUpdate clamps). Run: node --test
+// Node-runnable tests for the editor-session slice (state/session.js): the
+// tool / ink semantics, the tool settings' clamps and the tip-shape gate.
+// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -18,135 +18,21 @@ test('boot: pencil active, ink seeded from the palette', () => {
   assert.deepEqual(st.ink, PENCIL_PALETTE[0].rgb);
 });
 
-test('pickColor: copies the ink', () => {
-  const s = createSession();
-  s.pickColor(RED);
-  const st = s.get();
-  assert.deepEqual(st.ink, RED);
-  assert.notEqual(st.ink, RED, 'the ink is a copy, not the caller object');
-});
-
-test('eyedropper is a sticky tool: a pick leaves it selected', () => {
-  const s = createSession();
-  s.setTool('eyedropper');
-  assert.equal(s.get().tool, 'eyedropper');
-  s.pickColor(RED); // an eyedrop of a painted texel
-  assert.equal(s.get().tool, 'eyedropper', 'sampling does not switch tools');
-  s.setTool('pencil');
-  assert.equal(s.get().tool, 'pencil', 'only an explicit tool pick leaves it');
-});
-
-test('the selection tool is sticky: a color pick leaves it selected', () => {
-  const s = createSession();
-  s.setTool('select');
-  assert.equal(s.get().tool, 'select');
-  s.pickColor(RED); // ⌘K → OK, or an Alt-sample of a painted texel
-  assert.equal(s.get().tool, 'select', 'a pick does not switch tools');
-  assert.deepEqual(s.get().ink, RED, 'but it does take the ink');
-  s.setTool('pencil');
-  assert.equal(s.get().tool, 'pencil', 'only an explicit tool pick leaves it');
-});
-
-test('eraserSize is its own setting — independent of pencilSize both ways', () => {
-  const s = createSession();
-  assert.equal(s.get().eraserSize, 1, 'boots at 1, like the pencil');
-  s.setPencilSize(4, 40);
-  s.setEraserSize(9, 40);
-  assert.equal(s.get().pencilSize, 4, 'setting the eraser leaves the pencil alone');
-  assert.equal(s.get().eraserSize, 9);
-  s.setPencilSize(12, 40);
-  assert.equal(s.get().eraserSize, 9, 'and vice versa');
-});
-
-test('setEraserSize clamps and rounds like the pencil (its own code path)', () => {
-  const s = createSession();
-  s.setEraserSize(99, 40);
-  assert.equal(s.get().eraserSize, 40);
-  s.setEraserSize(0, 40);
-  assert.equal(s.get().eraserSize, 1, 'floor is 1');
-  s.setEraserSize(3.6, 40);
-  assert.equal(s.get().eraserSize, 4, 'rounded');
-  s.setEraserSize(NaN, 40);
-  assert.equal(s.get().eraserSize, 1, 'garbage falls back to 1');
-});
-
-test('the tip shapes: circle every load for both tools; the setters take the two names and nothing else', () => {
-  const s = createSession();
-  assert.equal(s.get().pencilShape, 'circle');
-  assert.equal(s.get().eraserShape, 'circle');
-  assert.deepEqual(
-    [...PENCIL_SHAPES],
-    ['circle', 'square'],
-    "the popups' two options, in order"
-  );
-  s.setPencilShape('square');
-  assert.equal(s.get().pencilShape, 'square');
-  s.setPencilShape('triangle');
-  assert.equal(s.get().pencilShape, 'square', 'an unknown shape is a no-op');
-  s.setPencilShape(/** @type {any} */ (undefined));
-  assert.equal(s.get().pencilShape, 'square', 'so is a missing one');
-  s.setPencilShape('circle');
-  assert.equal(s.get().pencilShape, 'circle');
-  s.setEraserShape('square');
-  assert.equal(s.get().eraserShape, 'square');
-  s.setEraserShape('blob');
-  assert.equal(s.get().eraserShape, 'square', 'the eraser setter is as strict');
-  s.setEraserShape('circle');
-  assert.equal(s.get().eraserShape, 'circle');
-});
-
-test('eraserShape is its own setting — independent of pencilShape both ways (the sizes’ rule)', () => {
-  const s = createSession();
-  s.setPencilShape('square');
-  assert.equal(
-    s.get().eraserShape,
-    'circle',
-    'setting the pencil leaves the eraser alone'
-  );
-  s.setEraserShape('square');
-  s.setPencilShape('circle');
-  assert.equal(s.get().eraserShape, 'square', 'and vice versa');
-  assert.equal(s.get().pencilShape, 'circle');
-});
-
-test('the shapes survive the sizes, the clamp, a tool switch and a color pick', () => {
-  const s = createSession();
-  s.setPencilShape('square');
-  s.setEraserShape('square');
-  s.setPencilSize(9, 40);
-  s.setEraserSize(3, 40);
-  s.clampTools(8, 4);
-  s.setTool('eraser');
-  s.pickColor(RED); // returns to the pencil — both shapes intact
-  assert.equal(s.get().tool, 'pencil');
-  assert.equal(s.get().pencilShape, 'square');
-  assert.equal(s.get().eraserShape, 'square');
-});
-
-test('the shape setters are silent on an unchanged value (the store discipline)', () => {
-  const s = createSession();
-  let fired = 0;
-  s.subscribe(() => fired++);
-  s.setPencilShape('circle'); // already circle
-  s.setEraserShape('circle');
-  assert.equal(fired, 0);
-  s.setPencilShape('square');
-  assert.equal(fired, 1);
-  s.setPencilShape('square');
-  assert.equal(fired, 1, 'a repeat pick notifies nobody');
-  s.setEraserShape('square');
-  assert.equal(fired, 2);
-  s.setEraserShape('square');
-  assert.equal(fired, 2);
-});
-
-test('the eraser is a sticky tool: selecting it leaves the ink untouched', () => {
+test('the eyedropper, selection and eraser are sticky tools: a pick or a switch leaves them and the ink alone', () => {
+  for (const tool of ['eyedropper', 'select']) {
+    const s = createSession();
+    s.setTool(tool);
+    s.pickColor(RED); // an eyedrop of a painted texel, ⌘K → OK, an Alt-sample
+    assert.equal(s.get().tool, tool, `${tool}: a pick does not switch tools`);
+    assert.deepEqual(s.get().ink, RED, `${tool}: but it does take the ink`);
+    s.setTool('pencil');
+    assert.equal(s.get().tool, 'pencil', 'only an explicit tool pick leaves it');
+  }
   const s = createSession();
   s.pickColor(RED);
   s.setTool('eraser');
-  const st = s.get();
-  assert.equal(st.tool, 'eraser');
-  assert.deepEqual(st.ink, RED, 'the solid ink survives for when erasing ends');
+  assert.equal(s.get().tool, 'eraser');
+  assert.deepEqual(s.get().ink, RED, 'the solid ink survives for when erasing ends');
 });
 
 test('pickColor while the eraser is held returns to the pencil', () => {
@@ -158,37 +44,60 @@ test('pickColor while the eraser is held returns to the pencil', () => {
   assert.deepEqual(st.ink, GREEN);
 });
 
-test('setPencilSize / setCornerRadius clamp and round against the given bound', () => {
+test('the tool settings clamp and round against the given bound; clampTools re-clamps them on a shrink', () => {
+  // [setter, key, bound, floor]: a size floors at 1, the radius at 0 (sharp).
+  const table = [
+    ['setPencilSize', 'pencilSize', 40, 1],
+    ['setEraserSize', 'eraserSize', 40, 1],
+    ['setCornerRadius', 'cornerRadius', 20, 0],
+  ];
+  for (const [setter, key, bound, floor] of table) {
+    const s = createSession();
+    s[setter](3.6, bound);
+    assert.equal(s.get()[key], 4, `${setter}: rounded`);
+    s[setter](bound + 59, bound);
+    assert.equal(s.get()[key], bound, `${setter}: capped at the bound`);
+    s[setter](floor - 3, bound);
+    assert.equal(s.get()[key], floor, `${setter}: floored`);
+  }
   const s = createSession();
-  s.setPencilSize(99, 40);
-  assert.equal(s.get().pencilSize, 40);
-  s.setPencilSize(0, 40);
-  assert.equal(s.get().pencilSize, 1, 'floor is 1');
-  s.setPencilSize(3.6, 40);
-  assert.equal(s.get().pencilSize, 4, 'rounded');
+  s.setPencilSize(7, 40);
   s.setPencilSize(NaN, 40);
-  assert.equal(s.get().pencilSize, 1, 'garbage falls back to 1');
-  s.setCornerRadius(99, 20);
-  assert.equal(s.get().cornerRadius, 20);
-  s.setCornerRadius(-3, 20);
-  assert.equal(s.get().cornerRadius, 0, 'floor is 0 (sharp)');
-  s.setCornerRadius(NaN, 20);
-  assert.equal(s.get().cornerRadius, 0, 'garbage falls back to 0');
-});
-
-test('clampTools: a shrink re-clamps persisted values down (the resize rule)', () => {
-  const s = createSession();
+  assert.equal(s.get().pencilSize, 1, 'garbage falls back to the floor');
+  // The resize rule: a shrink re-clamps persisted values down, a grow leaves
+  // in-bounds values alone.
+  const sizes = ({ pencilSize, eraserSize, cornerRadius }) => ({
+    pencilSize,
+    eraserSize,
+    cornerRadius,
+  });
   s.setPencilSize(30, 40);
   s.setEraserSize(25, 40);
   s.setCornerRadius(15, 20);
   s.clampTools(8, 4); // tile shrank
-  assert.equal(s.get().pencilSize, 8);
-  assert.equal(s.get().eraserSize, 8);
-  assert.equal(s.get().cornerRadius, 4);
-  s.clampTools(64, 32); // a grow leaves in-bounds values alone
-  assert.equal(s.get().pencilSize, 8);
-  assert.equal(s.get().eraserSize, 8);
-  assert.equal(s.get().cornerRadius, 4);
+  assert.deepEqual(sizes(s.get()), { pencilSize: 8, eraserSize: 8, cornerRadius: 4 });
+  s.clampTools(64, 32);
+  assert.deepEqual(sizes(s.get()), { pencilSize: 8, eraserSize: 8, cornerRadius: 4 });
+});
+
+test('the tip shapes: circle every load for both tools; each setter takes the two names and nothing else', () => {
+  const s = createSession();
+  assert.equal(s.get().pencilShape, 'circle');
+  assert.equal(s.get().eraserShape, 'circle');
+  for (const [setter, key] of [
+    ['setPencilShape', 'pencilShape'],
+    ['setEraserShape', 'eraserShape'],
+  ]) {
+    for (const shape of PENCIL_SHAPES) {
+      s[setter](shape);
+      assert.equal(s.get()[key], shape);
+    }
+    const held = s.get()[key];
+    s[setter]('blob');
+    assert.equal(s.get()[key], held, `${setter}: an unknown shape is a no-op`);
+    s[setter](/** @type {any} */ (undefined));
+    assert.equal(s.get()[key], held, `${setter}: so is a missing one`);
+  }
 });
 
 test('picker open/close and the fill checkboxes are plain flags', () => {

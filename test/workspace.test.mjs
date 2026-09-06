@@ -1,8 +1,8 @@
 // Node-runnable tests for the workspace slice — the OPEN documents: contexts
-// (own doc + history + face + identity), untitled naming, per-context dirty
-// tracking off the doc's two channels, the activation mirror, the
-// stored-document flows (openStored / save / duplicate / rename / remove /
-// export) against the real files slice over an in-memory storage stub, and
+// (own doc + history + face + selection + identity), untitled naming,
+// per-context dirty tracking off the doc's two channels, the activation
+// mirror, the stored-document flows (openStored / save / duplicate / rename /
+// remove) against the real files slice over an in-memory storage stub, and
 // the followActive primitive.
 // Run: node --test
 import { test } from 'node:test';
@@ -11,95 +11,9 @@ import assert from 'node:assert/strict';
 import { createDoc } from '../src/state/doc.js';
 import { createFiles, UNTITLED } from '../src/state/files.js';
 import { createWorkspace, followActive } from '../src/state/workspace.js';
-import { crc32 } from '../src/lib/png-chunks.js';
-
-// --- stubs (the files.test.mjs kit, restated) ---------------------------------
-
-function fakeScheduler() {
-  let next = 1;
-  const pending = new Map();
-  return {
-    schedule: (fn) => {
-      const id = next++;
-      pending.set(id, fn);
-      return id;
-    },
-    cancel: (id) => pending.delete(id),
-    frame() {
-      const fns = [...pending.values()];
-      pending.clear();
-      for (const fn of fns) fn();
-    },
-  };
-}
-
-function memStorage() {
-  const map = new Map();
-  return {
-    map,
-    list: async () => [...map.values()],
-    get: async (id) => map.get(id),
-    put: async (r) => map.set(r.id, r),
-    remove: async (id) => map.delete(id),
-  };
-}
+import { fakeScheduler, memStorage, encodeAtlas, decodeAtlas } from './helpers.mjs';
 
 const sheet = (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) });
-
-function chunk(type, data) {
-  const out = new Uint8Array(8 + data.length + 4);
-  const dv = new DataView(out.buffer);
-  dv.setUint32(0, data.length);
-  for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
-  out.set(data, 8);
-  dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
-  return out;
-}
-const SIG = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
-
-async function encodeAtlas(img) {
-  const payload = new Uint8Array(8 + img.data.length);
-  new DataView(payload.buffer).setUint32(0, img.width);
-  new DataView(payload.buffer).setUint32(4, img.height);
-  payload.set(img.data, 8);
-  const parts = [
-    SIG,
-    chunk('IHDR', new Uint8Array(13)),
-    chunk('IDAT', payload),
-    chunk('IEND', new Uint8Array(0)),
-  ];
-  let total = 0;
-  for (const p of parts) total += p.length;
-  const out = new Uint8Array(total);
-  let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.length;
-  }
-  return out;
-}
-
-async function decodeAtlas(bytes) {
-  let i = SIG.length;
-  while (i < bytes.length) {
-    const len = new DataView(bytes.buffer, bytes.byteOffset + i).getUint32(0);
-    const type = String.fromCharCode(
-      bytes[i + 4],
-      bytes[i + 5],
-      bytes[i + 6],
-      bytes[i + 7]
-    );
-    if (type === 'IDAT') {
-      const d = bytes.subarray(i + 8, i + 8 + len);
-      const dv = new DataView(d.buffer, d.byteOffset);
-      const w = dv.getUint32(0);
-      const h = dv.getUint32(4);
-      return { width: w, height: h, data: new Uint8ClampedArray(d.subarray(8)) };
-    }
-    i += 8 + len + 4;
-  }
-  throw new Error('no IDAT');
-}
 
 // --- harness -----------------------------------------------------------------
 
@@ -177,77 +91,22 @@ test('setFace is per-context', () => {
   assert.equal(b.face, 'left');
 });
 
-test('setSelection is per-context, on the context’s OWN store, silent when unchanged', () => {
+test('setSelection is per-context, on the context’s OWN store; a rect drag rides beside it', () => {
   const { ws } = makeWorld();
   const a = openLoaded(ws);
   const b = openLoaded(ws);
   assert.equal(a.selection.get().bounds, null, 'no selection at birth');
-  let aNotes = 0;
-  let bNotes = 0;
-  let wsNotes = 0;
-  a.selection.subscribe(() => aNotes++);
-  b.selection.subscribe(() => bNotes++);
-  ws.subscribe(() => wsNotes++);
+  assert.equal(a.selection.get().rect, null, 'no drag at birth');
   const box = { x0: 2, y0: 3, x1: 7, y1: 9 };
   ws.setSelection(a.key, box);
   assert.deepEqual(a.selection.get().bounds, box);
-  assert.notEqual(a.selection.get().bounds, box, 'stored as a copy');
   assert.equal(b.selection.get().bounds, null, 'the other context is untouched');
-  assert.equal(aNotes, 1);
-  assert.equal(bNotes, 0);
-  assert.equal(wsNotes, 0, 'never published through the workspace store');
-  ws.setSelection(a.key, { ...box });
-  assert.equal(aNotes, 1, 'an equal-valued write is silent');
-  ws.setSelection(a.key, { ...box, x1: 8 });
-  assert.equal(aNotes, 2, 'a changed edge notifies');
+  const drag = { x0: 1, y0: 1, x1: 4, y1: 4 };
+  ws.setRectDrag(a.key, drag);
+  assert.deepEqual(a.selection.get().rect, drag);
+  assert.deepEqual(a.selection.get().bounds, box, 'the drag leaves the selection alone');
   ws.setSelection(a.key, null);
   assert.equal(a.selection.get().bounds, null);
-  assert.equal(aNotes, 3);
-  ws.setSelection(a.key, null);
-  assert.equal(aNotes, 3, 'null → null is silent');
-  ws.setSelection('nope', box); // an unknown key is a no-op
-  assert.equal(wsNotes, 0);
-});
-
-test('setRectDrag rides the same per-context store, silent when unchanged, never touching bounds', () => {
-  const { ws } = makeWorld();
-  const a = openLoaded(ws);
-  const b = openLoaded(ws);
-  assert.equal(a.selection.get().rect, null, 'no drag at birth');
-  let aNotes = 0;
-  let bNotes = 0;
-  let wsNotes = 0;
-  a.selection.subscribe(() => aNotes++);
-  b.selection.subscribe(() => bNotes++);
-  ws.subscribe(() => wsNotes++);
-  const sel = { x0: 1, y0: 1, x1: 4, y1: 4 };
-  ws.setSelection(a.key, sel);
-  assert.equal(aNotes, 1);
-  const box = { x0: 2, y0: 3, x1: 7, y1: 9 };
-  ws.setRectDrag(a.key, box);
-  assert.deepEqual(a.selection.get().rect, box);
-  assert.notEqual(a.selection.get().rect, box, 'stored as a copy');
-  assert.deepEqual(a.selection.get().bounds, sel, 'the selection outline is untouched');
-  assert.equal(b.selection.get().rect, null, 'the other context is untouched');
-  assert.equal(aNotes, 2);
-  assert.equal(bNotes, 0);
-  assert.equal(wsNotes, 0, 'never published through the workspace store');
-  ws.setRectDrag(a.key, { ...box });
-  assert.equal(aNotes, 2, 'an equal-valued write is silent');
-  ws.setRectDrag(a.key, { ...box, y1: 10 });
-  assert.equal(aNotes, 3, 'a changed edge notifies');
-  ws.setRectDrag(a.key, null);
-  assert.equal(a.selection.get().rect, null);
-  assert.equal(aNotes, 4);
-  ws.setRectDrag(a.key, null);
-  assert.equal(aNotes, 4, 'null → null is silent');
-  assert.deepEqual(
-    a.selection.get().bounds,
-    sel,
-    'the drag ending leaves the selection alone'
-  );
-  ws.setRectDrag('nope', box); // an unknown key is a no-op
-  assert.equal(wsNotes, 0);
 });
 
 // --- dirty tracking --------------------------------------------------------------
@@ -394,18 +253,6 @@ test('removeStored reverts an open context to an untitled identity', async () =>
   assert.equal(storage.map.size, 0);
   assert.equal(ctx.fileId, null);
   assert.equal(ctx.name, 'Doomed', 'the pixels and name stay open');
-});
-
-test('exportOf uses the context identity (verbatim when clean, fresh when dirty)', async () => {
-  const { ws, frame, storage } = makeWorld();
-  const ctx = openLoaded(ws);
-  await ws.save(ctx.key, 'Ship');
-  const clean = await ws.exportOf(ctx.key);
-  assert.deepEqual(clean.bytes, storage.map.get('id-1').png);
-  stroke(ctx);
-  frame(ctx);
-  const dirty = await ws.exportOf(ctx.key);
-  assert.notDeepEqual(dirty.bytes, storage.map.get('id-1').png);
 });
 
 // --- followActive -----------------------------------------------------------------

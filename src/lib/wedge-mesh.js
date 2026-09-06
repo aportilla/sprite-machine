@@ -256,7 +256,7 @@ export function wedgeMesh(result, opts = {}) {
   // — not for lighting (flatShading recomputes them per-face in the shader).
   geo = mergeVertices(geo, 1e-4);
 
-  // finishVoxelMesh centres X/Z and leaves Y as authored — matches voxelMesh.
+  // finishVoxelMesh centres X/Z and leaves Y as authored (wedge-mesh.test pins it).
   return finishVoxelMesh(geo, {
     nx,
     nz,

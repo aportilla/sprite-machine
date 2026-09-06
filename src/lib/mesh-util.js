@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
-// Shared helpers for the vertex-colored voxel/wedge mesh builders (mesh.js and
-// wedge-mesh.js). Extracted so the color-space contract and the framing +
-// material constants live in exactly one place and the two builders can't drift.
+// Shared helpers for the vertex-colored wedge mesh builder (wedge-mesh.js):
+// the color-space contract and the framing + material constants live in
+// exactly one place. (The plain voxel builder that once shared them, mesh.js,
+// went with the test trim of Sep 5 2026 — dead code with no consumer.)
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';

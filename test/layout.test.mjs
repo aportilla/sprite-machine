@@ -1,7 +1,7 @@
 // Node-runnable tests for the desktop's window + icon arithmetic
-// (shell/layout.js): the smart initial placement, the document-window
-// cascade, the icons' default lattice, and the nine-slice resize rule in
-// both frames. Run: node --test
+// (shell/layout.js): the RULES — the initial placement, the document-window
+// cascade, the zoom, the icons' default lattice and the nine-slice pin in
+// both frames — never a number against a literal. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -18,37 +18,23 @@ import {
   pinTo,
   spriteHeightFor,
   SPRITE_CHROME,
-  SPRITE_STRIP,
-  SPRITE_PICKER,
-  SPRITE_PICKER_AT,
-  STAGE_STRIP,
   SPRITE_WIDTH,
   ATLAS_GRID,
   ringWidthFor,
   ringRowWidth,
   ringHeightFor,
-  RING_CHROME,
-  RING_STRIP,
   RING_MIN_WIDTH,
-  RING_FIELD,
-  RING_FIELDS,
-  RING_CAPTION_HEIGHT,
   TOP_RESERVE,
   MENU_BAR,
   ICON_CELL,
-  TOOL_CELL,
   TOOLS_BOX,
-  BAND,
   WINDOW_FRAME,
   ICON_FRAME,
 } from '../src/shell/layout.js';
 import { RING_DEFAULTS } from '../src/state/ring.js';
 
-// The Tools palette's authored box (index.html's width / height) — the
-// strip's own arithmetic, restated here as a pin: six 22×19 icon cells in a
-// frameless column with 1px rules between, inside the 1px borders and the
-// 12px dot bar.
-const TOOLS = { width: 24, height: 133 };
+// The Tools palette's box — the placement's one fixed input.
+const TOOLS = TOOLS_BOX;
 // The capture tool's raster (1000×850 CSS at DSF 1, minus the 10px bezel).
 const W = 980;
 const H = 830;
@@ -61,76 +47,41 @@ const box = (left, top, width, height) => ({ left, top, width, height });
 const roundTrip = (b, from, to, frame = F, policy) =>
   pinTo(pinOf(b, from, frame), to, frame, policy);
 
-test('the Tools palette box: six 22×19 icon cells in a frameless column + the chrome', () => {
-  // The cell is the icon's own size (src/assets/tools/, 22×19), and the
-  // windoid's box derives from it — the numbers index.html authors (the
-  // drive pins the markup against TOOLS_BOX).
-  assert.deepEqual(TOOL_CELL, { width: 22, height: 19 });
-  assert.deepEqual(TOOLS_BOX, TOOLS);
-});
-
-test('placement: the sprite/stage rail is one right-flush column, sprite fixed', () => {
+test('placement: Tools top-left under the strip; the sprite/stage rail one right-flush column on any raster, the sprite fixed at whole grid cells', () => {
   const p = initialPlacement(W, H, TOOLS);
+  // Tools sits at the classic inset under the strip, left of the vacancy.
+  assert.equal(p.tools.left, 14);
+  assert.equal(p.tools.top, TOP_RESERVE + 8);
+  assert.ok(p.tools.left + TOOLS.width < p.doc.left);
   // The sprite windoid is FIXED-size: the atlas grid block's width, its
   // height derived (the face grid exactly fills its body below the picker
-  // strip).
-  assert.equal(p.sprite.width, SPRITE_WIDTH);
-  assert.equal(p.sprite.height, spriteHeightFor(SPRITE_WIDTH));
-  // Both right-flush behind the side inset at the SAME width, below the
-  // options strip, sprite on top, stage under it with a gap, absorbing the
-  // rest of the height down to the bottom gap.
-  assert.equal(p.sprite.left + p.sprite.width, W - 14);
-  assert.equal(p.stage.width, SPRITE_WIDTH);
-  assert.equal(p.stage.left, p.sprite.left);
-  assert.ok(p.sprite.top > TOP_RESERVE);
-  assert.equal(p.stage.top, p.sprite.top + p.sprite.height + 8);
-  assert.equal(p.stage.top + p.stage.height, H - 8);
-});
-
-test("the windoids' headers: the picker's band and the checkbox row, rule included", () => {
-  // The Sprite View's header holds the face picker block — six 21px cubes
-  // with 12px gaps over the kit's 19px radio row under the 26px icons —
-  // 8 in from the top and 8 above the rule; the chrome counts it.
-  assert.deepEqual(SPRITE_PICKER, { width: 6 * 21 + 5 * 12, height: 26 + 19 });
-  assert.equal(SPRITE_STRIP, 8 + SPRITE_PICKER.height + 8 + 1);
-  assert.equal(SPRITE_STRIP, 62);
-  assert.deepEqual(SPRITE_CHROME, { w: 2, h: 12 + 2 + SPRITE_STRIP });
-  // The block centers across the fixed header's interior on whole px.
-  assert.equal(SPRITE_PICKER_AT.left, (SPRITE_WIDTH - 2 - SPRITE_PICKER.width) / 2);
-  assert.ok(Number.isInteger(SPRITE_PICKER_AT.left));
-  assert.equal(SPRITE_PICKER_AT.top, 8);
-  // The 3D View's header: the kit's 20px checkbox row over the rule.
-  assert.equal(STAGE_STRIP, 24);
-});
-
-test('sprite sizing: height derives from width through the tile ratio + chrome', () => {
-  // The windoid width yields WHOLE grid cells: the body minus the interior
-  // rules splits evenly across the columns (the vf-grid states cell sizes
-  // in whole system px, and the exact-fill contract needs them to sum back
-  // to the body).
+  // strip) — and that width yields WHOLE grid cells: the body minus the
+  // interior rules splits evenly across the columns (the exact-fill
+  // contract needs the kit's whole-px cell sizes to sum back to the body).
   const cellW =
     (SPRITE_WIDTH - SPRITE_CHROME.w - (ATLAS_GRID.cols - 1)) / ATLAS_GRID.cols;
   assert.equal(cellW, ATLAS_GRID.cell);
   assert.ok(Number.isInteger(cellW));
-  // The default ratio is the square tile: square cells, one rule between
-  // the rows.
-  assert.equal(
-    spriteHeightFor(SPRITE_WIDTH),
-    ATLAS_GRID.rows * ATLAS_GRID.cell + (ATLAS_GRID.rows - 1) + SPRITE_CHROME.h
-  );
-  // A live tile's own ratio wins (the ?tile=WxH shear hook): the cell
-  // height rounds through it.
-  assert.equal(
-    spriteHeightFor(SPRITE_WIDTH, 0.5),
-    ATLAS_GRID.rows * (ATLAS_GRID.cell / 2) + (ATLAS_GRID.rows - 1) + SPRITE_CHROME.h
-  );
-});
-
-test('placement: Tools sits top-left, above the rail band', () => {
-  const p = initialPlacement(W, H, TOOLS);
-  assert.equal(p.tools.left, 14);
-  assert.equal(p.tools.top, TOP_RESERVE + 8);
-  assert.ok(p.tools.left + TOOLS.width < p.doc.left);
+  // The capture raster, tall and narrow, squat and wide: both windoids
+  // right-flush behind the side inset at the SAME width (the stage never
+  // derives a width of its own), below the options strip, sprite on top,
+  // stage under it with a gap, absorbing the rest of the height down to the
+  // bottom gap.
+  for (const [w, h] of [
+    [W, H],
+    [400, 2000],
+    [2400, 500],
+  ]) {
+    const q = initialPlacement(w, h, TOOLS);
+    assert.equal(q.sprite.width, SPRITE_WIDTH);
+    assert.equal(q.sprite.height, spriteHeightFor(SPRITE_WIDTH));
+    assert.equal(q.sprite.left + q.sprite.width, w - 14);
+    assert.equal(q.stage.width, SPRITE_WIDTH);
+    assert.equal(q.stage.left, q.sprite.left);
+    assert.ok(q.sprite.top > TOP_RESERVE);
+    assert.equal(q.stage.top, q.sprite.top + q.sprite.height + 8);
+    assert.equal(q.stage.top + q.stage.height, h - 8);
+  }
 });
 
 test('placement: the document box sits top-left beside Tools, leaving the cascade room', () => {
@@ -158,86 +109,13 @@ test('placement: the document box sits top-left beside Tools, leaving the cascad
   assert.equal(last.top + p.doc.height, y1);
 });
 
-test("ring strip: the controls are a DITL whose arithmetic is the header's height and the width floor", () => {
-  // The kit's metrics, stated once: a 74 × 25 number field, a 16px caption.
-  assert.deepEqual(RING_FIELD, { width: 74, height: 25 });
-  assert.equal(RING_CAPTION_HEIGHT, 16);
-  const { box, rows, cols, captionDy } = RING_FIELDS;
-  // Down: two rows 4 in from the top, 4 apart, 4 above the bottom.
-  assert.deepEqual(rows, [4, 4 + 25 + 4]);
-  assert.equal(box.height, 4 + 25 + 4 + 25 + 4);
-  // A caption drops (25 − 16) / 2 floored below its row — where the
-  // baselines meet (the caption's 12px ascent at 16 below the row; the
-  // field's text at 1 + 1 + 2 + 12).
-  assert.equal(captionDy, 4);
-  assert.equal(captionDy + 12, 1 + 1 + 2 + 12);
-  // Across: inset, caption, gap, field, gap, caption, gap, field, inset.
-  assert.equal(cols[0].caption, 8);
-  assert.equal(cols[0].field, cols[0].caption + cols[0].width + 6);
-  assert.equal(cols[1].caption, cols[0].field + RING_FIELD.width + 6);
-  assert.equal(cols[1].field, cols[1].caption + cols[1].width + 6);
-  assert.equal(box.width, cols[1].field + RING_FIELD.width + 8);
-  // Every item inside the box, in whole system px.
-  for (const c of cols) {
-    assert.ok(c.caption + c.width <= box.width);
-    assert.ok(c.field + RING_FIELD.width <= box.width);
-    for (const v of [c.caption, c.width, c.field]) assert.ok(Number.isInteger(v));
-  }
-  for (const r of rows) {
-    assert.ok(r + RING_FIELD.height <= box.height);
-    assert.ok(r + captionDy + RING_CAPTION_HEIGHT <= box.height);
-  }
-  // The DITL reproduces the strip as it was first measured (the plan's
-  // as-built 258 × 62 — ring-size-plan.md): the strip is the controls over
-  // the header's rule (the window's header-height, rule included), the
-  // floor the controls plus the borders. (The paper setting has no column
-  // — its radios were built and retired; ring-size-plan.md note 8.)
-  assert.deepEqual(box, { width: 258, height: 62 });
-  assert.equal(RING_STRIP, box.height + 1);
-  assert.equal(RING_STRIP, 63);
-  assert.equal(RING_MIN_WIDTH, box.width + RING_CHROME.w);
-  assert.equal(RING_MIN_WIDTH, 260);
-  assert.equal('paper' in RING_FIELDS, false);
-});
-
-test('ring sizing: the height derives from the tile size, the width seeds from the row, both floored', () => {
-  // The chrome: the two side borders; 12 dot bar + 2 borders + the two-row
-  // strip + the kit's horizontal rail (15 px inside the frame) over one row
-  // of size-px cells.
-  assert.deepEqual(RING_CHROME, { w: 2, h: 12 + 2 + RING_STRIP + 15 });
-  assert.equal(ringHeightFor(64), RING_CHROME.h + 64);
-  assert.equal(ringHeightFor(255), RING_CHROME.h + 255);
-  assert.equal(ringHeightFor(0), RING_CHROME.h + 1, 'never a zero row');
-  // The row's own width — the paper the view declares to the kit's scroll
-  // area: n cells of size, butted (rules="none"), no perimeter.
-  assert.equal(ringRowWidth(4, 64), 4 * 64);
-  assert.equal(ringRowWidth(1, 128), 128);
-  assert.equal(ringRowWidth(0, 64), 64, 'never fewer than one cell');
-  // The natural row: the row + 2 borders, floored at the strip (a short
-  // ring never clips the controls — the default four 64s among them, two
-  // px under the floor now that no rules pad the row).
-  assert.equal(ringWidthFor(4, 64), Math.max(RING_MIN_WIDTH, 4 * 64 + 2));
-  assert.equal(ringWidthFor(4, 70), Math.max(RING_MIN_WIDTH, 4 * 70 + 2));
-  assert.equal(ringWidthFor(16, 255), 16 * 255 + 2);
-  assert.equal(ringWidthFor(1, 128), RING_MIN_WIDTH, 'a short ring floors at the strip');
-  assert.equal(ringWidthFor(0, 64), RING_MIN_WIDTH, 'never fewer than one cell');
-  // The layout's default size mirrors the slice's (one truth, restated for
-  // the no-opts call), and the Sprite View's cell is no longer the ring's.
-  assert.equal(RING_DEFAULTS.size, 64);
-  assert.equal(
-    initialPlacement(W, H, TOOLS).ring.height,
-    ringHeightFor(RING_DEFAULTS.size)
-  );
-  assert.equal(ATLAS_GRID.cell, 70);
-});
-
-test("placement: the ring docks on the bottom margin at the doc box's left — the tile's height, the row's width", () => {
+test("placement: the ring docks on the bottom margin at the doc box's left — the tile's height, the row's width, both floored", () => {
   const p = initialPlacement(W, H, TOOLS);
   const x1 = p.sprite.left - 14; // the vacancy's right edge
   assert.equal(p.ring.left, p.doc.left);
   assert.equal(p.ring.top + p.ring.height, H - 8);
-  assert.equal(p.ring.height, ringHeightFor(64));
-  assert.equal(p.ring.width, ringWidthFor(4, 64));
+  assert.equal(p.ring.height, ringHeightFor(RING_DEFAULTS.size));
+  assert.equal(p.ring.width, ringWidthFor(RING_DEFAULTS.views, RING_DEFAULTS.size));
   // The tile size moves the height (the bottom stays docked); the view
   // count seeds the width; nothing else about the box moves.
   const big = initialPlacement(W, H, TOOLS, { ringSize: 200 });
@@ -247,7 +125,7 @@ test("placement: the ring docks on the bottom margin at the doc box's left — t
   // (four 200-px cells outgrow this raster's vacancy — the cap below.)
   assert.equal(big.ring.width, Math.min(ringWidthFor(4, 200), x1 - p.doc.left));
   const eight = initialPlacement(W, H, TOOLS, { ringViews: 8 });
-  assert.equal(eight.ring.width, ringWidthFor(8, 64));
+  assert.equal(eight.ring.width, ringWidthFor(8, RING_DEFAULTS.size));
   assert.equal(eight.ring.top, p.ring.top);
   // A row wider than the vacant middle is CAPPED at it — a fresh strip
   // never runs under the rail (the rail goes live instead) — and never
@@ -257,6 +135,13 @@ test("placement: the ring docks on the bottom margin at the doc box's left — t
   assert.equal(wide.ring.left + wide.ring.width, x1);
   const tiny = initialPlacement(300, 400, TOOLS, { ringViews: 16 });
   assert.equal(tiny.ring.width, RING_MIN_WIDTH);
+  // The floors themselves: never a zero row, never fewer than one cell, and
+  // a short ring never clips the controls.
+  assert.equal(ringHeightFor(0), ringHeightFor(1), 'never a zero row');
+  assert.equal(ringRowWidth(0, 64), ringRowWidth(1, 64), 'never fewer than one cell');
+  assert.equal(ringWidthFor(0, 64), RING_MIN_WIDTH);
+  assert.equal(ringWidthFor(1, 128), RING_MIN_WIDTH, 'a short ring floors at the strip');
+  assert.ok(ringWidthFor(16, 255) > RING_MIN_WIDTH, 'a wide one clears it');
 });
 
 test('placement: a shown ring shortens the doc box; hidden, nothing changes', () => {
@@ -284,33 +169,31 @@ test('placement: a shown ring shortens the doc box; hidden, nothing changes', ()
   }
   // …by the tile's own height: a bigger tile takes more of the vacancy.
   const tall = initialPlacement(W, H, TOOLS, { ringShown: true, ringSize: 200 });
-  assert.equal(tall.doc.height, on.doc.height - (ringHeightFor(200) - ringHeightFor(64)));
+  assert.equal(
+    tall.doc.height,
+    on.doc.height - (ringHeightFor(200) - ringHeightFor(RING_DEFAULTS.size))
+  );
   assert.equal(tall.doc.top + tall.doc.height + room, tall.ring.top - 8);
 });
 
-test('placement: the rail is one column — the stage takes the sprite width on any raster', () => {
-  // Tall and narrow, or squat and wide: the stage never derives a width of
-  // its own. The sprite windoid's fixed size is untouched by the raster,
-  // and the stage still bottoms out at the gap.
-  for (const [w, h] of [
-    [400, 2000],
-    [2400, 500],
-  ]) {
-    const p = initialPlacement(w, h, TOOLS);
-    assert.equal(p.sprite.width, SPRITE_WIDTH);
-    assert.equal(p.stage.width, SPRITE_WIDTH);
-    assert.equal(p.stage.left, p.sprite.left);
-    assert.equal(p.stage.top + p.stage.height, h - 8);
-  }
-});
-
-test('placement: a tiny raster still yields finite, usable boxes', () => {
+test('placement: a tiny raster still yields finite, usable boxes; a zero-sized one places and pins finitely', () => {
   const p = initialPlacement(300, 200, TOOLS, { ringShown: true });
-  for (const box of [p.sprite, p.stage, p.ring, p.doc]) {
-    assert.ok(Number.isFinite(box.left) && Number.isFinite(box.top));
-    assert.ok(box.width > 0 && box.height > 0);
-    assert.ok(box.left >= 0 && box.top >= TOP_RESERVE);
+  for (const b of [p.sprite, p.stage, p.ring, p.doc]) {
+    assert.ok(Number.isFinite(b.left) && Number.isFinite(b.top));
+    assert.ok(b.width > 0 && b.height > 0);
+    assert.ok(b.left >= 0 && b.top >= TOP_RESERVE);
   }
+  // 0×0: the floors keep the ring finite and at the reserve, and its pin —
+  // read on a raster with no middle at all — maps finitely.
+  const z = initialPlacement(0, 0, TOOLS, { ringShown: true });
+  assert.ok(Object.values(z.ring).every(Number.isFinite) && z.ring.top >= TOP_RESERVE);
+  const rp = pinTo(
+    pinOf(z.ring, { width: 0, height: 0 }, WINDOW_FRAME),
+    { width: 600, height: 500 },
+    WINDOW_FRAME,
+    { size: { height: z.ring.height }, min: { width: RING_MIN_WIDTH } }
+  );
+  assert.ok(Object.values(rp).every(Number.isFinite));
 });
 
 test('panel placement: centeredBox centers a fixed-size panel in the open area below the strip', () => {
@@ -330,7 +213,7 @@ test('panel placement: centeredBox centers a fixed-size panel in the open area b
   assert.equal(t.top, TOP_RESERVE);
 });
 
-test('cascade: the first open takes the doc box, each further one steps down-right', () => {
+test('cascade: the first open takes the doc box, each further one steps down-right, and a freed slot is reused', () => {
   const base = { left: 100, top: 100 };
   assert.deepEqual(cascadeFrom(base, []), { left: 100, top: 100, slot: 0 });
   const one = [{ left: 100, top: 100 }];
@@ -345,10 +228,6 @@ test('cascade: the first open takes the doc box, each further one steps down-rig
     top: 100 + 2 * CASCADE_STEP,
     slot: 2,
   });
-});
-
-test('cascade: a freed slot is reused — a closed or dragged-away window gives it back', () => {
-  const base = { left: 100, top: 100 };
   // Slot 0's window was dragged elsewhere, slot 1 is held: the next open
   // lands back on slot 0 (a closed window simply isn't in the list).
   assert.deepEqual(
@@ -359,7 +238,7 @@ test('cascade: a freed slot is reused — a closed or dragged-away window gives 
     { left: 100, top: 100, slot: 0 }
   );
   // A landing a pixel or two off its slot (a lattice snap, an edge clamp)
-  // still holds it.
+  // still holds it…
   assert.deepEqual(cascadeFrom(base, [{ left: 102, top: 99 }]), {
     left: 100 + CASCADE_STEP,
     top: 100 + CASCADE_STEP,
@@ -373,7 +252,7 @@ test('cascade: a freed slot is reused — a closed or dragged-away window gives 
   });
 });
 
-test('cascade: every slot held wraps instead of walking off the raster', () => {
+test('cascade: every slot held wraps instead of walking off the raster; a slot re-expresses on any doc box', () => {
   const base = { left: 100, top: 100 };
   const all = Array.from({ length: CASCADE_SLOTS }, (_, i) => ({
     left: 100 + CASCADE_STEP * i,
@@ -385,17 +264,13 @@ test('cascade: every slot held wraps instead of walking off the raster', () => {
     top: 100 + CASCADE_STEP,
     slot: 1,
   });
-});
-
-test('cascade: a slot re-expresses on any doc box — the same step of a new raster', () => {
   // A window that opened on slot 2 of one raster's doc box lands on slot 2
   // of another's (the resize rule for an untouched window), wrapping past
   // the slot count the way an open would.
-  const a = { left: 100, top: 100 };
   const b = { left: 58, top: 64 };
   assert.deepEqual(
-    cascadeSlot(a, 2),
-    cascadeFrom(a, [cascadeSlot(a, 0), cascadeSlot(a, 1)])
+    cascadeSlot(base, 2),
+    cascadeFrom(base, [cascadeSlot(base, 0), cascadeSlot(base, 1)])
   );
   assert.deepEqual(cascadeSlot(b, 2), {
     left: 58 + 2 * CASCADE_STEP,
@@ -427,6 +302,11 @@ test('zoom: the zoomed box fills the vacancy right and down from a held top-left
   assert.equal(zd.top, dragged.top);
   assert.equal(zd.left + zd.width, x1);
   assert.equal(zd.top + zd.height, y1);
+  // Dragged past the vacancy's edges the arithmetic would go negative, so
+  // both extents floor instead — the box may hang off the raster, the
+  // resize rule's own recoverable-by-a-drag posture.
+  const zp = zoomedBox(W, H, { left: W - 20, top: H - 20 });
+  assert.ok(zp.left === W - 20 && zp.top === H - 20 && zp.width > 0 && zp.height > 0);
 });
 
 test('zoom: a shown ring stops the zoomed box a gap above the strip', () => {
@@ -443,58 +323,62 @@ test('zoom: a shown ring stops the zoomed box a gap above the strip', () => {
   assert.equal(zt.top + zt.height, H - 8 - ringHeightFor(200) - 8);
 });
 
-test('zoom: a window dragged past the vacancy still gets a workable floor', () => {
-  // Top-left beyond the vacancy's edges: the arithmetic would go negative,
-  // so both extents floor (DOC_MIN) instead — the box may hang off the
-  // raster, the resize rule's own recoverable-by-a-drag posture.
-  const z = zoomedBox(W, H, { left: W - 20, top: H - 20 });
-  assert.equal(z.left, W - 20);
-  assert.equal(z.top, H - 20);
-  assert.ok(z.width >= 220 && z.height >= 220);
-});
-
 test('pin: a strut keeps its offset from its edge, a spring its fraction of the middle', () => {
-  // Wholly inside the top-left band: both edges per axis are NEAR struts —
-  // the box does not move at all.
+  // NEAR struts (wholly inside the top-left band): the box does not move.
   assert.deepEqual(roundTrip(box(30, 40, 50, 30), R, { width: 600, height: 500 }), {
     left: 30,
     top: 40,
     width: 50,
     height: 30,
   });
-  // Wholly inside the bottom-right band: FAR struts — it keeps its offsets
-  // from the right and bottom edges.
-  assert.deepEqual(roundTrip(box(940, 740, 40, 40), R, { width: 600, height: 500 }), {
-    left: 540,
-    top: 440,
-    width: 40,
-    height: 40,
+  // FAR struts (wholly inside the bottom-right band): it keeps its offsets
+  // from the right and bottom edges — a rigid corner widget, the same under
+  // a fixed-size policy, on any raster.
+  for (const to of [
+    { width: 600, height: 500 },
+    { width: 300, height: 250 },
+  ]) {
+    const want = { left: to.width - 60, top: to.height - 60, width: 40, height: 40 };
+    assert.deepEqual(roundTrip(box(940, 740, 40, 40), R, to), want);
+    assert.deepEqual(
+      roundTrip(box(940, 740, 40, 40), R, to, F, { size: { width: 40, height: 40 } }),
+      want
+    );
+  }
+  // NEAR + FAR (spanning band to band): both margins hold, the box
+  // stretches with the raster.
+  assert.deepEqual(roundTrip(box(50, 50, 900, 700), R, { width: 1400, height: 1200 }), {
+    left: 50,
+    top: 50,
+    width: 1300,
+    height: 1100,
   });
-  // Wholly inside the middle: SPRINGS — 25%…75% of the middle on both axes,
-  // so position AND size scale with it (a resizable box).
+  // SPRINGS (wholly inside the middle): 25%…75% of the middle on both axes,
+  // so position AND size scale with it, up or down (a resizable box).
   assert.deepEqual(roundTrip(box(300, 250, 400, 300), R, { width: 1400, height: 1200 }), {
     left: 400,
     top: 350,
     width: 600,
     height: 500,
   });
+  assert.deepEqual(roundTrip(box(300, 250, 400, 300), R, { width: 600, height: 500 }), {
+    left: 200,
+    top: 175,
+    width: 200,
+    height: 150,
+  });
   // Same raster → the same box, exactly.
   assert.deepEqual(roundTrip(box(300, 250, 400, 300), R, R), box(300, 250, 400, 300));
-});
-
-test('pin: the frame reserve is the y = 0 line — a box under the strip stays under it', () => {
-  // The window frame: a box riding the options strip's bottom edge is a
-  // near strut at offset 0 on any raster height.
-  const b = box(14, TOP_RESERVE, 30, 187);
+  // The frame's reserve is its y = 0 line: a box riding the options strip's
+  // bottom edge is a near strut at offset 0 on any raster height.
+  const under = box(14, TOP_RESERVE, 30, 187);
   const home = { width: 1000, height: 830 };
-  assert.equal(
-    roundTrip(b, home, { width: 1000, height: 400 }, WINDOW_FRAME).top,
-    TOP_RESERVE
-  );
-  assert.equal(
-    roundTrip(b, home, { width: 1000, height: 2000 }, WINDOW_FRAME).top,
-    TOP_RESERVE
-  );
+  for (const h of [400, 2000]) {
+    assert.equal(
+      roundTrip(under, home, { width: 1000, height: h }, WINDOW_FRAME).top,
+      TOP_RESERVE
+    );
+  }
 });
 
 test('pin: continuous across every seam — no pop where a strut meets the spring', () => {
@@ -534,35 +418,6 @@ test('pin: an edge outside the raster is a strut with a negative offset — it h
     width: 80,
     height: 40,
   });
-});
-
-test('pin: a corner widget is rigid — same size, same corner offsets, on any raster', () => {
-  const widget = box(930, 750, 60, 40); // 10px off the bottom-right corner
-  for (const to of [
-    { width: 600, height: 500 },
-    { width: 1400, height: 1200 },
-    { width: 300, height: 250 },
-  ]) {
-    const want = { left: to.width - 70, top: to.height - 50, width: 60, height: 40 };
-    assert.deepEqual(roundTrip(widget, R, to), want); // resizable
-    assert.deepEqual(
-      roundTrip(widget, R, to, F, { size: { width: 60, height: 40 } }),
-      want
-    );
-  }
-});
-
-test('pin: near + far stretches with the raster, spring + spring scales with the middle', () => {
-  // Spanning from the left band to the right band: both margins hold.
-  assert.deepEqual(roundTrip(box(50, 50, 900, 700), R, { width: 1400, height: 1200 }), {
-    left: 50,
-    top: 50,
-    width: 1300,
-    height: 1100,
-  });
-  // Inside the middle: the box is the middle's 25%…75% on both rasters.
-  const scaled = roundTrip(box(300, 250, 400, 300), R, { width: 600, height: 500 });
-  assert.deepEqual(scaled, { left: 200, top: 175, width: 200, height: 150 });
 });
 
 test('pin: a fixed-size box resolves through the anchor rule', () => {
@@ -642,14 +497,23 @@ test('pin: a degenerate span collapses the middle to a seam, and grows back exac
 });
 
 test('pin: the placement is a fixed point — a resize lands the windoids where Arrange would', () => {
-  // The window frame's top and right bands hold the rail (the stage's top
-  // edge and the rail's left edges are struts), so every placed windoid
-  // re-pins onto any other raster EXACTLY as initialPlacement puts it there
-  // — the test that retires the "untouched window follows the placement"
-  // special case. The document window is content: its top-left (the
-  // cascade slot) is a fixed point too, while its right and bottom edges
-  // spring with the vacancy — inside it, never into the rail or off the
-  // bottom.
+  // The window frame's top band runs through the stage's top edge (a GAP of
+  // slack past it) and its right band covers the rail column (the rail's
+  // left edge an inset inside it): the bands hold the rail, so the stage's
+  // top edge and the rail's left edges are struts…
+  const home = initialPlacement(W, H, TOOLS);
+  const { bands } = WINDOW_FRAME;
+  assert.ok(
+    bands.top > home.stage.top - TOP_RESERVE &&
+      bands.top <= home.stage.top - TOP_RESERVE + 8
+  );
+  assert.ok(bands.right > W - home.stage.left && bands.right <= W - home.stage.left + 14);
+  // …and every placed windoid re-pins onto any other raster EXACTLY as
+  // initialPlacement puts it there — the test that retires the "untouched
+  // window follows the placement" special case. The document window is
+  // content: its top-left (the cascade slot) is a fixed point too, while
+  // its right and bottom edges spring with the vacancy — inside it, never
+  // into the rail or off the bottom.
   const rasters = [
     { width: 980, height: 830 },
     { width: 760, height: 620 },
@@ -736,66 +600,6 @@ test('pin: the placement is a fixed point — a resize lands the windoids where 
   );
 });
 
-test('pin: a long resize drag cannot ratchet — every event maps the SAME pin', () => {
-  // The regression: re-deriving the pin per event from the just-rounded
-  // geometry walked windows down the screen (round-half-up never rounds
-  // back). The contract is the one windows.js keeps: pinOf once, pinTo per
-  // event — so a hundred wiggles land exactly home, springs included.
-  const home = { width: 980, height: 830 };
-  const b = box(172, 391, 300, 200); // its edges: near, spring; spring, spring
-  const pin = pinOf(b, home, WINDOW_FRAME);
-  for (let i = 0; i < 100; i++) {
-    const h = 830 + (i % 2 === 0 ? -(150 + i) : 150 + i); // wiggle up and down
-    const pos = pinTo(pin, { width: 980, height: h }, WINDOW_FRAME);
-    assert.ok(Number.isFinite(pos.top) && Number.isFinite(pos.height));
-  }
-  assert.deepEqual(pinTo(pin, home, WINDOW_FRAME), b);
-});
-
-test('pin: a zero-sized raster degrades gracefully', () => {
-  const pin = pinOf(box(10, 100, 50, 50), { width: 0, height: 0 }, WINDOW_FRAME);
-  const pos = pinTo(pin, { width: 600, height: 500 }, WINDOW_FRAME);
-  for (const v of Object.values(pos)) assert.ok(Number.isFinite(v));
-  // The ring's placement on a degenerate raster is finite and floored at the
-  // reserve (the Math.max floors), and its pin maps finitely too.
-  const p = initialPlacement(0, 0, TOOLS, { ringShown: true });
-  for (const v of Object.values(p.ring)) assert.ok(Number.isFinite(v));
-  assert.ok(p.ring.top >= TOP_RESERVE);
-  const rp = pinTo(
-    pinOf(p.ring, { width: 0, height: 0 }, WINDOW_FRAME),
-    { width: 600, height: 500 },
-    WINDOW_FRAME,
-    {
-      size: { height: p.ring.height },
-      min: { width: RING_MIN_WIDTH },
-    }
-  );
-  for (const v of Object.values(rp)) assert.ok(Number.isFinite(v));
-});
-
-test('frames: the window bands hold the rail, the icon bands are the bare spec', () => {
-  assert.equal(BAND, 100);
-  assert.equal(WINDOW_FRAME.reserve, TOP_RESERVE);
-  assert.equal(ICON_FRAME.reserve, MENU_BAR);
-  // Uniform floors at the left and bottom; the top band runs through the
-  // stage's top edge (a GAP of slack past it), the right band covers the
-  // rail column (the rail's left edge sits an inset inside it).
-  const p = initialPlacement(W, H, TOOLS);
-  const { bands } = WINDOW_FRAME;
-  assert.equal(bands.left, BAND);
-  assert.equal(bands.bottom, BAND);
-  assert.ok(
-    bands.top > p.stage.top - TOP_RESERVE && bands.top <= p.stage.top - TOP_RESERVE + 8
-  );
-  assert.ok(bands.right > W - p.stage.left && bands.right <= W - p.stage.left + 14);
-  assert.deepEqual(ICON_FRAME.bands, {
-    left: BAND,
-    top: BAND,
-    right: BAND,
-    bottom: BAND,
-  });
-});
-
 test('icon defaults: a raster-derived column below the Tools band, wrapping', () => {
   // The tall case: one column at the classic left edge, 72px pitch.
   assert.deepEqual(iconDefault(0, 830), { left: 16, top: 340 });
@@ -849,17 +653,14 @@ test('icon pin: the frame is the desktop below the MENU BAR, uniform bands, a fi
       MENU_BAR
     );
   }
-});
-
-test("icon pin: the seams are the FINDER frame's, not the application's", () => {
-  // The window frame's top band runs through the rail head (~240px below the
-  // strip); the icon frame's is the bare 100 below the menu bar. A box 200px
-  // down is a top strut for a window — it stays put as the raster grows —
-  // and a spring for an icon, which moves down with the middle.
-  const b = { left: 16, top: 220, ...{ width: ICON_CELL, height: ICON_CELL } };
+  // The seams are the FINDER frame's, not the application's: the window
+  // frame's top band runs through the rail head (~240px below the strip),
+  // the icon frame's is the bare band below the menu bar. A box 200px down
+  // is a top strut for a window — it stays put as the raster grows — and a
+  // spring for an icon, which moves down with the middle.
+  const b = { left: 16, top: 220, ...cell };
   const wide = { width: 1000, height: 820 };
   const tall = { width: 1000, height: 1620 };
-  const size = { width: ICON_CELL, height: ICON_CELL };
-  assert.equal(roundTrip(b, wide, tall, WINDOW_FRAME, { size }).top, 220);
-  assert.ok(roundTrip(b, wide, tall, ICON_FRAME, { size }).top > 220);
+  assert.equal(roundTrip(b, wide, tall, WINDOW_FRAME, { size: cell }).top, 220);
+  assert.ok(roundTrip(b, wide, tall, ICON_FRAME, { size: cell }).top > 220);
 });

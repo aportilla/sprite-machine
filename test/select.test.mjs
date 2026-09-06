@@ -1,6 +1,7 @@
 // Node-runnable tests for the selection tool's primitives (pure, no DOM):
-// the bounds helpers, the axis lock, and the lift / clear / composite trio
-// with the transparency rule and the no-wrap clip. Run: node --test
+// the bounds helpers and the axis lock in one pass, then the lift / clear /
+// composite trio with the transparency rule and the no-wrap clip.
+// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -45,7 +46,7 @@ const texel = (d, w, x, y) =>
 const RED = [255, 0, 0];
 const BLUE = [0, 0, 255];
 
-test('normalizeBounds orders any corner pair top-left → bottom-right', () => {
+test('the bounds helpers: normalize orders any corner pair, contain is inclusive, translate is a pure shift, the axis lock picks the dominant axis', () => {
   const b = { x0: 2, y0: 3, x1: 7, y1: 9 };
   assert.deepEqual(normalizeBounds({ px: 2, py: 3 }, { px: 7, py: 9 }), b);
   assert.deepEqual(normalizeBounds({ px: 7, py: 9 }, { px: 2, py: 3 }), b);
@@ -58,10 +59,7 @@ test('normalizeBounds orders any corner pair top-left → bottom-right', () => {
     x1: 4,
     y1: 4,
   });
-});
 
-test('boundsContain is inclusive on all four edges', () => {
-  const b = { x0: 2, y0: 3, x1: 7, y1: 9 };
   for (const [x, y] of [
     [2, 3],
     [7, 3],
@@ -78,16 +76,13 @@ test('boundsContain is inclusive on all four edges', () => {
     [0, 0],
   ])
     assert.ok(!boundsContain(b, x, y), `${x},${y} outside`);
-});
 
-test('translateBounds is a pure shift — it may leave the tile', () => {
-  const b = { x0: 2, y0: 3, x1: 7, y1: 9 };
+  // A shift may leave the tile; the input is untouched.
   assert.deepEqual(translateBounds(b, 5, -4), { x0: 7, y0: -1, x1: 12, y1: 5 });
   assert.deepEqual(b, { x0: 2, y0: 3, x1: 7, y1: 9 }, 'the input is untouched');
   assert.deepEqual(translateBounds(b, 0, 0), b);
-});
 
-test('constrainAxis: the dominant axis wins, a tie keeps dx, zero stays zero', () => {
+  // The dominant axis wins, a tie keeps dx, zero stays zero.
   assert.deepEqual(constrainAxis(5, 2), { dx: 5, dy: 0 }, 'wider wins');
   assert.deepEqual(constrainAxis(-5, 2), { dx: -5, dy: 0 }, 'sign kept');
   assert.deepEqual(constrainAxis(1, -6), { dx: 0, dy: -6 }, 'taller wins');
@@ -96,7 +91,7 @@ test('constrainAxis: the dominant axis wins, a tie keeps dx, zero stays zero', (
   assert.deepEqual(constrainAxis(0, 0), { dx: 0, dy: 0 });
 });
 
-test('liftRect copies exactly the rect and counts its opaque texels', () => {
+test('liftRect copies exactly the rect and counts its opaque texels; stray RGB under alpha 0 is empty', () => {
   const W = 8;
   const H = 6;
   const src = buffer(W, H, { '2,1': RED, '3,2': BLUE, '6,4': RED });
@@ -110,25 +105,18 @@ test('liftRect copies exactly the rect and counts its opaque texels', () => {
   assert.deepEqual(texel(f.data, 3, 2, 2), [0, 0, 0, 0], 'an empty texel lifts empty');
   assert.equal(f.opaque, 2, 'two painted texels inside the rect; (6,4) is outside');
   assert.deepEqual(src, before, 'the source is untouched');
-});
 
-test('liftRect: opaque is 0 over empty space; stray RGB under alpha 0 is empty', () => {
-  const W = 5;
-  const src = buffer(W, 5);
-  // Stray RGB under alpha 0 — the hard-pixel rule says it is not a pixel.
-  src[(2 * W + 2) * 4] = 200;
-  src[(2 * W + 2) * 4 + 1] = 100;
-  const f = liftRect(src, W, { x0: 1, y0: 1, x1: 3, y1: 3 });
-  assert.equal(f.opaque, 0);
+  // Over empty space the count is 0 — stray RGB under alpha 0 is not a pixel
+  // (the hard-pixel rule).
+  const V = 5;
+  const empty = buffer(V, 5);
+  empty[(2 * V + 2) * 4] = 200;
+  empty[(2 * V + 2) * 4 + 1] = 100;
+  assert.equal(liftRect(empty, V, { x0: 1, y0: 1, x1: 3, y1: 3 }).opaque, 0);
   const g = liftRect(
-    buffer(W, 5, { '1,1': RED, '2,2': RED, '3,3': RED, '4,4': RED }),
-    W,
-    {
-      x0: 1,
-      y0: 1,
-      x1: 3,
-      y1: 3,
-    }
+    buffer(V, 5, { '1,1': RED, '2,2': RED, '3,3': RED, '4,4': RED }),
+    V,
+    { x0: 1, y0: 1, x1: 3, y1: 3 }
   );
   assert.equal(g.opaque, 3, 'N painted texels inside count N; the one outside does not');
 });

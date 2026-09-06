@@ -1,7 +1,9 @@
 // Node-runnable tests for the marching ants' raster (pure, no DOM): the
-// clockwise ring walk, the dash cycle, the march and the seam — and the
-// OUTLINE ring around a row-convex shape (a circle tip's disc), whose walk
-// is the rectangle's exact generalization. Run: node --test
+// rectangle ring's runs pinned as the run-length encoding of an independently
+// stated clockwise walk (which implies the coverage, the dash cycle, the march
+// and the phase's period), the seam, one concrete case — and the OUTLINE ring
+// around a row-convex shape (a circle tip's disc), whose walk is the
+// rectangle's exact generalization. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -23,7 +25,6 @@ function segments({ x, y, w, h }) {
   if (w > 1) for (let j = h - 2; j >= 1; j--) left.push([x, y + j]);
   return [top, right, bottom, left].filter((s) => s.length);
 }
-const walk = (f) => segments(f).flat();
 
 // The ink of walk pixel i at `phase`: four black, four white, the dashes
 // advancing one px along the walk per phase step.
@@ -96,71 +97,11 @@ const FRAMES = [
   { x: 0, y: 0, w: 1, h: 1 }, // one pixel
 ];
 
-test('the runs cover the ring exactly once, in clockwise walk order', () => {
-  for (const f of FRAMES) {
-    const expect = walk(f);
-    for (let phase = 0; phase < ANTS_PERIOD; phase++) {
-      const got = pixels(antsRuns(f, phase), f);
-      assert.equal(got.length, expect.length, `frame ${JSON.stringify(f)} count`);
-      assert.deepEqual(
-        got.map(([x, y]) => [x, y]),
-        expect,
-        `frame ${JSON.stringify(f)} phase ${phase} order`
-      );
-      const keys = new Set(got.map(([x, y]) => `${x},${y}`));
-      assert.equal(keys.size, got.length, 'each pixel once');
-    }
-    // 2(w+h) − 4 for a real ring; a line degenerates to its own length.
-    const { w, h } = f;
-    const ring = w > 1 && h > 1 ? 2 * (w + h) - 4 : Math.max(w, h);
-    assert.equal(walk(f).length, ring);
-  }
-});
-
-test('pixel i is black when (i − phase) mod 8 < 4: four on, four off', () => {
-  for (const f of FRAMES) {
-    for (let phase = 0; phase < ANTS_PERIOD; phase++) {
-      const got = pixels(antsRuns(f, phase), f);
-      got.forEach(([, , black], i) =>
-        assert.equal(
-          black,
-          blackAt(i, phase),
-          `frame ${JSON.stringify(f)} phase ${phase} px ${i}`
-        )
-      );
-    }
-  }
-});
-
-test('a phase step marches the dashes one px FORWARD along the walk (clockwise)', () => {
-  const f = { x: 2, y: 3, w: 13, h: 9 };
-  for (let phase = 0; phase < ANTS_PERIOD; phase++) {
-    const now = pixels(antsRuns(f, phase), f);
-    const next = pixels(antsRuns(f, phase + 1), f);
-    // Pixel i at the next phase shows what pixel i−1 showed at this one.
-    for (let i = 1; i < now.length; i++)
-      assert.equal(next[i][2], now[i - 1][2], `px ${i}`);
-  }
-});
-
-test('the phase is cyclic and any integer reduces', () => {
-  const f = { x: 0, y: 0, w: 7, h: 6 };
-  for (let phase = 0; phase < ANTS_PERIOD; phase++) {
-    const base = antsRuns(f, phase);
-    assert.deepEqual(antsRuns(f, phase + ANTS_PERIOD), base, `+period at ${phase}`);
-    assert.deepEqual(antsRuns(f, phase - ANTS_PERIOD), base, `−period at ${phase}`);
-    assert.deepEqual(
-      antsRuns(f, phase + 3 * ANTS_PERIOD),
-      base,
-      `+3 periods at ${phase}`
-    );
-  }
-});
-
 // The whole contract in one pin: the arithmetic runs equal the run-length
 // encoding of the inked walk, segment by segment — so every run is maximal
 // within its segment (a corner pixel's run and the column below it may share
-// an ink: they are different segments), and nothing is split or merged.
+// an ink: they are different segments), and nothing is split or merged. The
+// phases run past a period either way, so the cycle is pinned with it.
 test('the runs ARE the run-length encoding of the inked walk, per segment', () => {
   for (const f of FRAMES) {
     for (let phase = -ANTS_PERIOD; phase <= 2 * ANTS_PERIOD; phase++) {
@@ -206,7 +147,7 @@ test('the seam: the walk starts a fresh cycle at the top-left corner', () => {
 // The concrete runs of the 5×5 case at phase 0, in emission order — a pin a
 // reader can check against the header's walk by hand. Every run lies on
 // whole pixels: there is nothing here a rasterizer could anti-alias.
-test('5×5 at phase 0: the concrete runs', () => {
+test('5×5 at phase 0: the concrete runs; a frame under 1×1 emits nothing', () => {
   assert.deepEqual(antsRuns({ x: 0, y: 0, w: 5, h: 5 }, 0), [
     { x: 0, y: 0, w: 4, h: 1, black: true }, // top row: the first dash
     { x: 4, y: 0, w: 1, h: 1, black: false }, // the top-right corner
@@ -223,9 +164,7 @@ test('5×5 at phase 0: the concrete runs', () => {
     { x: 1, y: 0, w: 4, h: 1, black: true },
     { x: 4, y: 1, w: 1, h: 4, black: false },
   ]);
-});
-
-test('a frame under 1×1 emits nothing', () => {
+  // A frame with no extent on either axis has no ring.
   assert.deepEqual(antsRuns({ x: 0, y: 0, w: 0, h: 5 }, 0), []);
   assert.deepEqual(antsRuns({ x: 0, y: 0, w: 5, h: 0 }, 3), []);
 });

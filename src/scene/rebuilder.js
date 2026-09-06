@@ -88,10 +88,9 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
 
     const result = buildVoxels(rawViews, opts);
     // The low-poly wedge mesh, always: additive 45° wedges over same-color
-    // staircases on the greedy-meshed voxel solid. The plain greedy-voxel
-    // builder (lib/mesh.js voxelMesh — the same solid, every step a hard
-    // step) is the library's, Node-tested, with no consumer here since the
-    // "smooth" toggle went (Sep 4 2026).
+    // staircases on the greedy-meshed voxel solid. (The plain greedy-voxel
+    // builder the "smooth" toggle switched to went with the toggle, Sep 4
+    // 2026, and its dead module with the test trim of Sep 5.)
     current = wedgeMesh(result, { flat });
     if (diag && current?.geometry) {
       const geo = current.geometry; // captured: current may change before load resolves

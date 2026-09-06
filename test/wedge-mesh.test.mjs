@@ -1,74 +1,33 @@
-// Low-poly wedge gate robustness (THREE is loaded here, unlike pipeline.test.mjs).
-// Regression for the Helium bug: privacy browsers "farble" canvas getImageData,
-// perturbing source pixels by ~±1/channel. The wedge gate used strict RGB
-// equality, so same-material pixels stopped comparing equal and wedges silently
-// dropped — only in the farbling browser. The gate now snaps to the palette and
-// compares with a small tolerance, so it must be invariant under ±1 noise while
-// still gating genuine material seams.
+// The low-poly wedge mesh (THREE is loaded here, unlike pipeline.test.mjs):
+// the welded surface is watertight with and without wedges; the wedge gate is
+// STRICT (riser and tread the same material, nothing else consulted) and
+// robust to a ±1 canvas farble (the Helium bug: privacy browsers perturb
+// getImageData, and strict RGB equality dropped wedges only there); the shared
+// finish (finishVoxelMesh) centers X/Z and leaves Y exactly as authored; and
+// the vertex-color linearizer maps a packed sRGB color to a [0,1] linear tuple.
 // Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildVoxels } from '../src/lib/pipeline.js';
 import { wedgeMesh } from '../src/lib/wedge-mesh.js';
+import { makeVertexColorLinearizer } from '../src/lib/mesh-util.js';
+import { packRGBA } from '../src/lib/ingest.js';
+import { img, fill, oddEdges } from './helpers.mjs';
 
-// --- tiny sprite builder (mirrors pipeline.test.mjs) ------------------------
-const C = {
-  R: [220, 60, 60], // red
-  B: [70, 90, 200], // blue
-  T: [169, 220, 214], // teal
-};
-function img(rows, pal = C) {
-  const h = rows.length;
-  const w = rows[0].length;
-  const data = new Uint8ClampedArray(w * h * 4);
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) {
-      const ch = rows[y][x];
-      if (ch === '.' || ch === ' ') continue;
-      const [r, g, b] = pal[ch];
-      const i = (y * w + x) * 4;
-      data[i] = r;
-      data[i + 1] = g;
-      data[i + 2] = b;
-      data[i + 3] = 255;
-    }
-  return { width: w, height: h, data };
-}
-const fill = (w, h, ch) => img(Array.from({ length: h }, () => ch.repeat(w)));
 const wedgeCount = (views) => wedgeMesh(buildVoxels(views)).userData.wedges;
+const EPS = 1e-4;
 
-// Count undirected edges used an ODD number of times. A closed (watertight)
-// welded surface uses every edge an even number of times, so 0 == watertight.
+// A coherent 45° ramp: a staircase of one material -> should produce wedges.
+const ramp = () => ({
+  front: fill(4, 4, 'T'),
+  right: img(['...T', '..TT', '.TTT', 'TTTT']),
+  top: fill(4, 4, 'T'),
+});
+
+// --- watertight welding -----------------------------------------------------
 // Guards the greedy base-face merge + T-junction repair: a greedy rect abutting
-// a wedge's unit-scale edge would leave boundary edges here without the repair.
-function oddEdges(mesh) {
-  const geo = mesh.geometry;
-  const pos = geo.attributes.position.array;
-  const idx = geo.index ? geo.index.array : null;
-  const tris = idx ? idx.length / 3 : pos.length / 9;
-  const key = (i) =>
-    `${Math.round(pos[i * 3] * 1e4)},${Math.round(pos[i * 3 + 1] * 1e4)},${Math.round(pos[i * 3 + 2] * 1e4)}`;
-  const edges = new Map();
-  for (let t = 0; t < tris; t++) {
-    const [a, b, c] = idx
-      ? [idx[t * 3], idx[t * 3 + 1], idx[t * 3 + 2]]
-      : [t * 3, t * 3 + 1, t * 3 + 2];
-    for (const [p, q] of [
-      [a, b],
-      [b, c],
-      [c, a],
-    ]) {
-      const ka = key(p),
-        kb = key(q);
-      const e = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
-      edges.set(e, (edges.get(e) || 0) + 1);
-    }
-  }
-  let odd = 0;
-  for (const n of edges.values()) if (n % 2 === 1) odd++;
-  return odd;
-}
+// a wedge's unit-scale edge would leave boundary edges without the repair.
 
 test('wedge mesh is watertight — solid cube (no wedges)', () => {
   const mesh = wedgeMesh(
@@ -87,12 +46,7 @@ test('wedge mesh is watertight — staircase (base faces + wedges)', () => {
   assert.equal(oddEdges(mesh), 0, 'base faces + wedges must weld with no boundary edges');
 });
 
-// A coherent 45° ramp: a staircase of one material -> should produce wedges.
-const ramp = () => ({
-  front: fill(4, 4, 'T'),
-  right: img(['...T', '..TT', '.TTT', 'TTTT']),
-  top: fill(4, 4, 'T'),
-});
+// --- the farble ---------------------------------------------------------------
 
 // Deterministic per-pixel ±1 RGB perturbation on every opaque pixel — the exact
 // shape of Helium's farble (measured: max channel delta = 1, ~25% of pixels).
@@ -134,10 +88,11 @@ test('a real material seam still gates wedges (tolerance is not too loose)', () 
   );
 });
 
-// The gate is STRICT: a wedge fires iff the two faces it covers — the riser and
-// the tread — are the same material. It consults nothing else (no profile/facing
-// view, no elevation). These two staircases prove both directions of that
-// contract, which hands the sprite author exact control over which corners round.
+// --- the strict gate ------------------------------------------------------------
+// A wedge fires iff the two faces it covers — the riser and the tread — are the
+// same material. It consults nothing else (no profile/facing view, no
+// elevation). These two staircases prove both directions of that contract,
+// which hands the sprite author exact control over which corners round.
 
 // (1) All step faces one material (white), with a stray pink band elsewhere in
 // the FRONT elevation. Every step's riser AND tread are white, so all 9 notch
@@ -190,4 +145,70 @@ test('strict gate: a corner whose riser and tread differ never wedges (author co
     0,
     'riser!=tread must never wedge, even on a perfect ramp'
   );
+});
+
+// --- the shared finish: X/Z centered, Y as authored ------------------------------
+// finishVoxelMesh (mesh-util.js) translates X and Z to center the grid and Y by
+// a hard 0 — where the object sits vertically is wherever the artist painted it.
+
+test('the mesh centers on X and Z (bbox center ~0)', () => {
+  // A 4x4x4 cube at worldSize 2.5 spans [-1.25, 1.25] on the centered axes.
+  const cube = wedgeMesh(
+    buildVoxels(
+      { front: fill(4, 4, 'T'), right: fill(4, 4, 'T'), top: fill(4, 4, 'T') },
+      { mirror: { x: true, y: false, z: false } }
+    )
+  );
+  const bb = cube.geometry.boundingBox; // computed by finishVoxelMesh
+  assert.ok(Math.abs((bb.min.x + bb.max.x) / 2) < EPS, 'X center must be ~0');
+  assert.ok(Math.abs((bb.min.z + bb.max.z) / 2) < EPS, 'Z center must be ~0');
+  assert.ok(Math.abs(bb.min.x - -1.25) < EPS);
+  assert.ok(Math.abs(bb.max.x - 1.25) < EPS);
+  // A cube cannot tell nx from nz; a 3x1x2 box holds the center on both axes.
+  const box = buildVoxels(
+    { front: fill(3, 1, 'T'), right: fill(2, 1, 'T'), top: fill(3, 2, 'T') },
+    { mirror: { x: true, y: true, z: true } }
+  );
+  assert.deepEqual(box.dims, { nx: 3, ny: 1, nz: 2 });
+  const bbox = wedgeMesh(box).geometry.boundingBox;
+  assert.ok(Math.abs((bbox.min.x + bbox.max.x) / 2) < EPS, 'X center ~0 even at nx=3');
+  assert.ok(Math.abs((bbox.min.z + bbox.max.z) / 2) < EPS, 'Z center ~0 even at nz=2');
+});
+
+test('the mesh leaves Y as authored — a floating object does not rest on y=0', () => {
+  // Paint only the TOP image row so the solid sits high in the tile and floats.
+  const mesh = wedgeMesh(
+    buildVoxels(
+      {
+        front: img(['MM', '..', '..']), // content only in the top row
+        right: fill(1, 3, 'N'), // full-height side so Y agrees (3 tall)
+      },
+      { mirror: { x: false, y: false, z: false } }
+    )
+  );
+  const bb = mesh.geometry.boundingBox;
+  // The object occupies world y=2 in a 3-tall grid (s = 2.5/3): its base sits
+  // at 2s = 5/3, well above the ground plane, and its top at the full 2.5.
+  assert.ok(bb.min.y > 1.5, `floating base must stay above y=0 (got ${bb.min.y})`);
+  assert.ok(Math.abs(bb.min.y - 5 / 3) < EPS, 'base sits at world y = 2 * (2.5/3)');
+  assert.ok(Math.abs(bb.max.y - 2.5) < EPS, 'top reaches the full world height');
+});
+
+// --- the vertex-color linearizer ----------------------------------------------------
+
+test('makeVertexColorLinearizer returns a [0,1] linear tuple for a packed color', () => {
+  const lin = makeVertexColorLinearizer();
+  const c = lin(packRGBA(220, 60, 60, 255));
+  assert.equal(c.length, 3);
+  for (const v of c) {
+    assert.equal(typeof v, 'number');
+    assert.ok(v >= 0 && v <= 1, `channel ${v} must be in [0,1]`);
+  }
+  // sRGB->linear is monotonic: the bright red channel outranks the dim ones,
+  // and the two equal input channels linearize to the same value.
+  assert.ok(c[0] > c[1]);
+  assert.equal(c[1], c[2]);
+  // Endpoints map exactly.
+  assert.deepEqual(lin(packRGBA(255, 255, 255, 255)), [1, 1, 1]);
+  assert.deepEqual(lin(packRGBA(0, 0, 0, 255)), [0, 0, 0]);
 });

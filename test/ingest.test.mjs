@@ -1,6 +1,6 @@
-// Node-runnable tests for ingest.js: transform reorientation (rot/flip and their
-// ordering), the flip identity fast-path, the pipeline's transforms branch, and
-// ingestSprite's throw / empty-tile / valid-tile contracts. Pure — no THREE/DOM.
+// Node-runnable tests for ingest.js: flip and applyTransform (rot, flip and
+// their ordering), the pipeline's transforms branch, and ingestSprite's throw /
+// alpha-gate / returned-shape contracts. Pure — no THREE/DOM.
 // Run: node --test test/ingest.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { packRGBA, flip, applyTransform, ingestSprite } from '../src/lib/ingest.js';
 import { buildVoxels } from '../src/lib/pipeline.js';
 import { voxIndex } from '../src/lib/carve.js';
+import { C, img, fill } from './helpers.mjs';
 
 // --- tiny builders ----------------------------------------------------------
 // An image whose pixels are labelled by their FIRST byte (R channel), so we can
@@ -26,26 +27,6 @@ const firstBytes = (img) => {
   for (let i = 0; i < img.width * img.height; i++) out.push(img.data[i * 4]);
   return out;
 };
-// rows of chars -> ImageData-like (shared pattern from pipeline.test.mjs).
-const C = { M: [199, 125, 214], N: [201, 184, 120] };
-function img(rows, pal = C) {
-  const h = rows.length;
-  const w = rows[0].length;
-  const data = new Uint8ClampedArray(w * h * 4);
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) {
-      const ch = rows[y][x];
-      const i = (y * w + x) * 4;
-      if (ch === '.' || ch === ' ') continue;
-      const [r, g, b] = pal[ch];
-      data[i] = r;
-      data[i + 1] = g;
-      data[i + 2] = b;
-      data[i + 3] = 255;
-    }
-  return { width: w, height: h, data };
-}
-const fill = (w, h, ch) => img(Array.from({ length: h }, () => ch.repeat(w)));
 const pk = (name) => packRGBA(...C[name], 255) >>> 0;
 
 // A 2x2 whose texels are TL=1, TR=2, BL=3, BR=4 (row-major). Any reorientation
@@ -53,38 +34,29 @@ const pk = (name) => packRGBA(...C[name], 255) >>> 0;
 const grid2x2 = () => tag(2, 2, [1, 2, 3, 4]);
 
 // --- flip -------------------------------------------------------------------
-test('flip(img,true,false) mirrors columns; dims unchanged', () => {
-  // 2x1: left tagged 10, right tagged 40 -> after flipX the row reverses.
-  const out = flip(tag(2, 1, [10, 40]), true, false);
-  assert.equal(out.width, 2);
-  assert.equal(out.height, 1);
-  assert.deepEqual(firstBytes(out), [40, 10]);
-});
-
-test('flip(img,false,true) mirrors rows', () => {
+test('flip mirrors columns (flipX) or rows (flipY); dims unchanged', () => {
+  // 2x1: left tagged 10, right tagged 40 -> flipX reverses the row.
+  const x = flip(tag(2, 1, [10, 40]), true, false);
+  assert.equal(x.width, 2);
+  assert.equal(x.height, 1);
+  assert.deepEqual(firstBytes(x), [40, 10]);
   // 2x2 TL,TR,BL,BR = 1,2,3,4 -> flipY swaps the two rows.
   assert.deepEqual(firstBytes(flip(grid2x2(), false, true)), [3, 4, 1, 2]);
-});
-
-test('flip(img,false,false) returns the SAME object (identity fast-path)', () => {
-  // Covers ui.js mirrorImage, which delegates to flip — a no-op must not copy.
-  const src = grid2x2();
-  const out = flip(src, false, false);
-  assert.equal(out, src); // same reference, not a fresh copy
+  // Neither flip leaves the pixels where they were.
+  assert.deepEqual(firstBytes(flip(grid2x2(), false, false)), [1, 2, 3, 4]);
 });
 
 // --- applyTransform: rotation -----------------------------------------------
-test('applyTransform rot:2 is a 180° turn (full reversal)', () => {
+test('applyTransform rotates: rot:2 reverses, rot:3 is 270° CW, rot:-1 normalizes to 3', () => {
   assert.deepEqual(firstBytes(applyTransform(grid2x2(), { rot: 2 })), [4, 3, 2, 1]);
-});
-
-test('applyTransform rot:3 is 270° CW; rot:-1 normalizes to the same', () => {
   const three = applyTransform(grid2x2(), { rot: 3 });
   assert.equal(three.width, 2);
   assert.equal(three.height, 2);
   assert.deepEqual(firstBytes(three), [2, 4, 1, 3]);
   // rot is reduced modulo 4 into 0..3, so -1 === 3.
   assert.deepEqual(firstBytes(applyTransform(grid2x2(), { rot: -1 })), [2, 4, 1, 3]);
+  // No options at all is the identity.
+  assert.deepEqual(firstBytes(applyTransform(grid2x2())), [1, 2, 3, 4]);
 });
 
 // --- applyTransform: rot+flip ORDERING --------------------------------------
@@ -109,12 +81,6 @@ test('applyTransform applies flips AFTER rotation', () => {
     firstBytes(applyTransform(grid2x2(), { rot: 1, flipX: true })),
     firstBytes(flipThenRot)
   );
-});
-
-test('applyTransform with no options is a pass-through (same ref)', () => {
-  const src = grid2x2();
-  assert.equal(applyTransform(src), src); // rot 0 + no flip -> flip identity path
-  assert.equal(applyTransform(src, {}), src);
 });
 
 // --- pipeline transforms branch (the only end-to-end coverage) --------------
@@ -157,39 +123,34 @@ test('buildVoxels transforms flipX swaps the +z face colors of a two-tone front'
 });
 
 // --- ingestSprite contracts -------------------------------------------------
-test('ingestSprite throws on a zero dimension', () => {
-  assert.throws(
-    () => ingestSprite({ width: 0, height: 1, data: new Uint8ClampedArray(4) }),
-    /expected/
-  );
-  assert.throws(
-    () => ingestSprite({ width: 1, height: 0, data: new Uint8ClampedArray(4) }),
-    /expected/
-  );
+test('ingestSprite throws on a zero dimension or truncated data', () => {
+  const bad = (width, height, data) => () => ingestSprite({ width, height, data });
+  assert.throws(bad(0, 1, new Uint8ClampedArray(4)), /expected/);
+  assert.throws(bad(1, 0, new Uint8ClampedArray(4)), /expected/);
+  assert.throws(bad(2, 2, new Uint8ClampedArray(15)), /expected/); // 2x2 needs 16 bytes
+  assert.throws(bad(1, 1, null), /expected/); // missing data entirely
 });
 
-test('ingestSprite throws on truncated data (length < w*h*4)', () => {
-  // 2x2 needs 16 bytes; give it 15.
-  assert.throws(
-    () => ingestSprite({ width: 2, height: 2, data: new Uint8ClampedArray(15) }),
-    /expected/
-  );
-  // Missing data entirely also throws.
-  assert.throws(() => ingestSprite({ width: 1, height: 1, data: null }), /expected/);
-});
-
-test('ingestSprite returns null for a fully transparent tile', () => {
-  // alpha 0 everywhere (and below ALPHA_SOLID=128) -> nothing solid -> absent.
-  assert.equal(ingestSprite(tag(3, 2, [])), null); // all-zero data
-  const belowThreshold = {
+test('ingestSprite gates on alpha >= 128 and returns {w,h,occ,rgb}; an empty tile is null', () => {
+  const px = (r, a) => ({
     width: 1,
     height: 1,
-    data: new Uint8ClampedArray([9, 9, 9, 127]),
-  };
-  assert.equal(ingestSprite(belowThreshold), null);
-});
-
-test('ingestSprite returns {w,h,occ,rgb} for a valid tile', () => {
+    data: new Uint8ClampedArray([r, 0, 0, a]),
+  });
+  // Nothing solid anywhere -> the tile is absent (null), not an empty grid.
+  assert.equal(ingestSprite(tag(3, 2, [])), null); // all-zero data
+  assert.equal(ingestSprite(px(9, 127)), null); // just under the gate
+  assert.notEqual(ingestSprite(px(9, 128)), null); // on the gate: solid
+  // Two texels: first opaque (a=200), second transparent (a=100 < 128).
+  const gated = ingestSprite({
+    width: 2,
+    height: 1,
+    data: new Uint8ClampedArray([50, 0, 0, 200, 60, 0, 0, 100]),
+  });
+  assert.deepEqual([...gated.occ], [1, 0]);
+  assert.equal(gated.rgb[0] >>> 0, packRGBA(50, 0, 0, 255) >>> 0);
+  assert.equal(gated.rgb[1] >>> 0, 0); // transparent texel left unpacked
+  // The returned shape for a valid tile.
   const v = ingestSprite(grid2x2()); // TL=1,TR=2,BL=3,BR=4, all opaque
   assert.equal(v.w, 2);
   assert.equal(v.h, 2);
@@ -201,17 +162,4 @@ test('ingestSprite returns {w,h,occ,rgb} for a valid tile', () => {
     [...v.rgb].map((x) => x >>> 0),
     [1, 2, 3, 4].map((r) => packRGBA(r, 0, 0, 255) >>> 0)
   );
-});
-
-test('ingestSprite marks only opaque texels solid (alpha >= 128 gate)', () => {
-  // Two texels: first opaque (a=200), second transparent (a=100 < 128).
-  const im = {
-    width: 2,
-    height: 1,
-    data: new Uint8ClampedArray([50, 0, 0, 200, 60, 0, 0, 100]),
-  };
-  const v = ingestSprite(im);
-  assert.deepEqual([...v.occ], [1, 0]);
-  assert.equal(v.rgb[0] >>> 0, packRGBA(50, 0, 0, 255) >>> 0);
-  assert.equal(v.rgb[1] >>> 0, 0); // transparent texel left unpacked
 });

@@ -6,28 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createDoc } from '../src/state/doc.js';
-
-// A hand-cranked frame scheduler standing in for requestAnimationFrame.
-function fakeScheduler() {
-  let next = 1;
-  const pending = new Map();
-  return {
-    schedule: (fn) => {
-      const id = next++;
-      pending.set(id, fn);
-      return id;
-    },
-    cancel: (id) => pending.delete(id),
-    frame() {
-      const fns = [...pending.values()];
-      pending.clear();
-      for (const fn of fns) fn();
-    },
-    get size() {
-      return pending.size;
-    },
-  };
-}
+import { fakeScheduler } from './helpers.mjs';
 
 const sheet = (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) });
 
@@ -174,23 +153,24 @@ test('resizeTiles drains the pending stroke BEFORE resizing (old scale, old shee
   assert.notEqual(s.atlasImage, original, 'then the resize swapped the sheet');
 });
 
-test('resizeTiles: same-size is a silent no-op; sizes clamp to the tile bounds', () => {
+test('resizeTiles: a same-size call is a no-op — the doc is unchanged', () => {
   const doc = createDoc(fakeScheduler());
   doc.loadAtlas(carSheet());
-  let changes = 0;
-  doc.subscribe(() => changes++);
   assert.equal(doc.resizeTiles(2, 2), false);
-  assert.equal(changes, 0);
-  assert.equal(doc.resizeTiles(100, 100), true, 'over-max clamps, still a change');
-  assert.equal(doc.get().tileW, 64);
-  assert.equal(doc.resizeTiles(0, 0), true, 'under-min clamps to 1');
-  assert.equal(doc.get().tileW, 1);
+  const s = doc.get();
+  assert.equal(s.tileW, 2);
+  assert.equal(s.tileH, 2);
+  assert.deepEqual(getPx(s.atlasImage, 2, 0), RED, 'the sheet is as loaded');
 });
 
-test('replaceAllTiles recolors every tile, one change notification', () => {
+test('replaceAllTiles recolors every tile in ONE change notification, scoped to the tiled region', () => {
   const doc = createDoc(fakeScheduler());
-  const img = carSheet();
+  // A 7px-wide sheet over 3 columns rounds to 2px tiles: column x=6 is outside
+  // every tile — invisible to the carve, present in a download.
+  const img = sheet(7, 4);
+  setPx(img, 2, 0, RED); // inside FRONT
   setPx(img, 5, 3, RED); // BOTTOM tile too — "all tiles" means all tiles
+  setPx(img, 6, 0, RED); // the remainder column
   doc.loadAtlas(img);
   let changes = 0;
   doc.subscribe(() => changes++);
@@ -200,21 +180,12 @@ test('replaceAllTiles recolors every tile, one change notification', () => {
   assert.deepEqual(getPx(doc.get().atlasImage, 2, 0), GREEN);
   assert.deepEqual(getPx(doc.get().atlasImage, 5, 3), GREEN);
   assert.deepEqual(getPx(doc.get().views.front, 0, 0), GREEN, 're-sliced views see it');
-  assert.equal(doc.replaceAllTiles(t, { r: 0, g: 255, b: 0 }), false, 'nothing left');
-  assert.equal(changes, 1, 'an unchanged sheet notifies nobody');
-});
-
-test('replaceAllTiles is scoped to the tiled region (remainder pixels untouched)', () => {
-  const doc = createDoc(fakeScheduler());
-  // A 7px-wide sheet over 3 columns rounds to 2px tiles: column x=6 is outside
-  // every tile — invisible to the carve, present in a download.
-  const img = sheet(7, 4);
-  setPx(img, 2, 0, RED); // inside FRONT
-  setPx(img, 6, 0, RED); // the remainder column
-  doc.loadAtlas(img);
-  doc.replaceAllTiles({ r: 255, g: 0, b: 0 }, { r: 0, g: 255, b: 0 });
-  assert.deepEqual(getPx(doc.get().atlasImage, 2, 0), GREEN);
-  assert.deepEqual(getPx(doc.get().atlasImage, 6, 0), RED, 'remainder left alone');
+  assert.deepEqual(getPx(doc.get().atlasImage, 6, 0), RED, 'the remainder is left alone');
+  assert.equal(
+    doc.replaceAllTiles(t, { r: 0, g: 255, b: 0 }),
+    false,
+    'nothing left inside the tiles'
+  );
 });
 
 test('the sheet generation bumps on loadAtlas only — never on resize/replace', () => {

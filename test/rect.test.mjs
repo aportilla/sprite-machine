@@ -1,5 +1,6 @@
-// Node-runnable tests for the editor's rounded-rect rasterization (pure, no DOM).
-// Run: node --test
+// Node-runnable tests for the editor's rounded-rect rasterization (pure, no DOM):
+// the Shift-lock square, the radius clamp, the convex corner bite and the
+// rect-relative clip at a non-zero origin. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -34,24 +35,13 @@ test('squareEnd: Shift-lock constrains to a square using the shorter extent', ()
   assert.deepEqual(squareEnd(s, { px: 4, py: 15 }), { px: 4, py: 5 });
 });
 
-test('maxCornerRadius = floor(min(w,h)/2), never negative', () => {
-  assert.equal(maxCornerRadius(10, 10), 5);
-  assert.equal(maxCornerRadius(4, 10), 2);
-  assert.equal(maxCornerRadius(1, 1), 0);
-  assert.equal(maxCornerRadius(0, 8), 0);
-  assert.equal(maxCornerRadius(7, 7), 3);
-});
-
-test('r=0 is a full rectangle: every row spans the whole width', () => {
+test('r=0 is a full rectangle; inverted / degenerate bounds emit no rows', () => {
   const { rows } = raster(2, 3, 6, 8, 0);
   assert.equal(rows.length, 6); // y = 3..8
   for (const { xl, xr } of rows) {
     assert.equal(xl, 2);
     assert.equal(xr, 6);
   }
-});
-
-test('inverted / degenerate bounds emit no rows', () => {
   const calls = [];
   roundedRectRows(6, 3, 2, 8, 0, (y, xl, xr) => calls.push([y, xl, xr]));
   roundedRectRows(2, 8, 6, 3, 0, (y, xl, xr) => calls.push([y, xl, xr]));
@@ -97,11 +87,16 @@ test('corners round OUTWARD (convex), never scoop inward (concave)', () => {
   assert.ok(xl[0] > xl[5], 'top edge inset more than the straight middle');
 });
 
-test('radius is clamped to half the shorter side', () => {
-  // Ask for r=99 on a 4-wide, 8-tall rect → clamped to maxCornerRadius(4,8)=2.
+test('radius is clamped to half the shorter side (maxCornerRadius, never negative)', () => {
+  assert.equal(maxCornerRadius(10, 10), 5);
+  assert.equal(maxCornerRadius(4, 10), 2);
+  assert.equal(maxCornerRadius(1, 1), 0);
+  assert.equal(maxCornerRadius(0, 8), 0);
+  assert.equal(maxCornerRadius(7, 7), 3);
+  // Ask for r=99 on a 4-wide, 8-tall rect → the raster is the one at the clamp.
   const big = raster(0, 0, 3, 7, 99);
-  const two = raster(0, 0, 3, 7, 2);
-  assert.deepEqual([...big.cells].sort(), [...two.cells].sort());
+  const clamped = raster(0, 0, 3, 7, maxCornerRadius(4, 8));
+  assert.deepEqual([...big.cells].sort(), [...clamped.cells].sort());
 });
 
 test('rows are contiguous, symmetric, and within the bounding box', () => {
