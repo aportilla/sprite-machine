@@ -199,6 +199,7 @@ const NAMED_KEYS = {
   Escape: { key: 'Escape', code: 'Escape', vk: 27, text: '' },
   Shift: { key: 'Shift', code: 'ShiftLeft', vk: 16, text: '' },
   Enter: { key: 'Enter', code: 'Enter', vk: 13, text: '\r' },
+  Tab: { key: 'Tab', code: 'Tab', vk: 9, text: '' },
   Backspace: { key: 'Backspace', code: 'Backspace', vk: 8, text: '' },
   Space: { key: ' ', code: 'Space', vk: 32, text: ' ' },
   Home: { key: 'Home', code: 'Home', vk: 36, text: '' },
@@ -841,15 +842,19 @@ const stepperUp = (sel) =>
         .shadowRoot.querySelector('[part="stepper"]').getBoundingClientRect();
       return { x: st.left + st.width / 2, y: st.top + st.height * 0.25 }; })()`
   );
-// Focus a vf-number-field's input and replace its text with real keystrokes.
-async function typeInto(sel, text) {
+// Focus a vf-number-field's input and replace its text with real keystrokes,
+// committed by `commit`: Return by default — which in a dialog ALSO fires
+// the default button (the kit's dialog grammar, vintage-frames 0.6.2:
+// Return anywhere in a box is the ringed button) — or Tab, which commits on
+// the blur and leaves the box up, for a check that reads the box open.
+async function typeInto(sel, text, commit = 'Enter') {
   await evaluate(
     `(() => {${DEEP} const i = __q('${sel}').shadowRoot.querySelector('input');
       i.focus(); i.select(); })()`
   );
   await keyPress('Backspace');
   await typeText(text);
-  await keyPress('Enter');
+  await keyPress(commit);
 }
 
 // --- the plain boot: seeding, the About box, ?file, geometry -----------------
@@ -1395,16 +1400,15 @@ async function s16_properties() {
   const up = await stepperUp('#props-tile');
   await click(up.x, up.y);
   const stepped = (await settle((p) => p.tileW > TILE)).tileW;
+  // Return commits the typed size AND OKs the box in one stroke (the kit's
+  // dialog grammar); ⌘Z waits on the box being down.
   await typeInto('#props-tile', '24');
-  const typed = await settle((p) => p.tileW === 24);
+  const typed = await settle((p) => p.tileW === 24 && p.anyModalOpen === false);
   check(
     'Properties: the stepper and a typed value retile the document, the editor staying on its face',
     open && stepped > TILE && typed.tileW === 24 && typed.face === 'front',
     JSON.stringify({ open, boot: TILE, stepped, typed: typed.tileW, face: typed.face })
   );
-  const ok = await centreOf('#btn-props-ok');
-  await click(ok.x, ok.y);
-  await settle((p) => p.anyModalOpen === false);
   await keyPress('z', META);
   const s = await settle((p) => p.tileW === stepped);
   check(
@@ -1987,7 +1991,9 @@ async function s23_spriteAtlas() {
   await pickMenu('#menu-file', 'export-atlas');
   await until(async () => (await ringDialog()).open);
   const seededDlg = await ringDialog();
-  await typeInto('#atlas-views', '8');
+  // Tab commits the field on the blur and keeps the box up — Return would
+  // commit AND export at once, before the download capture below is armed.
+  await typeInto('#atlas-views', '8', 'Tab');
   await until(async () => (await ringBox()).cells === 8);
   rb = await ringBox();
   const live = await ringDialog();

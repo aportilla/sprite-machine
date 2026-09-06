@@ -1173,7 +1173,21 @@ alone; the reading lines in Geneva), whose
 tab, so the app and any unsaved document stay put; inked by `style.css`
 in the paragraph's own black with the underline as its whole affordance,
 and the arrow stays the arrow over it (System 7 had no pointing hand, and
-the kit ships none) — and a default OK. The version and the
+the kit ships none) — and a default OK, **holding the focus as the box
+opens**, so Return OKs the splash. That is the kit's dialog grammar
+(vintage-frames 0.6.2, Sep 6 2026 — kit ask #12,
+[docs/kit-asks-dialog-default-focus.md](docs/kit-asks-dialog-default-focus.md),
+shipped the day it was written): a `vf-dialog` opens on a slotted
+`autofocus`, else its first text field, else its default button, and
+**Return anywhere in a box fires the default button** — a focused link
+follows itself instead, and Tab from OK reaches this one, with the kit's
+dotted ring. Before 0.6.2 the native `<dialog>`'s own focusing steps
+handed the first focusable thing in the box the focus — that link — and
+Return at the greet opened the npm page in a new tab with the splash still
+up; the app carried no workaround, on purpose. The same grammar runs
+every dialog here: a value typed into Properties or Export Sprite Atlas…
+and Returned is committed and OK'd / exported in one stroke, the classic
+Mac's own. The version and the
 date are **build facts, never markup**: `vite.config.js` `define`s
 `__APP_VERSION__` (package.json's `version`) and `__APP_DATE__` (HEAD's
 commit date — the date of the code that is running, so every build of one
