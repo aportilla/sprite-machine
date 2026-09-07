@@ -680,7 +680,9 @@ forward.
   and the Godot / Unity importers load by filename pair: a frame per view
   (`car-0`, `car-1`, … in yaw order, each an untrimmed `size × size` box at
   its column) carrying the anchor as its normalized **`pivot`** — so the
-  feet-row is the origin the engine uses, with no reader code — an
+  feet-row is the origin the engine uses, with no reader code; four
+  decimals, TexturePacker's own short form, the record keeping the px
+  exact — an
   `animations` block naming the ring as one sequence, and `meta` naming the
   sibling PNG, the sheet size and, under a `sprite-machine` key, the same
   record the chunk holds. The zip is **stored** (no compression — the PNG is

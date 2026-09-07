@@ -92,10 +92,12 @@ test('ringMetaChunks: Title, Software, and a JSON that round-trips — the paper
 
 test('texturePackerJson: one untrimmed frame per yaw at its column with the anchor as a normalized pivot, the ring as one animation, and meta naming the sibling PNG plus the same record the chunk carries', () => {
   const settings = { views: 3, elevation: 30, offset: 45, size: 100, paper: 'gray' };
+  // The anchor is a projection, so its row is a long float; the pivot it
+  // becomes is rounded to four places, the record keeping it exact.
   const geometry = {
     frame: 100,
     scale: 1.25,
-    anchor: { x: 50, y: 80 },
+    anchor: { x: 50, y: 80.00966799187808 },
     yaws: [45, 165, 285],
   };
   const tp = texturePackerJson('car', settings, geometry, {
@@ -109,7 +111,7 @@ test('texturePackerJson: one untrimmed frame per yaw at its column with the anch
     trimmed: false,
     spriteSourceSize: { x: 0, y: 0, w: 100, h: 100 },
     sourceSize: { w: 100, h: 100 },
-    pivot: { x: 0.5, y: 0.8 },
+    pivot: { x: 0.5, y: 0.8001 },
   });
   assert.deepEqual(tp.animations, { car: ['car-0', 'car-1', 'car-2'] });
   assert.equal(tp.meta.image, 'car-atlas.png');

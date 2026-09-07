@@ -187,7 +187,9 @@ export function ringMetaChunks(name, settings, geometry) {
  * unrotated `frame`×`frame` box at its column of the strip, carrying the
  * engine anchor as its normalized **pivot** (TexturePacker's own field: x
  * right, y DOWN from the frame's top-left, 0..1 — so the feet-row becomes
- * the origin an engine actually uses, with no reader code); an
+ * the origin an engine actually uses, with no reader code — rounded to
+ * four places, TexturePacker's own short decimals: under 0.03 px of error
+ * at the 255-px ceiling, while the record below keeps the anchor exact); an
  * `animations` block naming the ring as one sequence in that order (the
  * TexturePacker extension PixiJS's AnimatedSprite reads); and `meta` in
  * TexturePacker's shape (`app`, `version`, `image` — the sibling PNG's
@@ -204,6 +206,8 @@ export function ringMetaChunks(name, settings, geometry) {
 export function texturePackerJson(slug, settings, geometry, { image, version }) {
   const { frame, anchor, yaws } = geometry;
   const keys = yaws.map((_, i) => `${slug}-${i}`);
+  const short = (v) => Math.round(v * 1e4) / 1e4;
+  const pivot = { x: short(anchor.x / frame), y: short(anchor.y / frame) };
   /** @type {Record<string, object>} */
   const frames = {};
   keys.forEach((key, i) => {
@@ -213,7 +217,7 @@ export function texturePackerJson(slug, settings, geometry, { image, version }) 
       trimmed: false,
       spriteSourceSize: { x: 0, y: 0, w: frame, h: frame },
       sourceSize: { w: frame, h: frame },
-      pivot: { x: anchor.x / frame, y: anchor.y / frame },
+      pivot: { ...pivot },
     };
   });
   return {
