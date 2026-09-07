@@ -94,6 +94,27 @@ test('eliminateTJunctions preserves per-triangle color and normal', () => {
   for (const t of c111) assert.deepEqual(t.normal, N0);
 });
 
+// --- 3b. A 45° diagonal edge ---------------------------------------------------
+// A slope block's staircase edge and a region's cut beside it are long
+// diagonals since the planar merge; a corner of another plane landing on one
+// is a T-junction the repair must split exactly like an axis-aligned edge's.
+test('eliminateTJunctions splits a 45° diagonal edge at a lattice vertex on it', () => {
+  const N = [0, 0, 1];
+  const tris = [
+    // a slope-shaped triangle whose hypotenuse runs (0,0) -> (4,4)
+    { a: [0, 0, 0], b: [4, 4, 0], c: [0, 4, 0], normal: N, color: 1 },
+    // neighbours below the diagonal with vertices at (1,1) and (3,3)
+    { a: [1, 1, 0], b: [2, 0, 0], c: [1, 0, 0], normal: N, color: 2 },
+    { a: [3, 3, 0], b: [4, 2, 0], c: [3, 2, 0], normal: N, color: 3 },
+  ];
+  assert.ok(hasTJunction(tris), 'setup: vertices sit inside the diagonal');
+  const out = eliminateTJunctions(tris);
+  assert.ok(!hasTJunction(out));
+  assert.ok(Math.abs(totalArea(tris) - totalArea(out)) < 1e-9);
+  for (const t of out) assert.ok(tri2Area(t) > 1e-9, 'no degenerate output triangle');
+  assert.ok(out.filter((t) => t.color === 1).length >= 3, 'the diagonal was subdivided');
+});
+
 // --- 4. Fan-fallback path (defensive safety net) ----------------------------
 // triangulateConvex's fan fallback only fires if clean-ear clipping fails to
 // make progress on a convex polygon — a net that clean ear-clipping never

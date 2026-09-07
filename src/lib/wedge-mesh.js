@@ -21,20 +21,42 @@
 //  - A lone cube has no concave notch, so it gets NO wedges and stays sharp —
 //    the additive rule self-guards convex structural corners.
 //
-// COLOR IS THE SKIN, NOT THE GEOMETRY (Sep 7 2026). The base faces are
-// greedy-merged on occupancy alone (faces.js) and painted by a texture
-// (skin.js): a rectangle that crosses a colour boundary carries a chart — a
-// texel per voxel face — and a one-colour rectangle, like every wedge, points
-// at its colour's swatch; every triangle's UVs are an affine read of its
-// vertices' lattice positions, taken AFTER the T-junction repair, so no UV is
-// ever plumbed through a split. Until then every triangle carried a vertex
-// colour and the merge could only join faces of one colour — a painted wall
-// shattered into a rect per region, each boundary feeding the repair. The
-// Car: 1784 → 900 triangles, the same 236 wedges. Opening the wedge gate to
-// match was measured and rejected (1092: more wedges are more caps and more
-// split faces), so the strict same-material gate stays exactly as it was.
+// COLOR IS THE SKIN, NOT THE GEOMETRY (Sep 7 2026). The base faces merge on
+// occupancy alone and are painted by a texture (skin.js): a region that
+// crosses a colour boundary carries a chart — a texel per cell — and a
+// one-colour region, like every wedge, points at its colour's swatch; every
+// triangle's UVs are an affine read of its vertices' lattice positions, taken
+// AFTER the T-junction repair, so no UV is ever plumbed through a split.
+// Until then every triangle carried a vertex colour and the merge could only
+// join faces of one colour — a painted wall shattered into a rect per
+// region, each boundary feeding the repair. The Car: 1784 → 900 triangles,
+// the same 236 wedges. Opening the wedge gate to match was measured and
+// rejected (1092: more wedges are more caps and more split faces), so the
+// strict same-material gate stays exactly as it was.
 //
-// Scope (first cut): additive wedges only. Convex staircases (a hood sloping
+// THE PLANAR MERGE (Sep 7 2026, the same day, in two steps). The scan fires
+// per notch cell, but the geometry is emitted per PLANE:
+//  - A SLOPE is one quad per BLOCK: the wedge cells of one 45° plane (one
+//    orientation, one intercept) form a grid — t along the staircase, r along
+//    the ridge — that is greedy-merged on one colour. Emitted per cell, a
+//    windshield was a grid of unit quads, and every unit edge along a roof's
+//    rim pinned a vertex on it that the repair then had to fan the roof
+//    around (the Car's 17×10 roof: 20 triangles). Merging the runs along the
+//    ridge alone took the Car 900 → 408; across the staircase too it would
+//    have gained nothing (392) as long as the gable caps stayed a sawtooth
+//    of triangles whose corners split the slope's long diagonal edge back.
+//  - So the base faces are coplanar REGIONS (regions.js), not greedy rects:
+//    a plane's exposed faces AND the cap half-faces the blocks end on, traced
+//    as one polygon with every collinear run merged — the wall beside a
+//    windshield has one straight diagonal edge, and the slope beside it is
+//    two triangles. Each region is triangulated by earcut (THREE's
+//    ShapeUtils, holes included) and painted as one: a chart over its box
+//    where it crosses a colour, a swatch where it does not.
+//  The T-junction repair stays, now reading 45° edges too: a region's edge
+//  and a slope's ridge still meet to different extents where a corner of
+//  another plane lands on them, and every vertex is on the lattice.
+//
+// Scope: additive wedges only. Convex staircases (a hood sloping
 // down-and-out) still step, and true 3-D corners where two ridges meet degrade
 // to a step rather than a corner tile. One wedge per cell (first ridge wins).
 // ---------------------------------------------------------------------------
@@ -42,7 +64,8 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { voxIndex } from './carve.js';
-import { faceQuads, idxFor } from './faces.js';
+import { FACE_GEO, pointOf } from './faces.js';
+import { faceRegions, planeKey } from './regions.js';
 import { unpackRGBA } from './ingest.js';
 import { bakeSkin, uvOfLattice, swatchUV } from './skin.js';
 import { eliminateTJunctions } from './t-junction.js';
@@ -63,12 +86,13 @@ const RIDGES = [
 ];
 
 /**
- * A lattice triangle and its paint: a charted base triangle carries its chart
- * and rect (its UVs are read off its vertices); everything else — a uniform
- * base rect, a wedge's slope, a gable cap — carries the packed colour whose
- * swatch it samples. The T-junction repair copies the paint onto every piece.
+ * A lattice triangle and its paint: a charted region's triangle carries its
+ * chart and region (its UVs are read off its vertices); everything else — a
+ * one-colour region's, a slope's — carries the packed colour whose swatch it
+ * samples. The T-junction repair copies the paint onto every piece.
  * @typedef {{a:number[], b:number[], c:number[], normal:number[],
- *            chart:import('./skin.js').Chart|null, rect:import('./skin.js').Rect|null,
+ *            chart:import('./skin.js').Chart|null,
+ *            region:import('./regions.js').Region|null,
  *            swatch:number|null}} Tri
  */
 
@@ -106,7 +130,7 @@ export function wedgeMesh(result, opts = {}) {
   ];
 
   // --- scan for wedges ------------------------------------------------------
-  const wedgeCell = new Map(); // cellIdx -> chosen {R,A,B,sA,sB}
+  const wedgeCell = new Map(); // cellIdx -> chosen {R,A,B,sA,sB,color}
   const removed = new Set(); // base faces (idx*6+f) culled because a wedge covers them
   const wedges = [];
 
@@ -149,13 +173,13 @@ export function wedgeMesh(result, opts = {}) {
               // wedges are more caps and more split base faces, measured on the
               // Car — so the strictness is the count's too.)
               if (!flat && !sameMat(cA, cB)) continue;
-              wedgeCell.set(cidx, { R, A, B, sA, sB });
-              removed.add(aKey);
-              removed.add(bKey);
               // The non-flat gate guarantees cA and cB agree, so either is the
               // surface's true colour. (In flat mode the wedge colour is overridden
               // to FLAT_COLOR downstream, so a null here can never render.)
               const color = (cA != null ? cA : cB) >>> 0;
+              wedgeCell.set(cidx, { R, A, B, sA, sB, color });
+              removed.add(aKey);
+              removed.add(bKey);
               wedges.push({ x, y, z, R, A, B, sA, sB, color });
               placed = true;
               break;
@@ -166,12 +190,12 @@ export function wedgeMesh(result, opts = {}) {
   }
 
   // --- geometry emit --------------------------------------------------------
-  // Collect INTEGER-lattice triangles first (base faces + wedges), eliminate the
-  // T-junctions greedy merging introduces, THEN build the scaled buffers.
+  // Collect INTEGER-lattice triangles first (regions + slopes), eliminate the
+  // T-junctions the merges leave, THEN build the scaled buffers.
   /** @type {Tri[]} */
   const tris = []; // CCW wrt normal
-  // paint: { chart, rect } for a charted base rect, { swatch } for a
-  // one-material primitive (a uniform rect, a wedge's slope, a cap)
+  // paint: { chart, region } for a charted region, { swatch } for a
+  // one-material primitive (a one-colour region, a slope)
   const pushTri = (a, b, c, N, paint) => {
     // wind to match the explicit outward normal N (backface culling is on)
     const ux = b[0] - a[0],
@@ -194,7 +218,7 @@ export function wedgeMesh(result, opts = {}) {
       c,
       normal: N,
       chart: paint.chart ?? null,
-      rect: paint.rect ?? null,
+      region: paint.region ?? null,
       swatch: paint.swatch ?? null,
     });
   };
@@ -217,72 +241,146 @@ export function wedgeMesh(result, opts = {}) {
     const L = Math.hypot(p[0], p[1], p[2]) || 1;
     return [p[0] / L, p[1] / L, p[2] / L];
   };
-
-  // 1. base voxel faces, GREEDY-merged on occupancy, minus the ones wedges
-  // cover; the skin baked over the rects once — a chart where a rect crosses
-  // a colour, a swatch where it does not — then each rect emitted with its
-  // paint. Merging creates T-junctions against the unit-scale wedge edges;
-  // the repair pass below stitches those back into a watertight manifold.
-  // Flat mode has no skin: every primitive is the flat grey, the UVs zero.
-  const baseMask = surfaceMask.slice();
-  for (const rk of removed) baseMask[(rk / 6) | 0] &= ~(1 << rk % 6);
-  const rects = faceQuads(dims, baseMask, true);
-  const skin = flat ? null : bakeSkin(rects, result.palette ?? [], faceColor, dims);
-  // a uniform rect's one colour is its first face's (every face agrees)
-  const rectColor = (r) =>
-    faceColor.get(idxFor(r.face, r.a, r.b, r.s, dims) * 6 + FACE_INDEX[r.face]) >>> 0;
-  rects.forEach((rect, i) => {
-    const cr = rect.corners;
-    const chart = skin ? skin.charts[i] : null;
-    const paint = chart
-      ? { chart, rect }
-      : { swatch: flat ? FLAT_COLOR : rectColor(rect) };
-    pushQuad(cr[0], cr[1], cr[2], cr[3], rect.normal, paint);
-  });
-
-  // 2. wedge prisms: hypotenuse slope + gable caps at open ends — one material
-  // each by the gate, so every triangle samples the wedge colour's swatch.
-  for (const w of wedges) {
-    const { x, y, z, R, A, B, sA, sB } = w;
-    const p = { x, y, z };
-    const aC = p[A],
-      bC = p[B],
-      rC = p[R];
-    const Ac = sA < 0 ? aC : aC + 1,
-      Ao = sA < 0 ? aC + 1 : aC; // filled / opposite A corner
-    const Bc = sB < 0 ? bC : bC + 1,
-      Bo = sB < 0 ? bC + 1 : bC;
-    const rLo = rC,
-      rHi = rC + 1;
-    const pt = (av, bv, rv) => mk(A, av, B, bv, R, rv);
-    const paint = { swatch: flat ? FLAT_COLOR : w.color >>> 0 };
-
-    // sloped face: connects the opposite-A and opposite-B corners, swept along R
-    const HN = axisVec(A, -sA, B, -sB);
-    pushQuad(
-      pt(Ao, Bc, rLo),
-      pt(Ao, Bc, rHi),
-      pt(Ac, Bo, rHi),
-      pt(Ac, Bo, rLo),
-      HN,
-      paint
-    );
-
-    // cap an end iff the run doesn't continue there and isn't buried in solid
-    const capNeeded = (sg) => {
-      const [ax, ay, az] = step(x, y, z, R, sg);
-      if (solidAt(ax, ay, az)) return false; // internal against solid
-      if (!inBounds(ax, ay, az)) return true; // grid edge -> exposed
-      const wn = wedgeCell.get(voxIndex(ax, ay, az, dims));
-      return !(wn && wn.R === R && wn.sA === sA && wn.sB === sB);
+  // a notch cell's corners along its wedge's A and B: the filled corner (the
+  // one toward the two solids) and the opposite one
+  const cornersOf = (w) => {
+    const p = { x: w.x, y: w.y, z: w.z };
+    const aC = p[w.A];
+    const bC = p[w.B];
+    return {
+      Ac: w.sA < 0 ? aC : aC + 1,
+      Ao: w.sA < 0 ? aC + 1 : aC,
+      Bc: w.sB < 0 ? bC : bC + 1,
+      Bo: w.sB < 0 ? bC + 1 : bC,
     };
-    if (capNeeded(-1))
-      pushTri(pt(Ac, Bc, rLo), pt(Ao, Bc, rLo), pt(Ac, Bo, rLo), axisVec(R, -1), paint);
-    if (capNeeded(1))
-      pushTri(pt(Ac, Bc, rHi), pt(Ao, Bc, rHi), pt(Ac, Bo, rHi), axisVec(R, 1), paint);
+  };
+
+  // 1. the slopes, one quad per BLOCK. The cells of one 45° plane — one
+  // orientation (R, A, B, sA, sB) and one intercept sA·a + sB·b — sit on a
+  // grid: t = sA·a runs up the staircase (the cell at (a + sA, b − sB) is
+  // t + 1, its hypotenuse the continuation of this one's), r along the ridge.
+  // Greedy-merge that grid on one colour, the ridge first (the long runs), and
+  // a block's slope is one quad from its first staircase cell's far corners to
+  // its last's, swept over its r-range. One material each by the gate, so
+  // every slope samples its colour's swatch.
+  const planes = new Map(); // plane key -> Map<'t,r', {t, r, w}>
+  for (const w of wedges) {
+    const p = { x: w.x, y: w.y, z: w.z };
+    const aC = p[w.A];
+    const bC = p[w.B];
+    const key = [w.R, w.A, w.B, w.sA, w.sB, w.sA * aC + w.sB * bC].join('|');
+    let grid = planes.get(key);
+    if (!grid) planes.set(key, (grid = new Map()));
+    const t = w.sA * aC;
+    const r = p[w.R];
+    grid.set(t + ',' + r, { t, r, w });
+  }
+  let slopes = 0;
+  for (const grid of planes.values()) {
+    const used = new Set();
+    const cells = [...grid.values()].sort((p, q) => p.t - q.t || p.r - q.r);
+    for (const c0 of cells) {
+      const k0 = c0.t + ',' + c0.r;
+      if (used.has(k0)) continue;
+      const w0 = c0.w;
+      const free = (t, r) => {
+        const k = t + ',' + r;
+        const c = grid.get(k);
+        return !!c && !used.has(k) && c.w.color === w0.color;
+      };
+      let rl = 1;
+      while (free(c0.t, c0.r + rl)) rl++;
+      let tl = 1;
+      grow: for (; ; tl++) {
+        for (let j = 0; j < rl; j++) if (!free(c0.t + tl, c0.r + j)) break grow;
+      }
+      for (let i = 0; i < tl; i++)
+        for (let j = 0; j < rl; j++) used.add(c0.t + i + ',' + (c0.r + j));
+      const first = cornersOf(w0);
+      const last = cornersOf(grid.get(c0.t + tl - 1 + ',' + c0.r).w);
+      const rLo = c0.r;
+      const rHi = c0.r + rl;
+      const pt = (av, bv, rv) => mk(w0.A, av, w0.B, bv, w0.R, rv);
+      pushQuad(
+        pt(first.Ao, first.Bc, rLo),
+        pt(first.Ao, first.Bc, rHi),
+        pt(last.Ac, last.Bo, rHi),
+        pt(last.Ac, last.Bo, rLo),
+        axisVec(w0.A, -w0.sA, w0.B, -w0.sB),
+        { swatch: flat ? FLAT_COLOR : w0.color >>> 0 }
+      );
+      slopes++;
+    }
   }
 
-  // 3. stitch out T-junctions, then flatten to scaled vertex buffers. The UVs
+  // 2. the gable caps, as HALF pieces of the planes they lie on: a cell's end
+  // is capped unless the prism runs on into a wedge of the same orientation
+  // there or ends against solid. The cap is the right triangle in the cell's
+  // ±R face whose right angle sits at the filled corner (Ac, Bc), filed under
+  // that face's plane in the face's own tangent frame.
+  /** @type {Map<string, import('./regions.js').Half[]>} */
+  const halves = new Map();
+  for (const w of wedges) {
+    const p = { x: w.x, y: w.y, z: w.z };
+    for (const sg of [-1, 1]) {
+      const [ex, ey, ez] = step(w.x, w.y, w.z, w.R, sg);
+      if (solidAt(ex, ey, ez)) continue; // internal against solid
+      if (inBounds(ex, ey, ez)) {
+        const wn = wedgeCell.get(voxIndex(ex, ey, ez, dims));
+        if (wn && wn.R === w.R && wn.sA === w.sA && wn.sB === w.sB) continue; // the prism runs on
+      }
+      const face = faceKeyOf(w.R, sg);
+      const g = FACE_GEO[face];
+      const key = planeKey(face, p[w.R]);
+      if (!halves.has(key)) halves.set(key, []);
+      halves.get(key).push({
+        a: p[g.A],
+        b: p[g.B],
+        hiA: g.A === w.A ? w.sA > 0 : w.sB > 0,
+        hiB: g.B === w.A ? w.sA > 0 : w.sB > 0,
+        color: flat ? FLAT_COLOR : w.color >>> 0,
+      });
+    }
+  }
+
+  // 3. the regions: every plane's exposed faces (minus the ones the wedges
+  // cover) with its caps, traced (regions.js), the skin baked over them once,
+  // then each triangulated by earcut and emitted with its paint. Flat mode
+  // has no skin: every primitive is the flat grey, the UVs zero.
+  const baseMask = surfaceMask.slice();
+  for (const rk of removed) baseMask[(rk / 6) | 0] &= ~(1 << rk % 6);
+  const regions = faceRegions(dims, baseMask, faceColor, halves);
+  const skin = flat ? null : bakeSkin(regions, result.palette ?? [], faceColor);
+  regions.forEach((region, i) => {
+    const chart = skin ? skin.charts[i] : null;
+    const paint = chart
+      ? { chart, region }
+      : { swatch: flat ? FLAT_COLOR : /** @type {number} */ (region.uniform) >>> 0 };
+    const toV2 = (loop) => loop.map(([a, b]) => new THREE.Vector2(a, b));
+    const faces = THREE.ShapeUtils.triangulateShape(
+      toV2(region.outer),
+      region.holes.map(toV2)
+    );
+    const verts = [region.outer, ...region.holes].flat();
+    let area = 0;
+    for (const [i0, i1, i2] of faces) {
+      const [p, q, r] = [verts[i0], verts[i1], verts[i2]];
+      area += Math.abs((q[0] - p[0]) * (r[1] - p[1]) - (r[0] - p[0]) * (q[1] - p[1]));
+      pushTri(
+        pointOf(region.face, p[0], p[1], region.s),
+        pointOf(region.face, q[0], q[1], region.s),
+        pointOf(region.face, r[0], r[1], region.s),
+        region.normal,
+        paint
+      );
+    }
+    if (area !== region.area2)
+      throw new Error(
+        `wedge-mesh: the ${region.face} region at slice ${region.s} triangulated to ${area / 2} of its ${region.area2 / 2} cells`
+      );
+  });
+
+  // 4. stitch out T-junctions, then flatten to scaled vertex buffers. The UVs
   // are read HERE, after the repair, from each vertex's lattice position: a
   // charted triangle's vertex is an affine read into its chart (a vertex the
   // repair inserted along an edge included), a swatch triangle's three sit at
@@ -294,7 +392,7 @@ export function wedgeMesh(result, opts = {}) {
   let o = 0;
   let q = 0;
   for (const t of repaired) {
-    const sw = skin && !t.rect ? swatchUV(skin, t.swatch) : null;
+    const sw = skin && !t.region ? swatchUV(skin, t.swatch) : null;
     for (const v of [t.a, t.b, t.c]) {
       pos[o] = v[0] * s;
       pos[o + 1] = v[1] * s;
@@ -303,7 +401,7 @@ export function wedgeMesh(result, opts = {}) {
       nrm[o + 1] = t.normal[1];
       nrm[o + 2] = t.normal[2];
       if (skin) {
-        const [tu, tv] = sw || uvOfLattice(t.chart, t.rect, v);
+        const [tu, tv] = sw || uvOfLattice(t.chart, t.region, v);
         uv[q] = tu / skin.width;
         uv[q + 1] = tv / skin.height;
       }
@@ -318,7 +416,7 @@ export function wedgeMesh(result, opts = {}) {
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   // Weld coincident lattice vertices by position+normal+uv so distinct-facing
-  // wedge/base vertices stay split — and so do two charts' vertices at one
+  // slope/region vertices stay split — and so do two charts' vertices at one
   // lattice point (they sample different texels; watertightness is judged on
   // positions, so the split costs it nothing). Normals are load-bearing HERE
   // and in diag.js — not for lighting (flatShading recomputes them per-face
@@ -335,7 +433,8 @@ export function wedgeMesh(result, opts = {}) {
     ...paint,
     userData: {
       triangles: geo.index ? geo.index.count / 3 : repaired.length,
-      wedges: wedges.length,
+      wedges: wedges.length, // cells
+      slopes,
       skin: skin ? { width: skin.width, height: skin.height, charts: charted } : null,
     },
   });

@@ -25,8 +25,9 @@ const ramp = () => ({
 });
 
 // --- watertight welding -----------------------------------------------------
-// Guards the greedy base-face merge + T-junction repair: a greedy rect abutting
-// a wedge's unit-scale edge would leave boundary edges without the repair.
+// Guards the region merge + T-junction repair: a region's edge meeting a
+// slope's, or another plane's, to a different extent would leave boundary
+// edges without the repair.
 
 test('wedge mesh is watertight — solid cube (no wedges)', () => {
   const mesh = wedgeMesh(
@@ -43,6 +44,84 @@ test('wedge mesh is watertight — staircase (base faces + wedges)', () => {
   const mesh = wedgeMesh(buildVoxels(ramp()));
   assert.ok(mesh.userData.wedges > 0, 'the ramp must produce wedges');
   assert.equal(oddEdges(mesh), 0, 'base faces + wedges must weld with no boundary edges');
+});
+
+// --- a slope is one quad ---------------------------------------------------------
+// The wedge cells of one 45° plane are emitted as one block, and the walls
+// beside it fold the gable caps in with one straight diagonal edge, so a
+// ramp's slope is two triangles at any width and any number of steps — the
+// whole mesh costs the same 1 wide and 4 wide, and a colour change along the
+// ridge splits the block into two that meet inside the surface, still welded.
+
+test('a slope is one quad: a ramp costs the same triangles 1 wide and 4 wide; a ridge colour seam still welds', () => {
+  const tris = (m) => m.userData.triangles;
+  const wide = wedgeMesh(buildVoxels(ramp()));
+  const narrow = wedgeMesh(
+    buildVoxels({
+      front: fill(1, 4, 'T'),
+      right: img(['...T', '..TT', '.TTT', 'TTTT']),
+      top: fill(1, 4, 'T'),
+    })
+  );
+  assert.equal(wide.userData.wedges, 4 * narrow.userData.wedges, 'four times the cells');
+  assert.equal(wide.userData.slopes, 1, 'the three steps are one block');
+  assert.equal(narrow.userData.slopes, 1);
+  assert.equal(
+    tris(wide),
+    tris(narrow),
+    'the same triangles: the cells merged into one slope'
+  );
+  // the closed ramp: a floor, a back, the toe riser, the top tread, the slope
+  // and two sides — the sides five-cornered (the diagonal one edge), the rest
+  // quads, every shared edge the same extent on both planes (no repair split)
+  assert.equal(tris(wide), 2 + 2 + 2 + 2 + 2 + 3 + 3);
+  assert.equal(oddEdges(wide), 0);
+
+  const seam = wedgeMesh(
+    buildVoxels({
+      front: img(['TTRR', 'TTRR', 'TTRR', 'TTRR']),
+      right: img(['...T', '..TT', '.TTT', 'TTTT']),
+      top: img(['TTRR', 'TTRR', 'TTRR', 'TTRR']),
+    })
+  );
+  assert.equal(seam.userData.wedges, wide.userData.wedges, 'every cell still wedges');
+  assert.equal(seam.userData.slopes, 2, 'the seam halves the block');
+  assert.equal(oddEdges(seam), 0, 'two colours of slope abut with no boundary edges');
+});
+
+// --- a boundary that touches itself ----------------------------------------------
+// The region tracer hands earcut a self-touching ring where a plane's
+// boundary meets itself at a corner: a bay open to the outside through a
+// corner rides the outer loop twice, two holes meeting at a corner ride one
+// hole loop twice. Both must triangulate to the region's full area (the
+// mesher asserts it) and weld watertight.
+
+test('a self-touching boundary triangulates whole and welds: a bay open at a corner, two holes meeting at one', () => {
+  // a one-deep slab: the front's mask is the plate. The corner notch's riser
+  // (the right view's tan) and tread (the top's teal) differ, so no wedge
+  // fills it and the corner stays a pinch.
+  const bay = wedgeMesh(
+    buildVoxels({
+      front: img(['MMM', 'M.M', '.MM']),
+      right: fill(1, 3, 'N'),
+      top: fill(3, 1, 'T'),
+    })
+  );
+  assert.equal(
+    bay.userData.wedges,
+    0,
+    'the corner notch must stay a step for the pinch to exist'
+  );
+  assert.equal(oddEdges(bay), 0);
+  const holes = wedgeMesh(
+    buildVoxels({
+      front: img(['MMMM', 'M.MM', 'MM.M', 'MMMM']),
+      right: fill(1, 4, 'N'),
+      top: fill(4, 1, 'T'),
+    })
+  );
+  assert.equal(holes.userData.wedges, 0);
+  assert.equal(oddEdges(holes), 0);
 });
 
 // --- the farble ---------------------------------------------------------------

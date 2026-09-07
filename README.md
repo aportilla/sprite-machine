@@ -99,7 +99,7 @@ drop your own **3×2 sprite sheet** PNG anywhere on the window. **Smooth slopes*
 **always on** — no toggle: the "smooth" checkbox that could switch them off
 left the 3D View's controls strip on Sep 4 2026, and the one control there
 now is **rotate**, the auto-spin, **off every load** (the model sits still
-until you check it); greedy meshing is always on too.
+until you check it); the planar merge is always on too.
 Sprites are hard pixel art — every texel is fully opaque or fully
 transparent — and every face with no view of its own is mirror-filled from
 its opposite at render time. The **face picker** (six pixel-art cube icons
@@ -1403,20 +1403,26 @@ any angle — 1 pixel = 1 voxel = 1 cube.
    naive "stamp one sprite pixel down the whole depth ray" smear. Faces no view
    can see fall through a principled chain: mirrored opposite → neighbor average
    → dominant body color.
-6. **Mesh** — exposed faces (interior culled) are **greedy-meshed on
-   occupancy alone**: coplanar exposed faces merge into the largest
-   rectangles whatever is painted on them, so a flat wall is one quad
-   instead of one-per-texel — and the color rides a **texture, the skin**
-   (`src/lib/skin.js`, pure, Node-tested), not the geometry. A rectangle
-   whose faces cross a color boundary carries a **chart**: one texel per
-   voxel face, the faces' colors verbatim, padded by one replicated texel
-   on every side so a fragment on the rectangle's edge never reads its
+6. **Mesh** — exposed faces (interior culled) are merged **on occupancy
+   alone** into coplanar **regions** (`src/lib/regions.js`, pure,
+   Node-tested): a plane's exposed faces — and the gable caps of the wedge
+   blocks that end on it — traced as one polygon on the lattice with every
+   straight run one edge, holes included, whatever is painted on them, and
+   triangulated by earcut (three's `ShapeUtils`), so a flat wall is two
+   triangles instead of one-per-texel and the wall beside a windshield has
+   one straight diagonal edge — and the color rides a **texture, the
+   skin** (`src/lib/skin.js`, pure, Node-tested), not the geometry. A
+   region whose cells cross a color boundary carries a **chart**: its
+   bounding box as texels, one per cell, the cells' colors verbatim (a
+   cap's cell the wedge's), and every texel the cells don't cover — the
+   one-texel gutter, a hole, the box beyond a diagonal — flooded from the
+   nearest cell, so a fragment on the region's edge never reads a
    neighbour (and an importer with bilinear filtering on gets no bleed); a
-   rectangle of one color — every 1×1, and every wedge, one material by
-   its gate — points at that color's **swatch**, a 1×1 chart in a strip,
-   sampled at its center. The skin is therefore only the rectangles the
-   old mesher had to split plus the strip, its size bounded by those
-   rectangles' faces and never by the grid; it is packed deterministically
+   region of one color — every one-color wall, and every wedge, one
+   material by its gate — points at that color's **swatch**, a 1×1 chart
+   in a strip, sampled at its center. The skin is therefore only the
+   regions that cross a color plus the strip, its size bounded by those
+   regions' boxes and never by the grid; it is packed deterministically
    onto a power-of-two sheet, sampled **nearest** with no mipmaps, and
    built straight from bytes — a `DataTexture`, never a canvas, so a
    privacy browser's canvas farble can't touch it. Every triangle's UVs
@@ -1427,7 +1433,9 @@ any angle — 1 pixel = 1 voxel = 1 cube.
    color region and each boundary fed the repair — color doing geometry's
    job; the Car went **1784 → 900** triangles the day the merge stopped
    looking (the reference cube's 768 → **12** is the all-one-color case,
-   which always merged whole). The count is the bonus; the reason is the
+   which always merged whole), and **900 → 244** the same day, when the
+   wedges merged into slope blocks and the rectangles into regions (see
+   [Low-poly](#low-poly-additive-wedges)). The count is the bonus; the reason is the
    **shape of the export**: the default materials in Unity, Godot and
    Unreal ignore vertex colors — each needs a custom shader, a toggle or a
    material-graph node — while a mesh with a `map` renders in every
@@ -1457,6 +1465,31 @@ unit-step notches — a staircase of same-surface voxels becomes a smooth ramp
 they can never punch a hole or eat the object, and a shape with no staircase (a
 plain cube) gets no wedges and stays sharp. Every vertex lands on the integer
 lattice, so the result welds **watertight**.
+
+**The planar merge** (Sep 7 2026, in two steps the same day): the scan
+fires per notch cell, but the geometry is emitted per **plane**. A **slope
+is one quad per block** — the wedge cells of one 45° plane, one orientation
+and one intercept, sit on a grid (t up the staircase, r along the ridge)
+that is greedy-merged on one color, so a windshield is two triangles. And
+the **gable caps fold into the walls** — a block's end caps are half-cells
+of the plane they lie on (no cap against solid, none where a wedge of the
+same orientation continues — a color change along the ridge leaves two
+blocks meeting inside the surface), and every plane's exposed faces and
+caps are traced together as one **region** polygon with every straight run
+one edge (`src/lib/regions.js`, above), so the wall beside the windshield
+has one straight diagonal edge and nothing pins a vertex on the slope.
+Emitted per cell, a windshield was a grid of unit quads, and every unit
+edge along the roof's rim pinned a vertex there that the T-junction repair
+fanned the roof around: the Car's 17×10 roof cost 20 triangles, three
+quarters of the raw mesh was wedge slopes, and the Car read **900**. The
+runs merged along the ridge alone read **408** — the roof two triangles
+again, but every slope still a stack of strips, since the caps' corners
+split its long diagonal edge straight back. Per plane it reads **244**, the
+same 236 wedge cells in 20 blocks, watertight. The repair stays as the
+safety net and reads 45° edges too: a region's edge and a slope's ridge
+still meet to different extents where a corner of another plane lands on
+them, and a wall's diagonal is split where the slope beside it changes
+color up its staircase, one block ending against the next.
 
 Whether a wedge fires is a **strict same-material test on the two faces it would
 merge** — the corner's **riser** and **tread**. Same color on both ⇒ the corner
@@ -1499,8 +1532,8 @@ over `test/*.test.mjs`, about two hundred cases; `test/wedge-mesh.test.mjs`
 and `test/t-junction.test.mjs` load THREE), densest where a bug would be
 silent and expensive: the visual-hull carve and coloring (`pipeline`,
 `carve`, `colorize`, `ingest`), the wedge mesh's watertightness and its
-gate (`wedge-mesh`, `t-junction`), the skin's bake and its UV read
-(`skin`), the rasterizers (`rect`, `fill`,
+gate (`wedge-mesh`, `t-junction`), the region trace (`regions`), the
+skin's bake and its UV read (`skin`), the rasterizers (`rect`, `fill`,
 `select`, `brush`, `ants`), the document format (`png-chunks`), the
 document and library contracts (`doc`, `files`, `workspace`, `history`,
 `desktop-state`), and the layout rules (placement, cascade, the nine-slice
@@ -1551,11 +1584,14 @@ src/lib/
   ingest.js       sprite -> occupancy/color arrays (full tile, no crop), place, reorient
   carve.js        dim reconciliation, visual-hull AND, surface extraction
   colorize.js     depth-aware first-hit surface coloring + palette snap
-  faces.js        surface voxels -> rects {face, s, a, b, w, h, normal, corners}: greedy-merged on
-                  OCCUPANCY alone (the color is the skin's) or culled; idxFor, tangent -> voxel index (pure)
-  skin.js         the SKIN: the model's color as a texture — a chart per multi-color rect (a texel per
-                  voxel face, replicated gutters), a swatch per color, a deterministic power-of-two
-                  shelf pack, bytes only (no canvas); uvOfLattice / swatchUV, the UV reads (pure)
+  faces.js        the face vocabulary's geometry: FACE_GEO (each face's tangent axes + normal axis),
+                  idxFor (tangent -> voxel index) and pointOf (tangent -> lattice point) (pure)
+  regions.js      coplanar REGIONS: a plane's exposed faces + the wedge blocks' gable-cap halves traced
+                  as boundary loops on the lattice, collinear runs merged (a wall beside a slope has ONE
+                  diagonal edge), outers and holes paired, a texel per cell — what the mesher triangulates (pure)
+  skin.js         the SKIN: the model's color as a texture — a chart per multi-color region (a texel per
+                  cell over its box, the rest flooded from the nearest piece), a swatch per color, a
+                  deterministic power-of-two shelf pack, bytes only (no canvas); uvOfLattice / swatchUV (pure)
   ring.js         the 3D Sprite Atlas's geometry: the yaw ring, the lattice envelope + square frame,
                   the camera pose (direction + true up), the sheet, the engine anchor (pure)
   rect.js         editor rect tool: rounded-rectangle rasterization, per-row runs (pure)
@@ -1570,10 +1606,11 @@ src/lib/
                   runs, the dash cycle + march + seam) and antsOutlineRuns (the same dashes around any
                   row-convex shape's thin boundary — a circle tip's disc; the box its special case) (pure)
   pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
-  t-junction.js   lattice-exact T-junction repair for merged+wedge meshes; a split carries every
-                  field of its source but the three vertices (pure)
+  t-junction.js   lattice-exact T-junction repair for the merged mesh, axis-aligned and 45° edges; a
+                  split carries every field of its source but the three vertices (pure)
   mesh-util.js    the skin as a DataTexture (nearest, sRGB) + mesh finishing: the map material (THREE)
-  wedge-mesh.js   voxel solid + additive 45° wedges, painted by the skin (THE mesh, always on; THREE)
+  wedge-mesh.js   the voxel solid as region polygons (earcut, via THREE's ShapeUtils) + additive 45°
+                  wedges as slope blocks, painted by the skin (THE mesh, always on; THREE)
   sprite-data.js  built-in defaults (as atlases): first-boot seeds + New-dialog templates, + grid->ImageData helper
   png-chunks.js   PNG chunk surgery: parse + tEXt/iTXt read/replace, CRC32 — the document format (pure)
   zip.js          a stored (method 0) zip writer + reader, CRC-32 — Export Sprite Atlas…'s container (pure)
@@ -1893,15 +1930,16 @@ only when the tile's IDENTITY actually changes.
 - **Low-poly scope** — wedges are **additive only**: a convex staircase (a hood
   sloping down-and-out) still steps, and where two wedge ridges meet at a true
   3-D corner it degrades to a step rather than a corner tile. Base faces **are**
-  greedy-merged (on occupancy — the color is the skin's, so no boundary splits
-  a rectangle); the T-junctions that merging leaves against the
-  unit-scale wedge edges are stitched out by a lattice-exact repair pass
-  (`t-junction.js`), so the result stays watertight (a regression test asserts
-  zero boundary edges).
-- **Perf** — hidden-face culling + greedy meshing (both on) keep it to one draw
+  merged (on occupancy, into coplanar regions — the color is the skin's, so
+  no boundary splits a plane), and the wedges into slope blocks; the
+  T-junctions that merging leaves where a region and a block meet to
+  different extents are stitched out by a lattice-exact repair pass
+  (`t-junction.js`, axis-aligned and 45° edges), so the result stays
+  watertight (a regression test asserts zero boundary edges).
+- **Perf** — hidden-face culling + the planar merge keep it to one draw
   call and a handful of triangles — the mesh carries its color as one small
-  texture, the skin, whose size scales with the multi-color rectangles'
-  faces and never with the grid, rebaked from bytes on every rebuild and
+  texture, the skin, whose size scales with the multi-color regions'
+  boxes and never with the grid, rebaked from bytes on every rebuild and
   disposed with the mesh — and the render loop only redraws on change
   (idle scenes don't repaint). The carve is a synchronous O(n³) walk, so the tile
   stepper is capped at **64** (a 64³ grid still rebuilds live per stroke); to lift

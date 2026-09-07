@@ -14,9 +14,12 @@
 // the (convex) result with lattice-only vertices. Pure integer geometry: no
 // THREE, Node-testable.
 //
-// Only AXIS-ALIGNED edges can carry interior lattice points here (base-rect
-// edges); wedge edges are unit-length or unit-diagonal and a valid surface
-// never has a vertex in a face interior, so a rect's own diagonal is safe.
+// Two kinds of edge can carry interior lattice points here: an AXIS-ALIGNED
+// one (a region polygon's, a slope's ridge edge) and a 45° DIAGONAL (a slope
+// block's staircase edge, a region's cut beside it — both long since the
+// merges of Sep 7 2026). Any other segment is a triangulation chord across a
+// region's or a slope's interior, where a valid surface never has a vertex,
+// so it is left alone.
 //
 // A triangle is an opaque record beyond its three vertices: every other field
 // (the normal, and the mesher's paint — a chart and its rect, or a swatch
@@ -28,21 +31,19 @@
 const key = (p) => p[0] + ',' + p[1] + ',' + p[2];
 
 // Integer lattice points strictly interior to segment p->q that are in `vset`,
-// ordered p->q. Returns [] unless p->q is axis-aligned.
+// ordered p->q. Returns [] unless p->q is axis-aligned or a 45° diagonal (two
+// axes stepping by the same magnitude).
 function interiorPointsOnEdge(p, q, vset) {
-  let ax = -1;
-  for (let i = 0; i < 3; i++) {
-    if (p[i] !== q[i]) {
-      if (ax >= 0) return []; // differs on >1 axis -> not axis-aligned
-      ax = i;
-    }
-  }
-  if (ax < 0) return []; // degenerate (p === q)
-  const step = q[ax] > p[ax] ? 1 : -1;
+  const d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+  const axes = [];
+  for (let i = 0; i < 3; i++) if (d[i] !== 0) axes.push(i);
+  if (axes.length === 0 || axes.length === 3) return []; // degenerate, or a chord
+  const n = Math.abs(d[axes[0]]);
+  if (axes.length === 2 && Math.abs(d[axes[1]]) !== n) return []; // not 45°
   const out = [];
-  for (let t = p[ax] + step; t !== q[ax]; t += step) {
+  for (let t = 1; t < n; t++) {
     const pt = [p[0], p[1], p[2]];
-    pt[ax] = t;
+    for (const i of axes) pt[i] += Math.sign(d[i]) * t;
     if (vset.has(key(pt))) out.push(pt);
   }
   return out;

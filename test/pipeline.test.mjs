@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { buildVoxels } from '../src/lib/pipeline.js';
 import { packRGBA } from '../src/lib/ingest.js';
 import { voxIndex } from '../src/lib/carve.js';
-import { culledQuads, greedyQuads } from '../src/lib/faces.js';
+import { faceRegions } from '../src/lib/regions.js';
 import { VIEWS } from '../src/lib/views.js';
 import { C, img, fill } from './helpers.mjs';
 
@@ -218,10 +218,7 @@ test('strict registration: unmatched front pixels carve away', () => {
   for (let z = 0; z < 3; z++) assert.equal(r.solid[voxIndex(2, 2, z, r.dims)], 0);
 });
 
-// --- greedy meshing: conservation (no holes/overlaps) + reduction -----------
-const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
-const quadArea = (c) => Math.round(dist(c[0], c[1]) * dist(c[1], c[2]));
-const sumArea = (quads) => quads.reduce((n, q) => n + quadArea(q.corners), 0);
+// --- the regions: conservation (no holes/overlaps) + reduction ---------------
 function exposedFaceCount(r) {
   let n = 0;
   for (let i = 0; i < r.surfaceMask.length; i++) {
@@ -234,7 +231,7 @@ function exposedFaceCount(r) {
   return n;
 }
 
-test('greedy meshing conserves surface area (no holes or overlaps)', () => {
+test('the regions cover the surface exactly: every exposed face in one region, none twice', () => {
   for (const r of [
     buildVoxels({ front: fill(3, 3, 'M'), right: fill(3, 3, 'N'), top: fill(3, 3, 'T') }),
     buildVoxels({
@@ -244,37 +241,41 @@ test('greedy meshing conserves surface area (no holes or overlaps)', () => {
     }),
   ]) {
     const exposed = exposedFaceCount(r);
-    const culled = culledQuads(r.dims, r.surfaceMask);
-    const greedy = greedyQuads(r.dims, r.surfaceMask);
-    assert.equal(culled.length, exposed); // one quad per exposed face
-    assert.equal(sumArea(culled), exposed); // sanity
-    assert.equal(sumArea(greedy), exposed); // greedy covers exactly the same area
-    assert.ok(greedy.length <= culled.length);
+    const regions = faceRegions(r.dims, r.surfaceMask, r.faceColor);
+    let covered = 0;
+    for (const g of regions) for (const p of g.present) covered += p;
+    assert.equal(covered, exposed); // the regions' cells are the exposed faces, once each
+    assert.ok(regions.length <= exposed);
   }
 });
 
-test('greedy collapses a solid cube to 6 faces (12 tris)', () => {
+test('a solid cube is six regions, a quad each (12 tris)', () => {
   const r = buildVoxels(
     { front: fill(8, 8, 'M'), right: fill(8, 8, 'N'), top: fill(8, 8, 'T') },
     { mirror: { x: true, y: false, z: false } }
   );
-  const greedy = greedyQuads(r.dims, r.surfaceMask);
-  // 6 outer faces -> one merged rect each.
-  assert.equal(greedy.length, 6);
+  const regions = faceRegions(r.dims, r.surfaceMask, r.faceColor);
+  assert.equal(regions.length, 6);
+  for (const g of regions) assert.deepEqual([g.outer.length, g.holes.length], [4, 0]);
 });
 
-test('greedy merges on occupancy alone: a two-color wall is one rect', () => {
+test('the regions form on occupancy alone: a two-color wall is one region', () => {
   // A 4×4 front painted in two colors over a full side and top. The color-
   // aware merge gave two +z rects (one per band); on occupancy the wall is
-  // one 4×4 rect — the paint is the skin's business (skin.test.mjs).
+  // one 4×4 region — the paint is the skin's business (skin.test.mjs).
   const r = buildVoxels({
     front: img(['RRRR', 'RRRR', 'BBBB', 'BBBB']),
     right: fill(4, 4, 'T'),
     top: fill(4, 4, 'T'),
   });
-  const pz = greedyQuads(r.dims, r.surfaceMask).filter((q) => q.face === 'pz');
+  const pz = faceRegions(r.dims, r.surfaceMask, r.faceColor).filter(
+    (g) => g.face === 'pz'
+  );
   assert.equal(pz.length, 1);
-  assert.deepEqual([pz[0].w, pz[0].h], [4, 4]);
+  assert.deepEqual(
+    [pz[0].w, pz[0].h, pz[0].outer.length, pz[0].uniform],
+    [4, 4, 4, null]
+  );
 });
 
 // --- 7. Projection conventions pinned (docs/code can't silently drift) -------
