@@ -14,7 +14,6 @@ import { SAMPLES } from './lib/sprite-data.js';
 import { PALETTE_168 } from './lib/constants.js';
 import { session } from './state/session.js';
 import { prefs } from './state/prefs.js';
-import { ring } from './state/ring.js';
 import { files } from './state/files.js';
 import { workspace } from './state/workspace.js';
 import { parseBootParams } from './boot/params.js';
@@ -61,17 +60,12 @@ const boot = parseBootParams(location.search, {
   sampleNames: SAMPLES.map((s) => s.name),
   hash: location.hash,
 });
-if (boot.ring) {
-  // ?ring=<views>[,<elevation>[,<offset>[,<size>[,<paper>]]]]: the 3D
-  // Sprite Atlas windoid shown (it boots hidden) with its settings seeded —
-  // the slice's own clamps apply.
-  prefs.setShowRing(true);
-  ring.setViews(boot.ring.views);
-  ring.setElevation(boot.ring.elevation);
-  ring.setOffset(boot.ring.offset);
-  ring.setSize(boot.ring.size);
-  ring.setPaper(boot.ring.paper);
-}
+// ?ring=<views>[,<elevation>[,<offset>[,<size>[,<paper>]]]]: the 3D Sprite
+// Atlas windoid shown (it boots hidden). The settings are the DOCUMENT's
+// (state/ring-settings.js), so the seed rides into the boot sample's
+// context at its open (bootDocuments below — the settings store's own
+// clamps apply); a ?file boot keeps the stored document's own chunk.
+if (boot.ring) prefs.setShowRing(true);
 // The on-mount hook order, preserved: pencil size (and its tip shape, when
 // ?cursor names one), then pick (so ?palette
 // reflects it and ?fill fills with it), then the dialog, then rect, then
@@ -293,6 +287,7 @@ async function bootDocuments() {
     const ctx = await loadSample(SAMPLES[boot.sampleIndex], {
       face: boot.edit ?? undefined,
       hooks: bootHooks,
+      ring: boot.ring,
     });
     // Dev hooks that need the loaded sheet: ?tile / ?tile=WxH resizes the
     // fresh sheet once (the capture tool can't click the stepper); the

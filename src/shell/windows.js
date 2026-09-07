@@ -240,9 +240,14 @@ export function initWindows(desktop, { hide = [] } = {}) {
   // Tools top-left, the sprite/stage rail right, the 3D Sprite Atlas strip
   // docked at the bottom — the doc box giving up the strip's band only
   // while the strip is SHOWN. The Tools palette's content-hugging size
-  // stays authored in index.html and feeds the math.
+  // stays authored in index.html and feeds the math. The strip's inputs
+  // (its view count and tile size) are a DOCUMENT's settings: the served
+  // document's by default (state/ring.js's façade), or — for the doc box of
+  // a window being opened — the settings of the document it is opened for,
+  // since the open activates it and the strip follows.
   const ringShown = () => prefs.get().showRing;
-  const smartLayout = () =>
+  /** @param {{views: number, size: number}} [r]  the strip's settings */
+  const smartLayout = (r = ring.get()) =>
     initialPlacement(
       desktop.width,
       desktop.height,
@@ -250,7 +255,7 @@ export function initWindows(desktop, { hide = [] } = {}) {
         width: byId.tools.width ?? 0,
         height: byId.tools.height ?? 0,
       },
-      { ringViews: ring.get().views, ringSize: ring.get().size, ringShown: ringShown() }
+      { ringViews: r.views, ringSize: r.size, ringShown: ringShown() }
     );
 
   // --- the Full Sprite View's fixed size ---------------------------------------
@@ -291,6 +296,18 @@ export function initWindows(desktop, { hide = [] } = {}) {
   // over visibility, the rule's own contract), a drag or Arrange brings it
   // back. (A first cut held the bottom edge instead, growing the window up
   // with the top floored at the reserve — a second writer; retired.)
+  // That is the rule for a strip ON SCREEN. The size is a document's
+  // setting (state/ring-settings.js), so a change also arrives with a
+  // document SWITCH — and, at boot or from the Finder role, behind a strip
+  // that is HIDDEN (the activation wire writes the workspace mirror before
+  // the app-active one, so the switch lands here while the strip is still
+  // off screen — the boot placement having run before any document
+  // existed, at the defaults). A hidden strip has nothing on screen to
+  // hold, so a height change behind it RE-RUNS ITS PLACEMENT instead: the
+  // show — or the boot — finds it docked at the height this document's
+  // tile derives, the way a placement always would, rather than hanging
+  // off the margin by a size the user never typed. (Hidden by its own
+  // toggle and unchanged in size, it comes back exactly where it was.)
   const floorRingWidth = () => {
     if ((byId.ring.width ?? 0) < RING_MIN_WIDTH) byId.ring.width = RING_MIN_WIDTH;
   };
@@ -441,14 +458,18 @@ export function initWindows(desktop, { hide = [] } = {}) {
     })
   );
 
-  // The tile size changes the ring's height: re-fit — the top-left held,
-  // the bottom edge the one that moves (see fitRing) — guarded on the
-  // computed height so a settings change that leaves it (views, elevation,
-  // offset) writes nothing (the sprite refit's idiom). The view count no
-  // longer touches the window — a longer row scrolls under the rail.
+  // The tile size changes the ring's height: shown, re-fit — the top-left
+  // held, the bottom edge the one that moves (see fitRing); hidden,
+  // re-placed (see the same comment) — guarded on the computed height so a
+  // settings change that leaves it (views, elevation, offset) writes
+  // nothing (the sprite refit's idiom). The view count no longer touches
+  // the window — a longer row scrolls under the rail.
   unsubs.push(
     ring.subscribe(() => {
-      if ((byId.ring.height ?? 0) !== ringHeightFor(ring.get().size)) fitRing();
+      if ((byId.ring.height ?? 0) !== ringHeightFor(ring.get().size)) {
+        if (byId.ring.hidden) placeWindoid('ring', smartLayout());
+        else fitRing();
+      }
       // The placement's inputs moved (the strip's box, the doc box behind
       // a shown strip) whether or not the window did.
       notifyLayout();
@@ -503,11 +524,13 @@ export function initWindows(desktop, { hide = [] } = {}) {
     win.id = `win-doc-${ctx.key}`;
     win.setAttribute('heading', ctx.name);
     // The box is the smart placement's vacant-middle fill, computed against
-    // the CURRENT raster (the desktop may have resized since boot), cascaded
-    // into the first slot no open document window holds — never a
-    // remembered geometry (see the header). Saved and untitled documents
-    // place alike.
-    const d = smartLayout().doc;
+    // the CURRENT raster (the desktop may have resized since boot) and THIS
+    // document's atlas settings (the strip's band, while shown, is the
+    // height its tile derives — the open activates the document and the
+    // strip follows it), cascaded into the first slot no open document
+    // window holds — never a remembered geometry (see the header). Saved
+    // and untitled documents place alike.
+    const d = smartLayout(ctx.ring.get()).doc;
     const occupied = [...byKey.values()].map(({ win }) => ({
       left: win.left ?? 0,
       top: win.top ?? 0,

@@ -129,10 +129,17 @@ named method; the names are stable.
    orbits means the rig orbits too: the stage's ambient + key + fill,
    expressed in the camera's frame (decision **E**). No ground plane, no
    shadow in the sprite (**F**): the ground is the 3D View's furniture.
-8. **Settings are app-level and session-only**, in a `ring` slice
-   (`views`, `elevation`, `offset`, `scale`; clamped setters; silent
-   no-ops) — the prefs discipline. Per-document persistence in a PNG chunk
-   is a follow-up (§8, decision **D**).
+8. **Settings are the DOCUMENT's** (since Sep 7 2026 — they were app-level
+   and session-only, the prefs discipline, until then; decision **D**
+   reversed by §8's first follow-up): a per-context store
+   (`state/ring-settings.js`, `ctx.ring` on every DocContext — `views`,
+   `elevation`, `offset`, `size`, `paper`; clamped setters; silent no-ops),
+   persisted as a `sprite-machine:ring` text chunk on the document PNG
+   and restored by every open path, a change dirtying the document. The
+   app-level `ring` (`state/ring.js`) is a façade over the ACTIVE
+   document's store, so the strip, the dialog, the follower and the
+   window rule read one store-shaped object and follow activation for
+   free.
 9. **The dialog edits live.** Its fields are bound two-way to the slice —
    a change in the dialog moves the strip behind the modal at once, and
    Cancel doesn't revert (the settings are non-destructive; the strip IS
@@ -918,11 +925,15 @@ and an eye on the dev server are the verification.
   shape (`texturePackerJson` in `state/ring.js`): a frame per yaw with the
   engine anchor as its normalized pivot, an `animations` block, and the
   ring record under `meta["sprite-machine"]`. README §Menu bar.
-- **Per-document settings** in a `sprite-machine:ring` chunk on the
-  DOCUMENT (the transforms chunk's idiom): the slice becomes per-context
-  (a `ring` store on `DocContext`, `followActive` for the strip), a change
-  dirties the document, save/load round-trip it. The export chunk already
-  has the JSON shape.
+- **Per-document settings** — SHIPPED Sep 7 2026: a `sprite-machine:ring`
+  chunk on the DOCUMENT (the four settings as JSON, always written — a
+  default is the writing version's choice, not an identity; the paper
+  stays out), `ctx.ring` a store on every DocContext
+  (`state/ring-settings.js`), a change dirtying the document, every open
+  path (a stored open, a dropped PNG, the `?ring` boot seed) restoring
+  it clean. Rather than a `followActive` per consumer, the app-level
+  `ring` in `state/ring.js` became a façade over the active context's
+  store (`createActiveRing`): the six consumers kept their calls.
 - **A drop shadow in the sprite:** a `ShadowMaterial` ground at y = 0,
   `shadowMap` on for the ring renderer, a `shadow` checkbox in the strip
   and the dialog. The camera-relative key light makes it consistent across
@@ -951,8 +962,9 @@ and an eye on the dev server are the verification.
   respects a shown strip.
 - **C. A close box on the windoid.** Dropping it makes the menu the only
   way out — one line less (`closable = false` for all four).
-- **D. App-level, session-only settings** (the prefs discipline). Per-doc
-  persistence is §8's first item.
+- **D. App-level, session-only settings** (the prefs discipline) — the
+  shipped default; REVERSED Sep 7 2026 by §8's first item: the settings
+  are per-document now, in the PNG.
 - **E. Lights ride with the camera** (engine-correct for a rotation set).
   World-fixed lights would shade each facing differently.
 - **F. No ground shadow** in the sprite.

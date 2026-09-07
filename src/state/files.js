@@ -9,10 +9,12 @@
 //
 // THE DOCUMENT IS THE PNG (lib/png-chunks.js): a save encodes the drained
 // atlas, splices the metadata text chunks (Title / Creation Time / Software /
-// sprite-machine:transforms — the last only when non-identity), and stores
-// those bytes; a load reads the chunks back and hands pixels + transforms +
-// name to the caller. The record's name/icon/dims fields are declared CACHE,
-// never truth — the chunk wins on any disagreement.
+// sprite-machine:transforms — only when non-identity — / sprite-machine:ring
+// — the 3D Sprite Atlas's four settings, whenever the caller passes them),
+// and stores those bytes; a load reads the chunks back and hands pixels +
+// transforms + ring settings + name to the caller. The record's
+// name/icon/dims fields are declared CACHE, never truth — the chunk wins on
+// any disagreement.
 //
 // WHAT THIS SLICE DOES NOT KNOW (the multi-document split): which documents
 // are open, which is active, their dirty state, or their identity — that is
@@ -24,6 +26,7 @@
 
 import { createStore } from './store.js';
 import { readTextChunks, setTextChunks } from '../lib/png-chunks.js';
+import { RING_CHUNK_KEY, ringChunk, parseRingChunk } from './ring-settings.js';
 
 export const UNTITLED = 'untitled';
 // The Software chunk value — doubles as the document-schema marker.
@@ -79,23 +82,26 @@ export function createFiles(deps = null) {
   const newId = () => (d?.newId ? d.newId() : crypto.randomUUID());
 
   // The metadata chunks a save writes. `createdAt` persists across saves via
-  // the record (first save stamps it); transforms only when non-identity.
-  function metaChunks(name, createdAt, transforms) {
+  // the record (first save stamps it); transforms only when non-identity;
+  // the ring settings whenever the caller has them (a null removes a stale
+  // chunk — replace semantics).
+  function metaChunks(name, createdAt, transforms, ring) {
     return {
       Title: name,
       'Creation Time': new Date(createdAt).toISOString(),
       Software: SOFTWARE,
       [TRANSFORMS_KEY]:
         transforms && Object.keys(transforms).length ? JSON.stringify(transforms) : null,
+      [RING_CHUNK_KEY]: ring ? ringChunk(ring) : null,
     };
   }
 
   // Encode a doc (drained first) into finished document bytes.
-  async function encodeDoc(doc, name, createdAt) {
+  async function encodeDoc(doc, name, createdAt, ring) {
     doc.drain();
     const state = doc.get();
     const bytes = await d.encodeAtlas(state.atlasImage);
-    return setTextChunks(bytes, metaChunks(name, createdAt, state.transforms));
+    return setTextChunks(bytes, metaChunks(name, createdAt, state.transforms, ring));
   }
 
   const api = {
@@ -142,15 +148,18 @@ export function createFiles(deps = null) {
      * stored `{id, name}` — the caller (the workspace) applies them to
      * whatever identity it manages.
      * @param {ReturnType<typeof import('./doc.js').createDoc>} doc
-     * @param {{fileId?: string|null, name?: string}} identity
+     * @param {{fileId?: string|null, name?: string,
+     *          ring?: import('./ring-settings.js').RingChunkSettings|null}} identity
+     *   ring: the document's 3D Sprite Atlas settings (the workspace passes
+     *   its context's) — written as the ring chunk; absent, none is
      */
-    async save(doc, { fileId = null, name } = {}) {
+    async save(doc, { fileId = null, name, ring = null } = {}) {
       if (!doc.get().atlasImage) return null;
       const id = fileId ?? newId();
       const finalName = name ?? UNTITLED;
       const prev = fileId ? await d.storage.get(id) : null;
       const createdAt = prev?.createdAt ?? now();
-      const png = await encodeDoc(doc, finalName, createdAt);
+      const png = await encodeDoc(doc, finalName, createdAt, ring);
       const state = doc.get();
       const icon = (await d.makeIcon?.(state)) ?? null;
       await d.storage.put({
@@ -168,12 +177,15 @@ export function createFiles(deps = null) {
     },
 
     /**
-     * Load a stored document's content: pixels, transforms, and the name the
-     * chunk (or the record cache) carries. Resolves null when the id is
-     * gone; throws on a decode failure (the caller surfaces it). No doc is
-     * mutated here — the workspace loads the result into a context.
+     * Load a stored document's content: pixels, transforms, the 3D Sprite
+     * Atlas settings its chunk carries (null for none — the context opens
+     * at the defaults), and the name the chunk (or the record cache)
+     * carries. Resolves null when the id is gone; throws on a decode
+     * failure (the caller surfaces it). No doc is mutated here — the
+     * workspace loads the result into a context.
      * @param {string} id
-     * @returns {Promise<{image: object, transforms: object, name: string}|null>}
+     * @returns {Promise<{image: object, transforms: object,
+     *   ring: Partial<import('./ring-settings.js').RingChunkSettings>|null, name: string}|null>}
      */
     async load(id) {
       const rec = await d.storage.get(id);
@@ -196,7 +208,12 @@ export function createFiles(deps = null) {
         }
       }
       const image = await d.decodeAtlas(bytes);
-      return { image, transforms, name: meta.Title ?? rec.name ?? UNTITLED };
+      return {
+        image,
+        transforms,
+        ring: parseRingChunk(meta[RING_CHUNK_KEY]),
+        name: meta.Title ?? rec.name ?? UNTITLED,
+      };
     },
 
     /** Rename a stored doc BY ID: the Title chunk is rewritten in place (a
@@ -222,15 +239,19 @@ export function createFiles(deps = null) {
      * clean saved doc (a downloaded file IS the document); a fresh encode
      * for an untitled or dirty one.
      * @param {ReturnType<typeof import('./doc.js').createDoc>} doc
-     * @param {{fileId?: string|null, name?: string, dirty?: boolean}} identity
+     * @param {{fileId?: string|null, name?: string, dirty?: boolean,
+     *          ring?: import('./ring-settings.js').RingChunkSettings|null}} identity
      * @returns {Promise<{bytes: Uint8Array, name: string}>}
      */
-    async exportBytes(doc, { fileId = null, name = UNTITLED, dirty = false } = {}) {
+    async exportBytes(
+      doc,
+      { fileId = null, name = UNTITLED, dirty = false, ring = null } = {}
+    ) {
       if (fileId && !dirty && d.storage) {
         const rec = await d.storage.get(fileId).catch(() => null);
         if (rec) return { bytes: rec.png, name: rec.name };
       }
-      const bytes = await encodeDoc(doc, name, now());
+      const bytes = await encodeDoc(doc, name, now(), ring);
       return { bytes, name };
     },
   };

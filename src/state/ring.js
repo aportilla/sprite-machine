@@ -1,126 +1,132 @@
 // ---------------------------------------------------------------------------
-// `ring` slice — the 3D Sprite Atlas's settings and its SHEET CHANNEL. The
-// settings (view count, elevation, first-angle offset, the tile's edge in
-// px, and the body's paper) are app-level and session-only, the prefs
-// discipline: one ring, whichever document is active, nothing persisted
-// (per-document settings in a PNG chunk are the planned follow-up —
-// docs/sprite-atlas-plan.md §8). Written by the windoid's controls strip and
-// File → Export Sprite Atlas…'s fields (the same settings, two surfaces —
-// the dialog edits LIVE, no pending state; the paper has no control today
-// — see RING_PAPERS — a viewing choice the export never carries), and by
-// the ?ring capture hook; read by the renderer's follower (scene/ring.js),
-// the windoid body, and shell/windows.js (the windoid's height follows the
-// tile size — docs/ring-size-plan.md).
+// `ring` — the 3D Sprite Atlas as the app sees it: THE ACTIVE DOCUMENT'S
+// settings, and the SHEET CHANNEL.
+//
+// THE SETTINGS ARE THE DOCUMENT'S (state/ring-settings.js: every DocContext
+// carries its own store, `ctx.ring`, persisted in the document's PNG as a
+// `sprite-machine:ring` chunk and restored by every open path). This module
+// is the FAÇADE over whichever one the windoid serves: `get()` reads it,
+// `subscribe` fires on its changes AND on a switch to another document's,
+// and each setter routes to it — so the strip (sm-ring-controls), the body
+// (sm-ring-view), File → Export Sprite Atlas…'s fields (shell/menus.js), the
+// renderer's follower (scene/ring.js) and the windoid's height rule
+// (shell/windows.js) all read one store-shaped object and follow the active
+// document for free, the way the windoids themselves do. The served context
+// is the ACTIVE one; while the desktop is focused (the Finder role, the
+// windoid hidden) it stays the one last served — the windoid returns aimed
+// where it was — until that document closes; with nothing served the
+// defaults read and a setter is a no-op (nothing to write to; the ?ring
+// boot hook seeds the boot document at its open instead). A switch that
+// reads the same on every key notifies nobody — the store idiom.
 //
 // THE SHEET CHANNEL is the doc's `onLive` shape — hot, imperative, never
-// through the store: the follower publishes the rendered sheet canvas (by
+// through a store: the follower publishes the rendered sheet canvas (by
 // reference) after every render, which lands per rebuild frame during a
 // stroke; a store patch per frame would re-render every subscriber's
 // template for pixels only the windoid's cells paint. `sheet()` hands a late
-// subscriber (a reconnected windoid body) the last one.
-//
-// Every setter clamps, rounds to an integer, treats NaN as a no-op (a
-// vf-number-field's valueAsNumber is NaN mid-edit) and is silent on an
-// unchanged value (the shell slice's idiom).
+// subscriber (a reconnected windoid body) the last one. App-level: there is
+// one renderer, serving the active document like the rebuilder it follows.
 // ---------------------------------------------------------------------------
 
-import { createStore } from './store.js';
 import { SOFTWARE } from './files.js';
+import { workspace as workspaceSingleton } from './workspace.js';
+import { RING_DEFAULTS, RING_CHUNK_KEY, sameRingSettings } from './ring-settings.js';
 
-export const RING_DEFAULTS = {
-  views: 4,
-  elevation: 45,
-  offset: 0,
-  size: 64,
-  paper: 'white',
-};
-/** The body's PAPER — the three the slice admits, each naming the kit
- *  pattern the windoid paints for it (vintage-frames docs/PATTERNS.md):
- *  `white` and `black` are the flat fills, and `gray` is the `dots` motif
- *  — a 1-bit surface shows gray as a dither, and dots is the paper the
- *  atlas wore before there was a setting. A VIEWING setting: the frames
- *  render over a transparent clear, so the export carries no paper and
- *  the chunk omits it. The default is white — and today NOTHING in the UI
- *  writes it (a radio column in the strip was built and retired on
- *  2026-09-03; the user's intent is to pick the paper FOR the user one
- *  day, from the sheet's own content — a sprite with a lot of white in
- *  it reads better on black, and the reverse — rather than ask); only
- *  the ?ring= capture hook seeds it. The plumbing is kept for that. */
-export const RING_PAPERS = { white: 'white', black: 'black', gray: 'dots' };
-/** The view count's ceiling: the strip scrolls past what fits its window,
- *  but a 255-px tile at sixteen views is already a 4080-px sheet, and past
- *  sixteen a ring is a wall. */
-export const RING_MAX_VIEWS = 16;
-/** The tile's edge in px — greater than 1, less than 256 (the ask); the
- *  model's lattice envelope is fit to it, so px per voxel is derived. A
- *  16-view sheet at 255 is 4080 px wide, inside every desktop GPU's
- *  render-target limit. The default is the engine-friendly power of two —
- *  the editor's own tile ceiling. */
-export const RING_MIN_SIZE = 2;
-export const RING_MAX_SIZE = 255;
-
-/** The export's own text chunk: the settings, the frame, the anchor and the
- *  yaw list — enough for an engine importer to slice and align the sheet
- *  (the TexturePacker JSON beside the PNG carries the same record, in the
- *  shape engines already read — `texturePackerJson`). */
-export const RING_CHUNK_KEY = 'sprite-machine:ring';
+export {
+  RING_DEFAULTS,
+  RING_PAPERS,
+  RING_MAX_VIEWS,
+  RING_MIN_SIZE,
+  RING_MAX_SIZE,
+  RING_CHUNK_KEY,
+} from './ring-settings.js';
 
 /**
- * @typedef {{views: number, elevation: number, offset: number, size: number, paper: string}} RingSettings
- *   paper: a RING_PAPERS key.
+ * @typedef {import('./ring-settings.js').RingSettings} RingSettings
  * @typedef {{canvas: HTMLCanvasElement, frame: number, views: number}} RingSheet
  *   canvas: the whole strip, `views` frames of `frame` px side by side.
  */
 
-const int = (v) => (Number.isFinite(v) ? Math.round(v) : NaN);
-const clampInt = (v, lo, hi) => Math.min(Math.max(int(v), lo), hi);
+/**
+ * @param {ReturnType<typeof import('./workspace.js').createWorkspace>} workspace
+ */
+export function createActiveRing(workspace) {
+  /** @type {import('./workspace.js').DocContext|null} the served context */
+  let ctx = null;
+  /** @type {(() => void)|null} */
+  let offCtx = null;
+  /** @type {Set<(s: RingSettings) => void>} */
+  const listeners = new Set();
+  /** @type {RingSettings} what the listeners last heard */
+  let last = RING_DEFAULTS;
 
-export function createRing() {
-  const store = createStore({ ...RING_DEFAULTS });
+  const get = () => (ctx ? ctx.ring.get() : RING_DEFAULTS);
+  const notify = () => {
+    const s = get();
+    if (sameRingSettings(s, last)) return;
+    last = s;
+    for (const fn of listeners) fn(s);
+  };
+  const serve = (next) => {
+    if (next === ctx) return;
+    offCtx?.();
+    ctx = next;
+    offCtx = ctx ? ctx.ring.subscribe(notify) : null;
+    notify();
+  };
+  const sync = () => {
+    const active = workspace.active();
+    if (active) serve(active);
+    else if (ctx && !workspace.byKey(ctx.key)) serve(null);
+  };
+  const offWorkspace = workspace.subscribe(sync);
+  sync();
+
+  /** @param {(s: RingSettings) => void} fn  @returns {() => void} */
+  const subscribe = (fn) => {
+    listeners.add(fn);
+    return () => {
+      listeners.delete(fn);
+    };
+  };
+
   /** @type {RingSheet|null} */
   let sheet = null;
   /** @type {Set<(s: RingSheet|null) => void>} */
-  const listeners = new Set();
-
-  const set = (key, v) => {
-    if (Number.isNaN(v) || store.get()[key] === v) return;
-    store.patch({ [key]: v });
-  };
+  const sheetListeners = new Set();
 
   return {
-    store,
-    get: store.get,
-    subscribe: store.subscribe,
+    /** Store-shaped (get + subscribe) for the Lit StoreController. */
+    store: { get, subscribe },
+    get,
+    subscribe,
 
-    /** @param {number} n  1..RING_MAX_VIEWS */
+    /** @param {number} n */
     setViews(n) {
-      set('views', clampInt(n, 1, RING_MAX_VIEWS));
+      ctx?.ring.setViews(n);
     },
-    /** @param {number} d  degrees above the horizon, 0..90 */
+    /** @param {number} d */
     setElevation(d) {
-      set('elevation', clampInt(d, 0, 90));
+      ctx?.ring.setElevation(d);
     },
-    /** @param {number} d  the first view's yaw, normalized into [0, 360) */
+    /** @param {number} d */
     setOffset(d) {
-      const i = int(d);
-      set('offset', Number.isNaN(i) ? NaN : ((i % 360) + 360) % 360);
+      ctx?.ring.setOffset(d);
     },
-    /** @param {number} n  the tile's edge in px, RING_MIN_SIZE..RING_MAX_SIZE */
+    /** @param {number} n */
     setSize(n) {
-      set('size', clampInt(n, RING_MIN_SIZE, RING_MAX_SIZE));
+      ctx?.ring.setSize(n);
     },
-    /** @param {string} name  a RING_PAPERS key; anything else is a no-op
-     *  (the NaN rule's shape — a stray value changes nothing) */
+    /** @param {string} name */
     setPaper(name) {
-      if (!Object.hasOwn(RING_PAPERS, name)) return;
-      set('paper', name);
+      ctx?.ring.setPaper(name);
     },
 
     /** The follower's publish: stores the sheet by reference and calls every
      *  listener with it (null: no model — the cells show paper). */
     publishSheet(s) {
       sheet = s;
-      for (const fn of listeners) fn(s);
+      for (const fn of sheetListeners) fn(s);
     },
     /** The last published sheet, or null. */
     sheet() {
@@ -128,10 +134,17 @@ export function createRing() {
     },
     /** @param {(s: RingSheet|null) => void} fn  @returns {() => void} unsubscribe */
     onSheet(fn) {
-      listeners.add(fn);
+      sheetListeners.add(fn);
       return () => {
-        listeners.delete(fn);
+        sheetListeners.delete(fn);
       };
+    },
+
+    /** Stop following the workspace (tests; the app's singleton lives as
+     *  long as the page). */
+    dispose() {
+      offWorkspace();
+      serve(null);
     },
   };
 }
@@ -235,5 +248,6 @@ export function texturePackerJson(slug, settings, geometry, { image, version }) 
   };
 }
 
-// The app-wide singleton (one ring per page, like the prefs).
-export const ring = createRing();
+// The app-wide singleton: the façade over the one workspace (one desktop,
+// one windoid, one renderer per page).
+export const ring = createActiveRing(workspaceSingleton);

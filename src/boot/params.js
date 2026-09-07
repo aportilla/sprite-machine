@@ -14,7 +14,7 @@ import { clampTile } from '../lib/atlas.js';
 import { VIEW_NAMES } from '../lib/views.js';
 import { PALETTE_168 } from '../lib/constants.js';
 import { PENCIL_SHAPES } from '../lib/brush.js';
-import { RING_DEFAULTS, RING_PAPERS } from '../state/ring.js';
+import { RING_DEFAULTS, RING_PAPERS } from '../state/ring-settings.js';
 
 /**
  * @param {string} search  location.search (with or without the leading '?')

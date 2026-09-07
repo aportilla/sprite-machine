@@ -10,10 +10,12 @@
 //
 // A dropped PNG may BE an exported document (the format is one .png with
 // metadata text chunks — lib/png-chunks.js), so `loadFile` reads the bytes
-// first: a `Title` chunk restores the document's name and a
-// `sprite-machine:transforms` chunk its per-view reorientation — the lossless
-// round-trip that makes Export ↔ drop a real save path. Non-PNG images (and
-// PNGs with no chunks) fall back to the file's own name.
+// first: a `Title` chunk restores the document's name, a
+// `sprite-machine:transforms` chunk its per-view reorientation, and a
+// `sprite-machine:ring` chunk its 3D Sprite Atlas settings — the lossless
+// round-trip that makes Download ↔ drop a real save path. Non-PNG images
+// (and PNGs with no chunks) fall back to the file's own name and the
+// defaults.
 //
 // One loader writes instead of opening: `seedDefaultDocs` saves the built-in
 // samples into the library as ordinary stored documents — a truly-virgin-boot
@@ -27,6 +29,7 @@ import { workspace } from './state/workspace.js';
 import { createDoc } from './state/doc.js';
 import { files } from './state/files.js';
 import { build } from './state/build.js';
+import { RING_CHUNK_KEY, parseRingChunk } from './state/ring-settings.js';
 
 // Validate + open a decoded sheet as a fresh context. The single trunk under
 // the loaders below. Returns the new context, or null (with the error
@@ -35,23 +38,33 @@ import { build } from './state/build.js';
 // mount hooks — the canvas's mount fill commits its working buffer against
 // ctx.face, so a face switched between the editor's first render and that
 // commit would file the OLD face's buffer under the NEW face.
+// `ring` seeds the context's 3D Sprite Atlas settings the same way (a
+// document's own chunk, or the ?ring boot hook's): at open, before any
+// tracker or follower, so the seed is the document's birth state, not a
+// change that dirties it.
 /** @param {ImageData} imageData
  *  @param {{transforms?: Record<string, object>, name?: string, face?: string,
- *           hooks?: object|null}} [opts] */
-export function openSheet(imageData, { transforms = {}, name, face, hooks = null } = {}) {
+ *           hooks?: object|null,
+ *           ring?: Partial<import('./state/ring-settings.js').RingSettings>|null}} [opts] */
+export function openSheet(
+  imageData,
+  { transforms = {}, name, face, hooks = null, ring = null } = {}
+) {
   const bad = validateSheet(imageData);
   if (bad) {
     build.setError(bad);
     return null;
   }
-  const ctx = workspace.open({ name, face, hooks });
+  const ctx = workspace.open({ name, face, hooks, ring });
   ctx.doc.loadAtlas(imageData, transforms);
   return ctx;
 }
 
 /** @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}} sample
- *  @param {{face?: string, hooks?: object|null}} [opts]  boot-only editor dev hooks */
-export async function loadSample(sample, { face, hooks = null } = {}) {
+ *  @param {{face?: string, hooks?: object|null,
+ *           ring?: Partial<import('./state/ring-settings.js').RingSettings>|null}} [opts]
+ *    boot-only editor dev hooks, and the ?ring hook's settings seed */
+export async function loadSample(sample, { face, hooks = null, ring = null } = {}) {
   let image;
   try {
     image = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
@@ -70,6 +83,7 @@ export async function loadSample(sample, { face, hooks = null } = {}) {
     name: sample.name,
     face,
     hooks,
+    ring,
   });
 }
 
@@ -83,6 +97,7 @@ export async function loadFile(f) {
     const bytes = new Uint8Array(await f.arrayBuffer());
     let title = null;
     let transforms = {};
+    let ring = null;
     if (isPng(bytes)) {
       // Chunk metadata is best-effort: a torn chunk list only costs the name.
       try {
@@ -91,6 +106,7 @@ export async function loadFile(f) {
         if (meta['sprite-machine:transforms']) {
           transforms = JSON.parse(meta['sprite-machine:transforms']);
         }
+        ring = parseRingChunk(meta[RING_CHUNK_KEY]);
       } catch {
         transforms = {};
       }
@@ -98,6 +114,7 @@ export async function loadFile(f) {
     return openSheet(await bytesToImageData(bytes), {
       transforms,
       name: title ?? f.name.replace(/\.[^.]+$/, ''),
+      ring,
     });
   } catch (err) {
     build.setError(`Couldn't read "${f.name}" as an image: ${err.message}`);

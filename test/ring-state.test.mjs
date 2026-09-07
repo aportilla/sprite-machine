@@ -1,11 +1,20 @@
-// Node-runnable tests for the ring slice (state/ring.js): the 3D Sprite
-// Atlas's settings — every setter's range and the paper's name gate — the
-// sheet channel, and the export's metadata chunks. Run: node --test
+// Node-runnable tests for the 3D Sprite Atlas's state: the per-document
+// settings store (state/ring-settings.js — every setter's range, the
+// paper's name gate, the document chunk's round-trip), the façade over the
+// active document's (state/ring.js — what it serves across activations,
+// where its setters land) with the sheet channel, and the export's metadata
+// chunks. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  createRing,
+  createRingSettings,
+  ringChunk,
+  parseRingChunk,
+  RING_DEFAULTS,
+} from '../src/state/ring-settings.js';
+import {
+  createActiveRing,
   ringMetaChunks,
   texturePackerJson,
   RING_MAX_VIEWS,
@@ -13,7 +22,12 @@ import {
   RING_MAX_SIZE,
   RING_CHUNK_KEY,
 } from '../src/state/ring.js';
+import { createWorkspace } from '../src/state/workspace.js';
+import { createDoc } from '../src/state/doc.js';
 import { SOFTWARE } from '../src/state/files.js';
+import { fakeScheduler } from './helpers.mjs';
+
+const createRing = () => createRingSettings();
 
 test('the setters: an integer inside its range, clamped at either bound (the offset wrapped into [0, 360)); NaN a no-op; the paper a name or a no-op', () => {
   // [setter, key, input, expected]: per setter an in-range value, then one
@@ -46,8 +60,62 @@ test('the setters: an integer inside its range, clamped at either bound (the off
   assert.equal(r.get().paper, 'gray', 'a pattern name, or anything else, is a no-op');
 });
 
+test('the document chunk: the four settings round-trip through it (the paper never in it); a seed goes through the setters, so garbage costs only its field; nothing parses to null', () => {
+  const r = createRingSettings({
+    views: 8,
+    elevation: 30,
+    offset: 45,
+    size: 123,
+    paper: 'black',
+  });
+  const text = ringChunk(r.get());
+  assert.deepEqual(JSON.parse(text), { views: 8, elevation: 30, offset: 45, size: 123 });
+  const back = createRingSettings(parseRingChunk(text));
+  assert.deepEqual(back.get(), { ...r.get(), paper: 'white' });
+  const torn = createRingSettings(
+    parseRingChunk('{"views":"lots","size":9999,"bogus":1}')
+  );
+  assert.deepEqual(torn.get(), { ...RING_DEFAULTS, size: RING_MAX_SIZE });
+  assert.equal(parseRingChunk(undefined), null);
+  assert.equal(parseRingChunk('[1,2]'), null);
+  assert.equal(parseRingChunk('{not json'), null);
+});
+
+test('the façade serves the active document’s settings: a switch notifies (only when the reading moves), a setter lands on the served context, the desktop focus keeps the last one until it closes', () => {
+  const ws = createWorkspace({ createDoc: () => createDoc(fakeScheduler()) });
+  const ring = createActiveRing(ws);
+  const seen = [];
+  ring.subscribe((s) => seen.push(s.views));
+  assert.equal(ring.get(), RING_DEFAULTS, 'nothing open: the defaults');
+  ring.setViews(9);
+  assert.equal(ring.get().views, 4, 'and a setter has nowhere to land');
+
+  const a = ws.open({ ring: { views: 6 } });
+  const b = ws.open();
+  ws.setActive(a.key);
+  assert.equal(ring.get().views, 6, 'the active context’s store');
+  ring.setSize(100);
+  assert.equal(a.ring.get().size, 100, 'a setter writes the served context');
+  assert.equal(b.ring.get().size, 64, 'not the other');
+  ws.setActive(b.key);
+  assert.equal(ring.get().views, 4);
+  ws.setActive(null);
+  assert.equal(ring.get(), b.ring.get(), 'the desktop focused: still the last served');
+  ws.close(b.key);
+  assert.equal(ring.get(), RING_DEFAULTS, 'its close drops it');
+  ws.setActive(a.key);
+  ws.setActive(null);
+  ws.setActive(a.key);
+  // a → (the size change on a) → b → a; the close of b (defaults → defaults)
+  // and the null ↔ a trips read the same, so they say nothing.
+  assert.deepEqual(seen, [6, 6, 4, 6], 'a switch to the same reading is silent');
+  ring.dispose();
+});
+
 test('the sheet channel: by reference, every listener, unsubscribe stops', () => {
-  const r = createRing();
+  const r = createActiveRing(
+    createWorkspace({ createDoc: () => createDoc(fakeScheduler()) })
+  );
   assert.equal(r.sheet(), null);
   const seenA = [];
   const seenB = [];

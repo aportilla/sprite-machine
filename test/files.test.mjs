@@ -139,6 +139,31 @@ test('non-identity transforms round-trip through the chunk', async () => {
   assert.deepEqual(loaded.transforms, { front: { rot: 1 } });
 });
 
+test('the ring settings round-trip through their chunk when passed; a save without them writes none, and a load reads none as null', async () => {
+  const { files, doc, storage } = makeWorld();
+  const ring = { views: 8, elevation: 30, offset: 45, size: 100, paper: 'black' };
+  await files.save(doc, { name: 'R', ring });
+  const meta = readTextChunks(storage.map.get('id-1').png);
+  assert.equal(
+    meta['sprite-machine:ring'],
+    '{"views":8,"elevation":30,"offset":45,"size":100}'
+  );
+  assert.deepEqual((await files.load('id-1')).ring, {
+    views: 8,
+    elevation: 30,
+    offset: 45,
+    size: 100,
+  });
+
+  await files.save(doc, { fileId: 'id-1', name: 'R' });
+  assert.equal(
+    readTextChunks(storage.map.get('id-1').png)['sprite-machine:ring'],
+    undefined,
+    'a save without settings removes the chunk (replace semantics)'
+  );
+  assert.equal((await files.load('id-1')).ring, null);
+});
+
 test('load hands back pixels, name and transforms; a missing id resolves null', async () => {
   const { files, doc, frames } = makeWorld();
   stroke(doc);

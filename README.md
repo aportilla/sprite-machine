@@ -532,11 +532,14 @@ captures on a machine with saved docs) and `?hide=<window>[,<window>]`
 (`document|tools|sprite|stage|ring`) hides windows a capture needs out of frame,
 `?ring=<views>[,<elevation>[,<offset>[,<size>[,<paper>]]]]` shows the
 **3D Sprite Atlas** windoid (View → 3D Sprite Atlas, which boots hidden)
-with those settings — `?ring=4` the default set, `?ring=8,30,45,128,gray`
-eight views at 30° from 45° in 128 px tiles on the gray paper (the fifth
-field is the body's paper, `white` / `black` / `gray` — a slice setting
-nothing in the UI writes today, so this hook is the one way to see the
-other two); a missing trailing field keeps its default —
+with those settings seeded into the **boot sample's** document (the
+settings are the document's — a `?file` boot keeps the stored document's
+own and the hook only shows the windoid) — `?ring=4` the default set,
+`?ring=8,30,45,128,gray` eight views at 30° from 45° in 128 px tiles on
+the gray paper (the fifth field is the body's paper, `white` / `black` /
+`gray` — a setting nothing in the UI writes today, so this hook is the
+one way to see the other two); a missing trailing field keeps its
+default —
 and `?now=<when>` (an ISO date-time like `2026-08-24T19:27`, read as local
 time, or epoch milliseconds) **freezes the menu bar clock** at that instant —
 a live clock would otherwise make every shot with the bar in frame differ by
@@ -997,9 +1000,22 @@ Patterns control panel (document tier, not a document — see
   verbatim, and renders **only while shown** (`scene/ring.js`: a change
   behind a hidden windoid marks the sheet dirty, the show renders it;
   shown, at most one render per animation frame, so a stroke follows at
-  the Sprite View's cost class). The settings are app-level and
-  session-only (the `ring` slice — the prefs discipline; per-document
-  persistence in a PNG chunk is the planned follow-up), and the windoid
+  the Sprite View's cost class). **The settings are the document's**:
+  every open document carries its own store of the four (`ctx.ring`,
+  `state/ring-settings.js`), a change **dirties the document** like a
+  stroke, **Save writes them into the PNG** as a `sprite-machine:ring`
+  text chunk (the four as JSON, always written; the paper — a viewing
+  choice — never), and every open path restores them — a stored open, a
+  dropped PNG, a Duplicate's copy — so a document reopens with the ring
+  it was saved with, and a chunkless PNG (an older save, a foreign sheet)
+  opens at the defaults (four views, 45° up, from the front, 64 px).
+  The strip, the Export dialog and the renderer read the **active**
+  document's through one façade (`state/ring.js`'s `ring`), so switching
+  windows switches the settings the way it switches the model: a
+  document with a 128-px tile brings the windoid to that height, and
+  another at the default takes it back; with the desktop focused the
+  windoid, hidden, keeps aiming at the document it last served, and
+  returns with it. The windoid
   is **toggleable**: View → 3D Sprite Atlas shows it (hidden every load)
   and its **close box** — the kit's, kept on this one windoid — hides it,
   one flag both ways (`prefs.showRing`); a show brings it to the front of
@@ -1016,7 +1032,15 @@ Patterns control panel (document tier, not a document — see
   changes with the **top-left held** (only the bottom edge moves: a bigger
   tile grows the window down from where its bar sits, never up or
   sideways — so a strip left docked on the bottom margin grows past it at
-  a big tile; drag it up, or Arrange re-docks it) and **declared to the
+  a big tile; drag it up, or Arrange re-docks it). The size being a
+  document's, a change also arrives with a **document switch** — the same
+  re-fit while the strip is on screen — and, at boot or from the Finder
+  role, behind a strip that is **hidden**: a hidden strip has nothing on
+  screen to hold, so it **re-runs its placement** instead, and the show
+  (or the boot) finds it docked at the height this document's tile
+  derives rather than hanging off the margin by a size nobody typed
+  (hidden by its own toggle and unchanged in size, it comes back exactly
+  where it was). It is **declared to the
   grow box as the kit's size rect**
   (vintage-frames 0.5.6: `min-height` = `max-height` locks the axis, the
   kit's own Patterns-strip idiom, stated from `shell/windows.js` rather
@@ -1224,14 +1248,20 @@ the boot document for captures.
 
 A document is exactly one sprite `.png` — the 3×2 atlas — with all metadata
 in standard PNG text chunks (`lib/png-chunks.js`): `Title`, `Creation Time`,
-`Software`, and `sprite-machine:transforms` (written only when
-non-identity). The pixels alone are already a complete document (tile size
-derives from the dimensions), so **Save, Download and drop-import converge on
-a single format**: File → Download downloads the saved bytes verbatim,
-dropping any downloaded PNG back restores it losslessly (title included — the
-drop path reads the chunks), and any foreign 3×2 sheet is a legal, if
-anonymous, document. A chunk-stripping optimizer costs the name and
-timestamps only.
+`Software`, `sprite-machine:transforms` (written only when
+non-identity) and `sprite-machine:ring` — the **3D Sprite Atlas's
+settings** (`views`, `elevation`, `offset`, `size` as JSON; always
+written, since a setting's default is the writing version's choice
+rather than an identity; the same keyword the exported sheet carries,
+there with the frame, the anchor and the yaw list beside the settings —
+the Title tells the two files apart). The pixels alone are already a
+complete document (tile size derives from the dimensions), so **Save,
+Download and drop-import converge on a single format**: File → Download
+downloads the saved bytes verbatim, dropping any downloaded PNG back
+restores it losslessly (title and atlas settings included — the drop path
+reads the chunks), and any foreign 3×2 sheet is a legal, if anonymous,
+document at the default ring. A chunk-stripping optimizer costs the name,
+the timestamps and the ring settings only.
 
 Storage is IndexedDB (`storage/db.js`: one `docs` store; the record is the
 PNG bytes plus rebuildable listing caches — name, timestamps, icon data-URI,
@@ -1504,7 +1534,9 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
   workspace.js        the OPEN documents: DocContexts (own doc + history + face + fileId/name/dirty
                       + a per-context selection store: the canvas's marquee OUTLINE and the rect
                       tool's drag box, for the strip's readouts — never through the workspace
-                      store, they move at pointer rate),
+                      store, they move at pointer rate — + a per-context RING store, the 3D
+                      Sprite Atlas's settings, seeded at open from the document's chunk, a
+                      change dirtying the context, every save writing it),
                       activeKey (the kit's vf-activate mirrored in), untitled naming, per-context
                       dirty tracking, the stored flows (openStored/save/duplicate/rename/export),
                       and followActive() — the follow-the-active-document primitive
@@ -1515,15 +1547,23 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
                       every load. The low-poly pass has no toggle: always on) + showRing (the 3D
                       Sprite Atlas windoid; View → 3D Sprite Atlas and its close box write it, off by
                       default)
-  ring.js             the 3D Sprite Atlas's settings (views / elevation / offset / size — the tile's
-                      edge in px — app-level, session-only, clamped setters) + the SHEET CHANNEL (the
-                      rendered sheet, by reference, the doc's onLive shape) + ringMetaChunks (the
-                      export's text chunks) + texturePackerJson (the sheet's TexturePacker JSON)
+  ring-settings.js    the 3D Sprite Atlas's settings STORE (views / elevation / offset / size — the
+                      tile's edge in px — / paper; clamped setters; a seed through them) — a
+                      FACTORY, one per open document (ctx.ring) — + the document chunk's
+                      encode/parse (ringChunk / parseRingChunk, the four as JSON). Pure: no
+                      workspace import, so files.js can use it
+  ring.js             the app-level `ring`: a FAÇADE over the ACTIVE document's settings store
+                      (get / subscribe / the setters route to it; a switch notifies only when the
+                      reading moves; the desktop focused keeps the last served until it closes)
+                      + the SHEET CHANNEL (the rendered sheet, by reference, the doc's onLive
+                      shape) + ringMetaChunks (the export's text chunks) + texturePackerJson (the
+                      sheet's TexturePacker JSON)
   build.js            dims / voxels / tris / warnings / error — written by the rebuilder (+ the loaders'
                       errors); the stats read by the 3D View's status tooltip, warnings/error recorded only
   files.js            the document LIBRARY: listing + availability + per-document storage ops
-                      (save/load/rename/remove/export, each taking an explicit doc + identity) —
-                      browser deps (storage, PNG codec, icon art) injected
+                      (save/load/rename/remove/export, each taking an explicit doc + identity —
+                      the identity carrying the ring settings a save writes as their chunk, a
+                      load handing them back) — browser deps (storage, PNG codec, icon art) injected
   shell.js            appActive + icon selection (the menus and the focus gating share one
                       truth; the windoids are permanent — no flags) + the desktop pattern
                       (the Desktop Patterns panel's Set; the one desktop setting that persists)

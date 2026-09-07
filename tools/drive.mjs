@@ -2567,6 +2567,17 @@ async function s27_saveOpenRoundTrip() {
   const p = await at(1, 1);
   await click(p.x, p.y);
   await painted(1, 1);
+  // The 3D Sprite Atlas's settings are the DOCUMENT's (a sprite-machine:ring
+  // chunk): a view count typed into the strip rides the save and comes back
+  // with the reopen, while a new untitled reads its own defaults.
+  const ringViews = () =>
+    evaluate(
+      `(() => {${DEEP} const f = __q('.ring-views'); return f ? +f.value : null; })()`
+    );
+  await pickMenu('#menu-view', 'ring');
+  await until(async () => (await ringViews()) != null);
+  await typeInto('.ring-views', '7');
+  await until(async () => (await ringViews()) === 7);
   await keyPress('s', META);
   const nameOpen = await until(() =>
     evaluate(`(() => {${DEEP} return !!__q('#dlg-name').open; })()`)
@@ -2594,6 +2605,7 @@ async function s27_saveOpenRoundTrip() {
   await newBlankDoc();
   await settle((q) => q.heading === 'untitled');
   const um2 = await urlMirror();
+  const untitledViews = await ringViews();
   const iconPos = await evaluate(
     `(() => {${DEEP}
       const i = __qa('vf-icon').find((el) => el.label === 'Test Doc');
@@ -2604,10 +2616,23 @@ async function s27_saveOpenRoundTrip() {
   s = await settle((q) => q.heading === 'Test Doc');
   const restored = await painted(1, 1);
   um = await urlMirror();
+  const reopenedViews = await ringViews();
   check(
-    'a new untitled clears the fragment; double-clicking the icon reopens the saved doc with its pixels restored and the address bar following',
-    um2.hash === '' && s.heading === 'Test Doc' && restored && um.hash === '#Test%20Doc',
-    JSON.stringify({ untitledUrl: um2, heading: s.heading, restored, url: um })
+    'a new untitled clears the fragment and reads the atlas defaults; double-clicking the icon reopens the saved doc with its pixels and its atlas settings restored and the address bar following',
+    um2.hash === '' &&
+      untitledViews === 4 &&
+      s.heading === 'Test Doc' &&
+      restored &&
+      reopenedViews === 7 &&
+      um.hash === '#Test%20Doc',
+    JSON.stringify({
+      untitledUrl: um2,
+      untitledViews,
+      heading: s.heading,
+      restored,
+      reopenedViews,
+      url: um,
+    })
   );
 }
 

@@ -38,11 +38,21 @@
 // box as the release would paint it), null between drags — for the same
 // reader at the same rate: the strip's rect readout (Sep 5 2026), and
 // nothing else will ever read it (a drag is no selection).
+//
+// THE 3D SPRITE ATLAS'S SETTINGS are a per-context store too (`ctx.ring`,
+// state/ring-settings.js): a document's atlas configuration is the
+// document's — born from its PNG's `sprite-machine:ring` chunk (or the
+// defaults), written back by every save, and a change dirties the context
+// like a stroke (the tracker below subscribes to it). The windoid, the
+// dialog and the renderer read the ACTIVE one's through state/ring.js's
+// façade; nothing here reads the settings — the workspace only carries
+// them between the open paths and the files slice.
 // ---------------------------------------------------------------------------
 
 import { createStore } from './store.js';
 import { createDoc } from './doc.js';
 import { createHistory } from './history.js';
+import { createRingSettings } from './ring-settings.js';
 import { files as filesSingleton, UNTITLED } from './files.js';
 
 /**
@@ -56,6 +66,7 @@ import { files as filesSingleton, UNTITLED } from './files.js';
  *   dirty: boolean,
  *   hooks: object|null,
  *   selection: ReturnType<typeof createStore<{bounds: SelectionBounds|null, rect: SelectionBounds|null}>>,
+ *   ring: ReturnType<typeof createRingSettings>,
  * }} DocContext
  */
 /** The canvas's CURRENT selection rectangle in tile texels, inclusive — it
@@ -145,10 +156,15 @@ export function createWorkspace(deps = {}) {
      * pixels into `ctx.doc` right after — the load's sheet bump is what
      * leaves the newborn context clean. The window layer reconciles a
      * document window into existence from the store change.
-     * @param {{name?: string, fileId?: string|null, face?: string, hooks?: object|null}} [init]
+     * `ring` seeds the context's 3D Sprite Atlas settings at birth (a stored
+     * document's chunk, a dropped PNG's, the ?ring boot hook's) — before the
+     * tracker wires, so the seed is no change: the context is born with them
+     * the way it is born with its pixels.
+     * @param {{name?: string, fileId?: string|null, face?: string, hooks?: object|null,
+     *          ring?: Partial<import('./ring-settings.js').RingSettings>|null}} [init]
      * @returns {DocContext}
      */
-    open({ name, fileId = null, face = 'left', hooks = null } = {}) {
+    open({ name, fileId = null, face = 'left', hooks = null, ring = null } = {}) {
       const doc = makeDoc();
       /** @type {DocContext} */
       const ctx = {
@@ -164,6 +180,7 @@ export function createWorkspace(deps = {}) {
           bounds: /** @type {SelectionBounds|null} */ (null),
           rect: /** @type {SelectionBounds|null} */ (null),
         }),
+        ring: createRingSettings(ring),
       };
       let lastSheet = doc.get().sheet;
       const unsubs = [
@@ -176,6 +193,8 @@ export function createWorkspace(deps = {}) {
           }
         }),
         doc.onLive(() => setDirty(ctx, true)),
+        // An atlas setting is document content: it goes into the file.
+        ctx.ring.subscribe(() => setDirty(ctx, true)),
       ];
       untrack.set(ctx.key, () => unsubs.forEach((u) => u()));
       store.patch({ contexts: [...store.get().contexts, ctx] });
@@ -194,7 +213,7 @@ export function createWorkspace(deps = {}) {
       if (existing) return { ctx: existing, existed: true };
       const rec = await files.load(id);
       if (!rec) return null;
-      const ctx = this.open({ name: rec.name, fileId: id });
+      const ctx = this.open({ name: rec.name, fileId: id, ring: rec.ring });
       ctx.doc.loadAtlas(rec.image, rec.transforms);
       return { ctx, existed: false };
     },
@@ -271,6 +290,7 @@ export function createWorkspace(deps = {}) {
       const res = await files.save(ctx.doc, {
         fileId: ctx.fileId,
         name: name ?? ctx.name,
+        ring: ctx.ring.get(),
       });
       if (!res) return null;
       ctx.fileId = res.id;
@@ -288,6 +308,7 @@ export function createWorkspace(deps = {}) {
       const res = await files.save(ctx.doc, {
         fileId: null,
         name: `${ctx.name} copy`,
+        ring: ctx.ring.get(),
       });
       return res ? res.id : null;
     },
@@ -339,7 +360,12 @@ export function createWorkspace(deps = {}) {
     async exportOf(key) {
       const ctx = byKey(key);
       if (!ctx) return null;
-      return files.exportBytes(ctx.doc, ctx);
+      return files.exportBytes(ctx.doc, {
+        fileId: ctx.fileId,
+        name: ctx.name,
+        dirty: ctx.dirty,
+        ring: ctx.ring.get(),
+      });
     },
   };
   return api;

@@ -12,7 +12,8 @@ import { followActive } from './workspace.js';
 export class StoreController {
   /**
    * @param {import('lit').ReactiveControllerHost} host
-   * @param {ReturnType<typeof import('./store.js').createStore<S>>} store
+   * @param {{get(): S, subscribe(fn: (s: S) => void): () => void}} store
+   *   a createStore, or anything store-shaped (the ring façade's `store`)
    */
   constructor(host, store) {
     (this.host = host).addController(this);

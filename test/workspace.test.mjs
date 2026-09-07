@@ -218,6 +218,24 @@ test('openStored loads a fresh context; a second open returns the existing one',
   assert.equal(await ws.openStored('nope'), null);
 });
 
+test('the ring settings are the context’s: a change dirties it, a save writes them, a stored open restores them clean; an unseeded context has the defaults', async () => {
+  const { ws } = makeWorld();
+  const ctx = openLoaded(ws);
+  assert.equal(ctx.ring.get().views, 4, 'born at the defaults');
+  assert.equal(ctx.dirty, false);
+  ctx.ring.setViews(8);
+  ctx.ring.setSize(100);
+  assert.equal(ctx.dirty, true, 'an atlas setting is document content');
+  await ws.save(ctx.key, 'Ring');
+  assert.equal(ctx.dirty, false);
+  ws.close(ctx.key);
+
+  const { ctx: back } = await ws.openStored('id-1');
+  assert.deepEqual(back.ring.get(), { ...ctx.ring.get() });
+  assert.equal(back.dirty, false, 'the restored settings are birth state, not a change');
+  assert.equal(openLoaded(ws).ring.get().views, 4, 'another context has its own');
+});
+
 test('duplicate stores "«name» copy" and leaves the context untouched', async () => {
   const { ws, storage } = makeWorld();
   const ctx = openLoaded(ws);
