@@ -5,8 +5,10 @@
 // active one checked, a pick bringing its window forward), and every dialog
 // flow (About, Open, the
 // shared name prompt, Properties, the unsaved-changes alert, the
-// storage-unavailable notice, the parked Export 3D Model… configurator — a
-// dummy form whose only live control is Cancel — and the LIVE Export Sprite
+// storage-unavailable notice, the Export 3D Model… dialog — a scale in
+// voxels per meter, a lit / unlit popup and two readouts over an Export
+// that writes the model as one glb, «slug».glb, its skin embedded from
+// bytes (lib/gltf.js through scene/model-export.js) — and the Export Sprite
 // Atlas… dialog: the 3D Sprite Atlas windoid's settings as a form, bound
 // two-way to the ring slice (a change moves the strip behind the modal at
 // once; Cancel doesn't revert — the strip IS the preview), whose Export
@@ -60,6 +62,7 @@ import {
   docFilename,
   ringFilename,
   ringBasename,
+  modelFilename,
   slugOf,
 } from '../state/files.js';
 import { workspace, followActive } from '../state/workspace.js';
@@ -77,9 +80,12 @@ import { downloadPngBytes, downloadBlob, canvasToPngBytes } from '../image-io.js
  * @param {{
  *   patterns: ReturnType<typeof import('./patterns.js').initPatterns>,
  *   ring: ReturnType<typeof import('../scene/ring.js').initRing>,
+ *   model: ReturnType<typeof import('../scene/model-export.js').initModelExport>,
  * }} panels
- *   The panel windows a menu item opens (the Desktop Patterns control panel)
- *   and the 3D Sprite Atlas's renderer follower (Export renders through it).
+ *   The panel windows a menu item opens (the Desktop Patterns control panel),
+ *   the 3D Sprite Atlas's renderer follower (Export Sprite Atlas… renders
+ *   through it) and the 3D model export's subject (Export 3D Model… writes
+ *   its glb through it).
  */
 export function initMenus(desktop, windows, panels) {
   const $ = (sel) => {
@@ -128,9 +134,79 @@ export function initMenus(desktop, windows, panels) {
   on($('#btn-about-ok'), 'click', () => dlgAbout.close());
   on($('#btn-storage-ok'), 'click', () => dlgStorage.close());
   on($('#btn-props-ok'), 'click', () => dlgProps.close());
-  // The Export 3D Model… configurator is PARKED (a dummy form, Export
-  // disabled in the markup) — Cancel is its only live control.
+
+  // --- Export 3D Model… -------------------------------------------------------
+  // The model as ONE glb (lib/gltf.js, through the export subject in
+  // scene/model-export.js — the rebuilder's current mesh, its skin embedded
+  // from bytes): a scale field, voxels per meter (glTF is in meters, and ten
+  // a meter makes the forty-voxel Car four meters long — the parked form's
+  // "units per voxel" turned over, Sep 7 2026), a lighting popup (lit, the
+  // 3D View's flat-shaded metallic-roughness; unlit, the KHR_materials_unlit
+  // extension — the paint exact under no light), and two readouts: the model
+  // (its triangles and skin) and its extent in meters at the scale typed,
+  // live with the field and with every rebuild. The fields are the dialog's
+  // own for the session (the markup's ten and lit every load; nothing
+  // persists — the export is a derivation, the scale a reader's choice).
+  // Export is enabled whenever a model exists, like the atlas's; a failure
+  // lands on the build slice like Download's.
+  const modelScale = $('#model-scale');
+  const modelLighting = $('#model-lighting');
+  const modelStats = $('#model-stats');
+  const modelSize = $('#model-size');
+  const btnExportModelOk = $('#btn-export-model-ok');
+  // A NaN (the field mid-edit) keeps the last committed scale.
+  let lastScale = Number(modelScale.value) || 1;
+  const voxelsPerMeter = () => {
+    const n = Math.round(Number(modelScale.value));
+    if (Number.isFinite(n) && n >= 1) lastScale = n;
+    return lastScale;
+  };
+  const metres = (v) => String(Math.round(v * 100) / 100);
+  const seedModelDialog = () => {
+    const st = panels.model.stats();
+    if (st) {
+      const vpm = voxelsPerMeter();
+      const skin = st.skin ? `, ${st.skin.width} × ${st.skin.height} skin` : '';
+      modelStats.textContent = `${st.triangles.toLocaleString('en-US')} triangles${skin}`;
+      modelSize.textContent = st.extent
+        ? `${st.extent.map((v) => metres(v / vpm)).join(' × ')} m`
+        : '—';
+    } else {
+      modelStats.textContent = '—';
+      modelSize.textContent = '—';
+    }
+    btnExportModelOk.disabled = !st;
+  };
+  const syncModelDialog = () => {
+    if (dlgExportModel.open) seedModelDialog();
+  };
+  function showModelDialog() {
+    seedModelDialog();
+    dlgExportModel.show();
+  }
+  teardown.push(build.subscribe(syncModelDialog));
+  on(modelScale, 'vf-change', syncModelDialog);
   on($('#btn-export-model-cancel'), 'click', () => dlgExportModel.close());
+  on(btnExportModelOk, 'click', () => {
+    const ctx = workspace.active();
+    if (!ctx) return;
+    try {
+      const glb = panels.model.exportGlb({
+        name: ctx.name,
+        voxelsPerMeter: voxelsPerMeter(),
+        unlit: modelLighting.value === 'unlit',
+        generator: `sprite-machine ${__APP_VERSION__}`,
+      });
+      if (!glb) return;
+      downloadBlob(
+        new Blob([glb], { type: 'model/gltf-binary' }),
+        modelFilename(ctx.name)
+      );
+      dlgExportModel.close();
+    } catch (err) {
+      build.setError(`Export failed: ${err.message}`);
+    }
+  });
 
   // The one name-prompt dialog, two uses (first save / rename): resolves the
   // committed name, or null on Cancel/Escape — the vf-close event is the
@@ -633,7 +709,7 @@ export function initMenus(desktop, windows, panels) {
         break;
       }
       case 'export-model':
-        dlgExportModel.show();
+        showModelDialog();
         break;
       case 'export-atlas':
         showRingDialog();
@@ -914,7 +990,14 @@ export function initMenus(desktop, windows, panels) {
   return {
     // showAbout doubles as the boot greeting: a load with no ?file=<name>
     // to open parks at the About box (main.js).
-    actions: { confirmDiscard, openDoc, closeContext, saveThen, showAbout },
+    actions: {
+      confirmDiscard,
+      openDoc,
+      closeContext,
+      saveThen,
+      showAbout,
+      showExportModel: showModelDialog,
+    },
     dispose() {
       for (const fn of teardown) fn();
     },

@@ -42,14 +42,15 @@ test('?sample: a name wins over an index, bad values clamp to a valid one, and i
   assert.equal(parseBootParams('', names).sampleExplicit, false);
 });
 
-test('the flags: fresh, hide, patterns, about, flat, diag, cam', () => {
+test('the flags: fresh, hide, patterns, about, export, flat, diag, cam', () => {
   const b = parseBootParams(
-    '?fresh=1&hide=stage,sprite&patterns=1&about=1&flat=1&diag=1&cam=fq'
+    '?fresh=1&hide=stage,sprite&patterns=1&about=1&export=1&flat=1&diag=1&cam=fq'
   );
   assert.equal(b.fresh, true);
   assert.deepEqual(b.hide, ['stage', 'sprite']);
   assert.equal(b.patterns, true);
   assert.equal(b.about, true);
+  assert.equal(b.exportModel, true);
   assert.equal(b.flat, true);
   assert.equal(b.diag, true);
   assert.equal(b.cam, 'fq');

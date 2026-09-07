@@ -6,7 +6,7 @@ contracts, `tools/drive.mjs` for the user journeys on trusted input,
 Chrome runs unreliably (chorded and right-button drags wedge its renderer),
 feel, the cursor, browser zoom, and the one input no script can give it (a
 dropped file). Run against `npm run dev` in a normal browser,
-`http://localhost:5173/`. Twenty-two items; a run is about ten minutes.
+`http://localhost:5173/`. Twenty-three items; a run is about ten minutes.
 
 ## Gestures the drive cannot make
 
@@ -76,6 +76,12 @@ dropped file). Run against `npm run dev` in a normal browser,
       Then a stroke in a fresh color: it lands on the model at once (the
       skin rebakes per rebuild) while the triangle count holds — a recolor
       is the skin's, not the geometry's; only a silhouette change moves it.
+- [ ] **The glb**: File → Export 3D Model…, Export, then open `car.glb` in
+      a glTF viewer (Blender's importer, or a web viewer): the Car right
+      side up with hard texels — no smear at a color edge — the windshield
+      ramped, standing on the origin, four meters long at the default ten
+      voxels per meter; exported Unlit, the colors flat and exact under no
+      light.
 
 ## Browser zoom and displays
 

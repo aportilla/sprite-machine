@@ -55,6 +55,9 @@ export const docFilename = (name) => `${slugOf(name)}.png`;
 export const ringBasename = (name) => `${slugOf(name)}-atlas`;
 /** "Cargo Ship" -> "cargo-ship-atlas.zip" (the download itself). */
 export const ringFilename = (name) => `${ringBasename(name)}.zip`;
+/** "Cargo Ship" -> "cargo-ship.glb" (File → Export 3D Model…'s download:
+ *  the model and its skin, one file). */
+export const modelFilename = (name) => `${slugOf(name)}.glb`;
 
 /**
  * @param {{

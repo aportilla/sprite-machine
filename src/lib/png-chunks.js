@@ -108,8 +108,10 @@ const latin1String = (b) => {
 const utf8Bytes = (s) => new TextEncoder().encode(s);
 const utf8String = (b) => new TextDecoder().decode(b);
 
-// Serialize one chunk: length | type | data | crc(type+data).
-function buildChunk(type, data) {
+/** Serialize one chunk: length | type | data | crc(type+data). Exported for
+ *  the encoder (png-encode.js), which frames IHDR / IDAT / IEND through it.
+ *  @param {string} type  @param {Uint8Array} data */
+export function buildChunk(type, data) {
   const out = new Uint8Array(8 + data.length + 4);
   const dv = new DataView(out.buffer);
   dv.setUint32(0, data.length);

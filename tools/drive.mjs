@@ -79,11 +79,12 @@ import {
   rmSync,
 } from 'node:fs';
 import { join } from 'node:path';
-// The two imports from src/: the document format's chunk reader and the
-// stored zip's reader, to read the exported atlas file back (an app outcome
-// no unit can reach: the download).
+// The three imports from src/: the document format's chunk reader, the
+// stored zip's reader and the glb's reader, to read the exported files back
+// (an app outcome no unit can reach: the download).
 import { readTextChunks } from '../src/lib/png-chunks.js';
 import { zipEntries } from '../src/lib/zip.js';
+import { glbParts } from '../src/lib/gltf.js';
 
 const APP_PORT = process.argv[2] || '5173';
 const DBG_PORT = +(process.env.DRIVE_DEBUG_PORT || 9333);
@@ -2147,6 +2148,108 @@ async function s23_spriteAtlas() {
   );
 }
 
+async function s29_exportModel() {
+  section('S29 Export 3D Model');
+  const boot = await freshPage();
+  const modelDialog = () =>
+    evaluate(
+      `(() => {${DEEP} return {
+          open: __q('#dlg-export-model').open,
+          scale: __q('#model-scale').value, lighting: __q('#model-lighting').value,
+          stats: __q('#model-stats').textContent, size: __q('#model-size').textContent,
+          exportEnabled: !__q('#btn-export-model-ok').disabled }; })()`
+    );
+  await pickMenu('#menu-file', 'export-model');
+  await until(async () => (await modelDialog()).open);
+  const seeded = await modelDialog();
+  // Tab commits the scale on the blur and keeps the box up — Return would
+  // commit AND export at once, before the download capture below is armed.
+  await typeInto('#model-scale', '20', 'Tab');
+  await until(async () => (await modelDialog()).scale === '20');
+  const typed = await modelDialog();
+  check(
+    'File → Export 3D Model… opens with Export enabled over a readout of the model, and the size readout follows the scale typed',
+    seeded.open === true &&
+      seeded.exportEnabled === true &&
+      /triangles/.test(seeded.stats) &&
+      /m$/.test(seeded.size) &&
+      typed.scale === '20' &&
+      typed.size !== seeded.size,
+    JSON.stringify({ seeded, typed })
+  );
+  // Export = the model as one glb: the download lands in the run's temp dir
+  // and is read back — the header, one primitive over positions / normals /
+  // UVs and an index, the skin as a PNG behind a NEAREST sampler, and the
+  // scale baked into the positions (the lattice floor's center the origin).
+  await send('Browser.setDownloadBehavior', {
+    behavior: 'allowAndName',
+    downloadPath: userDir,
+    eventsEnabled: true,
+  });
+  downloads.clear();
+  const exportBtn = await centreOf('#btn-export-model-ok');
+  await click(exportBtn.x, exportBtn.y);
+  await until(async () => [...downloads.values()].some((d) => d.state === 'completed'));
+  const exported = [...downloads.values()].find((d) => d.state === 'completed') || null;
+  let verdict = false;
+  let detail = JSON.stringify([...downloads.values()]);
+  if (exported) {
+    const file = join(userDir, exported.guid);
+    let parts = null;
+    try {
+      parts = glbParts(new Uint8Array(readFileSync(file)));
+    } catch {}
+    const j = parts?.json;
+    const prim = j?.meshes?.[0]?.primitives?.[0];
+    const pos = prim ? j.accessors[prim.attributes.POSITION] : null;
+    const sampler = j?.samplers?.[0];
+    const imageView = j?.images?.[0] ? j.bufferViews[j.images[0].bufferView] : null;
+    const png = imageView
+      ? parts.bin[imageView.byteOffset] === 0x89 &&
+        parts.bin[imageView.byteOffset + 1] === 0x50
+      : false;
+    // At 20 voxels per meter the model is at most the lattice's width over
+    // twenty across, and it stands on the lattice floor (y ≥ 0).
+    const width = pos ? pos.max[0] - pos.min[0] : 0;
+    verdict =
+      /\.glb$/.test(exported.name) &&
+      j?.asset?.version === '2.0' &&
+      j.asset.extras?.['sprite-machine']?.voxelsPerMeter === 20 &&
+      !!prim &&
+      prim.attributes.NORMAL != null &&
+      prim.attributes.TEXCOORD_0 != null &&
+      prim.indices != null &&
+      j.materials?.[0]?.pbrMetallicRoughness?.baseColorTexture?.index === 0 &&
+      sampler?.magFilter === 9728 &&
+      sampler?.minFilter === 9728 &&
+      png &&
+      width > 0 &&
+      width <= boot.tileW / 20 + 1e-6 &&
+      pos.min[1] >= 0;
+    detail = JSON.stringify({
+      name: exported.name,
+      version: j?.asset?.version,
+      extras: j?.asset?.extras,
+      attributes: prim?.attributes,
+      sampler,
+      png,
+      min: pos?.min,
+      max: pos?.max,
+      tileW: boot.tileW,
+    });
+    if (KEEP_DOWNLOADS) {
+      mkdirSync(KEEP_DOWNLOADS, { recursive: true });
+      copyFileSync(file, join(KEEP_DOWNLOADS, exported.name));
+    }
+  }
+  check(
+    'Export writes «slug».glb: one primitive with positions, normals, UVs and an index, the skin a PNG behind a NEAREST sampler, the typed scale baked into the positions with the lattice floor at the origin',
+    verdict,
+    detail
+  );
+  await settle((p) => p.anyModalOpen === false);
+}
+
 async function s24_desktopPatterns() {
   section('S24 Desktop Patterns');
   await freshPage();
@@ -2866,6 +2969,7 @@ async function main() {
     s26_newDocumentDialog,
     s27_saveOpenRoundTrip,
     s28_browserResize,
+    s29_exportModel,
   ];
   for (const run of scenarios) await run();
 

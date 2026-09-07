@@ -37,7 +37,7 @@ compares a fresh set against them: every "does it look right" question — a
 label's ink, a dotted rule, a header's height, the DITL, the paper — lives
 there as pixels, and a golden changes only in a commit that changed the look
 on purpose, after an eye on the diff. `drive.mjs` covers what no screenshot
-can: about eighty checks over twenty-seven user journeys, driving the desktop
+can: about eighty checks over twenty-eight user journeys, driving the desktop
 over the DevTools Protocol with real trusted input (keys, menu picks,
 ⌘-equivalents, drags, grow-box resizes, the dialogs, a save → reopen
 round-trip through IndexedDB), probing through the components' shadow roots,
@@ -523,7 +523,7 @@ pixels landing like a mount fill (no undo entry) — its **ants standing at
 phase 0** (no ticker, so the shot stays byte-identical across runs) — the
 stepper, face picker, dialog, swatch pick, hover preview, rect drag, fill click,
 and selection marquee / move
-can't be driven headlessly. Six shell-era params round the set out:
+can't be driven headlessly. Seven shell-era params round the set out:
 `?fresh=1` boots with **storage ignored** (no desktop-state restore, no
 `?file` resolution, no saved-doc icons — a bare desktop now, every icon
 being a saved doc — no first-boot seeding, no About box greet, and no
@@ -546,10 +546,11 @@ a live clock would otherwise make every shot with the bar in frame differ by
 the minute — `?patterns=1` opens the **Desktop Patterns** control
 panel once the boot document has landed (the capture tool can't pull a
 menu; under `?fresh` the desktop is on the dither, so the panel shows it
-seeded), and `?about=1` opens the **About box** over the boot document
+seeded), `?about=1` opens the **About box** over the boot document
 (the plain boot's own greet — but that boot's virgin seeding is an
 IndexedDB round-trip the capture tool's virtual-time budget stalls on, so
-under `?fresh` this is the way to a shot of it).
+under `?fresh` this is the way to a shot of it), and `?export=1` opens the
+**Export 3D Model** dialog over the boot document (no menu pull headless).
 `?sample` shares the storage-untouched discipline: it opens the named
 built-in as an untitled from in-memory data, skipping the seeding and the
 `?file`/dialog boot alike (the deterministic path `drive.mjs` drives).
@@ -664,10 +665,27 @@ forward.
   doc prompts for a name), _Duplicate_ ⌘D (the stored copy opens in its own
   window), _Rename…_, _Download_ ⇧⌘E (the document `.png` verbatim — the
   downloaded atlas IS the source format, hence Download rather than Export,
-  and no ellipsis: it acts immediately), _Export 3D Model…_ (the one
-  **parked export configurator** — a dialog previewing the future exporter
-  with every form field disabled and the Export button inert, Cancel the
-  only live control), _Export Sprite Atlas…_ (**live**: the 3D Sprite
+  and no ellipsis: it acts immediately), _Export 3D Model…_ (**live**, Sep 7 2026: the
+  model as **one glTF 2.0 binary**, `«slug».glb` — `car.glb` — from the
+  app's own writer (`src/lib/gltf.js`, pure, Node-tested; three's
+  `GLTFExporter` encodes a texture through a canvas readback, which a
+  privacy browser perturbs, so the skin goes in from bytes through
+  `src/lib/png-encode.js`, verbatim): one primitive of the mesh's own
+  welded positions, per-face normals, UVs and index, the **skin** as an
+  embedded PNG behind a **`NEAREST`** sampler — the hard texel is part of
+  the file — under a metallic-roughness material, metalness 0 and
+  roughness 1, the 3D View's, or, on request, `KHR_materials_unlit`. The
+  dialog: **Scale** in **voxels per meter** (glTF is in meters; ten a
+  meter makes the forty-voxel Car four meters long), a **Lighting** popup
+  (lit / unlit), and two readouts — the model, its triangles and its
+  skin's size, and its **extent in meters** at the scale typed, live. The
+  origin is the **lattice floor's center**, the atlas export's anchor, so
+  a model and its sprite sheet share one origin; Y up, the winding CCW,
+  and every engine's first-party importer reads it as it lands — the
+  reason the color is a texture at all. The fields are the dialog's own
+  for the session (ten and lit every load; nothing persists — the export
+  is a derivation, the scale a reader's choice). Enabled whenever a model
+  exists), _Export Sprite Atlas…_ (**live**: the 3D Sprite
   Atlas windoid's four settings as a form — views, elevation, first angle,
   size — over a readout of the sheet they produce; the fields
   are bound to the same slice the windoid's strip edits, so a change here
@@ -1514,7 +1532,7 @@ assert on it, counts `vf-*` elements, reads a `--vf-*` property, pins
 `resizable` / `header-height` / a size rect, or asserts a drag's delta or
 DOM order after a raise — locating a kit control through its part to drive
 it is fine. **The drive re-derives nothing**: it imports nothing from `src/`
-but the PNG chunk reader and the zip reader (to open the export), and checks that the app applied its arithmetic
+but the PNG chunk reader, the zip reader and the glb reader (to open the exports), and checks that the app applied its arithmetic
 (a resize lands where Arrange lands, read off the page). **One home per
 fact**: no constant pinned against a literal, no default parameter, no
 dev-only URL hook, no guard that a retired feature stays absent, no literal
@@ -1559,6 +1577,10 @@ src/lib/
   sprite-data.js  built-in defaults (as atlases): first-boot seeds + New-dialog templates, + grid->ImageData helper
   png-chunks.js   PNG chunk surgery: parse + tEXt/iTXt read/replace, CRC32 — the document format (pure)
   zip.js          a stored (method 0) zip writer + reader, CRC-32 — Export Sprite Atlas…'s container (pure)
+  png-encode.js   a PNG encoder from bytes (8-bit RGBA, stored deflate, Adler-32) — the skin into the
+                  glb without a canvas, so no privacy browser's farble can touch it (pure)
+  gltf.js         a glTF 2.0 binary writer for one textured mesh + its reader — Export 3D Model…'s
+                  file: the skin behind a NEAREST sampler, lit or KHR_materials_unlit (pure)
   diag.js         geometry watertightness self-check (dev only; ?diag=1)
 src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-tested)
   store.js            createStore(): get / patch / subscribe — values BY REFERENCE, silent no-op patches
@@ -1618,7 +1640,8 @@ src/scene/
                   re-wired per activation) -> buildVoxels -> the wedge mesh (always) -> mesh swap
                   (the geometry, the material AND its skin texture disposed) -> build stats;
                   a window switch re-frames the camera (a new subject); hands every mesh (and
-                  null before a dispose) to one outside consumer through the onMesh seam
+                  null before a dispose) to the outside consumers — the 3D Sprite Atlas's
+                  renderer and the model export — through the onMesh seam
   ring-renderer.js  the 3D Sprite Atlas's own THREE world on an offscreen canvas: a shared-geometry
                   clone of the rebuilder's mesh, an orthographic camera posed per yaw (lib/ring.js),
                   the light rig riding in the camera's frame, N frames rendered into ONE sheet canvas
@@ -1626,6 +1649,9 @@ src/scene/
                   subject, a render per setting change or rebuild — at most one per frame, and only
                   while the windoid is shown (hidden: dirty, the show renders) — published on the
                   ring slice's sheet channel; Export's renderSheet()
+  model-export.js the 3D model export's subject: the rebuilder's mesh through the same onMesh seam,
+                  turned into a glb on demand — the mesh's own buffers, the skin's bytes as a PNG,
+                  the scale in voxels per meter — Export 3D Model…'s feed to lib/gltf.js
 src/shell/        the desktop's behavior modules (imperative wiring over the index.html skeleton)
   layout.js       the window + icon arithmetic (pure, Node-tested): initialPlacement (the smart
                   boot/open arrangement from the raster — the ONLY source of window geometry;
@@ -1899,13 +1925,17 @@ only when the tile's IDENTITY actually changes.
   snapshot. Controlled by a session checkbox in the strip, the fill tool's
   "on all faces" idiom. The single-face move is written so nothing about it
   changes shape for this (see `#applyMove` in `sm-draw-canvas.js`).
-- **Export** — File → Export 3D Model… is a parked configurator dialog, a
-  form only: the merged mesh is glTF-ready **with its skin**
-  (`GLTFExporter` serializes a `MeshStandardMaterial` with a `map` as an
-  embedded PNG under `NEAREST` samplers — which is why the color is a
-  texture at all: the engines' default materials read a `map` as it lands
-  and ignore vertex colors), and the `onMesh` seam the 3D Sprite Atlas
-  added already hands every mesh to a consumer outside the stage. File → Export Sprite Atlas… is live (see
+- **Export** — File → Export 3D Model… is live (see [Menu bar](#menu-bar)):
+  one glb, the skin embedded from bytes behind `NEAREST` samplers, which
+  the engines' default materials read as it lands — the reason the color
+  is a texture at all. Its follow-ups: the skin beside the model as a PNG
+  for an engine that wants it separately (a zip, the atlas export's
+  container), and a word for Unity users — its texture importer generates
+  mipmaps regardless of the sampler, and a mipmapped chart bleeds its
+  neighbours at distance, so mipmaps go off on the texture the way any
+  pixel-art texture is imported there. The `onMesh` seam the 3D Sprite
+  Atlas added hands every mesh to the export's subject beside the atlas's
+  renderer. File → Export Sprite Atlas… is live (see
   [Windows](#windows)); its follow-ups: per-document settings in a
   `sprite-machine:ring` chunk on the document itself (the transforms
   chunk's idiom — the export chunk already has the JSON shape), a drop

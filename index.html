@@ -550,31 +550,31 @@
         <vf-button id="btn-storage-ok" slot="buttons" variant="default">OK</vf-button>
       </vf-dialog>
 
-      <!-- The export configurators. Export 3D Model… is PARKED: a
-           non-functional preview of the future exporter — every form field
-           disabled, the default Export button inert — so the menu grammar
-           can stand before the exporter exists; Cancel (and the close box)
-           is its only live control. Export Sprite Atlas… below is LIVE.
-           Unlike Download (the document .png verbatim — the source), both
-           DERIVE artifacts from the built model. -->
+      <!-- The export configurators. Unlike Download (the document .png
+           verbatim — the source), both DERIVE artifacts from the built
+           model. Export 3D Model…: the model as ONE glTF 2.0 binary,
+           «slug».glb (lib/gltf.js, the app's own writer), its skin texture
+           embedded from bytes with NEAREST samplers — a scale field
+           (voxels per meter: glTF is in meters, and ten a meter makes the
+           forty-voxel Car four meters long), a lighting popup (lit — the 3D
+           View's flat-shaded metallic-roughness material — or unlit, the
+           KHR_materials_unlit extension: the paint exact under no light),
+           and two readouts, the model (its triangles and skin) and its
+           extent in meters at the scale typed, live. The fields are the
+           dialog's own for the session (ten and lit every load); Export is
+           enabled whenever a model exists, like the atlas's. Arithmetic:
+           20 (bar + band) + 16 pad + four 25px rows with 12 between (136)
+           + the 44 footer + 16 + 5 = 237, rounded up to 264 the way the
+           atlas dialog's five rows land on 300 (the kit's own footer
+           measure). -->
       <vf-dialog
         id="dlg-export-model"
         heading="Export 3D Model"
         closable
         width="360"
-        height="190"
+        height="264"
       >
         <vf-stack width="312" gap="12">
-          <vf-stack fill-width direction="row" gap="8" place="start">
-            <vf-stack pad="4 0 0">
-              <vf-label width="80" for="model-format">Format:</vf-label>
-            </vf-stack>
-            <vf-select id="model-format" value="glb" disabled>
-              <vf-option value="glb" selected>glTF Binary (.glb)</vf-option>
-              <vf-option value="gltf">glTF (.gltf)</vf-option>
-              <vf-option value="obj">Wavefront (.obj)</vf-option>
-            </vf-select>
-          </vf-stack>
           <vf-stack fill-width direction="row" gap="8" place="start">
             <vf-stack pad="4 0 0">
               <vf-label width="80" for="model-scale">Scale:</vf-label>
@@ -582,13 +582,37 @@
             <vf-number-field
               id="model-scale"
               min="1"
-              max="100"
+              max="1000"
               step="1"
-              value="1"
-              disabled
+              value="10"
             ></vf-number-field>
             <vf-stack pad="4 0 0">
-              <vf-label>units per voxel</vf-label>
+              <vf-label>voxels per meter</vf-label>
+            </vf-stack>
+          </vf-stack>
+          <vf-stack fill-width direction="row" gap="8" place="start">
+            <vf-stack pad="4 0 0">
+              <vf-label width="80" for="model-lighting">Lighting:</vf-label>
+            </vf-stack>
+            <vf-select id="model-lighting" value="lit">
+              <vf-option value="lit" selected>Lit</vf-option>
+              <vf-option value="unlit">Unlit</vf-option>
+            </vf-select>
+          </vf-stack>
+          <vf-stack fill-width direction="row" gap="8" place="start">
+            <vf-stack pad="4 0 0">
+              <vf-label width="80">Model:</vf-label>
+            </vf-stack>
+            <vf-stack pad="4 0 0">
+              <vf-label id="model-stats"></vf-label>
+            </vf-stack>
+          </vf-stack>
+          <vf-stack fill-width direction="row" gap="8" place="start">
+            <vf-stack pad="4 0 0">
+              <vf-label width="80">Size:</vf-label>
+            </vf-stack>
+            <vf-stack pad="4 0 0">
+              <vf-label id="model-size"></vf-label>
             </vf-stack>
           </vf-stack>
         </vf-stack>

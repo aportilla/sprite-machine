@@ -225,6 +225,9 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     // seeding is an IndexedDB round-trip the capture tool's virtual-time
     // budget stalls on, so under ?fresh this is the way to a shot of it).
     about: params.get('about') === '1',
+    // ?export=1: open the Export 3D Model dialog once the boot document has
+    // landed (a capture hook — the capture tool can't pull a menu).
+    exportModel: params.get('export') === '1',
     // ?ring=…: the 3D Sprite Atlas windoid, shown with these settings (see
     // above); null leaves it hidden at the defaults.
     ring,

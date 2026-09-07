@@ -21,6 +21,7 @@ import { createStage } from './scene/stage.js';
 import { initRebuilder } from './scene/rebuilder.js';
 import { createRingRenderer } from './scene/ring-renderer.js';
 import { initRing } from './scene/ring.js';
+import { initModelExport } from './scene/model-export.js';
 import { loadSample, seedDefaultDocs } from './loaders.js';
 import { initDropTarget } from './drop-target.js';
 import { initShortcuts } from './shortcuts.js';
@@ -151,10 +152,16 @@ const windows = initWindows(desktop, { hide: boot.hide });
 const patterns = initPatterns(desktop, windows, { saved: dstate.desktopPattern() });
 // The 3D Sprite Atlas: the follower (scene/ring.js) that makes its offscreen
 // renderer on the first render — wired here, ahead of the menus, because
-// File → Export Sprite Atlas… renders through it; the rebuilder below hands
-// it every mesh through the onMesh seam.
+// File → Export Sprite Atlas… renders through it; and the 3D model export's
+// subject (scene/model-export.js), which File → Export 3D Model… turns into
+// a glb. The rebuilder below hands both every mesh through the onMesh seam.
 const ringFollow = initRing(createRingRenderer);
-const menus = initMenus(desktop, windows, { patterns, ring: ringFollow });
+const modelExport = initModelExport();
+const menus = initMenus(desktop, windows, {
+  patterns,
+  ring: ringFollow,
+  model: modelExport,
+});
 const icons = initIcons(desktop, {
   actions: menus.actions,
   savedPos: dstate.iconPos,
@@ -187,7 +194,11 @@ const stage = createStage(
 const rebuilder = initRebuilder(stage, {
   flat: boot.flat,
   diag: boot.diag,
-  onMesh: ringFollow.setSubject,
+  // The seam's two consumers: the atlas's renderer and the model export.
+  onMesh: (m) => {
+    ringFollow.setSubject(m);
+    modelExport.setSubject(m);
+  },
 });
 
 const disposeDrop = initDropTarget({
@@ -346,6 +357,7 @@ async function bootDocuments() {
   await bootDocuments();
   if (boot.patterns) patterns.open();
   if (boot.about) menus.actions.showAbout();
+  if (boot.exportModel) menus.actions.showExportModel();
   await bootBackground.catch(() => {});
   document.documentElement.dataset.smBoot = 'ready';
 })();
