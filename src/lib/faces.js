@@ -1,12 +1,24 @@
 // ---------------------------------------------------------------------------
-// Face generation: turn the surface voxels into renderable quads. Pure (no
+// Face generation: turn the surface voxels into renderable rectangles. Pure (no
 // THREE), so it's Node-testable. Two strategies, same output format:
-//   - culledQuads: one quad per exposed face (hidden faces already dropped).
-//   - greedyQuads: merge adjacent coplanar same-color faces into big rects.
+//   - culledQuads: one unit rect per exposed face (hidden faces already dropped).
+//   - greedyQuads: merge adjacent coplanar exposed faces into big rects — on
+//     OCCUPANCY ALONE. Color is never consulted: a flat wall is one rectangle
+//     whatever is painted on it, and the paint rides the skin texture
+//     (skin.js) — a texel per voxel face where a rectangle crosses a color
+//     boundary, a swatch where it does not. (Until Sep 7 2026 the merge was
+//     color-aware, so a painted wall shattered into one rect per color region
+//     and every boundary fed the T-junction repair — color doing geometry's
+//     job. The Car went 1784 → 900 triangles when the merge stopped looking.)
 // Both are appearance-identical; greedy just uses far fewer triangles.
 //
-// A quad is { normal:[3], color:uint32, corners:[[x,y,z]*4] } in voxel units,
-// vertices CCW seen from outside (matches the winding lighting/culling expect).
+// A rect is { face, s, a, b, w, h, normal:[3], corners:[[x,y,z]*4] }: the face
+// key, its slice index along the normal axis, its tangent origin and extent —
+// a along FACE_GEO[face].A, b along .B, so the voxel faces it covers are
+// (a..a+w-1) × (b..b+h-1) on slice s — the outward normal, and its four
+// corners in voxel units, CCW seen from outside (matches the winding
+// lighting/culling expect). The tangent record is what the skin's baker and
+// its UV read need; the corners are what the mesher emits.
 // ---------------------------------------------------------------------------
 
 import { voxIndex, FACE_KEYS } from './carve.js';
@@ -129,8 +141,17 @@ export const FACE_GEO = {
 
 const DIM = (dims, axis) => dims['n' + axis];
 
-// Compose a voxel index from tangent coords (a,b) and slice s for a given face.
-function idxFor(face, a, b, s, dims) {
+/**
+ * The voxel index behind tangent coords (a, b) on slice s of `face` — the
+ * lattice cell whose face that is. One home: the merge, the skin's baker and
+ * the mesher's swatch read all compose it here.
+ * @param {string} face  a FACE_KEYS key
+ * @param {number} a  along FACE_GEO[face].A
+ * @param {number} b  along FACE_GEO[face].B
+ * @param {number} s  the slice along FACE_GEO[face].N
+ * @param {{nx:number, ny:number, nz:number}} dims
+ */
+export function idxFor(face, a, b, s, dims) {
   const g = FACE_GEO[face];
   const c = { x: 0, y: 0, z: 0 };
   c[g.N] = s;
@@ -141,15 +162,12 @@ function idxFor(face, a, b, s, dims) {
 
 // `f` is the caller's known FACE_KEYS index for `face` (constant across a whole
 // per-face pass), threaded in so the greedy triple loop never re-scans for it.
-function faceColorAt(face, f, a, b, s, dims, surfaceMask, faceColor) {
-  const idx = idxFor(face, a, b, s, dims);
-  if (!(surfaceMask[idx] & (1 << f))) return -1;
-  const c = faceColor.get(idx * 6 + f);
-  return c == null ? -1 : c >>> 0;
+function exposedAt(face, f, a, b, s, dims, surfaceMask) {
+  return (surfaceMask[idxFor(face, a, b, s, dims)] & (1 << f)) !== 0;
 }
 
-/** One quad per exposed face. */
-export function culledQuads(dims, surfaceMask, faceColor) {
+/** One unit rect per exposed face. */
+export function culledQuads(dims, surfaceMask) {
   const quads = [];
   FACE_KEYS.forEach((face, f) => {
     const g = FACE_GEO[face];
@@ -160,16 +178,24 @@ export function culledQuads(dims, surfaceMask, faceColor) {
     for (let s = 0; s < dimN; s++)
       for (let b = 0; b < dimB; b++)
         for (let a = 0; a < dimA; a++) {
-          const c = faceColorAt(face, f, a, b, s, dims, surfaceMask, faceColor);
-          if (c < 0) continue;
-          quads.push({ normal, color: c, corners: g.quad(a, a, b, b, s) });
+          if (!exposedAt(face, f, a, b, s, dims, surfaceMask)) continue;
+          quads.push({
+            face,
+            s,
+            a,
+            b,
+            w: 1,
+            h: 1,
+            normal,
+            corners: g.quad(a, a, b, b, s),
+          });
         }
   });
   return quads;
 }
 
-/** Merge coplanar same-color faces per slice (classic greedy meshing). */
-export function greedyQuads(dims, surfaceMask, faceColor) {
+/** Merge coplanar exposed faces per slice on occupancy alone (classic greedy meshing). */
+export function greedyQuads(dims, surfaceMask) {
   const quads = [];
   FACE_KEYS.forEach((face, f) => {
     const g = FACE_GEO[face];
@@ -177,40 +203,30 @@ export function greedyQuads(dims, surfaceMask, faceColor) {
     const dimN = DIM(dims, g.N);
     const dimA = DIM(dims, g.A);
     const dimB = DIM(dims, g.B);
-    // Packed colors set the alpha byte (>2^31), so they must live in a Uint32
-    // array; presence is tracked separately (a color could equal any bit
-    // pattern, so no in-band sentinel is safe).
-    const cell = new Uint32Array(dimA * dimB);
     const has = new Uint8Array(dimA * dimB);
     const used = new Uint8Array(dimA * dimB);
 
     for (let s = 0; s < dimN; s++) {
       used.fill(0);
       for (let b = 0; b < dimB; b++)
-        for (let a = 0; a < dimA; a++) {
-          const c = faceColorAt(face, f, a, b, s, dims, surfaceMask, faceColor);
-          const j = b * dimA + a;
-          has[j] = c < 0 ? 0 : 1;
-          cell[j] = c < 0 ? 0 : c;
-        }
+        for (let a = 0; a < dimA; a++)
+          has[b * dimA + a] = exposedAt(face, f, a, b, s, dims, surfaceMask) ? 1 : 0;
 
       for (let b = 0; b < dimB; b++) {
         for (let a = 0; a < dimA; a++) {
           const base = b * dimA + a;
           if (!has[base] || used[base]) continue;
-          const c = cell[base];
 
           // grow width along A
           let w = 1;
-          while (a + w < dimA && has[base + w] && cell[base + w] === c && !used[base + w])
-            w++;
+          while (a + w < dimA && has[base + w] && !used[base + w]) w++;
 
-          // grow height along B while the whole row segment matches
+          // grow height along B while the whole row segment is exposed and free
           let h = 1;
           grow: for (; b + h < dimB; h++) {
             for (let k = 0; k < w; k++) {
               const j = (b + h) * dimA + a + k;
-              if (!has[j] || cell[j] !== c || used[j]) break grow;
+              if (!has[j] || used[j]) break grow;
             }
           }
 
@@ -218,8 +234,13 @@ export function greedyQuads(dims, surfaceMask, faceColor) {
             for (let da = 0; da < w; da++) used[(b + db) * dimA + a + da] = 1;
 
           quads.push({
+            face,
+            s,
+            a,
+            b,
+            w,
+            h,
             normal,
-            color: c,
             corners: g.quad(a, a + w - 1, b, b + h - 1, s),
           });
         }
@@ -229,8 +250,6 @@ export function greedyQuads(dims, surfaceMask, faceColor) {
   return quads;
 }
 
-export function faceQuads(dims, surfaceMask, faceColor, greedy = true) {
-  return greedy
-    ? greedyQuads(dims, surfaceMask, faceColor)
-    : culledQuads(dims, surfaceMask, faceColor);
+export function faceQuads(dims, surfaceMask, greedy = true) {
+  return greedy ? greedyQuads(dims, surfaceMask) : culledQuads(dims, surfaceMask);
 }

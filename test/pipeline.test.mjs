@@ -244,8 +244,8 @@ test('greedy meshing conserves surface area (no holes or overlaps)', () => {
     }),
   ]) {
     const exposed = exposedFaceCount(r);
-    const culled = culledQuads(r.dims, r.surfaceMask, r.faceColor);
-    const greedy = greedyQuads(r.dims, r.surfaceMask, r.faceColor);
+    const culled = culledQuads(r.dims, r.surfaceMask);
+    const greedy = greedyQuads(r.dims, r.surfaceMask);
     assert.equal(culled.length, exposed); // one quad per exposed face
     assert.equal(sumArea(culled), exposed); // sanity
     assert.equal(sumArea(greedy), exposed); // greedy covers exactly the same area
@@ -258,9 +258,23 @@ test('greedy collapses a solid cube to 6 faces (12 tris)', () => {
     { front: fill(8, 8, 'M'), right: fill(8, 8, 'N'), top: fill(8, 8, 'T') },
     { mirror: { x: true, y: false, z: false } }
   );
-  const greedy = greedyQuads(r.dims, r.surfaceMask, r.faceColor);
-  // 6 outer faces; each is a single flat color -> one merged rect each.
+  const greedy = greedyQuads(r.dims, r.surfaceMask);
+  // 6 outer faces -> one merged rect each.
   assert.equal(greedy.length, 6);
+});
+
+test('greedy merges on occupancy alone: a two-color wall is one rect', () => {
+  // A 4×4 front painted in two colors over a full side and top. The color-
+  // aware merge gave two +z rects (one per band); on occupancy the wall is
+  // one 4×4 rect — the paint is the skin's business (skin.test.mjs).
+  const r = buildVoxels({
+    front: img(['RRRR', 'RRRR', 'BBBB', 'BBBB']),
+    right: fill(4, 4, 'T'),
+    top: fill(4, 4, 'T'),
+  });
+  const pz = greedyQuads(r.dims, r.surfaceMask).filter((q) => q.face === 'pz');
+  assert.equal(pz.length, 1);
+  assert.deepEqual([pz[0].w, pz[0].h], [4, 4]);
 });
 
 // --- 7. Projection conventions pinned (docs/code can't silently drift) -------

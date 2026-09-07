@@ -412,7 +412,11 @@ const PROBE = `(() => {${DEEP}
   const checked = __q('sm-face-picker')?.shadowRoot?.querySelector('vf-radio[checked]');
   // The 3D View's status line is the last build's triangle count (a grouped
   // number and a noun, empty before a build lands) — the digits are the
-  // value; a nonzero count IS "a model reached the stage".
+  // value; a nonzero count IS "a model reached the stage". It moves on a
+  // SILHOUETTE change only: the mesh merges on occupancy and carries its
+  // color as a texture (the skin, Sep 7 2026), so a paint stroke that keeps
+  // the silhouette rebuilds to the same count — no wait may key on the count
+  // after a recolor.
   const buildStats = (() => {
     const el = __q('sm-status-line[kind="build"]');
     const lb = el && el.shadowRoot ? el.shadowRoot.querySelector('vf-label') : null;
@@ -1185,11 +1189,20 @@ async function s10_eraser() {
     })
   );
   // Back to a 1 px circle for the stroke, then an erase drag across the
-  // body: (20,24) sits exactly on the Bresenham run from (8,14) to (32,34).
+  // body ON THE LEFT FACE: the Car draws no RIGHT, so LEFT alone constrains
+  // its plane and the erase CARVES — a silhouette change, the one thing that
+  // moves the triangle count. On FRONT the same drag would only recolor
+  // (BACK still covers every column — the carve unions a plane's two views),
+  // and a recolor is the skin texture's alone: the merge is on occupancy, so
+  // the count holds through any paint stroke (see the probe). (20,24) sits
+  // exactly on the Bresenham run from (8,14) to (32,34).
   await pickShape('circle');
   await click(slider.x, slider.y);
   await keyPress('Home');
   await settle((p) => readoutNums(p) === '1');
+  const left = await centreOf('vf-radio[value="left"]');
+  await click(left.x, left.y);
+  await settle((p) => p.face === 'left');
   const trisBefore = (await probe()).tris;
   await drag(await at(8, 14), await at(32, 34));
   check(
@@ -1199,7 +1212,7 @@ async function s10_eraser() {
   );
   const s = await settle((p) => p.tris !== trisBefore);
   check(
-    'the erase reaches the voxel pipeline: the mesh rebuilds (the tri count moves — the voxel count would not, trap 2)',
+    'the erase reaches the voxel pipeline: the mesh rebuilds (the count moves on a silhouette change; a recolor would leave it, the color being the skin’s)',
     s.tris !== trisBefore,
     `${trisBefore} → ${s.tris}`
   );

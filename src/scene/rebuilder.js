@@ -21,8 +21,11 @@
 // The MESH SEAM: `onMesh` hands every built mesh (with its dims) to one
 // consumer outside the stage — the 3D Sprite Atlas's renderer (scene/ring.js
 // takes a shared-geometry clone) — and null BEFORE the mesh is disposed, so
-// no clone is left holding disposed geometry. The rebuilder stays the
-// pipeline's only consumer; the seam carries its product.
+// no clone is left holding disposed geometry — or a disposed skin: the mesh's
+// material samples a texture (lib/skin.js, the model's colour), and the
+// rebuilder disposes it with the geometry and the material on every swap.
+// The rebuilder stays the pipeline's only consumer; the seam carries its
+// product.
 //
 // This being the pipeline's single call site is what makes the future
 // Web-Worker carve a drop-in: making this function async is a local change.
@@ -51,10 +54,14 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     if (!current) return;
     onMesh?.(null); // the consumer drops its clone before the geometry dies
     stage.scene.remove(current);
-    // Free the GPU resources of the mesh we're replacing. The builder emits a
-    // single vertex-colored MeshStandardMaterial (no textures to dispose).
+    // Free the GPU resources of the mesh we're replacing: the geometry, the
+    // material, and its map — the skin texture, which a material's dispose
+    // does NOT release (a leaked DataTexture per stroke would climb). The 3D
+    // Sprite Atlas's clone shares all three; THREE's dispose event releases
+    // that renderer's copies too, the clone already dropped (onMesh above).
     current.traverse?.((o) => {
       o.geometry?.dispose?.();
+      o.material?.map?.dispose?.();
       o.material?.dispose?.();
     });
     current = null;

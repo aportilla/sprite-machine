@@ -17,6 +17,12 @@
 // Only AXIS-ALIGNED edges can carry interior lattice points here (base-rect
 // edges); wedge edges are unit-length or unit-diagonal and a valid surface
 // never has a vertex in a face interior, so a rect's own diagonal is safe.
+//
+// A triangle is an opaque record beyond its three vertices: every other field
+// (the normal, and the mesher's paint — a chart and its rect, or a swatch
+// color) is copied onto each piece a split produces, so the repair never has
+// to know what rides on a triangle. UVs are NOT carried through here: they
+// are a function of position (skin.js uvOfLattice), read after the repair.
 // ---------------------------------------------------------------------------
 
 const key = (p) => p[0] + ',' + p[1] + ',' + p[2];
@@ -121,10 +127,13 @@ function triangulateConvex(ring, normal, emit) {
 }
 
 /**
- * @param {Array<{a:number[],b:number[],c:number[],normal:number[],color:number}>} tris
+ * @template {{a:number[], b:number[], c:number[], normal:number[]}} T
+ * @param {T[]} tris
  *   triangles with INTEGER-lattice vertex coords, wound CCW wrt `normal`.
- * @returns {Array<{a:number[],b:number[],c:number[],normal:number[],color:number}>}
- *   an equivalent surface with no T-junctions (every edge split at interior verts).
+ * @returns {T[]}
+ *   an equivalent surface with no T-junctions (every edge split at interior
+ *   verts); a split triangle's pieces carry every field of their source but
+ *   the three vertices.
  */
 export function eliminateTJunctions(tris) {
   const vset = new Set();
@@ -144,9 +153,7 @@ export function eliminateTJunctions(tris) {
       continue;
     }
     const ring = [t.a, ...ab, t.b, ...bc, t.c, ...ca];
-    triangulateConvex(ring, t.normal, (a, b, c) =>
-      out.push({ a, b, c, normal: t.normal, color: t.color })
-    );
+    triangulateConvex(ring, t.normal, (a, b, c) => out.push({ ...t, a, b, c }));
   }
   return out;
 }

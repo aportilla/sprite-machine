@@ -6,7 +6,7 @@ contracts, `tools/drive.mjs` for the user journeys on trusted input,
 Chrome runs unreliably (chorded and right-button drags wedge its renderer),
 feel, the cursor, browser zoom, and the one input no script can give it (a
 dropped file). Run against `npm run dev` in a normal browser,
-`http://localhost:5173/`. Twenty-one items; a run is about ten minutes.
+`http://localhost:5173/`. Twenty-two items; a run is about ten minutes.
 
 ## Gestures the drive cannot make
 
@@ -68,6 +68,14 @@ dropped file). Run against `npm run dev` in a normal browser,
       — it stops where it is; orbit it by hand. The Car's windshield and
       wheel arches ramp (the wedge pass is always on, nothing to switch).
       The header's rotate row sits on whole pixels under the dot bar.
+- [ ] **The skin**: `?sample=car`, orbit it — every color sits where it
+      did, the edges hard: no bilinear smear at a chart's edge, no seam of
+      the neighbouring color along a rectangle boundary (the gutter's
+      job), the wedges the body's color, the shadow unchanged. View → 3D
+      Sprite Atlas at the default four views: the frames as they were.
+      Then a stroke in a fresh color: it lands on the model at once (the
+      skin rebakes per rebuild) while the triangle count holds — a recolor
+      is the skin's, not the geometry's; only a silhouette change moves it.
 
 ## Browser zoom and displays
 

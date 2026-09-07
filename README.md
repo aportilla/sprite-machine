@@ -1385,12 +1385,38 @@ any angle — 1 pixel = 1 voxel = 1 cube.
    naive "stamp one sprite pixel down the whole depth ray" smear. Faces no view
    can see fall through a principled chain: mirrored opposite → neighbor average
    → dominant body color.
-6. **Mesh** — exposed faces (interior culled) are **greedy-meshed**: coplanar
-   same-color faces merge into the largest rectangles, so a flat wall is one quad
-   instead of one-per-texel (the reference cube drops from 768 → **12** triangles,
-   appearance-identical). Emitted into one `BufferGeometry` with
-   per-face vertex colors, rendered `MeshStandardMaterial({ vertexColors,
-flatShading })`. One draw call, real shadows, and `flatShading` lets the
+6. **Mesh** — exposed faces (interior culled) are **greedy-meshed on
+   occupancy alone**: coplanar exposed faces merge into the largest
+   rectangles whatever is painted on them, so a flat wall is one quad
+   instead of one-per-texel — and the color rides a **texture, the skin**
+   (`src/lib/skin.js`, pure, Node-tested), not the geometry. A rectangle
+   whose faces cross a color boundary carries a **chart**: one texel per
+   voxel face, the faces' colors verbatim, padded by one replicated texel
+   on every side so a fragment on the rectangle's edge never reads its
+   neighbour (and an importer with bilinear filtering on gets no bleed); a
+   rectangle of one color — every 1×1, and every wedge, one material by
+   its gate — points at that color's **swatch**, a 1×1 chart in a strip,
+   sampled at its center. The skin is therefore only the rectangles the
+   old mesher had to split plus the strip, its size bounded by those
+   rectangles' faces and never by the grid; it is packed deterministically
+   onto a power-of-two sheet, sampled **nearest** with no mipmaps, and
+   built straight from bytes — a `DataTexture`, never a canvas, so a
+   privacy browser's canvas farble can't touch it. Every triangle's UVs
+   are an affine read of its vertices' lattice positions, taken _after_
+   the T-junction repair, so nothing is plumbed through a split. Until Sep
+   7 2026 every triangle carried a vertex color and the merge could only
+   join faces of one color, so a painted wall shattered into a rect per
+   color region and each boundary fed the repair — color doing geometry's
+   job; the Car went **1784 → 900** triangles the day the merge stopped
+   looking (the reference cube's 768 → **12** is the all-one-color case,
+   which always merged whole). The count is the bonus; the reason is the
+   **shape of the export**: the default materials in Unity, Godot and
+   Unreal ignore vertex colors — each needs a custom shader, a toggle or a
+   material-graph node — while a mesh with a `map` renders in every
+   engine's default material as it lands. Emitted into one
+   `BufferGeometry`, rendered `MeshStandardMaterial({ map, flatShading })`
+   (the skin declares sRGB, so the GPU's sampler does the decode the CPU
+   used to). One draw call, real shadows, and `flatShading` lets the
    directional light separate top from sides for free.
 
 ### Render modes
@@ -1402,7 +1428,8 @@ what the 3D View, the 3D Sprite Atlas and the export all render. The
 greedy-voxel solid, every step a hard step) went on Sep 4 2026, and the
 builder it switched to, `voxelMesh` in `src/lib/mesh.js`, went with the
 test trim of Sep 5 2026 — dead code with no consumer; `lib/mesh-util.js`
-keeps the framing and color contract the wedge mesh finishes with.
+keeps the framing and the material — the skin as its texture — the wedge
+mesh finishes with.
 
 ### Low-poly (additive wedges)
 
@@ -1420,7 +1447,12 @@ the sprite author exact, local control over every wedge: to smooth a slope, pain
 both faces it joins the same color (so the top-view art over a windshield must
 match the glass down to its foot); to keep an edge sharp — a roof/window seam, a
 tyre/body join — paint them differently and it can never round. The wedge takes
-its color from that shared material. See `src/lib/wedge-mesh.js`.
+its color from that shared material — its whole surface samples that color's
+swatch in the skin. And since the skin (Sep 7 2026) the strictness is the
+triangle count's too: opening the gate to match the occupancy merge was
+measured on the Car and **loses**, 900 → 1092, more wedges being more gable
+caps and more split base faces — so the gate stays exactly as it is. See
+`src/lib/wedge-mesh.js`.
 
 ### Missing faces
 
@@ -1449,7 +1481,8 @@ over `test/*.test.mjs`, about two hundred cases; `test/wedge-mesh.test.mjs`
 and `test/t-junction.test.mjs` load THREE), densest where a bug would be
 silent and expensive: the visual-hull carve and coloring (`pipeline`,
 `carve`, `colorize`, `ingest`), the wedge mesh's watertightness and its
-gate (`wedge-mesh`, `t-junction`), the rasterizers (`rect`, `fill`,
+gate (`wedge-mesh`, `t-junction`), the skin's bake and its UV read
+(`skin`), the rasterizers (`rect`, `fill`,
 `select`, `brush`, `ants`), the document format (`png-chunks`), the
 document and library contracts (`doc`, `files`, `workspace`, `history`,
 `desktop-state`), and the layout rules (placement, cascade, the nine-slice
@@ -1500,7 +1533,11 @@ src/lib/
   ingest.js       sprite -> occupancy/color arrays (full tile, no crop), place, reorient
   carve.js        dim reconciliation, visual-hull AND, surface extraction
   colorize.js     depth-aware first-hit surface coloring + palette snap
-  faces.js        surface voxels -> quads: greedy-merged or culled (pure)
+  faces.js        surface voxels -> rects {face, s, a, b, w, h, normal, corners}: greedy-merged on
+                  OCCUPANCY alone (the color is the skin's) or culled; idxFor, tangent -> voxel index (pure)
+  skin.js         the SKIN: the model's color as a texture — a chart per multi-color rect (a texel per
+                  voxel face, replicated gutters), a swatch per color, a deterministic power-of-two
+                  shelf pack, bytes only (no canvas); uvOfLattice / swatchUV, the UV reads (pure)
   ring.js         the 3D Sprite Atlas's geometry: the yaw ring, the lattice envelope + square frame,
                   the camera pose (direction + true up), the sheet, the engine anchor (pure)
   rect.js         editor rect tool: rounded-rectangle rasterization, per-row runs (pure)
@@ -1515,9 +1552,10 @@ src/lib/
                   runs, the dash cycle + march + seam) and antsOutlineRuns (the same dashes around any
                   row-convex shape's thin boundary — a circle tip's disc; the box its special case) (pure)
   pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
-  t-junction.js   lattice-exact T-junction repair for merged+wedge meshes (pure)
-  mesh-util.js    shared vertex-color linearizer + mesh finishing (THREE)
-  wedge-mesh.js   voxel solid + additive 45° wedges             (THE mesh, always on; THREE)
+  t-junction.js   lattice-exact T-junction repair for merged+wedge meshes; a split carries every
+                  field of its source but the three vertices (pure)
+  mesh-util.js    the skin as a DataTexture (nearest, sRGB) + mesh finishing: the map material (THREE)
+  wedge-mesh.js   voxel solid + additive 45° wedges, painted by the skin (THE mesh, always on; THREE)
   sprite-data.js  built-in defaults (as atlases): first-boot seeds + New-dialog templates, + grid->ImageData helper
   png-chunks.js   PNG chunk surgery: parse + tEXt/iTXt read/replace, CRC32 — the document format (pure)
   zip.js          a stored (method 0) zip writer + reader, CRC-32 — Export Sprite Atlas…'s container (pure)
@@ -1578,7 +1616,7 @@ src/scene/
   stage.js        renderer, camera + orbit controls, lights, ground, framing, on-demand render loop, resize
   rebuilder.js    the pipeline's ONLY consumer: follows the ACTIVE document (change+live channels,
                   re-wired per activation) -> buildVoxels -> the wedge mesh (always) -> mesh swap
-                  -> build stats;
+                  (the geometry, the material AND its skin texture disposed) -> build stats;
                   a window switch re-frames the camera (a new subject); hands every mesh (and
                   null before a dispose) to one outside consumer through the onMesh seam
   ring-renderer.js  the 3D Sprite Atlas's own THREE world on an offscreen canvas: a shared-geometry
@@ -1829,12 +1867,16 @@ only when the tile's IDENTITY actually changes.
 - **Low-poly scope** — wedges are **additive only**: a convex staircase (a hood
   sloping down-and-out) still steps, and where two wedge ridges meet at a true
   3-D corner it degrades to a step rather than a corner tile. Base faces **are**
-  greedy-merged like voxel mode; the T-junctions that merging leaves against the
+  greedy-merged (on occupancy — the color is the skin's, so no boundary splits
+  a rectangle); the T-junctions that merging leaves against the
   unit-scale wedge edges are stitched out by a lattice-exact repair pass
   (`t-junction.js`), so the result stays watertight (a regression test asserts
   zero boundary edges).
 - **Perf** — hidden-face culling + greedy meshing (both on) keep it to one draw
-  call and a handful of triangles, and the render loop only redraws on change
+  call and a handful of triangles — the mesh carries its color as one small
+  texture, the skin, whose size scales with the multi-color rectangles'
+  faces and never with the grid, rebaked from bytes on every rebuild and
+  disposed with the mesh — and the render loop only redraws on change
   (idle scenes don't repaint). The carve is a synchronous O(n³) walk, so the tile
   stepper is capped at **64** (a 64³ grid still rebuilds live per stroke); to lift
   that ceiling, move `buildVoxels` to a Web Worker (it's pure typed-array code,
@@ -1858,9 +1900,12 @@ only when the tile's IDENTITY actually changes.
   "on all faces" idiom. The single-face move is written so nothing about it
   changes shape for this (see `#applyMove` in `sm-draw-canvas.js`).
 - **Export** — File → Export 3D Model… is a parked configurator dialog, a
-  form only: the merged mesh is glTF-ready (`GLTFExporter`), and the
-  `onMesh` seam the 3D Sprite Atlas added already hands every mesh to a
-  consumer outside the stage. File → Export Sprite Atlas… is live (see
+  form only: the merged mesh is glTF-ready **with its skin**
+  (`GLTFExporter` serializes a `MeshStandardMaterial` with a `map` as an
+  embedded PNG under `NEAREST` samplers — which is why the color is a
+  texture at all: the engines' default materials read a `map` as it lands
+  and ignore vertex colors), and the `onMesh` seam the 3D Sprite Atlas
+  added already hands every mesh to a consumer outside the stage. File → Export Sprite Atlas… is live (see
   [Windows](#windows)); its follow-ups: per-document settings in a
   `sprite-machine:ring` chunk on the document itself (the transforms
   chunk's idiom — the export chunk already has the JSON shape), a drop

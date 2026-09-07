@@ -4,15 +4,14 @@
 // robust to a ±1 canvas farble (the Helium bug: privacy browsers perturb
 // getImageData, and strict RGB equality dropped wedges only there); the shared
 // finish (finishVoxelMesh) centers X/Z and leaves Y exactly as authored; and
-// the vertex-color linearizer maps a packed sRGB color to a [0,1] linear tuple.
+// the mesh carries its skin — a uv per vertex, a one-material triangle at one
+// texel, a charted one across several, the texture on the material.
 // Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildVoxels } from '../src/lib/pipeline.js';
 import { wedgeMesh } from '../src/lib/wedge-mesh.js';
-import { makeVertexColorLinearizer } from '../src/lib/mesh-util.js';
-import { packRGBA } from '../src/lib/ingest.js';
 import { img, fill, oddEdges } from './helpers.mjs';
 
 const wedgeCount = (views) => wedgeMesh(buildVoxels(views)).userData.wedges;
@@ -194,21 +193,51 @@ test('the mesh leaves Y as authored — a floating object does not rest on y=0',
   assert.ok(Math.abs(bb.max.y - 2.5) < EPS, 'top reaches the full world height');
 });
 
-// --- the vertex-color linearizer ----------------------------------------------------
+// --- the skin on the mesh -------------------------------------------------------------
+// The color rides a texture (skin.js), not the vertices: every vertex has a uv
+// in [0,1]; a one-material triangle — a uniform rect's, a wedge's slope, a cap
+// — has its three at one texel (the swatch's center), and a rect that crosses
+// a color boundary has triangles that span texels (a chart).
 
-test('makeVertexColorLinearizer returns a [0,1] linear tuple for a packed color', () => {
-  const lin = makeVertexColorLinearizer();
-  const c = lin(packRGBA(220, 60, 60, 255));
-  assert.equal(c.length, 3);
-  for (const v of c) {
-    assert.equal(typeof v, 'number');
-    assert.ok(v >= 0 && v <= 1, `channel ${v} must be in [0,1]`);
-  }
-  // sRGB->linear is monotonic: the bright red channel outranks the dim ones,
-  // and the two equal input channels linearize to the same value.
-  assert.ok(c[0] > c[1]);
-  assert.equal(c[1], c[2]);
-  // Endpoints map exactly.
-  assert.deepEqual(lin(packRGBA(255, 255, 255, 255)), [1, 1, 1]);
-  assert.deepEqual(lin(packRGBA(0, 0, 0, 255)), [0, 0, 0]);
+test('the mesh carries its skin: uvs in [0,1]; one material samples one texel, a two-color wall a chart', () => {
+  // Each triangle's three uv pairs, off the welded, indexed geometry.
+  const triUVs = (geo) => {
+    const uv = geo.attributes.uv;
+    const idx = geo.index.array;
+    const out = [];
+    for (let t = 0; t < idx.length; t += 3)
+      out.push([0, 1, 2].map((k) => [uv.getX(idx[t + k]), uv.getY(idx[t + k])]));
+    return out;
+  };
+  const oneTexel = (tri) => tri.every(([u, v]) => u === tri[0][0] && v === tri[0][1]);
+
+  // The ramp is one material end to end: every rect uniform, every wedge a
+  // swatch — so every triangle sits at one texel.
+  const mesh = wedgeMesh(buildVoxels(ramp()));
+  const geo = mesh.geometry;
+  assert.equal(geo.attributes.uv.count, geo.attributes.position.count, 'a uv per vertex');
+  for (const v of geo.attributes.uv.array)
+    assert.ok(v >= 0 && v <= 1, `uv ${v} outside [0,1]`);
+  assert.ok(triUVs(geo).every(oneTexel), 'a one-material triangle samples one texel');
+  assert.ok(mesh.material.map, 'the material samples the skin');
+  assert.deepEqual(
+    [mesh.material.map.image.width, mesh.material.map.image.height],
+    [mesh.userData.skin.width, mesh.userData.skin.height]
+  );
+
+  // A wall painted in two colors merges to one +z rect on occupancy — a
+  // chart, whose triangles read across texels.
+  const wall = wedgeMesh(
+    buildVoxels({
+      front: img(['RRRR', 'RRRR', 'BBBB', 'BBBB']),
+      right: fill(4, 4, 'T'),
+      top: fill(4, 4, 'T'),
+    })
+  );
+  assert.ok(wall.userData.skin.charts > 0, 'the wall charts at least one rect');
+  assert.ok(
+    triUVs(wall.geometry).some((t) => !oneTexel(t)),
+    'a charted triangle spans texels'
+  );
+  assert.equal(oddEdges(wall), 0, 'a chart seam splits vertices, never the surface');
 });
