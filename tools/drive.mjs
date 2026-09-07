@@ -79,9 +79,11 @@ import {
   rmSync,
 } from 'node:fs';
 import { join } from 'node:path';
-// The one import from src/: the document format's chunk reader, to read the
-// exported atlas file back (an app outcome no unit can reach: the download).
+// The two imports from src/: the document format's chunk reader and the
+// stored zip's reader, to read the exported atlas file back (an app outcome
+// no unit can reach: the download).
 import { readTextChunks } from '../src/lib/png-chunks.js';
+import { zipEntries } from '../src/lib/zip.js';
 
 const APP_PORT = process.argv[2] || '5173';
 const DBG_PORT = +(process.env.DRIVE_DEBUG_PORT || 9333);
@@ -2010,8 +2012,9 @@ async function s23_spriteAtlas() {
       live.views === '8',
     JSON.stringify({ seeded: seededDlg, live, rb })
   );
-  // Export = the strip's sheet: the download lands in the run's temp dir,
-  // and the file's IHDR and text chunks are read back.
+  // Export = the strip's sheet: the download (a stored zip: the PNG and its
+  // TexturePacker JSON) lands in the run's temp dir, and the PNG's IHDR and
+  // text chunks and the JSON are read back.
   await send('Browser.setDownloadBehavior', {
     behavior: 'allowAndName',
     downloadPath: userDir,
@@ -2026,20 +2029,34 @@ async function s23_spriteAtlas() {
   let detail = JSON.stringify([...downloads.values()]);
   if (exported) {
     const file = join(userDir, exported.guid);
-    const bytes = new Uint8Array(readFileSync(file));
+    let entries = [];
+    try {
+      entries = zipEntries(new Uint8Array(readFileSync(file)));
+    } catch {}
+    const png = entries.find((e) => /\.png$/.test(e.name));
+    const jsonEntry = entries.find((e) => /\.json$/.test(e.name));
+    const bytes = png ? png.bytes : new Uint8Array(32);
     const u32 = (o) =>
       ((bytes[o] << 24) | (bytes[o + 1] << 16) | (bytes[o + 2] << 8) | bytes[o + 3]) >>>
       0;
     const ihdr = { w: u32(16), h: u32(20) };
-    const meta = readTextChunks(bytes);
+    const meta = png ? readTextChunks(bytes) : {};
     let ringMeta = null;
+    let tp = null;
     try {
       ringMeta = JSON.parse(meta['sprite-machine:ring'] || 'null');
+      tp = JSON.parse(jsonEntry ? new TextDecoder().decode(jsonEntry.bytes) : 'null');
     } catch {}
     verdict =
+      entries.length === 2 &&
+      !!png &&
+      /-atlas\.zip$/.test(exported.name) &&
       ihdr.w === 8 * 128 &&
       ihdr.h === 128 &&
-      /-atlas\.png$/.test(exported.name) &&
+      !!tp &&
+      tp.meta?.image === png.name &&
+      Object.keys(tp.frames || {}).length === 8 &&
+      tp.frames[Object.keys(tp.frames)[7]]?.frame?.x === 7 * 128 &&
       !!ringMeta &&
       ringMeta.views === 8 &&
       ringMeta.elevation === rb.elev &&
@@ -2052,14 +2069,21 @@ async function s23_spriteAtlas() {
       typeof ringMeta.anchor?.y === 'number' &&
       typeof meta.Title === 'string' &&
       typeof meta.Software === 'string';
-    detail = JSON.stringify({ ihdr, name: exported.name, ringMeta, Title: meta.Title });
+    detail = JSON.stringify({
+      ihdr,
+      name: exported.name,
+      entries: entries.map((e) => e.name),
+      ringMeta,
+      tpImage: tp?.meta?.image,
+      Title: meta.Title,
+    });
     if (KEEP_DOWNLOADS) {
       mkdirSync(KEEP_DOWNLOADS, { recursive: true });
       copyFileSync(file, join(KEEP_DOWNLOADS, exported.name));
     }
   }
   check(
-    'Export writes the sheet as «slug»-atlas.png at views·size × size with the sprite-machine:ring chunk beside Title and Software',
+    'Export writes «slug»-atlas.zip: the sheet PNG at views·size × size with the sprite-machine:ring chunk beside Title and Software, and a TexturePacker JSON naming it with a frame per view',
     verdict,
     detail
   );

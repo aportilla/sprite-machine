@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {
   createRing,
   ringMetaChunks,
+  texturePackerJson,
   RING_MAX_VIEWS,
   RING_MIN_SIZE,
   RING_MAX_SIZE,
@@ -87,4 +88,36 @@ test('ringMetaChunks: Title, Software, and a JSON that round-trips — the paper
     anchor: { x: 61.5, y: 96.1 },
     yaws: [45, 90, 135],
   });
+});
+
+test('texturePackerJson: one untrimmed frame per yaw at its column with the anchor as a normalized pivot, the ring as one animation, and meta naming the sibling PNG plus the same record the chunk carries', () => {
+  const settings = { views: 3, elevation: 30, offset: 45, size: 100, paper: 'gray' };
+  const geometry = {
+    frame: 100,
+    scale: 1.25,
+    anchor: { x: 50, y: 80 },
+    yaws: [45, 165, 285],
+  };
+  const tp = texturePackerJson('car', settings, geometry, {
+    image: 'car-atlas.png',
+    version: '1.2.3',
+  });
+  assert.deepEqual(Object.keys(tp.frames), ['car-0', 'car-1', 'car-2']);
+  assert.deepEqual(tp.frames['car-2'], {
+    frame: { x: 200, y: 0, w: 100, h: 100 },
+    rotated: false,
+    trimmed: false,
+    spriteSourceSize: { x: 0, y: 0, w: 100, h: 100 },
+    sourceSize: { w: 100, h: 100 },
+    pivot: { x: 0.5, y: 0.8 },
+  });
+  assert.deepEqual(tp.animations, { car: ['car-0', 'car-1', 'car-2'] });
+  assert.equal(tp.meta.image, 'car-atlas.png');
+  assert.equal(tp.meta.version, '1.2.3');
+  assert.deepEqual(tp.meta.size, { w: 300, h: 100 });
+  assert.deepEqual(
+    tp.meta['sprite-machine'],
+    JSON.parse(ringMetaChunks('Car', settings, geometry)[RING_CHUNK_KEY]),
+    'the same record as the PNG chunk, the paper never in it'
+  );
 });

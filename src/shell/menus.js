@@ -10,8 +10,10 @@
 // Atlas… dialog: the 3D Sprite Atlas windoid's settings as a form, bound
 // two-way to the ring slice (a change moves the strip behind the modal at
 // once; Cancel doesn't revert — the strip IS the preview), whose Export
-// saves the strip's exact sheet as «slug»-atlas.png with the ring's
-// metadata chunk. File → Download is the source path.
+// saves the strip's exact sheet as «slug»-atlas.zip: the sheet PNG (with
+// the ring's metadata chunk) and its TexturePacker JSON, siblings by name
+// in one stored zip — a browser gives one download per gesture. File →
+// Download is the source path.
 // Behavior only — the markup lives in
 // index.html, the aesthetics in the kit. (Settings… is parked: the render
 // toggle moved to the 3D View's controls strip, and the emptied item sits
@@ -47,18 +49,27 @@ import { shell } from '../state/shell.js';
 import {
   ring,
   ringMetaChunks,
+  texturePackerJson,
   RING_MAX_VIEWS,
   RING_MIN_SIZE,
   RING_MAX_SIZE,
 } from '../state/ring.js';
-import { files, UNTITLED, docFilename, ringFilename } from '../state/files.js';
+import {
+  files,
+  UNTITLED,
+  docFilename,
+  ringFilename,
+  ringBasename,
+  slugOf,
+} from '../state/files.js';
 import { workspace, followActive } from '../state/workspace.js';
 import { TILE_MIN, TILE_MAX, clampTile } from '../lib/atlas.js';
 import { SAMPLES } from '../lib/sprite-data.js';
 import { ringFrame, ringSheet, ringAnchor, ringYaws } from '../lib/ring.js';
 import { setTextChunks } from '../lib/png-chunks.js';
+import { zipStore } from '../lib/zip.js';
 import { loadSample, loadBlank } from '../loaders.js';
-import { downloadPngBytes, canvasToPngBytes } from '../image-io.js';
+import { downloadPngBytes, downloadBlob, canvasToPngBytes } from '../image-io.js';
 
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
@@ -494,9 +505,11 @@ export function initMenus(desktop, windows, panels) {
   });
   on($('#btn-export-atlas-cancel'), 'click', () => dlgExportAtlas.close());
   // Export = the strip's sheet: the follower renders the whole strip now
-  // (whether or not the windoid is shown), the canvas becomes PNG bytes, and
+  // (whether or not the windoid is shown), the canvas becomes PNG bytes with
   // the ring's metadata chunk — the settings, the frame, the anchor, the yaw
-  // list — rides beside the Title and Software chunks. Failures land on the
+  // list — beside the Title and Software chunks, and the same record shapes
+  // the TexturePacker JSON beside it; the pair goes out as one stored zip
+  // (one download per gesture is all a browser gives). Failures land on the
   // build slice like Download's.
   on(btnExportAtlasOk, 'click', async () => {
     const ctx = workspace.active();
@@ -506,16 +519,29 @@ export function initMenus(desktop, windows, panels) {
       const canvas = panels.ring.renderSheet();
       const st = ring.get();
       const { px, scale } = ringFrame(dims, st.elevation, st.size);
-      const bytes = setTextChunks(
+      const geometry = {
+        frame: px,
+        scale,
+        anchor: ringAnchor(dims, st.elevation, st.size),
+        yaws: ringYaws(st.views, st.offset),
+      };
+      const base = ringBasename(ctx.name);
+      const png = setTextChunks(
         await canvasToPngBytes(canvas),
-        ringMetaChunks(ctx.name, st, {
-          frame: px,
-          scale,
-          anchor: ringAnchor(dims, st.elevation, st.size),
-          yaws: ringYaws(st.views, st.offset),
-        })
+        ringMetaChunks(ctx.name, st, geometry)
       );
-      downloadPngBytes(bytes, ringFilename(ctx.name));
+      const json = texturePackerJson(slugOf(ctx.name), st, geometry, {
+        image: `${base}.png`,
+        version: __APP_VERSION__,
+      });
+      const zip = zipStore([
+        { name: `${base}.png`, bytes: png },
+        {
+          name: `${base}.json`,
+          bytes: new TextEncoder().encode(JSON.stringify(json, null, 2)),
+        },
+      ]);
+      downloadBlob(new Blob([zip], { type: 'application/zip' }), ringFilename(ctx.name));
       dlgExportAtlas.close();
     } catch (err) {
       build.setError(`Export failed: ${err.message}`);

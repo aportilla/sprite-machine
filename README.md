@@ -670,12 +670,26 @@ forward.
   are bound to the same slice the windoid's strip edits, so a change here
   moves the strip behind the modal at once and Cancel reverts nothing — the
   strip IS the preview; **Export** saves exactly the pixels the strip shows,
-  the whole sheet as `«slug»-atlas.png` — `car-atlas.png` — with a `Title`
-  (`«name» atlas`), the `Software` marker and a **`sprite-machine:ring`**
-  text chunk carrying the settings, the frame size, the yaw list and the
-  engine **anchor** (where the lattice floor's center lands in every frame,
-  the feet-row); enabled whenever a model exists, the windoid shown or not —
-  see the 3D Sprite Atlas under [Windows](#windows)), and _Properties…_
+  the whole sheet, as **one zip** — `«slug»-atlas.zip`, `car-atlas.zip` —
+  holding two siblings by name: **`car-atlas.png`**, the sheet with a
+  `Title` (`«name» atlas`), the `Software` marker and a
+  **`sprite-machine:ring`** text chunk carrying the settings, the frame
+  size, the yaw list and the engine **anchor** (where the lattice floor's
+  center lands in every frame, the feet-row), and **`car-atlas.json`**, a
+  **TexturePacker** sheet description in the JSON-hash shape Phaser, PixiJS
+  and the Godot / Unity importers load by filename pair: a frame per view
+  (`car-0`, `car-1`, … in yaw order, each an untrimmed `size × size` box at
+  its column) carrying the anchor as its normalized **`pivot`** — so the
+  feet-row is the origin the engine uses, with no reader code — an
+  `animations` block naming the ring as one sequence, and `meta` naming the
+  sibling PNG, the sheet size and, under a `sprite-machine` key, the same
+  record the chunk holds. The zip is **stored** (no compression — the PNG is
+  deflated already, the JSON tiny) and written by the app's own
+  sixty-line primitive (`src/lib/zip.js`, pure, Node-tested against zlib's
+  CRC), no dependency; a zip because a browser gives **one download per
+  gesture** and the export is a pair. Enabled whenever a model exists, the
+  windoid shown or not — see the 3D Sprite Atlas under
+  [Windows](#windows)), and _Properties…_
   (name, atlas dims, the tile-size stepper — all of the active document).
 - **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (the ACTIVE document's history;
   disabled until it has something — which also hands the key back to a
@@ -1433,7 +1447,7 @@ assert on it, counts `vf-*` elements, reads a `--vf-*` property, pins
 `resizable` / `header-height` / a size rect, or asserts a drag's delta or
 DOM order after a raise — locating a kit control through its part to drive
 it is fine. **The drive re-derives nothing**: it imports nothing from `src/`
-but the PNG chunk reader, and checks that the app applied its arithmetic
+but the PNG chunk reader and the zip reader (to open the export), and checks that the app applied its arithmetic
 (a resize lands where Arrange lands, read off the page). **One home per
 fact**: no constant pinned against a literal, no default parameter, no
 dev-only URL hook, no guard that a retired feature stays absent, no literal
@@ -1472,6 +1486,7 @@ src/lib/
   wedge-mesh.js   voxel solid + additive 45° wedges             (THE mesh, always on; THREE)
   sprite-data.js  built-in defaults (as atlases): first-boot seeds + New-dialog templates, + grid->ImageData helper
   png-chunks.js   PNG chunk surgery: parse + tEXt/iTXt read/replace, CRC32 — the document format (pure)
+  zip.js          a stored (method 0) zip writer + reader, CRC-32 — Export Sprite Atlas…'s container (pure)
   diag.js         geometry watertightness self-check (dev only; ?diag=1)
 src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-tested)
   store.js            createStore(): get / patch / subscribe — values BY REFERENCE, silent no-op patches
@@ -1501,7 +1516,7 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
   ring.js             the 3D Sprite Atlas's settings (views / elevation / offset / size — the tile's
                       edge in px — app-level, session-only, clamped setters) + the SHEET CHANNEL (the
                       rendered sheet, by reference, the doc's onLive shape) + ringMetaChunks (the
-                      export's text chunks)
+                      export's text chunks) + texturePackerJson (the sheet's TexturePacker JSON)
   build.js            dims / voxels / tris / warnings / error — written by the rebuilder (+ the loaders'
                       errors); the stats read by the 3D View's status tooltip, warnings/error recorded only
   files.js            the document LIBRARY: listing + availability + per-document storage ops
@@ -1579,8 +1594,8 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   lines stamped at wire-up from vite.config.js's define — / Settings / New
                   Document (templates + tile size) / Open / name prompt / Properties /
                   unsaved-changes / storage notice / Export Sprite Atlas — the ring slice's
-                  settings as a live form, Export = the strip's sheet as «slug»-atlas.png with
-                  the ring chunk); the quit cascade
+                  settings as a live form, Export = the strip's sheet as «slug»-atlas.zip: the
+                  PNG with the ring chunk + its TexturePacker JSON); the quit cascade
   icons.js        the icon layer: one vf-icon per saved doc (nothing else), generated front-tile art,
                   open/rename wiring, open ghosts, raster-derived placement + boot clamp + the
                   resize re-pin (below the menu bar), the Finder wire (icon presses deactivate; the

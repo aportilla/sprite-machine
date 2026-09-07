@@ -911,6 +911,13 @@ and an eye on the dev server are the verification.
 
 ## 8. Follow-ups (out of scope here; the model is ready for them)
 
+- **A TexturePacker JSON beside the sheet** — SHIPPED Sep 7 2026: the
+  export is `«slug»-atlas.zip` (a stored zip, `lib/zip.js`, no dependency
+  — one download per gesture is all a browser gives), holding the PNG
+  exactly as before and `«slug»-atlas.json` in TexturePacker's JSON-hash
+  shape (`texturePackerJson` in `state/ring.js`): a frame per yaw with the
+  engine anchor as its normalized pivot, an `animations` block, and the
+  ring record under `meta["sprite-machine"]`. README §Menu bar.
 - **Per-document settings** in a `sprite-machine:ring` chunk on the
   DOCUMENT (the transforms chunk's idiom): the slice becomes per-context
   (a `ring` store on `DocContext`, `followActive` for the strip), a change

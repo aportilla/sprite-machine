@@ -60,7 +60,9 @@ export const RING_MIN_SIZE = 2;
 export const RING_MAX_SIZE = 255;
 
 /** The export's own text chunk: the settings, the frame, the anchor and the
- *  yaw list — enough for an engine importer to slice and align the sheet. */
+ *  yaw list — enough for an engine importer to slice and align the sheet
+ *  (the TexturePacker JSON beside the PNG carries the same record, in the
+ *  shape engines already read — `texturePackerJson`). */
 export const RING_CHUNK_KEY = 'sprite-machine:ring';
 
 /**
@@ -135,34 +137,97 @@ export function createRing() {
 }
 
 /**
+ * @typedef {{frame: number, scale: number, anchor: {x: number, y: number}, yaws: number[]}} RingGeometry
+ *   frame: the tile's edge in px (equal to `size`); scale: the DERIVED px
+ *   per voxel, a float; anchor: where the lattice floor's center lands in
+ *   every frame (the feet-row); yaws: one per view, in sheet order.
+ */
+
+/** The ring's own record — the settings (the four the sheet depends on;
+ *  the paper is the windoid's own and never written), then the frame (an
+ *  importer reading `frame` keeps working), the scale (how an engine relates
+ *  the sprite's px to the lattice's units), the anchor and the yaw list. The
+ *  one object the PNG chunk and the TexturePacker JSON both carry.
+ *  @param {Pick<RingSettings, 'views'|'elevation'|'offset'|'size'>} settings
+ *  @param {RingGeometry} geometry */
+function ringRecord({ views, elevation, offset, size }, { frame, scale, anchor, yaws }) {
+  return {
+    views,
+    elevation,
+    offset,
+    size,
+    frame,
+    scale,
+    anchor: { x: anchor.x, y: anchor.y },
+    yaws: [...yaws],
+  };
+}
+
+/**
  * The metadata chunks the export writes beside the pixels (pure; the
  * exporter passes what it knows): a Title naming the sheet after the
- * document, the Software marker, and the ring chunk's JSON — the settings
- * (the four the sheet depends on; the paper is the windoid's own and never
- * written), then the frame (equal to `size`; an importer reading `frame`
- * keeps working), the DERIVED px per voxel (`scale`, a float — how an
- * engine relates the sprite's px to the lattice's units), the anchor and
- * the yaw list.
+ * document, the Software marker, and the ring chunk's JSON — `ringRecord`.
  * @param {string} name  the document's name
  * @param {Pick<RingSettings, 'views'|'elevation'|'offset'|'size'>} settings
- * @param {{frame: number, scale: number, anchor: {x: number, y: number}, yaws: number[]}} geometry
+ * @param {RingGeometry} geometry
  * @returns {Record<string, string>}
  */
-export function ringMetaChunks(name, settings, { frame, scale, anchor, yaws }) {
-  const { views, elevation, offset, size } = settings;
+export function ringMetaChunks(name, settings, geometry) {
   return {
     Title: `${name} atlas`,
     Software: SOFTWARE,
-    [RING_CHUNK_KEY]: JSON.stringify({
-      views,
-      elevation,
-      offset,
-      size,
-      frame,
-      scale,
-      anchor: { x: anchor.x, y: anchor.y },
-      yaws: [...yaws],
-    }),
+    [RING_CHUNK_KEY]: JSON.stringify(ringRecord(settings, geometry)),
+  };
+}
+
+/**
+ * The sheet's TexturePacker JSON (the "JSON hash" flavor — what Phaser,
+ * PixiJS and the Godot / Unity importers load by filename pair; pure): one
+ * frame per view, keyed `«slug»-«index»` in yaw order, each an untrimmed,
+ * unrotated `frame`×`frame` box at its column of the strip, carrying the
+ * engine anchor as its normalized **pivot** (TexturePacker's own field: x
+ * right, y DOWN from the frame's top-left, 0..1 — so the feet-row becomes
+ * the origin an engine actually uses, with no reader code); an
+ * `animations` block naming the ring as one sequence in that order (the
+ * TexturePacker extension PixiJS's AnimatedSprite reads); and `meta` in
+ * TexturePacker's shape (`app`, `version`, `image` — the sibling PNG's
+ * filename — `format`, the sheet `size`, `scale`) plus the ring's own
+ * record under a `sprite-machine` key (loaders ignore keys they don't
+ * know — the same object as the PNG chunk).
+ * @param {string} slug  the document's filename slug (the frame keys' prefix)
+ * @param {Pick<RingSettings, 'views'|'elevation'|'offset'|'size'>} settings
+ * @param {RingGeometry} geometry
+ * @param {{image: string, version: string}} file  the PNG's filename beside
+ *   this JSON, and the app version the meta names
+ * @returns {object}  JSON-ready (the exporter stringifies it)
+ */
+export function texturePackerJson(slug, settings, geometry, { image, version }) {
+  const { frame, anchor, yaws } = geometry;
+  const keys = yaws.map((_, i) => `${slug}-${i}`);
+  /** @type {Record<string, object>} */
+  const frames = {};
+  keys.forEach((key, i) => {
+    frames[key] = {
+      frame: { x: i * frame, y: 0, w: frame, h: frame },
+      rotated: false,
+      trimmed: false,
+      spriteSourceSize: { x: 0, y: 0, w: frame, h: frame },
+      sourceSize: { w: frame, h: frame },
+      pivot: { x: anchor.x / frame, y: anchor.y / frame },
+    };
+  });
+  return {
+    frames,
+    animations: { [slug]: keys },
+    meta: {
+      app: 'sprite-machine',
+      version,
+      image,
+      format: 'RGBA8888',
+      size: { w: yaws.length * frame, h: frame },
+      scale: '1',
+      'sprite-machine': ringRecord(settings, geometry),
+    },
   };
 }
 

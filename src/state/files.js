@@ -33,8 +33,9 @@ export const SOFTWARE = 'sprite-machine 1';
 // unconventional sheets; editor-authored docs never need it).
 const TRANSFORMS_KEY = 'sprite-machine:transforms';
 
-/** "Cargo Ship" -> "cargo-ship" (the filename slug both downloads share). */
-const slugOf = (name) => {
+/** "Cargo Ship" -> "cargo-ship" (the filename slug both downloads share —
+ *  and the frame keys' prefix in the export's TexturePacker JSON). */
+export const slugOf = (name) => {
   const slug = (name || UNTITLED)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -45,9 +46,12 @@ const slugOf = (name) => {
 /** "Cargo Ship" -> "cargo-ship.png" (File → Download's filename). */
 export const docFilename = (name) => `${slugOf(name)}.png`;
 
-/** "Cargo Ship" -> "cargo-ship-atlas.png" (File → Export Sprite Atlas…'s
- *  filename: the same slug, `-atlas` before the extension). */
-export const ringFilename = (name) => `${slugOf(name)}-atlas.png`;
+/** "Cargo Ship" -> "cargo-ship-atlas" (File → Export Sprite Atlas…'s
+ *  basename: the same slug, `-atlas` after it — the zip's name and, inside
+ *  it, the sheet PNG's and the TexturePacker JSON's, siblings by name). */
+export const ringBasename = (name) => `${slugOf(name)}-atlas`;
+/** "Cargo Ship" -> "cargo-ship-atlas.zip" (the download itself). */
+export const ringFilename = (name) => `${ringBasename(name)}.zip`;
 
 /**
  * @param {{
