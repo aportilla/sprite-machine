@@ -92,18 +92,19 @@
 // had before the zoom (a session truth, never persisted), top-left held
 // both ways: see onZoom below.
 //
-// ⌘J — View → Arrange Windows / Zoom Window — is ONE item under a STATE
-// rule (menus.js owns the item; arranged() and zoomActive() here are its
-// two halves): arranged() asks whether the screen IS the arrangement —
-// every visible window's live box against the box its placement would
-// write on the current raster — and the item is Arrange Windows while
-// something is off (a drag, a grow, the strip shown into the doc box's
-// band, a browser resize the document window sprung with) and Zoom Window
-// (the zoom box's own toggle on the active document window) once
-// everything is where the placement puts it. Two readings are
+// ⌘J — View → Arrange Windows — is ONE item under a STATE rule (menus.js
+// owns the item; arranged() and zoomActive() here are its two halves; the
+// label is "Arrange Windows" in both states, only the item's VALUE turns):
+// arranged() asks whether the screen IS the arrangement — every visible
+// window's live box against the box its placement would write on the
+// current raster — and the item's value is `arrange` while something is
+// off (a drag, a grow, the strip shown into the doc box's band, a browser
+// resize the document window sprung with) and `zoom` (the zoom box's own
+// toggle on the active document window) once everything is where the
+// placement puts it. Two readings are
 // deliberately loose: which document sits on which cascade slot is
-// stacking bookkeeping (a raise alone must not turn the item to Arrange —
-// the chord would swap two windows plainly on the cascade), and the
+// stacking bookkeeping (a raise alone must not turn the value to `arrange`
+// — the chord would swap two windows plainly on the cascade), and the
 // active window may sit zoomed from its slot (so repeats of ⌘J toggle
 // that one window while nothing else moves). So that the test and the
 // writes share one arithmetic, every placement below is a computed TARGET
@@ -319,8 +320,8 @@ export function initWindows(desktop, { hide = [] } = {}) {
   /** The layout signal (onLayout below): told after every geometry write
    *  this module makes — a placement, a re-fit, a re-pin, a zoom, the
    *  window set changing — and after every gesture it hears (a drag's
-   *  release, a grow's commit). menus.js re-derives the View menu's
-   *  Arrange Windows / Zoom Window readout on it (arranged()). */
+   *  release, a grow's commit). menus.js re-derives the View menu's ⌘J
+   *  item's value (arrange / zoom) on it (arranged()). */
   const layoutListeners = new Set();
   const notifyLayout = () => {
     for (const fn of layoutListeners) fn();
@@ -743,10 +744,10 @@ export function initWindows(desktop, { hide = [] } = {}) {
      *  the chord would SWAP them rather than zoom. And the ACTIVE document
      *  window may sit ZOOMED from its slot (the zoom box's own box for that
      *  top-left, zoomBoxFor): its zoom is part of the arranged reading, so
-     *  the item stays Zoom Window and the next ⌘J restores that one window
-     *  — an Arrange there would re-cascade and swap. The View menu's ⌘J
-     *  item is Arrange Windows while this reads false and Zoom Window
-     *  while it reads true (menus.js). */
+     *  the item's value stays `zoom` and the next ⌘J restores that one
+     *  window — an arrange there would re-cascade and swap. The View
+     *  menu's ⌘J item carries the value `arrange` while this reads false
+     *  and `zoom` while it reads true (menus.js); its label never turns. */
     arranged() {
       const KEYS = /** @type {const} */ (['left', 'top', 'width', 'height']);
       /** @param {VfWindow} win */
@@ -805,8 +806,8 @@ export function initWindows(desktop, { hide = [] } = {}) {
      *  document window through the zoom box's own toggle (zoomToggle below
      *  — from the slot it sits on to the vacancy's edges, top-left held,
      *  and back). A window zoomed from its slot still reads arranged
-     *  (above), so the item stays Zoom Window and repeats toggle that one
-     *  window while nothing else moves. Nothing without an active document
+     *  (above), so the item's value stays `zoom` and repeats toggle that
+     *  one window while nothing else moves. Nothing without an active document
      *  window (the Finder role — menus.js greys the item there). */
     zoomActive() {
       const key = workspace.get().activeKey;

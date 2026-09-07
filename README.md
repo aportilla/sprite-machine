@@ -685,19 +685,20 @@ forward.
   _Fill_, _Eraser_, _Eyedropper_ — with the active one checkmarked (the same
   session truth the palette's tool strip and the S/B/R/G/E/I keys write, so a
   pick from any of the three moves all three).
-- **View** — _Arrange Windows_ / _Zoom Window_ ⌘J **leading the menu**, the
-  one command over the whole screen (**one item, two commands, a
-  state rule** — which one is a reading of the windows, never of what
-  was pressed last: with anything on screen off its placement — a drag,
-  a grow, a zoom, the 3D Sprite Atlas shown into the doc box's band, a
-  browser resize the document window sprung with — it is _Arrange
-  Windows_, the boot placement re-run on the **current** raster: the
+- **View** — _Arrange Windows_ ⌘J **leading the menu**, the
+  one command over the whole screen (**one item, one label, two commands
+  under a state rule** — which one is a reading of the windows, never of
+  what was pressed last: with anything on screen off its placement — a
+  drag, a grow, a zoom, the 3D Sprite Atlas shown into the doc box's
+  band, a browser resize the document window sprung with — it is the
+  **arrange**, the boot placement re-run on the **current** raster: the
   windoids back to the rail at their placed sizes, every open document
   window onto the doc box at its size, cascaded in stacking order so the
   front window tops the cascade; with everything already where the
-  placement puts it — Arrange would change nothing — it is _Zoom
-  Window_, the active document window through the zoom box's own toggle
-  (see [Windows](#windows)). A window zoomed from its slot still reads
+  placement puts it — Arrange would change nothing — it is the **zoom**,
+  the active document window through the zoom box's own toggle
+  (see [Windows](#windows)), Arrange's variant for a screen already
+  arranged. A window zoomed from its slot still reads
   arranged — the zoom is the zoom box's own toggle — so repeats of ⌘J
   toggle the focused document between its slot and the vacancy while
   nothing else moves, and from any other state the first ⌘J lands the
@@ -708,8 +709,12 @@ forward.
   document sits on which cascade slot (a raise is stacking bookkeeping,
   not layout: two documents swapped across the cascade by a click still
   read arranged, where Arrange itself, once something is off, cascades
-  in stacking order) — and the label is the readout, the Open… /
-  Open idiom, the item's value turning with it. Greyed with no document
+  in stacking order). Only the item's **value** turns with the state
+  (`arrange` / `zoom`, what a pick dispatches on); the **label never
+  does** — it reads _Arrange Windows_ in both states, the markup's own
+  text. A label that turned with the state (_Zoom Window_ once arranged,
+  the Open… / Open idiom) was retired Sep 7 2026: the zoom is a variant
+  of arranging, not a second command to announce. Greyed with no document
   window open — nothing on screen to arrange — and, arranged, in the
   Finder role (no active window to zoom); off its placement it is live
   in both roles, so from the Finder role a pick re-rails the hidden
@@ -794,10 +799,10 @@ Patterns control panel (document tier, not a document — see
   session truth, like a windoid arrangement you dragged: it never
   persists — a reload still places every window fresh; the doc box's
   size for the CURRENT raster is the no-memory fallback). **⌘J's zoom
-  half is this toggle**: with everything arranged the View menu's ⌘J
-  item reads _Zoom Window_ and expands the active window from its doc
-  box; the next ⌘J — still _Zoom Window_, a window zoomed from its slot
-  reading as arranged — restores it, nothing else moving (see
+  half is this toggle**: with everything arranged the View menu's
+  _Arrange Windows_ item (its value `zoom`) expands the active window
+  from its doc box; the next ⌘J — the value still `zoom`, a window zoomed
+  from its slot reading as arranged — restores it, nothing else moving (see
   [Menu bar](#menu-bar)). And because a
   zoomed window's far edges are struts of the nine-slice pin, a browser
   resize keeps a zoomed window zoomed.
@@ -1564,8 +1569,8 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   not a document — the Desktop Patterns control panel — placed, arranged and
                   re-pinned like every window, and mirroring as the Finder's turn when active)
   menus.js        vf-menu-select -> workspace/file actions on the ACTIVE document; the two-role
-                  focus gating + checkmark sync; the ⌘J item's state rule (Arrange Windows /
-                  Zoom Window — value + label read off windows.arranged()); the View menu's
+                  focus gating + checkmark sync; the ⌘J item's state rule (Arrange Windows —
+                  the value, arrange / zoom, read off windows.arranged(); the label fixed); the View menu's
                   open-windows section (one item per open document window after a separator,
                   reconciled off the workspace: the name, the active one checked, creation
                   order; a pick activates its window, from the Finder role too); Desktop Patterns ->

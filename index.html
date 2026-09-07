@@ -87,16 +87,19 @@
                Chrome's top layer put the fullscreened page over the kit's
                page-drawn cursor. The browser's own window fullscreen (⌃⌘F
                on the Mac) leaves Esc to the page. -->
-          <!-- ⌘J: ONE item, two commands, a STATE rule (menus.js owns the
-               sync and writes the value AND the label): with anything on
-               screen off its placement — a drag, a grow, a zoom, the
-               browser resized — it is "Arrange Windows" (value `arrange`:
-               the boot placement re-run on the CURRENT raster, the
-               windoids back to the rail, every open document window onto
-               the cascade); with everything already where the placement
-               puts it — Arrange would change nothing — it is "Zoom Window"
-               (value `zoom`: the active document window through the zoom
-               box's own toggle; a window zoomed from its slot, like any
+          <!-- ⌘J: ONE item, "Arrange Windows", two commands under a STATE
+               rule (menus.js owns the sync and writes the VALUE; the label
+               is this markup's and never turns — a label that turned with
+               the state, "Zoom Window" once arranged, was retired Sep 7
+               2026): with anything on screen off
+               its placement — a drag, a grow, a zoom, the browser resized
+               — the value is `arrange` (the boot placement re-run on the
+               CURRENT raster, the windoids back to the rail, every open
+               document window onto the cascade); with everything already
+               where the placement puts it — Arrange would change nothing
+               — the value is `zoom` (the active document window through
+               the zoom box's own toggle, Arrange's variant for a screen
+               already arranged; a window zoomed from its slot, like any
                permutation of the documents across the cascade, still
                reads arranged, so repeats toggle that one window while
                nothing else moves). Greyed without an open document window

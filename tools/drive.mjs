@@ -480,9 +480,9 @@ const PROBE = `(() => {${DEEP}
       save: !__q('vf-menu-item[value="save"]').disabled,
       close: !__q('vf-menu-item[value="close"]').disabled,
       pickColor: !__q('vf-menu-item[value="pick-color"]').disabled,
-      // The ⌘J item — Arrange Windows (value \`arrange\`) with anything on
-      // screen off its placement, Zoom Window (value \`zoom\`) once
-      // everything is arranged: the value is the state's readout.
+      // The ⌘J item (Arrange Windows) — value \`arrange\` with anything on
+      // screen off its placement, \`zoom\` once everything is arranged: the
+      // value is the state's readout; the label never turns.
       arrange: !__q('#item-arrange').disabled,
       arrangeValue: __q('#item-arrange').getAttribute('value'),
       ring: !__q('vf-menu-item[value="ring"]').disabled,
@@ -1648,8 +1648,8 @@ async function s21_windows() {
     sizeAfter.cw > sizeBefore.cw,
     JSON.stringify({ before: sizeBefore, after: sizeAfter })
   );
-  // ⌘J is a STATE rule: Arrange Windows while anything is off its placement
-  // (the chord lands the arrangement), Zoom Window once everything is
+  // ⌘J is a STATE rule: the value \`arrange\` while anything is off its
+  // placement (the chord lands the arrangement), \`zoom\` once everything is
   // arranged (the chord zooms the active window right and down with its
   // top-left held; a window zoomed from its slot still reads arranged, so
   // the next chord restores it).
@@ -1662,7 +1662,7 @@ async function s21_windows() {
   });
   const on = await probe();
   check(
-    '⌘J reads Arrange Windows while a window is off its placement, and the chord puts it back; arranged, the item turns to Zoom Window',
+    "⌘J's value is arrange while a window is off its placement, and the chord puts it back; arranged, the value turns to zoom",
     off.menuEnabled.arrangeValue === 'arrange' &&
       keyArranged &&
       on.menuEnabled.arrange === true &&
@@ -1679,7 +1679,7 @@ async function s21_windows() {
   const restored = await docBox();
   const after = await probe();
   check(
-    'arranged, ⌘J zooms the active window right and down with its top-left held, and the next ⌘J restores it — the item staying Zoom Window',
+    "arranged, ⌘J zooms the active window right and down with its top-left held, and the next ⌘J restores it — the item's value staying zoom",
     zoomed.left === arrangedDoc.left &&
       zoomed.top === arrangedDoc.top &&
       zoomed.w > arrangedDoc.w &&
@@ -1853,8 +1853,9 @@ async function s22_twoRoles() {
       s.optionsStrip,
     JSON.stringify({ docActive: s.docActive, windows: s.windows, strip: s.optionsStrip })
   );
-  // Off its placement, the ⌘J item is Arrange Windows in BOTH roles: the
-  // pick from the Finder lands the arrangement without activating anything.
+  // Off its placement, the ⌘J item is live (value \`arrange\`) in BOTH
+  // roles: the pick from the Finder lands the arrangement without
+  // activating anything.
   await dragWindow(`__doc()`, 40, 24, 9);
   const BARE_OFF = await bareSpot();
   await click(BARE_OFF.x, BARE_OFF.y);
@@ -2324,7 +2325,7 @@ async function s25_multipleDocuments() {
   await until(async () => (await docBoxes()).Car.w === twoUp.Car.w);
   const carBack = await docBoxes();
   check(
-    'with two windows on the cascade ⌘J reads Zoom Window and zooms the raised Car alone (the untitled untouched); ⌘J again restores it',
+    "with two windows on the cascade ⌘J's value is zoom and the chord zooms the raised Car alone (the untitled untouched); ⌘J again restores it",
     item.arrangeValue === 'zoom' &&
       carZoomed.Car.left === twoUp.Car.left &&
       carZoomed.Car.top === twoUp.Car.top &&
@@ -2335,8 +2336,8 @@ async function s25_multipleDocuments() {
     JSON.stringify({ item, twoUp, carZoomed, carBack })
   );
   // View → Arrange Windows cascades in STACKING order: Car, just raised,
-  // takes the second slot and the untitled the first. The item offers
-  // Arrange only once something is off its placement, so Car is nudged
+  // takes the second slot and the untitled the first. The item's value is
+  // \`arrange\` only once something is off its placement, so Car is nudged
   // off its slot first — the slots read before the nudge.
   const slotsBefore = await docBoxes();
   await dragWindow(`__doc()`, 20, 12, 9);
@@ -2615,7 +2616,7 @@ async function s28_browserResize() {
     }, 3000);
     await sleep(200);
   };
-  // The ⌘J item is Arrange Windows only while something is off its
+  // The ⌘J item's value is \`arrange\` only while something is off its
   // placement; already arranged, there is nothing to pick.
   const arrangeIfNeeded = async () => {
     const v = await evaluate(

@@ -662,8 +662,7 @@ export function initMenus(desktop, windows, panels) {
       case 'zoom':
         // The same item's other command (syncArrange below): everything
         // already arranged, ⌘J zooms the active document window — the
-        // zoom box's own toggle — and, that window now off its placement,
-        // reads Arrange Windows again.
+        // zoom box's own toggle — under the same "Arrange Windows" label.
         windows.zoomActive();
         break;
       default:
@@ -703,7 +702,7 @@ export function initMenus(desktop, windows, panels) {
   // the desktop focused, every document-scoped item greys out. About /
   // Desktop Patterns / Quit / New / Open stay — they're app-level (the
   // parked Settings… is disabled in the markup in both roles); the ⌘J
-  // item (Arrange Windows / Zoom Window) keeps its own gate below
+  // item (Arrange Windows — its value the arrange / zoom) keeps its own gate below
   // (an open document window, and the windows' state); the View menu's
   // open-windows items (syncWindows below) are live in both roles — a pick
   // there is what brings the application back — and Open wears the
@@ -744,24 +743,27 @@ export function initMenus(desktop, windows, panels) {
   teardown.push(shell.subscribe(syncGate));
   syncGate();
 
-  // --- Arrange Windows / Zoom Window: one item, ⌘J, a STATE rule ---------------
+  // --- Arrange Windows: one item, ⌘J, a STATE rule -------------------------------
   // The View menu's ⌘J item carries two commands, and which one is a
   // reading of the windows, never of what was pressed last: with anything
   // on screen off its placement — a drag, a grow, a zoom, the 3D Sprite
   // Atlas shown into the doc box's band, a browser resize the document
-  // window sprung with — it is ARRANGE WINDOWS, the placement re-run
+  // window sprung with — it is the ARRANGE, the placement re-run
   // (windows.arrange); with everything already where the placement puts it
-  // — arrange would change nothing (windows.arranged) — it is ZOOM WINDOW,
+  // — arrange would change nothing (windows.arranged) — it is the ZOOM,
   // the active document window through the zoom box's own toggle
   // (windows.zoomActive). A window zoomed from its slot still reads
   // arranged — and so does any permutation of the documents across the
   // cascade's slots (a raise is bookkeeping, not layout) — so repeats of
   // ⌘J toggle the focused document between its slot and the vacancy while
   // nothing else moves, and from any other state the first ⌘J lands the
-  // arrangement. The label is the
-  // readout (the Open… / Open idiom) and the VALUE turns with it — two
-  // commands in one slot, so the select handler above dispatches on the
-  // value alone and a pick can never mean the other thing. Greyed with no
+  // arrangement. The LABEL is fixed — "Arrange Windows" in both states,
+  // the markup's own text, never rewritten here: the zoom is Arrange's
+  // variant for a screen already arranged, not a second command to
+  // announce (a label that turned with the state — "Zoom Window" once
+  // arranged — was retired Sep 7 2026). Only the VALUE turns, so the select handler
+  // above dispatches on it alone and a pick can never mean the other
+  // thing. Greyed with no
   // document window open (nothing on screen to arrange), and, arranged, in
   // the Finder role (nothing to arrange — the hidden windoids don't count,
   // the test being what's on screen — and no active window to zoom); off
@@ -775,10 +777,8 @@ export function initMenus(desktop, windows, panels) {
     const open = workspace.get().contexts.length > 0;
     const arranged = open && windows.arranged();
     const value = arranged ? 'zoom' : 'arrange';
-    const label = arranged ? 'Zoom Window' : 'Arrange Windows';
     if (itemArrange.getAttribute('value') !== value)
       itemArrange.setAttribute('value', value);
-    if (itemArrange.textContent !== label) itemArrange.textContent = label;
     itemArrange.disabled = !open || (arranged && !shell.get().appActive);
   };
   teardown.push(
