@@ -60,7 +60,7 @@
 //   2. Erasing part of FRONT does NOT lower the voxel count — opposite views
 //      are plane-UNIONed by the carve, so BACK still covers the silhouette.
 //      What moves is the surface colouring and with it the triangle count,
-//      so the live-rebuild check asserts on the whole stats readout.
+//      so the live-rebuild check asserts on the 3D View's count readout.
 //   3. Once a stroke has landed, every navigation trips the app's dirty-
 //      document beforeunload guard — a confirm dialog headless Chrome parks
 //      on FOREVER unless answered. The message handler auto-accepts it.
@@ -410,17 +410,15 @@ const PROBE = `(() => {${DEEP}
     ? canvas.getBoundingClientRect()
     : { left: 0, top: 0, width: 0, height: 0 };
   const checked = __q('sm-face-picker')?.shadowRoot?.querySelector('vf-radio[checked]');
-  // The 3D View's build stats ride its status label's tooltip
-  // ("grid 40px · voxels 4950 · tris 1784") — parsed into a map.
+  // The 3D View's status line is the last build's triangle count (a grouped
+  // number and a noun, empty before a build lands) — the digits are the
+  // value; a nonzero count IS "a model reached the stage".
   const buildStats = (() => {
     const el = __q('sm-status-line[kind="build"]');
     const lb = el && el.shadowRoot ? el.shadowRoot.querySelector('vf-label') : null;
-    return (lb && lb.getAttribute('title')) || '';
+    return lb ? lb.textContent.trim() : '';
   })();
-  const stats = {};
-  for (const m of buildStats.matchAll(/(grid|voxels|tris) ([^·]+)/g)) {
-    stats[m[1]] = m[2].trim();
-  }
+  const tris = +(buildStats.replace(/[^\\d]/g, '') || 0);
   const picker = __q('sm-color-picker');
   const colorsDialog = picker ? picker.querySelector('vf-dialog') : null;
   const opts = __q('sm-tool-options');
@@ -456,8 +454,7 @@ const PROBE = `(() => {${DEEP}
     rect: { left: r.left, top: r.top, width: r.width, height: r.height },
     tileW: canvas ? canvas.width : 0,
     buildStats,
-    stats,
-    voxels: +(stats.voxels || 0),
+    tris,
     docIcons: __qa('vf-icon').filter((i) => (i.dataset.key || '').startsWith('doc:'))
       .length,
     windows: {
@@ -671,14 +668,14 @@ const quiet = () => Date.now() - lastNavAt >= NAV_QUIET;
 // THE READINESS PREDICATES: the app's own boot-complete mark on an UNSTAMPED
 // document, then what the scenario needs of that boot.
 const BOOT_READY = `(!window.__stamp && document.documentElement.dataset.smBoot === 'ready')`;
-// A document boot: the editor canvas up and the 3D View's first build in
-// its stats (the rebuilder lands a frame after the open).
+// A document boot: the editor canvas up and the 3D View's first build on
+// its status line — a count, digits (the rebuilder lands a frame after the
+// open; the line is empty until it does).
 const APP_READY = `(() => {${DEEP}
   if (!${BOOT_READY}) return false;
   const build = __q('sm-status-line[kind="build"]');
   const lb = build && build.shadowRoot && build.shadowRoot.querySelector('vf-label');
-  return !!(__q('.editor-canvas') && lb &&
-    (lb.getAttribute('title') || '').includes('voxels'));
+  return !!(__q('.editor-canvas') && lb && /\\d/.test(lb.textContent));
 })()`;
 // The plain boot (no ?sample, no ?file) opens NO document — it parks at the
 // About box. GREET_UP is the plain "is the About box open?" test (asked of a
@@ -725,7 +722,7 @@ async function waitFor(predicate, what) {
   await evaluate(`window.__stamp = 'S'`);
 }
 const waitForApp = () =>
-  waitFor(APP_READY, 'an editor canvas with build stats, boot ready');
+  waitFor(APP_READY, 'an editor canvas with a build count, boot ready');
 const waitForGreet = () => waitFor(GREET_READY, 'the About box, boot ready');
 const waitForBoot = () => waitFor(`(() => ${BOOT_READY})()`, 'boot ready after a reload');
 
@@ -1046,13 +1043,13 @@ async function s7_sampleBoot() {
   section('S7 the sample boot');
   const s = await freshPage();
   check(
-    'the ?sample=car&edit=front boot: pencil active, Car titled, four windows up, face front, a build with stats',
+    'the ?sample=car&edit=front boot: pencil active, Car titled, four windows up, face front, a build with a triangle count',
     s.drawTool === 'pencil' &&
       s.heading === 'Car' &&
       Object.values(s.windows).every(Boolean) &&
       s.face === 'front' &&
       s.checkedRadio === 'front' &&
-      s.voxels > 0,
+      s.tris > 0,
     JSON.stringify({
       tool: s.drawTool,
       heading: s.heading,
@@ -1193,18 +1190,18 @@ async function s10_eraser() {
   await click(slider.x, slider.y);
   await keyPress('Home');
   await settle((p) => readoutNums(p) === '1');
-  const statsBefore = JSON.stringify((await probe()).stats);
+  const trisBefore = (await probe()).tris;
   await drag(await at(8, 14), await at(32, 34));
   check(
     'an eraser drag clears the stroked texels',
     await cleared(20, 24),
     JSON.stringify(await texelAt(20, 24))
   );
-  const s = await settle((p) => JSON.stringify(p.stats) !== statsBefore);
+  const s = await settle((p) => p.tris !== trisBefore);
   check(
-    'the erase reaches the voxel pipeline: the mesh rebuilds (the tri count moves; voxels do not — trap 2)',
-    JSON.stringify(s.stats) !== statsBefore,
-    `${statsBefore} → ${JSON.stringify(s.stats)}`
+    'the erase reaches the voxel pipeline: the mesh rebuilds (the tri count moves — the voxel count would not, trap 2)',
+    s.tris !== trisBefore,
+    `${trisBefore} → ${s.tris}`
   );
 }
 
@@ -2289,17 +2286,18 @@ async function s25_multipleDocuments() {
     JSON.stringify({ docWindows: s.docWindows, heading: s.heading, list: s.viewWindows })
   );
   // Draw one texel in the untitled — ITS history, and the stage follows it:
-  // the blank untitled read 0 voxels; a single face on a blank sheet builds
-  // a voxel, so a nonzero count IS the proof this doc reached the stage.
+  // the blank untitled read no count; a single face on a blank sheet builds
+  // a voxel, so a nonzero triangle count IS the proof this doc reached the
+  // stage.
   await keyPress('b');
   const p = await at(3, 3);
   await click(p.x, p.y);
   await painted(3, 3);
-  s = await settle((q) => q.menuChecks.undoEnabled && q.voxels > 0);
+  s = await settle((q) => q.menuChecks.undoEnabled && q.tris > 0);
   check(
     'a stroke in the untitled enables ITS undo and rebuilds the stage from it',
-    s.menuChecks.undoEnabled === true && s.voxels > 0,
-    JSON.stringify({ undo: s.menuChecks.undoEnabled, voxels: s.voxels })
+    s.menuChecks.undoEnabled === true && s.tris > 0,
+    JSON.stringify({ undo: s.menuChecks.undoEnabled, tris: s.tris })
   );
   const barOf = (heading) =>
     evaluate(
@@ -2311,19 +2309,19 @@ async function s25_multipleDocuments() {
     );
   const carBar = await barOf('Car');
   await click(carBar.x, carBar.y);
-  s = await settle((q) => q.heading === 'Car' && q.voxels > 100);
+  s = await settle((q) => q.heading === 'Car' && q.tris > 100);
   check(
     'clicking the Car window activates it: title, undo enablement, the stage and the View menu check follow',
     s.heading === 'Car' &&
       s.docWindows === 2 &&
       s.menuChecks.undoEnabled === false &&
-      s.voxels > 100 &&
+      s.tris > 100 &&
       windowListTrue(s.viewWindows) &&
       s.viewWindows.items[0].checked === true,
     JSON.stringify({
       heading: s.heading,
       undo: s.menuChecks.undoEnabled,
-      voxels: s.voxels,
+      tris: s.tris,
     })
   );
   // Two windows on the cascade, the upper-left one (Car, on the first slot)
@@ -2552,11 +2550,11 @@ async function s26_newDocumentDialog() {
   await until(async () => (await newForm()).open);
   const carRow = await newRowCentre('Car');
   await dblclick(carRow.x, carRow.y);
-  s = await settle((p) => p.docWindows === 3 && p.voxels > 100);
+  s = await settle((p) => p.docWindows === 3 && p.tris > 100);
   check(
     'double-clicking a template opens a fresh untitled copy of it',
-    s.heading === 'Car' && s.docWindows === 3 && s.voxels > 100,
-    JSON.stringify({ heading: s.heading, docWindows: s.docWindows, voxels: s.voxels })
+    s.heading === 'Car' && s.docWindows === 3 && s.tris > 100,
+    JSON.stringify({ heading: s.heading, docWindows: s.docWindows, tris: s.tris })
   );
 }
 

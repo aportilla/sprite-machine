@@ -903,10 +903,12 @@ Patterns control panel (document tier, not a document — see
   background), so the model and its shadow composite over the 1-bit
   pattern rather than a flat gray — the same paper the Sprite View's
   cells and the draw canvas wear, one paper under every view of the
-  art, all the kit's own fill; its status strip reading the fixed
-  "3D Model View" — a static label; no build error or warning ever takes
-  the line — with the build stats (grid / voxels / tris) riding the
-  strip's hover tooltip. The 3D View
+  art, all the kit's own fill; its status strip reading the model's
+  **triangle count** — `1,784 triangles`, the Finder's "N items" idiom,
+  live with every rebuild, empty until the first build lands; the count
+  alone (the fixed "3D Model View" label with grid / voxels / tris on a
+  hover tooltip went Sep 7 2026), and no build error or warning ever takes
+  the line. The 3D View
   carries its own size floor (`shell/windows.js` — declared to the grow box
   as the kit's `min-width` / `min-height`, and applied to any boot geometry
   and raster re-pin alike): one rule on both axes, the fixed chrome plus
@@ -1559,7 +1561,7 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
                       shape) + ringMetaChunks (the export's text chunks) + texturePackerJson (the
                       sheet's TexturePacker JSON)
   build.js            dims / voxels / tris / warnings / error — written by the rebuilder (+ the loaders'
-                      errors); the stats read by the 3D View's status tooltip, warnings/error recorded only
+                      errors); the tri count read by the 3D View's status line, warnings/error recorded only
   files.js            the document LIBRARY: listing + availability + per-document storage ops
                       (save/load/rename/remove/export, each taking an explicit doc + identity —
                       the identity carrying the ring settings a save writes as their chunk, a
@@ -1712,9 +1714,8 @@ src/
                        (sm-stage-controls, in the
                        window's HEADER slot: the rotate checkbox — the one toggle, off
                        every load — in a kit row stack -> prefs) / the windows' status
-                       readouts (tile = the window's edited face; build = the 3D View's fixed
-                       name, the build stats riding its tooltip; the Sprite View and the
-                       3D Sprite Atlas carry none) /
+                       readouts (tile = the window's edited face; build = the 3D View's
+                       triangle count; the Sprite View and the 3D Sprite Atlas carry none) /
                        the app-level Colors dialog (in index.html's dialog set, rendered into its
                        LIGHT DOM on purpose: the kit's page-drawn cursor stays above a modal only
                        when it can observe the vf-dialog's `open` flip, and its observer sees the

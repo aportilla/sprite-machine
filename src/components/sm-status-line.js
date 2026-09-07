@@ -8,17 +8,18 @@
 //            reconciler assigns this instance's `ctx` (its window's
 //            DocContext) before the append, and the readout follows that
 //            window's own face selection
-//   - build: the 3D View's fixed name, "3D Model View" — a static label, no
-//            build error or warning ever takes the line; the build stats
-//            (grid / voxels / tris, from the build slice) ride the label's
-//            `title`, a hover tooltip — and the probe surface drive.mjs reads.
+//   - build: the 3D View's triangle count ("1,784 triangles", from the build
+//            slice — the Finder's "N items" idiom), empty until a build has
+//            landed; the count alone — no grid, no voxel count, no tooltip,
+//            and no build error or warning ever takes the line. The probe
+//            surface drive.mjs reads.
 // `:host { display: contents }` so the slotted element the window's slot
 // gate sees is this host, while the kit's status-bar styles lay out the
 // label inside.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
-import { css, LitElement, html, nothing } from 'lit';
+import { css, LitElement, html } from 'lit';
 import { build } from '../state/build.js';
 import { workspace } from '../state/workspace.js';
 import { StoreController, ActiveDocController } from '../state/store-controller.js';
@@ -54,23 +55,15 @@ export class SmStatusLine extends LitElement {
       const f = this.ctx?.face;
       return f ? `${f[0].toUpperCase()}${f.slice(1)} Face` : '';
     }
-    // kind === 'build': the fixed name, whatever the build slice holds.
-    return '3D Model View';
-  }
-
-  // The build stats line the readout used to show, kept as the label's
-  // tooltip (and the shadow-piercing probe surface drive.mjs parses).
-  #buildStats() {
+    // kind === 'build': the last build's triangle count; nothing before a
+    // model exists (no dims = no build). A fixed locale, so the grouping
+    // never moves with the machine (captures stay byte-identical).
     const b = build.get();
-    if (!b.dims) return '';
-    const { nx, ny, nz } = b.dims;
-    const grid = nx === ny && ny === nz ? `${nx}px` : `${nx}×${ny}×${nz}`;
-    return `grid ${grid} · voxels ${b.voxels} · tris ${b.triangles}`;
+    return b.dims ? `${b.triangles.toLocaleString('en-US')} triangles` : '';
   }
 
   render() {
-    const stats = this.kind === 'build' ? this.#buildStats() : '';
-    return html`<vf-label title=${stats || nothing}>${this.#text()}</vf-label>`;
+    return html`<vf-label>${this.#text()}</vf-label>`;
   }
 }
 
