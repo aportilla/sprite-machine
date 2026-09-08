@@ -2,7 +2,8 @@
 // Folder windows — the Finder's windows (Sep 7 2026). ONE vf-window per OPEN
 // folder, cloned from #tpl-folder-window (index.html): the striped bar and
 // close box of a document-tier window, movable, resizable, the kit's rails
-// on both edges, a header line reading the folder's item count, and a body
+// on both edges, a header line reading the folder's item count over the
+// Finder's double rule (two kit rules — index.html, layout.js), and a body
 // that is one PLACED vf-icon-field at the plane's origin — the container
 // shell/icons.js renders the folder's children into (the documents and the
 // folders whose container this folder is). The patterns.js panel shape,

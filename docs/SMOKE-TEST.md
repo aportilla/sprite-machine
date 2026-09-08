@@ -93,9 +93,9 @@ dropped file). Run against `npm run dev` in a normal browser,
       the Car over its icon — the folder inverts while the outline is over
       it and reverts when the outline leaves; release over it and the Car
       leaves the desktop. Double-click the folder: its window opens with
-      the Car inside and the header reading one item, the windoids hidden
-      (the Finder's window is front); the folder's icon wears the open
-      ghost while the window is up.
+      the Car inside and the header reading one item over the Finder's
+      double rule, the windoids hidden (the Finder's window is front); the
+      folder's icon wears the open ghost while the window is up.
 - [ ] **The rubber band**: on the bare desktop drag a rectangle across
       two icons — both select as the rectangle touches them, deselect as
       it leaves; with Shift held it toggles against what was selected. The

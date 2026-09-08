@@ -1269,10 +1269,17 @@ orphaned id.
 - **A folder window** (`#tpl-folder-window`, `shell/folders.js`) is the
   Finder's: a document-tier window — the striped bar, a close box,
   `movable resizable scrollbars="both"` — cloned per open and removed by
-  its close box (existence IS visibility), its header line the folder's
-  **item count** (`N items`, plain ink, off the model — a body-face label
-  placed at `FOLDER_COUNT_AT`, `header-height` = `FOLDER_STRIP` in
-  `shell/layout.js`), its body one **placed `vf-icon-field`** at the
+  its close box (existence IS visibility), its header the Finder's: the
+  folder's **item count** (`N items`, plain ink, off the model — a
+  body-face label placed at `FOLDER_COUNT_AT`) over the Finder's **double
+  rule** — black, white, black — made of two kit rules and no stylesheet:
+  the count line is a container in the options strip's anatomy,
+  `vf-container fill-width pattern="white" rule="bottom"`, 17 rows of
+  white paper over one row of ink (`FOLDER_COUNT_LINE` = 18); the header's
+  white shows for one row under it, and the header's own rule closes it —
+  `header-height` = `FOLDER_STRIP` = 20 in `shell/layout.js`, System 7's
+  own header, measured off the real Finder (Sep 8 2026) — its body one
+  **placed `vf-icon-field`** at the
   plane's origin (so the window's `placementAt()` and the field's
   coordinates agree) sized to the folder's **extent** — the body's
   viewport at least, grown to hold every icon plus the lattice's inset
@@ -1682,9 +1689,11 @@ fixtures live in `test/helpers.mjs`.
 
 ### Testing
 
-Four layers, each doing the one thing it is cheapest at, and a rule for
-what earns a test — the trim that set them is recorded in
-[docs/test-trim-plan.md](docs/test-trim-plan.md):
+The policy — what earns a test, what never does, and the decision to
+make for every enhancement — is [docs/TESTING.md](docs/TESTING.md); this
+section is its summary. Four layers, each doing the one thing it is
+cheapest at, and a rule for what earns a test — the trim that set them is
+recorded in [docs/test-trim-plan.md](docs/test-trim-plan.md):
 
 1. **Node unit tests** for the pure code above.
 2. **`tools/drive.mjs`**, an integration smoke of user journeys (about
@@ -1839,9 +1848,10 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   none persists; the atlas strip docked at the bottom, the doc box shortened
                   only while it is shown) + cascadeFrom (the document windows' first-free-slot
                   cascade) + folderBox / folderViewport / iconGridDefault / fieldExtent +
-                  FOLDER_STRIP / FOLDER_COUNT_AT (the folder windows: the placement, the
-                  plane's viewport, the in-window icon lattice, the field's extent, the
-                  item-count header) + TOOL_CELL / TOOLS_BOX (the Tools palette: the 22×19 icon
+                  FOLDER_STRIP / FOLDER_COUNT_LINE / FOLDER_COUNT_AT (the folder windows: the
+                  placement, the plane's viewport, the in-window icon lattice, the field's
+                  extent, the item-count header over the Finder's double rule — two kit
+                  rules) + TOOL_CELL / TOOLS_BOX (the Tools palette: the 22×19 icon
                   cell — the tool strip's, the icon's own size — and the windoid box
                   it derives, the one index.html authors and the drive pins) + spriteHeightFor (the fixed-size
                   Sprite View windoid: picker-block width, atlas-ratio height) + RING_FIELDS
@@ -1903,7 +1913,8 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   folder icon, into a folder window, out to the desktop → files.moveDoc /
                   moveFolder, the `target` highlight, the cycle refusal
   folders.js      the folder windows — the Finder's: one vf-window per OPEN folder cloned from
-                  #tpl-folder-window (the item-count header, a placed vf-icon-field sized to the
+                  #tpl-folder-window (the item-count header over the Finder's double rule, a
+                  placed vf-icon-field sized to the
                   folder's extent — the scroll range), adopted by windows.js as a PANEL
                   (layout.js folderBox: the doc box's corner, cascaded), removed by its close
                   box (existence IS visibility); open / close / isOpen / fields / folderOf /

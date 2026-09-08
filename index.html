@@ -793,37 +793,42 @@
          browser resize move it like every window; and, holding the
          desktop's active state, it IS the Finder's turn — the application
          deactivates (windoids and strip hide) while it is front. The header
-         is the Finder's item-count line: one body-face label placed at
-         FOLDER_COUNT_AT against the header's corner; `header-height` = the
-         pad + the 12px line + the pad over the rule = FOLDER_STRIP in
-         shell/layout.js (the drive pins the two). The body is one PLACED
-         vf-icon-field at the plane's origin (top/left 0 — so the window's
-         placementAt() and the field's coordinates agree), its width/height
-         the folder's EXTENT (folders.js fit: the viewport at least, grown
-         to hold every icon), which IS the scroll range. The SIZE is
-         authored here, the one box the placement takes as input (folderBox
-         cascades it from the doc box's corner): 320 wide — the plane
-         (303 inside the borders and the vertical rail) holds three lattice
-         columns — and 224 tall: the borders (2), the 18px bar, the header
-         (21), two rows of 64px cells at the 72 pitch inside 16px insets
-         (168), the 15px rail. -->
+         is the Finder's item-count line over the Finder's DOUBLE RULE —
+         black, white, black — from two kit rules and no stylesheet: the
+         count line is a `vf-container fill-width height="18"
+         pattern="white" rule="bottom"` (the options strip's anatomy: 17
+         rows of white paper over one row of ink, its own bottom rule — the
+         divider's first line), holding one body-face label placed at
+         FOLDER_COUNT_AT against its corner (the header's own: the
+         container sits at the header's origin in flow); under it the
+         header's white shows for one row, then the header's own rule,
+         which `header-height` counts: 18 + 1 + 1 = 20 = FOLDER_STRIP in
+         shell/layout.js (the container's 18 is FOLDER_COUNT_LINE there),
+         System 7's header measured off the real Finder. `pattern="white"`
+         because a BARE vf-container paints the desktop pattern's ink (kit
+         ask #6). The body is one PLACED vf-icon-field at the plane's
+         origin (top/left 0 — so the window's placementAt() and the field's
+         coordinates agree), its width/height the folder's EXTENT
+         (folders.js fit: the viewport at least, grown to hold every icon),
+         which IS the scroll range. The SIZE is authored here, the one box
+         the placement takes as input (folderBox cascades it from the doc
+         box's corner): 320 wide — the plane (303 inside the borders and
+         the vertical rail) holds three lattice columns — and 223 tall: the
+         borders (2), the 18px bar, the header (20), two rows of 64px cells
+         at the 72 pitch inside 16px insets (168), the 15px rail. -->
     <template id="tpl-folder-window">
       <vf-window
         heading="untitled folder"
         movable
         resizable
         scrollbars="both"
-        header-height="21"
+        header-height="20"
         width="320"
-        height="224"
+        height="223"
       >
-        <vf-label
-          slot="header"
-          face="body"
-          class="folder-count"
-          left="8"
-          top="4"
-        ></vf-label>
+        <vf-container slot="header" fill-width height="18" pattern="white" rule="bottom">
+          <vf-label face="body" class="folder-count" left="8" top="2"></vf-label>
+        </vf-container>
         <vf-icon-field top="0" left="0"></vf-icon-field>
       </vf-window>
     </template>

@@ -578,12 +578,23 @@ export function iconDefault(slot, desktopH) {
 // folder window's box; the app's principle is that no window geometry
 // survives a session.
 //
-// The HEADER is the Finder's item-count line — one body-face label placed
-// FOLDER_COUNT_AT in from the header's corner, the ring strip's rule (a
-// caption's box stated here, sm-ring-controls' idiom) — and its height is
-// that arithmetic: the pad, the body face's 12px line, the pad, over the
-// header's 1px rule (header-height counts its rule, as every kit bar does).
-// index.html AUTHORS it as `header-height`; the drive pins the two.
+// The HEADER is the Finder's item-count line over the Finder's DOUBLE RULE
+// — black, white, black — measured off System 7's own Finder window (a 2×
+// Infinite Mac shot, Sep 8 2026): 17 rows of white paper, then the three
+// rows, 20 in all. Two kit rules make it, no stylesheet: the count line is
+// a `vf-container fill-width height=FOLDER_COUNT_LINE pattern="white"
+// rule="bottom"` (the options strip's anatomy — 17 rows of paper over its
+// own bottom rule, the divider's first line), the header's white shows for
+// one row under it, and the header's own 1px rule closes it (header-height
+// counts its rule, as every kit bar does): FOLDER_STRIP = 18 + 1 + 1. The
+// count is one body-face label placed FOLDER_COUNT_AT in from the line's
+// corner (the header's own — the container sits at the header's origin in
+// flow; a caption's box stated here, sm-ring-controls' idiom): 8 in, and 2
+// down so the body face's 12px line — Geneva 9's, its baseline 10 in —
+// inks the Finder's rows 5–11 (a digit 7 tall, the x-height on 7–11),
+// where the screenshot's digits sit. index.html AUTHORS the three numbers
+// (header-height, the container's height, the label's top); how it looks
+// is for the eye (docs/TESTING.md), not a test.
 //
 // The ICON LATTICE inside a window (iconGridDefault) runs from the plane's
 // origin: an inset, then the desktop's own pitch across and down (80 × 72:
@@ -599,10 +610,12 @@ export function iconDefault(slot, desktopH) {
 // header, and the kit's 15px rails on the right and bottom edges
 // (scrollbars="both"; the corner cell holds the grow box). All system px —
 // if the kit's chrome changes, re-derive.
-const FOLDER_COUNT_PAD = 4;
-const FOLDER_COUNT_HEIGHT = 12; // the body face's line box
-export const FOLDER_COUNT_AT = { left: 8, top: FOLDER_COUNT_PAD };
-export const FOLDER_STRIP = FOLDER_COUNT_PAD + FOLDER_COUNT_HEIGHT + FOLDER_COUNT_PAD + 1;
+const FOLDER_COUNT_PAPER = 17; // the Finder's rows of paper over the divider
+export const FOLDER_COUNT_AT = { left: 8, top: 2 };
+/** The count line's box: its paper over its own rule, the divider's first line. */
+export const FOLDER_COUNT_LINE = FOLDER_COUNT_PAPER + 1;
+/** The header: the count line, the white row, the header's own rule. */
+export const FOLDER_STRIP = FOLDER_COUNT_LINE + 1 + 1;
 const FOLDER_CHROME = { w: 2 + 15, h: 1 + 18 + FOLDER_STRIP + 15 + 1 };
 const GRID_INSET = 16;
 
