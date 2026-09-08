@@ -1,11 +1,11 @@
 // ---------------------------------------------------------------------------
-// `files` slice — the document LIBRARY: the listing of every stored doc,
-// storage reachability, and the per-document storage operations (save / load
-// / rename / remove / export bytes). Pure actions over `createStore`,
-// Node-tested with injected dependencies — the browser bits (IndexedDB via
-// storage/db.js, PNG encode/decode via image-io.js, icon rendering) arrive
-// through `init()` at boot, so this module imports nothing it can't run
-// under Node.
+// `files` slice — the document LIBRARY: the listing of every stored doc, the
+// FOLDERS they sit in, storage reachability, and the per-document storage
+// operations (save / load / rename / remove / export bytes). Pure actions
+// over `createStore`, Node-tested with injected dependencies — the browser
+// bits (IndexedDB via storage/db.js, PNG encode/decode via image-io.js, icon
+// rendering) arrive through `init()` at boot, so this module imports nothing
+// it can't run under Node.
 //
 // THE DOCUMENT IS THE PNG (lib/png-chunks.js): a save encodes the drained
 // atlas, splices the metadata text chunks (Title / Creation Time / Software /
@@ -16,12 +16,27 @@
 // name/icon/dims fields are declared CACHE, never truth — the chunk wins on
 // any disagreement.
 //
+// FOLDERS ARE CATALOG STRUCTURE, NOT DOCUMENT CONTENT (Sep 7 2026): where a
+// file SITS is the HFS catalog's business, and a downloaded PNG carries none
+// of it (a dropped one lands on the desktop). So a folder is a record of its
+// own in storage's second store — `{id, name, parent, createdAt,
+// modifiedAt}`, `parent` a folder id or null, the desktop being the root
+// with no record — and a document's membership is ONE field on its record,
+// `folder` (a folder id, or null/absent = the desktop): neither chunk nor
+// cache, never in a chunk and never in localStorage. Folders nest freely;
+// the one rule is that a folder cannot be moved into itself or a descendant
+// (moveFolder refuses). The selectors below (childrenOf / isInside /
+// folderPath / nextFolderName) are pure over the store's snapshot, for the
+// shell and the tests alike; a document whose folder record is gone reads
+// as the desktop's, so nothing can vanish into an orphaned id.
+//
 // WHAT THIS SLICE DOES NOT KNOW (the multi-document split): which documents
 // are open, which is active, their dirty state, or their identity — that is
 // the workspace's (state/workspace.js). Every per-document operation here
 // takes an explicit doc instance and identity fields; nothing reads or
 // writes "the current document", because there is no such thing at this
-// layer anymore.
+// layer anymore. Nor does it know an icon's POSITION: that is the desktop
+// state's (shell/desktop-state.js), keyed by the item.
 // ---------------------------------------------------------------------------
 
 import { createStore } from './store.js';
@@ -29,6 +44,9 @@ import { readTextChunks, setTextChunks } from '../lib/png-chunks.js';
 import { RING_CHUNK_KEY, ringChunk, parseRingChunk } from './ring-settings.js';
 
 export const UNTITLED = 'untitled';
+/** A new folder's name — the Finder's, counted up like the workspace's
+ *  untitled documents (nextFolderName). */
+export const UNTITLED_FOLDER = 'untitled folder';
 // The Software chunk value — doubles as the document-schema marker.
 export const SOFTWARE = 'sprite-machine 1';
 
@@ -60,9 +78,100 @@ export const ringFilename = (name) => `${ringBasename(name)}.zip`;
 export const modelFilename = (name) => `${slugOf(name)}.glb`;
 
 /**
+ * @typedef {{id: string, name: string, createdAt: number, modifiedAt: number,
+ *   icon: string|null, w: number, h: number, folder: string|null}} DocRow
+ * @typedef {{id: string, name: string, parent: string|null,
+ *   createdAt: number, modifiedAt: number}} FolderRow
+ * @typedef {{available: boolean, list: DocRow[], folders: FolderRow[]}} FilesState
+ */
+
+// --- the pure selectors ----------------------------------------------------------
+
+/** Does a folder record with this id exist? (A folder id names a container
+ *  only while its record does.) @param {FilesState} state @param {string|null} id */
+const folderExists = (state, id) => id != null && state.folders.some((f) => f.id === id);
+
+/** The container an item's stated folder resolves to: the folder itself
+ *  while its record exists, else the desktop (null) — an orphaned id can
+ *  hide nothing. @param {FilesState} state @param {string|null|undefined} folder */
+export function containerOf(state, folder) {
+  return folderExists(state, folder ?? null) ? /** @type {string} */ (folder) : null;
+}
+
+/**
+ * A container's children — the documents and the folders whose container
+ * is `folder` (null: the desktop's), each in listing order.
+ * @param {FilesState} state
+ * @param {string|null} folder
+ * @returns {{docs: DocRow[], folders: FolderRow[]}}
+ */
+export function childrenOf(state, folder) {
+  const target = containerOf(state, folder);
+  return {
+    docs: state.list.filter((r) => containerOf(state, r.folder) === target),
+    folders: state.folders.filter((f) => containerOf(state, f.parent) === target),
+  };
+}
+
+/**
+ * Is folder `id` inside `ancestor` — is `ancestor` on its parent chain?
+ * (`id` is not inside itself; the caller tests identity beside this.) A
+ * chain that loops — a corrupt catalog — ends at its first repeat.
+ * @param {FilesState} state @param {string} id @param {string} ancestor
+ */
+export function isInside(state, id, ancestor) {
+  const seen = new Set();
+  let cur = state.folders.find((f) => f.id === id)?.parent ?? null;
+  while (cur != null && !seen.has(cur)) {
+    if (cur === ancestor) return true;
+    seen.add(cur);
+    cur = state.folders.find((f) => f.id === cur)?.parent ?? null;
+  }
+  return false;
+}
+
+/**
+ * The names from the root down to folder `id`, inclusive — the Open
+ * dialog's path prefix. The desktop (null, or an orphaned id) is the empty
+ * path.
+ * @param {FilesState} state @param {string|null|undefined} id
+ * @returns {string[]}
+ */
+export function folderPath(state, id) {
+  const names = [];
+  const seen = new Set();
+  let cur = containerOf(state, id ?? null);
+  while (cur != null && !seen.has(cur)) {
+    const f = state.folders.find((x) => x.id === cur);
+    if (!f) break;
+    names.unshift(f.name);
+    seen.add(cur);
+    cur = containerOf(state, f.parent);
+  }
+  return names;
+}
+
+/**
+ * The next free folder name in a container: "untitled folder", "untitled
+ * folder 2", … over the folder names already there (the workspace's
+ * untitled rule).
+ * @param {FilesState} state @param {string|null} parent
+ */
+export function nextFolderName(state, parent) {
+  const used = new Set(childrenOf(state, parent).folders.map((f) => f.name));
+  if (!used.has(UNTITLED_FOLDER)) return UNTITLED_FOLDER;
+  for (let n = 2; ; n++) {
+    const name = `${UNTITLED_FOLDER} ${n}`;
+    if (!used.has(name)) return name;
+  }
+}
+
+/**
  * @param {{
  *   storage: {list(): Promise<any[]>, get(id: string): Promise<any>,
- *             put(r: any): Promise<any>, remove(id: string): Promise<any>}|null,
+ *             put(r: any): Promise<any>, remove(id: string): Promise<any>,
+ *             listFolders?(): Promise<any[]>, putFolder?(r: any): Promise<any>,
+ *             removeFolder?(id: string): Promise<any>}|null,
  *   encodeAtlas: (img: object) => Promise<Uint8Array>,
  *   decodeAtlas: (bytes: Uint8Array) => Promise<object>,
  *   makeIcon?: (docState: object) => Promise<string|null>,
@@ -71,18 +180,21 @@ export const modelFilename = (name) => `${slugOf(name)}.glb`;
  * }|null} [deps]  Injected at construction (tests) or via init() (the app).
  */
 export function createFiles(deps = null) {
-  const store = createStore({
-    // Storage reachability: false until a refresh() succeeds, so a broken
-    // private-mode IndexedDB reads as "Save unavailable", not a crash.
-    available: false,
-    /** @type {{id:string,name:string,createdAt:number,modifiedAt:number,icon:string|null,w:number,h:number}[]} */
-    list: [],
-  });
+  const store = createStore(
+    /** @type {FilesState} */ ({
+      // Storage reachability: false until a refresh() succeeds, so a broken
+      // private-mode IndexedDB reads as "Save unavailable", not a crash.
+      available: false,
+      list: [],
+      folders: [],
+    })
+  );
 
   let d = deps;
 
   const now = () => (d?.now ?? Date.now)();
   const newId = () => (d?.newId ? d.newId() : crypto.randomUUID());
+  const byCreation = (a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1);
 
   // The metadata chunks a save writes. `createdAt` persists across saves via
   // the record (first save stamps it); transforms only when non-identity;
@@ -107,6 +219,10 @@ export function createFiles(deps = null) {
     return setTextChunks(bytes, metaChunks(name, createdAt, state.transforms, ring));
   }
 
+  /** The folder record by id off the listing (a folder record is small and
+   *  the listing holds it whole — the listing IS the record). */
+  const folderRec = (id) => store.get().folders.find((f) => f.id === id) ?? null;
+
   const api = {
     store,
     get: store.get,
@@ -118,17 +234,19 @@ export function createFiles(deps = null) {
       d = realDeps;
     },
 
-    /** Re-read the listing from storage; resolves availability as a side
-     *  effect (success ⇒ true, failure/absence ⇒ false). */
+    /** Re-read the listing — the documents AND the folders — from storage;
+     *  resolves availability as a side effect (success ⇒ true,
+     *  failure/absence ⇒ false). */
     async refresh() {
       if (!d?.storage) {
-        store.patch({ available: false, list: [] });
+        store.patch({ available: false, list: [], folders: [] });
         return;
       }
       try {
         const records = await d.storage.list();
+        const folderRecords = d.storage.listFolders ? await d.storage.listFolders() : [];
         const list = records
-          .map(({ id, name, createdAt, modifiedAt, icon, w, h }) => ({
+          .map(({ id, name, createdAt, modifiedAt, icon, w, h, folder }) => ({
             id,
             name,
             createdAt,
@@ -136,27 +254,42 @@ export function createFiles(deps = null) {
             icon: icon ?? null,
             w,
             h,
+            folder: folder ?? null,
           }))
-          .sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1));
-        store.patch({ available: true, list });
+          .sort(byCreation);
+        const folders = folderRecords
+          .map(({ id, name, parent, createdAt, modifiedAt }) => ({
+            id,
+            name,
+            parent: parent ?? null,
+            createdAt,
+            modifiedAt,
+          }))
+          .sort(byCreation);
+        store.patch({ available: true, list, folders });
       } catch {
-        store.patch({ available: false, list: [] });
+        store.patch({ available: false, list: [], folders: [] });
       }
     },
 
     /**
      * Persist a document's pixels under an identity. `fileId: null` saves a
      * NEW record (an untitled's first save, a duplicate); an existing id
-     * saves silently in place, its `createdAt` surviving. Resolves the
-     * stored `{id, name}` — the caller (the workspace) applies them to
-     * whatever identity it manages.
+     * saves silently in place, its `createdAt` — and its `folder` —
+     * surviving. Resolves the stored `{id, name}` — the caller (the
+     * workspace) applies them to whatever identity it manages.
      * @param {ReturnType<typeof import('./doc.js').createDoc>} doc
      * @param {{fileId?: string|null, name?: string,
-     *          ring?: import('./ring-settings.js').RingChunkSettings|null}} identity
+     *          ring?: import('./ring-settings.js').RingChunkSettings|null,
+     *          folder?: string|null}} identity
      *   ring: the document's 3D Sprite Atlas settings (the workspace passes
-     *   its context's) — written as the ring chunk; absent, none is
+     *   its context's) — written as the ring chunk; absent, none is.
+     *   folder: where a NEW record lands (null, the default: the desktop; a
+     *   Duplicate passes the original's, so the copy lands beside it). An
+     *   existing record keeps its own — a save never moves a file; moveDoc
+     *   does.
      */
-    async save(doc, { fileId = null, name, ring = null } = {}) {
+    async save(doc, { fileId = null, name, ring = null, folder = null } = {}) {
       if (!doc.get().atlasImage) return null;
       const id = fileId ?? newId();
       const finalName = name ?? UNTITLED;
@@ -174,6 +307,7 @@ export function createFiles(deps = null) {
         icon,
         w: state.atlasImage.width,
         h: state.atlasImage.height,
+        folder: prev ? (prev.folder ?? null) : folder,
       });
       await this.refresh();
       return { id, name: finalName };
@@ -220,8 +354,9 @@ export function createFiles(deps = null) {
     },
 
     /** Rename a stored doc BY ID: the Title chunk is rewritten in place (a
-     *  rename is metadata, so `modifiedAt` stands). Open-context names are
-     *  the workspace's to follow. */
+     *  rename is metadata, so `modifiedAt` stands — and so does `folder`,
+     *  the spread keeping it). Open-context names are the workspace's to
+     *  follow. */
     async renameById(id, name) {
       const rec = await d.storage.get(id);
       if (!rec) return;
@@ -234,6 +369,97 @@ export function createFiles(deps = null) {
      *  workspace's to revert. */
     async remove(id) {
       await d.storage.remove(id);
+      await this.refresh();
+    },
+
+    /**
+     * File a stored doc into a folder (`null`: the desktop). A move is
+     * catalog, not content: the bytes, the name and `modifiedAt` all stand.
+     * Resolves true when the record moved (false: gone, or already there).
+     * @param {string} id @param {string|null} folder
+     */
+    async moveDoc(id, folder) {
+      const rec = await d.storage.get(id);
+      if (!rec) return false;
+      const target = containerOf(store.get(), folder);
+      if ((rec.folder ?? null) === target) return false;
+      await d.storage.put({ ...rec, folder: target });
+      await this.refresh();
+      return true;
+    },
+
+    /**
+     * Make a folder in a container (`parent` null: the desktop), named as
+     * given or the next free "untitled folder". Resolves `{id, name}`.
+     * @param {{name?: string, parent?: string|null}} [init]
+     */
+    async createFolder({ name, parent = null } = {}) {
+      const state = store.get();
+      const target = containerOf(state, parent);
+      const finalName = name ?? nextFolderName(state, target);
+      const id = newId();
+      const t = now();
+      await d.storage.putFolder({
+        id,
+        name: finalName,
+        parent: target,
+        createdAt: t,
+        modifiedAt: t,
+      });
+      await this.refresh();
+      return { id, name: finalName };
+    },
+
+    /** Rename a folder in place (the desktop icon's in-place rename lands
+     *  here; a folder window's title follows through the listing). */
+    async renameFolder(id, name) {
+      const rec = folderRec(id);
+      if (!rec) return;
+      await d.storage.putFolder({ ...rec, name, modifiedAt: now() });
+      await this.refresh();
+    },
+
+    /**
+     * Move a folder into another (`null`: the desktop). REFUSED — a no-op
+     * resolving false — when the target is the folder itself or inside it
+     * (a folder cannot be put into itself, the Finder's one rule); false
+     * too for a folder that is gone or already there.
+     * @param {string} id @param {string|null} parent
+     */
+    async moveFolder(id, parent) {
+      const state = store.get();
+      const rec = folderRec(id);
+      if (!rec) return false;
+      const target = containerOf(state, parent);
+      if (target === id || (target != null && isInside(state, target, id))) return false;
+      if ((rec.parent ?? null) === target) return false;
+      await d.storage.putFolder({ ...rec, parent: target });
+      await this.refresh();
+      return true;
+    },
+
+    /**
+     * Delete a folder record. Its children — documents and folders — are
+     * lifted into ITS container first, so nothing is ever orphaned (the
+     * Trash's recursive emptying is its own day; nothing in the UI calls
+     * this yet).
+     * @param {string} id
+     */
+    async removeFolder(id) {
+      const state = store.get();
+      const rec = folderRec(id);
+      if (!rec) return;
+      const into = containerOf(state, rec.parent);
+      for (const f of state.folders) {
+        if ((f.parent ?? null) === id) await d.storage.putFolder({ ...f, parent: into });
+      }
+      for (const r of state.list) {
+        if ((r.folder ?? null) === id) {
+          const full = await d.storage.get(r.id);
+          if (full) await d.storage.put({ ...full, folder: into });
+        }
+      }
+      await d.storage.removeFolder(id);
       await this.refresh();
     },
 

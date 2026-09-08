@@ -564,6 +564,122 @@ export function iconDefault(slot, desktopH) {
   };
 }
 
+// --- folder windows (Sep 7 2026) ---------------------------------------------
+// The Finder's window: a document-tier window, movable, resizable,
+// scrollbars="both", its header line the item count and its body a placed
+// vf-icon-field at the plane's origin. Adopted by windows.js as a PANEL, so
+// its placement here is the pure `(desktopW, desktopH) → box` a panel
+// carries: the doc box's top-left (the vacant middle's corner — derived
+// from the Tools palette's AUTHORED box, TOOLS_BOX, the same number the
+// markup states), stepped down-right by CASCADE_STEP per folder window
+// already open when this one opened, at the window's authored size (the
+// Patterns panel's idiom: index.html states it, the placement takes it as
+// input). Nothing about the window persists — the Finder remembered every
+// folder window's box; the app's principle is that no window geometry
+// survives a session.
+//
+// The HEADER is the Finder's item-count line — one body-face label placed
+// FOLDER_COUNT_AT in from the header's corner, the ring strip's rule (a
+// caption's box stated here, sm-ring-controls' idiom) — and its height is
+// that arithmetic: the pad, the body face's 12px line, the pad, over the
+// header's 1px rule (header-height counts its rule, as every kit bar does).
+// index.html AUTHORS it as `header-height`; the drive pins the two.
+//
+// The ICON LATTICE inside a window (iconGridDefault) runs from the plane's
+// origin: an inset, then the desktop's own pitch across and down (80 × 72:
+// the 64px plate plus a 16px gutter across; the row pitch every icon column
+// on the desktop uses), wrapping at the body's inner width as it stands when
+// the icon first renders — a saved position wins from then on.
+//
+// The FIELD'S EXTENT (fieldExtent) is the body's viewport at least — so the
+// rubber band reaches every visible px — grown to hold every icon plus the
+// inset, so an icon placed past the viewport IS the scroll range (the kit
+// sizes its plane to placed content). folderViewport is the body's inner
+// box for a window size: the frame's 1px borders, the 18px title bar, the
+// header, and the kit's 15px rails on the right and bottom edges
+// (scrollbars="both"; the corner cell holds the grow box). All system px —
+// if the kit's chrome changes, re-derive.
+const FOLDER_COUNT_PAD = 4;
+const FOLDER_COUNT_HEIGHT = 12; // the body face's line box
+export const FOLDER_COUNT_AT = { left: 8, top: FOLDER_COUNT_PAD };
+export const FOLDER_STRIP = FOLDER_COUNT_PAD + FOLDER_COUNT_HEIGHT + FOLDER_COUNT_PAD + 1;
+const FOLDER_CHROME = { w: 2 + 15, h: 1 + 18 + FOLDER_STRIP + 15 + 1 };
+const GRID_INSET = 16;
+
+/**
+ * A folder window's placement: `size` (the window's authored box) at the
+ * doc box's top-left stepped down-right by the cascade for `n` folder
+ * windows already open, floored at the raster's corner and the reserve
+ * (windows.js's clamp does the rest).
+ *
+ * @param {number} desktopW
+ * @param {number} desktopH
+ * @param {{width: number, height: number}} size
+ * @param {number} [n]  folder windows open before this one
+ * @returns {{left: number, top: number, width: number, height: number}}
+ */
+export function folderBox(desktopW, desktopH, size, n = 0) {
+  const base = { left: EDGE + TOOLS_BOX.width + EDGE, top: TOP_RESERVE + GAP };
+  const slot = cascadeSlot(base, n);
+  return {
+    left: Math.max(0, Math.min(slot.left, Math.max(0, desktopW - size.width))),
+    top: Math.max(
+      TOP_RESERVE,
+      Math.min(slot.top, Math.max(TOP_RESERVE, desktopH - size.height))
+    ),
+    width: size.width,
+    height: size.height,
+  };
+}
+
+/**
+ * A folder window body's inner box — the plane's viewport — for the
+ * window's outer size: the chrome (borders, title bar, header, rails) off.
+ * @param {{width: number, height: number}} size
+ * @returns {{width: number, height: number}}
+ */
+export function folderViewport(size) {
+  return {
+    width: Math.max(0, size.width - FOLDER_CHROME.w),
+    height: Math.max(0, size.height - FOLDER_CHROME.h),
+  };
+}
+
+/**
+ * The default position for icon `slot` inside a folder window whose plane
+ * is `innerWidth` wide: rows from the origin, wrapping at the width.
+ * @param {number} slot
+ * @param {number} innerWidth
+ * @returns {{left: number, top: number}}
+ */
+export function iconGridDefault(slot, innerWidth) {
+  const cols = Math.max(
+    1,
+    Math.floor((innerWidth - GRID_INSET - ICON_CELL) / ICON_COL_PITCH) + 1
+  );
+  return {
+    left: GRID_INSET + (slot % cols) * ICON_COL_PITCH,
+    top: GRID_INSET + Math.floor(slot / cols) * ICON_ROW_PITCH,
+  };
+}
+
+/**
+ * A folder field's declared box: the viewport at least, grown to hold
+ * every icon (`positions`, their top-lefts) plus the inset.
+ * @param {{left: number, top: number}[]} positions
+ * @param {{width: number, height: number}} viewport
+ * @returns {{width: number, height: number}}
+ */
+export function fieldExtent(positions, viewport) {
+  let width = viewport.width;
+  let height = viewport.height;
+  for (const p of positions) {
+    width = Math.max(width, p.left + ICON_CELL + GRID_INSET);
+    height = Math.max(height, p.top + ICON_CELL + GRID_INSET);
+  }
+  return { width, height };
+}
+
 // --- the nine-slice resize rule (see the header) -------------------------------
 // The band every side gets at least: the outer slices are BAND system px
 // thick, the middle is the remainder.

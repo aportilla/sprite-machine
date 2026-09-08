@@ -613,13 +613,16 @@ export function initWindows(desktop, { hide = [] } = {}) {
   // The kit deliberately never decides which presses mean "the Finder" (its
   // furniture is slotted light DOM — only the page knows); the page owns the
   // test and routes the hits through clearActive(). A press on the desktop's
-  // own surface (the dither, the bezel) is exactly `target === desktop`:
-  // this listener sits on the host, so a press inside its shadow tree
-  // retargets to the host itself, while a press in any slotted child — a
-  // window, the menu bar, the options strip, a dialog, the icon layer —
-  // arrives as that child and misses the test. The icon layer's own "this
-  // press is the Finder" case lives in shell/icons.js, calling the same
-  // clearActive().
+  // own surface is exactly `target === desktop`: this listener sits on the
+  // host, so a press inside its shadow tree retargets to the host itself,
+  // while a press in any slotted child — a window, the menu bar, the options
+  // strip, a dialog, the desktop's icon FIELD — arrives as that child and
+  // misses the test. Since the field fills the screen (a vf-icon-field,
+  // 0.7.0 — the rubber band needs a surface), the dither's presses land on
+  // it, and this test covers the bezel alone; the field's own "this press
+  // is the Finder" case lives in shell/icons.js, calling the same
+  // clearActive(). A press in a folder window needs neither: the window
+  // activates itself, and a panel active IS the Finder's turn (applyActive).
   const onDesktopPress = (e) => {
     if (e.target === desktop) desktop.clearActive();
   };

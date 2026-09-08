@@ -58,6 +58,7 @@ import {
 } from '../state/ring.js';
 import {
   files,
+  folderPath,
   UNTITLED,
   docFilename,
   ringFilename,
@@ -81,13 +82,17 @@ import { downloadPngBytes, downloadBlob, canvasToPngBytes } from '../image-io.js
  *   patterns: ReturnType<typeof import('./patterns.js').initPatterns>,
  *   ring: ReturnType<typeof import('../scene/ring.js').initRing>,
  *   model: ReturnType<typeof import('../scene/model-export.js').initModelExport>,
+ *   folders: ReturnType<typeof import('./folders.js').initFolders>,
+ *   icons: ReturnType<typeof import('./icons.js').initIcons>,
  * }} panels
- *   The panel windows a menu item opens (the Desktop Patterns control panel),
- *   the 3D Sprite Atlas's renderer follower (Export Sprite Atlas… renders
- *   through it) and the 3D model export's subject (Export 3D Model… writes
- *   its glb through it).
+ *   The panel windows a menu item opens (the Desktop Patterns control panel,
+ *   the folder windows — the Finder's), the 3D Sprite Atlas's renderer
+ *   follower (Export Sprite Atlas… renders through it), the 3D model
+ *   export's subject (Export 3D Model… writes its glb through it), and the
+ *   icon layer (New Folder's rename box, Select All).
  */
 export function initMenus(desktop, windows, panels) {
+  const { folders, icons } = panels;
   const $ = (sel) => {
     const el = desktop.querySelector(sel);
     if (!el) throw new Error(`shell/menus: missing element ${sel}`);
@@ -376,10 +381,11 @@ export function initMenus(desktop, windows, panels) {
     });
   };
 
-  // Finder grammar for Open: with the desktop focused and an icon selected,
-  // the item reads "Open" and acts on the selection (the sync below relabels
-  // it; with nothing selected it stays "Open…", the listing dialog). Every
-  // icon is a saved-doc icon now — no other key shape exists.
+  // Finder grammar for Open: with the desktop focused — or a folder window,
+  // the Finder's, front — and an icon selected, the item reads "Open" and
+  // acts on the selection (the sync below relabels it; with nothing
+  // selected it stays "Open…", the listing dialog). Two key shapes: a
+  // document's opens its window, a folder's its Finder window.
   const finderSelection = () => {
     const s = shell.get();
     return !s.appActive && s.iconSelection.length > 0;
@@ -387,6 +393,7 @@ export function initMenus(desktop, windows, panels) {
   const openSelection = () => {
     for (const key of shell.get().iconSelection) {
       if (key.startsWith('doc:')) openDoc(key.slice('doc:'.length));
+      else if (key.startsWith('folder:')) folders.open(key.slice('folder:'.length));
     }
   };
 
@@ -458,13 +465,20 @@ export function initMenus(desktop, windows, panels) {
 
   // --- the Open dialog --------------------------------------------------------
   // Stored documents only — the built-ins are ordinary rows here once seeded,
-  // and a template belongs to File → New…, not Open.
+  // and a template belongs to File → New…, not Open. A filed document's row
+  // carries its folder PATH ahead of its name ("Vehicles ▸ Car — …", nested
+  // folders joined the same way); folders themselves are not rows — the
+  // dialog opens documents, a folder opens from its icon.
   const openList = $('#open-list');
   function showOpenDialog() {
     const rows = [];
-    for (const r of files.get().list) {
+    const st = files.get();
+    for (const r of st.list) {
       const when = new Date(r.modifiedAt).toLocaleDateString();
-      rows.push(listItem(`doc:${r.id}`, `${r.name} — ${r.w}×${r.h}px, ${when}`));
+      const path = folderPath(st, r.folder)
+        .map((n) => `${n} ▸ `)
+        .join('');
+      rows.push(listItem(`doc:${r.id}`, `${path}${r.name} — ${r.w}×${r.h}px, ${when}`));
     }
     openList.replaceChildren(...rows);
     dlgOpen.show();
@@ -654,6 +668,27 @@ export function initMenus(desktop, windows, panels) {
         // creating from it opens a window, which reactivates the application.
         showNewDialog();
         break;
+      case 'new-folder': {
+        // A FINDER command (the files slice's createFolder): "untitled
+        // folder" — counted up per container — in the active folder window,
+        // else on the desktop, its name selected for typing (the icon's
+        // rename box, through the icon layer). The Finder comes forward
+        // first: with a document window active, the desktop's turn — the
+        // windoids hide, the way a desktop press does; a folder window
+        // front keeps its turn. Storage unavailable raises the notice, like
+        // Save.
+        if (!files.get().available) {
+          dlgStorage.show();
+          break;
+        }
+        const parent = folders.activeFolder();
+        if (shell.get().appActive) desktop.clearActive();
+        files
+          .createFolder({ parent })
+          .then(({ id }) => icons.startRename(`folder:${id}`))
+          .catch((err) => build.setError(`New Folder failed: ${err.message}`));
+        break;
+      }
       case 'open':
         // Two grammars, one item: the Finder's "Open" (act on the selected
         // icons) with the desktop focused and a selection; otherwise "Open…",
@@ -663,8 +698,14 @@ export function initMenus(desktop, windows, panels) {
         else showOpenDialog();
         break;
       case 'close': {
+        // The active document (dirty-checked), or — the Finder's Close —
+        // the front folder window.
         const ctx = active();
         if (ctx) closeContext(ctx);
+        else {
+          const f = folders.activeFolder();
+          if (f != null) folders.close(f);
+        }
         break;
       }
       case 'save': {
@@ -729,6 +770,12 @@ export function initMenus(desktop, windows, panels) {
         break;
       case 'redo':
         workspace.active()?.history.redo();
+        break;
+      case 'select-all':
+        // The Finder's: every icon in the front field — the active folder
+        // window's, else the desktop's (the item is greyed with the
+        // application active, so this only ever runs in the Finder role).
+        icons.selectAll(folders.activeFolder());
         break;
       case 'pick-color':
         session.openPicker();
@@ -802,19 +849,25 @@ export function initMenus(desktop, windows, panels) {
   // --- focus gating ------------------------------------------------------------
   // Two roles share one menu bar (the single-application affordance): with
   // the desktop focused, every document-scoped item greys out. About /
-  // Desktop Patterns / Quit / New / Open stay — they're app-level (the
-  // parked Settings… is disabled in the markup in both roles); the ⌘J
-  // item (Arrange Windows — its value the arrange / zoom) keeps its own gate below
-  // (an open document window, and the windows' state); the View menu's
-  // open-windows items (syncWindows below) are live in both roles — a pick
-  // there is what brings the application back — and Open wears the
-  // Finder grammar above: its label follows the selection ("Open" on a
-  // selected icon, "Open…" for the listing dialog otherwise), never greyed.
+  // Desktop Patterns / Quit / New / New Folder / Open stay — they're
+  // app-level (the parked Settings… is disabled in the markup in both
+  // roles); the ⌘J item (Arrange Windows — its value the arrange / zoom)
+  // keeps its own gate below (an open document window, and the windows'
+  // state); the View menu's open-windows items (syncWindows below) are
+  // live in both roles — a pick there is what brings the application back
+  // — and Open wears the Finder grammar above: its label follows the
+  // selection ("Open" on a selected icon, "Open…" for the listing dialog
+  // otherwise), never greyed. Two items read the FINDER'S front window
+  // beside the role: Close is live with a document window OR a folder
+  // window active (the Finder's Close closed its front window), and Select
+  // All — the Finder's — is live only with the application inactive (so
+  // ⌘A falls through to a focused field's own select-all otherwise); both
+  // re-read on every change of the desktop's active window (vf-activate:
+  // a folder window taking or losing active moves neither role flag).
   // Disabling an item also parks its key equivalent (the kit never fires a
   // disabled item's shortcut), so ⌘S/⌘K gate with their menus; the
   // bare-letter tool keys get the same guard in src/shortcuts.js.
   const DOC_SCOPED = [
-    'close',
     'save',
     'duplicate',
     'rename',
@@ -833,16 +886,21 @@ export function initMenus(desktop, windows, panels) {
   ];
   const docItems = DOC_SCOPED.map((v) => $(`vf-menu-item[value="${v}"]`));
   const itemOpen = $('vf-menu-item[value="open"]');
+  const itemClose = $('vf-menu-item[value="close"]');
+  const itemSelectAll = $('vf-menu-item[value="select-all"]');
   const syncGate = () => {
     const s = shell.get();
     for (const item of docItems) item.disabled = !s.appActive;
+    itemClose.disabled = !(s.appActive || folders.activeFolder() != null);
+    itemSelectAll.disabled = s.appActive;
     // The ellipsis is the System 7 promise of a dialog: "Open" acts at once
     // on the selection, "Open…" asks (the listing) — so the label is the
     // grammar's own readout. The item is the markup's default-slot text.
     const label = finderSelection() ? 'Open' : 'Open…';
     if (itemOpen.textContent !== label) itemOpen.textContent = label;
   };
-  teardown.push(shell.subscribe(syncGate));
+  teardown.push(shell.subscribe(syncGate), folders.onChange(syncGate));
+  on(desktop, 'vf-activate', syncGate);
   syncGate();
 
   // --- Arrange Windows: one item, ⌘J, a STATE rule -------------------------------

@@ -1,9 +1,12 @@
 // ---------------------------------------------------------------------------
 // Desktop state in localStorage — tiny, synchronous at boot, exactly what
-// it's good at (the documents themselves live in IndexedDB). One versioned
-// JSON key, v3: per-icon position and per-open-SAVED-document edited face
-// (untitled windows are deliberately absent — no autosave, explicit Save is
-// the contract) plus which document was active, and the DESKTOP PATTERN
+// it's good at (the documents themselves — and the folders they sit in —
+// live in IndexedDB). One versioned JSON key, v3: per-icon position (by
+// item — "doc:<id>", "folder:<id>" — in its CURRENT container's
+// coordinates: the desktop's raster or a folder window's plane; which
+// container is the library's business) and per-open-SAVED-document edited
+// face (untitled windows are deliberately absent — no autosave, explicit
+// Save is the contract) plus which document was active, and the DESKTOP PATTERN
 // (the Desktop Patterns panel's setting — System 7 kept it in the System
 // file; here it's the one desktop setting that persists) — and the SEEDED
 // flag: whether the profile's first-ever boot has stored the built-in
@@ -125,9 +128,10 @@ export function createDesktopState(fresh) {
       writeNow();
     },
 
-    /** A saved icon position by key ("doc:<id>"), or null. (A stale blob
-     *  may still carry retired "sample:*" entries; they simply never match
-     *  an icon again.) */
+    /** A saved icon position by key ("doc:<id>", "folder:<id>"), in the
+     *  item's container's coordinates, or null. (A stale blob may still
+     *  carry retired "sample:*" entries; they simply never match an icon
+     *  again.) */
     iconPos(key) {
       const p = saved?.icons?.[key];
       return Number.isFinite(p?.left) && Number.isFinite(p?.top) ? p : null;
@@ -142,13 +146,23 @@ export function createDesktopState(fresh) {
     },
 
     /**
-     * Start persisting. `iconsRoot` is the icon layer (positions are read
-     * off the live elements at snapshot time — the properties ARE the truth
-     * after any drag). The windows are deliberately not an input: nothing
+     * Start persisting. `readIcons` is the icon layer's reading of every
+     * position it knows, by key (shell/icons.js positions(): the live
+     * elements' — the properties ARE the truth after any drag — under the
+     * ones it remembers for a closed folder window's icons, and `null` for
+     * an item filed away and not yet rendered in its new container). The
+     * snapshot MERGES it over the map last written — an icon in a closed
+     * folder window is not live, and a closed folder must not forget its
+     * arrangement on the next write — so the blob keeps a position for
+     * every item it has ever seen, each in its container's own
+     * coordinates. The windows are deliberately not an input: nothing
      * about them persists.
+     * @param {{readIcons: () => Record<string, {left:number, top:number}|null>}} inputs
      */
-    start({ iconsRoot }) {
+    start({ readIcons }) {
       if (fresh) return () => {};
+      /** @type {Record<string, {left:number, top:number}>} */
+      let known = { ...(saved?.icons ?? {}) };
 
       function snapshot() {
         // Open SAVED documents only: the edited face off each context.
@@ -159,10 +173,12 @@ export function createDesktopState(fresh) {
           docs.push(docEntry(ctx));
         }
         /** @type {Record<string, {left:number, top:number}>} */
-        const icons = {};
-        for (const icon of iconsRoot.querySelectorAll('vf-icon[data-key]')) {
-          icons[icon.dataset.key] = { left: icon.left, top: icon.top };
+        const icons = { ...known };
+        for (const [key, p] of Object.entries(readIcons())) {
+          if (p) icons[key] = { left: p.left, top: p.top };
+          else delete icons[key];
         }
+        known = icons;
         return {
           v: VERSION,
           docs,

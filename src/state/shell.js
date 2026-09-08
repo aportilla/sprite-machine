@@ -47,7 +47,8 @@ export function createShell() {
     // activeKey's null and the kit's empty boot; the operative seed is read
     // off desktop.activeWindow at wire-up (shell/windows.js).
     appActive: false,
-    /** @type {string[]} selected desktop-icon keys ("doc:<id>") */
+    /** @type {string[]} selected icon keys ("doc:<id>", "folder:<id>") — in
+     *  any container: the desktop's field or an open folder window's */
     iconSelection: [],
     /** @type {string} the desktop pattern — a kit library name (`gray-50`,
      *  `bricks`, …) or sixteen hex digits: exactly what vf-desktop's

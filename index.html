@@ -41,6 +41,14 @@
         </vf-menu>
         <vf-menu id="menu-file" label="File">
           <vf-menu-item value="new">New…</vf-menu-item>
+          <!-- New Folder (shell/menus.js → the files slice's createFolder):
+               a FINDER command — it brings the Finder forward and makes
+               "untitled folder" in the active folder window, else on the
+               desktop, its name selected for typing (the icon's rename
+               box). No key equivalent: System 7's ⌘N is the browser's, and
+               ⇧⌘N opens an incognito window. App-level like New…, live in
+               both roles. -->
+          <vf-menu-item value="new-folder">New Folder</vf-menu-item>
           <vf-menu-item value="open" shortcut="⌘O">Open…</vf-menu-item>
           <vf-separator></vf-separator>
           <vf-menu-item value="close">Close</vf-menu-item>
@@ -61,6 +69,15 @@
         <vf-menu id="menu-edit" label="Edit">
           <vf-menu-item value="undo" shortcut="⌘Z" disabled>Undo</vf-menu-item>
           <vf-menu-item value="redo" shortcut="⇧⌘Z" disabled>Redo</vf-menu-item>
+          <vf-separator></vf-separator>
+          <!-- Select All: the Finder's — every icon in the front field (the
+               active folder window's, else the desktop's). Finder-role
+               only: greyed with the application active, so ⌘A falls
+               through to a focused field's own select-all (menus.js gates
+               it the way it gates the document-scoped items, inverted). -->
+          <vf-menu-item value="select-all" shortcut="⌘A" disabled
+            >Select All</vf-menu-item
+          >
           <vf-separator></vf-separator>
           <vf-menu-item value="pick-color" shortcut="⌘K">Pick Color…</vf-menu-item>
         </vf-menu>
@@ -334,15 +351,27 @@
       </vf-window>
 
       <!-- ======================= Desktop file icons ===================== -->
-      <!-- One selection domain across every icon (the listbox owner is what
-           makes selection announceable); shell/icons.js renders the sample
-           cluster and one icon per saved document into it. -->
-      <div
+      <!-- The desktop's field of icons — the kit's own container for them
+           (vintage-frames 0.7.0: the listbox owner, so a selection is
+           announceable; the Finder's rubber band on a press-drag across its
+           background; `size` for a small-icon view one day). FILLED, not
+           placed: the field stays static, so its icons keep anchoring to
+           the desktop's raster and a saved position means what it meant
+           (a placed field would move the origin under the menu bar); filled
+           it has a surface to press, which is what the band needs. It sits
+           after the windoids and before the dialogs — the windows are out
+           of flow, the dialogs in the top layer — so its box is the raster
+           below the menu bar and the options strip, clipped by the screen.
+           shell/icons.js renders one icon per saved document and per folder
+           whose container is the desktop into it (the open folder windows'
+           fields hold the rest); a press anywhere in it is a press on the
+           Finder (icons.js routes it through clearActive()). -->
+      <vf-icon-field
         id="desktop-icons"
-        role="listbox"
-        aria-multiselectable="true"
-        aria-label="Desktop"
-      ></div>
+        label="Desktop"
+        fill-width
+        fill-height
+      ></vf-icon-field>
 
       <!-- ============================ Dialogs =========================== -->
       <!-- The About box: the classic launch splash, and Sprite Machine →
@@ -752,6 +781,50 @@
         <vf-stack pad="12">
           <sm-desktop-patterns></sm-desktop-patterns>
         </vf-stack>
+      </vf-window>
+    </template>
+
+    <!-- ================== The folder-window template ==================== -->
+    <!-- One clone per OPEN folder (shell/folders.js), removed by its close
+         box — existence IS visibility. The Finder's window: a DOCUMENT-TIER
+         window (the striped bar, a close box), movable and resizable, its
+         rails on both edges (scrollbars="both" — the corner cell holds the
+         grow box), adopted by shell/windows.js as a PANEL so Arrange and a
+         browser resize move it like every window; and, holding the
+         desktop's active state, it IS the Finder's turn — the application
+         deactivates (windoids and strip hide) while it is front. The header
+         is the Finder's item-count line: one body-face label placed at
+         FOLDER_COUNT_AT against the header's corner; `header-height` = the
+         pad + the 12px line + the pad over the rule = FOLDER_STRIP in
+         shell/layout.js (the drive pins the two). The body is one PLACED
+         vf-icon-field at the plane's origin (top/left 0 — so the window's
+         placementAt() and the field's coordinates agree), its width/height
+         the folder's EXTENT (folders.js fit: the viewport at least, grown
+         to hold every icon), which IS the scroll range. The SIZE is
+         authored here, the one box the placement takes as input (folderBox
+         cascades it from the doc box's corner): 320 wide — the plane
+         (303 inside the borders and the vertical rail) holds three lattice
+         columns — and 224 tall: the borders (2), the 18px bar, the header
+         (21), two rows of 64px cells at the 72 pitch inside 16px insets
+         (168), the 15px rail. -->
+    <template id="tpl-folder-window">
+      <vf-window
+        heading="untitled folder"
+        movable
+        resizable
+        scrollbars="both"
+        header-height="21"
+        width="320"
+        height="224"
+      >
+        <vf-label
+          slot="header"
+          face="body"
+          class="folder-count"
+          left="8"
+          top="4"
+        ></vf-label>
+        <vf-icon-field top="0" left="0"></vf-icon-field>
       </vf-window>
     </template>
 

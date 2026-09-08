@@ -300,15 +300,19 @@ export function createWorkspace(deps = {}) {
       return res.id;
     },
 
-    /** Save a copy as "«name» copy" (the context itself is untouched);
-     *  resolves the copy's stored id — the caller opens it in a new window. */
+    /** Save a copy as "«name» copy" (the context itself is untouched) —
+     *  beside the original, in its folder (the Finder's Duplicate); an
+     *  untitled's copy lands on the desktop. Resolves the copy's stored id
+     *  — the caller opens it in a new window. */
     async duplicate(key) {
       const ctx = byKey(key);
       if (!ctx) return null;
+      const orig = ctx.fileId ? files.get().list.find((r) => r.id === ctx.fileId) : null;
       const res = await files.save(ctx.doc, {
         fileId: null,
         name: `${ctx.name} copy`,
         ring: ctx.ring.get(),
+        folder: orig?.folder ?? null,
       });
       return res ? res.id : null;
     },

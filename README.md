@@ -37,11 +37,12 @@ compares a fresh set against them: every "does it look right" question — a
 label's ink, a dotted rule, a header's height, the DITL, the paper — lives
 there as pixels, and a golden changes only in a commit that changed the look
 on purpose, after an eye on the diff. `drive.mjs` covers what no screenshot
-can: about eighty checks over twenty-eight user journeys, driving the desktop
+can: about ninety checks over twenty-nine user journeys, driving the desktop
 over the DevTools Protocol with real trusted input (keys, menu picks,
-⌘-equivalents, drags, grow-box resizes, the dialogs, a save → reopen
-round-trip through IndexedDB), probing through the components' shadow roots,
-and exiting non-zero on any failure. Its waits are on **the app's own
+⌘-equivalents, drags — a window's bar, a grow box, an icon filed into a
+folder — the dialogs, a save → reopen round-trip through IndexedDB),
+probing through the components' shadow roots, and exiting non-zero on any
+failure (a second argument runs one journey by name while iterating on it). Its waits are on **the app's own
 readiness contract**, never a pause: `main.js` marks the root element
 `data-sm-boot="ready"` once the whole boot chain has landed, a reload yields
 a document without the mark until its own boot completes, and every wait
@@ -61,7 +62,10 @@ live), and the **3D View**, plus the toggleable **3D Sprite Atlas** (View
 angles, the rotation set an engine consumes — and what File → Export Sprite
 Atlas… saves) — plus documents
 that live as **files on the desktop**, saved in the browser and reopened by
-double-clicking their icons. Clicking the desktop is "switching to the Finder": the application
+double-clicking their icons, and **folders** to file them in, the Finder's
+way: File → New Folder makes one, dragging an icon onto it (or into its
+open window) files it, and a folder opens as a Finder window of its own —
+see [Folders](#folders). Clicking the desktop is "switching to the Finder": the application
 deactivates, its windoids hide, and the menus fall back to the desktop's
 grammar. See [The desktop](#the-desktop).
 
@@ -610,7 +614,10 @@ window the desktop's active window?**
   and the strip hide, the Finder grammar lands — which also clears the
   desktop for previewing), and its close box hands active to the topmost
   document window (the kit promotes the survivor), so the application
-  returns where it was. See [Desktop Patterns](#desktop-patterns).
+  returns where it was. See [Desktop Patterns](#desktop-patterns). **A
+  folder's window is the Finder's too** — the same panel contract:
+  opening one, or clicking into one, is the Finder's turn; see
+  [Folders](#folders).
 - Closing the last document window leaves the same desktop-focused state:
   a bare desktop whose windoid arrangement survives for the next open. And
   **boot begins in this state too**: until the first document window opens
@@ -655,13 +662,23 @@ forward.
   square tile size — the field is live for Empty only, since a template's
   art has a native size and a retile crops/pads rather than scales — or a
   built-in template (Car, Cube) as a fresh untitled copy; Create or a
-  double-clicked row opens the new window), _Open…_ ⌘O (two grammars, one
+  double-clicked row opens the new window), _New Folder_ (a **Finder
+  command**: it brings the Finder forward — with a document window active
+  the windoids hide, as a desktop click would — and makes _untitled
+  folder_, counted up per container, in the front folder window, else on
+  the desktop, its name selected for typing in the icon's rename box; no
+  key equivalent, System 7's ⌘N being the browser's; live in both roles,
+  like _New…_ — see [Folders](#folders)), _Open…_ ⌘O (two grammars, one
   item, the label its readout: _Open…_ raises the saved-docs listing
   dialog — the application's while a document is focused, the Finder's
-  browse with the desktop focused and nothing selected; with a desktop
-  icon selected it relabels to a bare _Open_ and opens that icon at once,
-  Finder-style — the ellipsis being System 7's promise of a dialog), _Close_
-  (the active document, dirty-checked), _Save_ ⌘S (first save of an untitled
+  browse with the desktop focused and nothing selected, each filed
+  document's row carrying its folder path ahead of its name; with an icon
+  selected — on the desktop or in a folder window — it relabels to a bare
+  _Open_ and opens that icon at once, a document into its window, a folder
+  into its Finder window, Finder-style — the ellipsis being System 7's
+  promise of a dialog), _Close_
+  (the active document, dirty-checked — or, in the Finder role, the front
+  folder window, the Finder's own Close), _Save_ ⌘S (first save of an untitled
   doc prompts for a name), _Duplicate_ ⌘D (the stored copy opens in its own
   window), _Rename…_, _Download_ ⇧⌘E (the document `.png` verbatim — the
   downloaded atlas IS the source format, hence Download rather than Export,
@@ -716,8 +733,11 @@ forward.
   (name, atlas dims, the tile-size stepper — all of the active document).
 - **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (the ACTIVE document's history;
   disabled until it has something — which also hands the key back to a
-  focused field's native undo), _Pick Color…_ ⌘K (the 168-color dialog —
-  app-level, like the ink it picks).
+  focused field's native undo), _Select All_ ⌘A (the Finder's: every icon
+  in the front field — the active folder window's, else the desktop's;
+  live only in the Finder role, so with the application active ⌘A falls
+  through to a focused field's own), _Pick Color…_ ⌘K (the 168-color
+  dialog — app-level, like the ink it picks).
 - **Tools** — the six sticky tool modes — _Selection_, _Pencil_, _Rectangle_,
   _Fill_, _Eraser_, _Eyedropper_ — with the active one checkmarked (the same
   session truth the palette's tool strip and the S/B/R/G/E/I keys write, so a
@@ -813,9 +833,10 @@ those letters in its shortcut column without ever double-firing them.
 
 ### Windows
 
-Two tiers, two regimes — plus one **panel window** on demand, the Desktop
-Patterns control panel (document tier, not a document — see
-[Desktop Patterns](#desktop-patterns)):
+Two tiers, two regimes — plus the **panel windows** on demand, document
+tier but not documents: the Desktop Patterns control panel (see
+[Desktop Patterns](#desktop-patterns)) and the folder windows (see
+[Folders](#folders)):
 
 - **Document windows** (document tier): one per open document, cloned from
   the `#tpl-document-window` template by the reconciler in
@@ -1211,6 +1232,119 @@ the Finder's window: see [One machine, two roles](#one-machine-two-roles)
 for what opening and closing it does to the application. `?patterns=1`
 opens it over the boot document for captures.
 
+### Folders
+
+The Finder's filing system, since Sep 7 2026, on vintage-frames 0.7.0 (its
+`docs/FINDER.md` is the recipe; the plan is
+[docs/folders-plan.md](docs/folders-plan.md)). A **folder is catalog
+structure, not document content**: where a file _sits_ is the HFS
+catalog's business, and a downloaded PNG carries none of it (a dropped one
+lands on the desktop), so a folder is a record of its own in IndexedDB's
+second store (`folders`: id, name, parent, timestamps — the desktop is the
+root and has no record) and a document's membership is one field on its
+record, `folder` — never a chunk, never localStorage. Folders **nest**
+freely; the one rule is that a folder cannot be put into itself or a
+descendant (the files slice refuses the move). A document whose folder
+record is gone reads as the desktop's, so nothing can vanish into an
+orphaned id.
+
+- **The icon** is the app's own 32×32 1-bit art (`src/assets/folder.png`),
+  a `vf-icon` with no `color`, so the kit's selection inversion, its
+  **`target`** inversion (the destination under a drag) and its derived
+  **open ghost** — outline held, interior dithered, worn while the
+  folder's window is on screen — are exact treatments of that one file.
+  It renames in place like a document's (`files.renameFolder`; the
+  window's title follows through the listing).
+- **The desktop's icons sit in a `vf-icon-field`** (`#desktop-icons`, the
+  kit's container for a field of icons — the listbox owner), **filled,
+  not placed**: it stays static, so its icons keep anchoring to the
+  desktop's raster and every saved position means what it meant (a placed
+  field would move the origin under the menu bar); filled, it has a
+  surface to press, which is what the **rubber band** needs — a drag on
+  the bare desktop selects what the rectangle touches, Shift toggles
+  against the selection, Escape cancels — and a press anywhere in it is a
+  press on the Finder. The selection is one per screen (the kit clears on
+  any press outside an icon, across containers), so `shell.iconSelection`
+  names icons in any container.
+- **A folder window** (`#tpl-folder-window`, `shell/folders.js`) is the
+  Finder's: a document-tier window — the striped bar, a close box,
+  `movable resizable scrollbars="both"` — cloned per open and removed by
+  its close box (existence IS visibility), its header line the folder's
+  **item count** (`N items`, plain ink, off the model — a body-face label
+  placed at `FOLDER_COUNT_AT`, `header-height` = `FOLDER_STRIP` in
+  `shell/layout.js`), its body one **placed `vf-icon-field`** at the
+  plane's origin (so the window's `placementAt()` and the field's
+  coordinates agree) sized to the folder's **extent** — the body's
+  viewport at least, grown to hold every icon plus the lattice's inset
+  (`fieldExtent`), which IS the scroll range: the kit sizes its plane to
+  placed content and its rails follow a moved icon by themselves. It is
+  **adopted by `shell/windows.js` as a panel** — the Desktop Patterns
+  panel's contract — placed by `folderBox` (the doc box's corner stepped
+  down-right by the cascade per folder window already open when it
+  opened, at the size the template authors: 320 × 224, three lattice
+  columns by two rows), re-placed by Arrange Windows and re-pinned by a
+  browser resize like every window; **nothing about it persists** — the
+  Finder remembered every folder window's box, and this app places every
+  window fresh (its icons' positions do persist, below). And it **is the
+  Finder's window**: holding the desktop's active state, a panel mirrors
+  as the desktop-focused role, so opening a folder — or clicking into its
+  window — deactivates the application (the windoids hide, the strip
+  goes, the document-scoped items grey) and closing it hands active to
+  the topmost document window, the application back where it was. No
+  zoom box yet (the Finder's zoom fit the window to its icons; a
+  follow-up).
+- **The icon layer is a reconciler over containers** (`shell/icons.js`):
+  the desktop's field for the items whose container is the desktop, plus
+  one field per open folder window for that folder's children — folders
+  first, then documents, each in listing order — an item that moves away
+  removed from its old root and re-created in its new one if that root
+  is on screen. **Positions persist by item** in the desktop-state blob
+  (`doc:<id>`, `folder:<id>`), each in its **current container's**
+  coordinates — the desktop's are screen coordinates, a window's its
+  plane's — and a saved position wins over the lattice; a new item, or
+  one filed with no landing, takes the container's **first free cell**
+  (`iconDefault` on the desktop, `iconGridDefault` inside a window: rows
+  from the plane's origin at the desktop's own 80 × 72 pitch, wrapping
+  at the plane's width). The layer remembers a closed window's icon
+  positions for the session and hands desktop-state every position it
+  knows, so a closed folder never forgets its arrangement. Only the
+  desktop's icons re-pin on a browser resize; a window's travel with it.
+- **Filing is the drag**, and the drag is the kit's (0.7.0): a movable
+  icon drags as the classic **dotted outline** over everything — windows,
+  palettes, the menu bar — the icon staying put, **every selected icon of
+  its field travelling as one**, Escape cancelling; the kit reports
+  `vf-drag` and a cancelable `vf-drop` with the pointer and the outline's
+  origin, and **the page decides what the drop means** (`icons.js`, the
+  kit's stated division: it reports, the consumer decides). Three
+  destinations, hit-tested with `elementsFromPoint` (the travelling icons
+  skipped — the outline is never a hit): onto a **folder icon** files the
+  set into that folder at its lattice's next free cells; into a **folder
+  window** it did not come from files it there, each member exactly where
+  its own outline was let go (the window's `placementAt`, held at the
+  origin); out onto the **desktop** from a window files it to the root,
+  each where its outline was (the desktop's `placementAt`, held below the
+  menu bar). Each cancels the kit's default action and moves the
+  **model** (`files.moveDoc` / `moveFolder` — the icon follows through the
+  reconciler, landing at the drop's position; a move is catalog, not
+  content: the bytes, the name and the modified time all stand); a drop in
+  the container the set came from is the kit's own move, whole. Under a
+  drag the folder icon under the pointer wears `target`, the Finder's
+  inverted destination — never for a folder over itself or a descendant,
+  where the drop is refused and nothing moves. Nothing about the gesture
+  is drawn, measured or clamped by the page.
+- **Duplicate** lands the copy beside the original, in its folder; a
+  first **Save** lands on the desktop; a dropped PNG opens as an untitled
+  whose first save lands on the desktop too. `?file=` resolves by name
+  across every folder. `?fresh=1` renders no icon and no folder window.
+  With storage unavailable, New Folder raises the storage notice like
+  Save.
+- **Not yet**: no delete (the **Trash** is the planned follow-up — a
+  folder icon at the bottom right, Special → Empty Trash; a folder made by
+  mistake is permanent for now), no small-icon view (the field's `size`
+  is the whole mechanism, given 16×16 art), no zoom box on folder windows,
+  no Clean Up, and the Finder's two alerts (a name too long, a folder into
+  itself) are silent refusals.
+
 ### The About box
 
 **Sprite Machine → About…** — and every load the URL gives no document to
@@ -1283,13 +1417,15 @@ reads the chunks), and any foreign 3×2 sheet is a legal, if anonymous,
 document at the default ring. A chunk-stripping optimizer costs the name,
 the timestamps and the ring settings only.
 
-Storage is IndexedDB (`storage/db.js`: one `docs` store; the record is the
-PNG bytes plus rebuildable listing caches — name, timestamps, icon data-URI,
-dims — where the chunk wins on any disagreement), driven by the `files`
-slice (`state/files.js` — the pure LIBRARY layer: listing, availability,
-and the per-document storage operations, each taking an explicit doc +
-identity; which documents are open and their dirty state is the
-workspace's). Explicit Save is the contract (System 7 idiom); per-document
+Storage is IndexedDB (`storage/db.js`, version 2: a `docs` store — the
+record is the PNG bytes plus rebuildable listing caches — name, timestamps,
+icon data-URI, dims — where the chunk wins on any disagreement, plus the
+one field that is neither chunk nor cache, `folder`, where the file sits —
+and a `folders` store, the catalog's structure; see [Folders](#folders)),
+driven by the `files` slice (`state/files.js` — the pure LIBRARY layer:
+listing, availability, the folder tree and its pure selectors, and the
+per-document storage operations, each taking an explicit doc + identity;
+which documents are open and their dirty state is the workspace's). Explicit Save is the contract (System 7 idiom); per-document
 dirty tracking rides each context's doc channels, and a `beforeunload`
 guard over ANY dirty open document is the safety net. Where IndexedDB is
 broken (private windows), Save raises an explanatory dialog and everything
@@ -1299,8 +1435,10 @@ else still works.
 
 Every saved doc gets a `vf-icon` (`selectable movable editable` — Return
 renames in place, converging on the same workspace action as File →
-Rename…, so any open window of that document retitles along) — and saved
-docs are the ONLY icons: the built-in defaults (Car, Cube) are **seeded
+Rename…, so any open window of that document retitles along) — and so does
+every folder (see [Folders](#folders): the field the icons sit in, the
+folder windows, the drag that files them, the per-container positions) —
+and saved items are the ONLY icons: the built-in defaults (Car, Cube) are **seeded
 into the library at the first-ever boot** (`seedDefaultDocs` in
 `loaders.js`, through the same save path as ⌘S — real PNG bytes, chunks,
 generated icon) and are ordinary mutable documents from then on; the
@@ -1662,7 +1800,11 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
   files.js            the document LIBRARY: listing + availability + per-document storage ops
                       (save/load/rename/remove/export, each taking an explicit doc + identity —
                       the identity carrying the ring settings a save writes as their chunk, a
-                      load handing them back) — browser deps (storage, PNG codec, icon art) injected
+                      load handing them back — and where a NEW record lands, its folder) + the
+                      FOLDERS: the catalog's tree (createFolder / renameFolder / moveDoc /
+                      moveFolder — a folder never into itself or a descendant — / removeFolder)
+                      and its pure selectors (childrenOf / isInside / folderPath /
+                      nextFolderName) — browser deps (storage, PNG codec, icon art) injected
   shell.js            appActive + icon selection (the menus and the focus gating share one
                       truth; the windoids are permanent — no flags) + the desktop pattern
                       (the Desktop Patterns panel's Set; the one desktop setting that persists)
@@ -1670,7 +1812,9 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
                       restores. A FACTORY — one instance per open document (no singleton)
   derive.js           pure selectors: editorViewModel(doc, face) -> { tile, mirrorBehind, wasDerived }
 src/storage/
-  db.js           the IndexedDB promise wrapper (one `docs` store) the files slice takes by injection
+  db.js           the IndexedDB promise wrapper (version 2: the `docs` store — a record's `folder`
+                  the one field that is neither chunk nor cache — and the `folders` store) the
+                  files slice takes by injection
 src/scene/
   stage.js        renderer, camera + orbit controls, lights, ground, framing, on-demand render loop, resize
   rebuilder.js    the pipeline's ONLY consumer: follows the ACTIVE document (change+live channels,
@@ -1694,7 +1838,10 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   boot/open arrangement from the raster — the ONLY source of window geometry;
                   none persists; the atlas strip docked at the bottom, the doc box shortened
                   only while it is shown) + cascadeFrom (the document windows' first-free-slot
-                  cascade) + TOOL_CELL / TOOLS_BOX (the Tools palette: the 22×19 icon
+                  cascade) + folderBox / folderViewport / iconGridDefault / fieldExtent +
+                  FOLDER_STRIP / FOLDER_COUNT_AT (the folder windows: the placement, the
+                  plane's viewport, the in-window icon lattice, the field's extent, the
+                  item-count header) + TOOL_CELL / TOOLS_BOX (the Tools palette: the 22×19 icon
                   cell — the tool strip's, the icon's own size — and the windoid box
                   it derives, the one index.html authors and the drive pins) + spriteHeightFor (the fixed-size
                   Sprite View windoid: picker-block width, atlas-ratio height) + RING_FIELDS
@@ -1741,16 +1888,32 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   unsaved-changes / storage notice / Export Sprite Atlas — the ring slice's
                   settings as a live form, Export = the strip's sheet as «slug»-atlas.zip: the
                   PNG with the ring chunk + its TexturePacker JSON); the quit cascade
-  icons.js        the icon layer: one vf-icon per saved doc (nothing else), generated front-tile art,
-                  open/rename wiring, open ghosts, raster-derived placement + boot clamp + the
-                  resize re-pin (below the menu bar), the Finder wire (icon presses deactivate; the
-                  selection feeds the shell slice for the desktop-focused File → Open, and is
-                  re-selected across a press on the app's chrome — menu bar / menu / dialog —
-                  which the kit's vf-icon would otherwise clear: kit ask #5's page-side bridge)
-  desktop-state.js  icon layout + the open saved docs' edited faces (+ active) + the desktop
-                  pattern in one versioned localStorage key (v3; v1/v2 migrate, their window
-                  geometry dropped) — window geometry never persists; this module never sees
-                  a window
+  icons.js        the icon layer: a RECONCILER over containers — the desktop's vf-icon-field and
+                  every open folder window's — one vf-icon per saved doc (generated front-tile
+                  art, `color`) and per folder (the app's 1-bit folder art, `data-folder`),
+                  open/rename wiring, open ghosts, placement (a saved position by item in its
+                  container's coordinates, else the container's first free lattice cell) + the
+                  desktop's boot clamp + its resize re-pin (below the menu bar), the session
+                  memory of a closed window's positions (positions() feeds desktop-state), the
+                  Finder wire (a press in the desktop's field deactivates; the selection feeds
+                  the shell slice for the Finder's File → Open, and is re-selected across a
+                  press on the app's chrome — menu bar / menu / dialog — which the kit's
+                  vf-icon would otherwise clear: kit ask #5's page-side bridge), and FILING —
+                  the kit's outline drag (vf-drag / vf-drop) hit-tested by the page: onto a
+                  folder icon, into a folder window, out to the desktop → files.moveDoc /
+                  moveFolder, the `target` highlight, the cycle refusal
+  folders.js      the folder windows — the Finder's: one vf-window per OPEN folder cloned from
+                  #tpl-folder-window (the item-count header, a placed vf-icon-field sized to the
+                  folder's extent — the scroll range), adopted by windows.js as a PANEL
+                  (layout.js folderBox: the doc box's corner, cascaded), removed by its close
+                  box (existence IS visibility); open / close / isOpen / fields / folderOf /
+                  activeFolder (the Finder's front window) / fit; nothing about it persists
+  desktop-state.js  icon layout (by item — doc:<id> / folder:<id> — in its container's own
+                  coordinates, merged over the map last written so a closed folder window's
+                  icons keep theirs) + the open saved docs' edited faces (+ active) + the
+                  desktop pattern in one versioned localStorage key (v3; v1/v2 migrate, their
+                  window geometry dropped) — window geometry never persists; this module never
+                  sees a window
   url-state.js    the address-bar mirror: the ACTIVE saved document's name -> location.hash
                   (#Cube, replaceState; cleared for untitled/none) so a reload restores it
   clock.js        the menu bar clock: a kit vf-label at the bar's right end — the time on the

@@ -2870,6 +2870,167 @@ async function s28_browserResize() {
   await send('Emulation.clearDeviceMetricsOverride');
 }
 
+// --- folders: the Finder's filing ------------------------------------------
+// The icon layer's containers as the checks read them: every icon in the
+// desktop's field and in each open folder window's field — its key, label,
+// container coordinates, the kit's open ghost, whether its rename box is up
+// (the kit's input part, located to read it) — and each folder window's
+// heading and its header count's digits (a value shape, never the copy).
+const folderProbe = () =>
+  evaluate(`(() => {${DEEP}
+    const iconsOf = (root) => [...root.querySelectorAll(':scope > vf-icon[data-key]')].map((i) => ({
+      key: i.dataset.key, label: i.label, folder: i.dataset.folder ?? null, open: !!i.open,
+      left: i.left, top: i.top,
+      editing: !!(i.shadowRoot && i.shadowRoot.querySelector('[part="input"]')),
+    }));
+    const wins = [...document.querySelectorAll('vf-window')].filter((w) =>
+      w.id.startsWith('win-folder-'));
+    return {
+      desktop: iconsOf(document.querySelector('#desktop-icons')),
+      windows: wins.map((w) => ({
+        id: w.id, heading: w.heading, active: w.hasAttribute('active'),
+        count: +((w.querySelector('.folder-count')?.textContent || '').replace(/[^\\d]/g, '') || 0),
+        icons: iconsOf(w.querySelector('vf-icon-field')),
+      })),
+    };
+  })()`);
+// The centre of an icon's ART CELL by label, in a container (a press on the
+// plate of a selected icon arms the rename — the art cell is the handle).
+const iconCentre = async (label, rootSel = '#desktop-icons') => {
+  const p = await evaluate(`(() => {
+    const i = [...document.querySelectorAll('${rootSel} vf-icon')].find((el) => el.label === '${label}');
+    if (!i) return null;
+    const r = i.shadowRoot.querySelector('[part="icon"]').getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  })()`);
+  if (!p) throw new Error(`no icon labelled ${label} in ${rootSel}`);
+  return p;
+};
+// An icon dragged from a to b: two steps (the kit's outline drag starts on
+// the first lattice step; the drop is where the pointer lets go).
+async function dragIcon(a, b) {
+  await mouse('mousePressed', a.x, a.y);
+  await mouse('mouseMoved', Math.round((a.x + b.x) / 2), Math.round((a.y + b.y) / 2), {
+    buttons: 1,
+  });
+  await sleep(60);
+  await mouse('mouseMoved', b.x, b.y, { buttons: 1 });
+  await sleep(60);
+  await mouse('mouseReleased', b.x, b.y, { buttons: 0 });
+  await sleep(200);
+}
+
+async function s30_folders() {
+  section('S30 folders: New Folder, a rename, filing by drag, the round trip');
+  // The plain boot's desktop: the seeded Car and Cube, the About box OK'd —
+  // the Finder role, with files to file.
+  await send('Page.navigate', { url: SEED_URL });
+  await waitForGreet();
+  await dismissGreet();
+  await pickMenu('#menu-file', 'new-folder');
+  // New Folder: a folder icon lands on the desktop with its rename box open
+  // (the kit focuses and selects the field), so the name types straight in.
+  const made = await until(async () =>
+    (await folderProbe()).desktop.some((i) => i.folder != null && i.editing)
+  );
+  await typeText('Vehicles');
+  await keyPress('Enter');
+  const named = await until(async () =>
+    (await folderProbe()).desktop.some((i) => i.folder != null && i.label === 'Vehicles')
+  );
+  let f = await folderProbe();
+  check(
+    'File → New Folder makes a folder icon on the desktop with its rename box open; the typed name lands on the folder',
+    made && named && f.desktop.filter((i) => i.folder != null).length === 1,
+    JSON.stringify(f.desktop)
+  );
+  // Filing by drag: the Car's icon dropped onto the folder's leaves the
+  // desktop; the folder opened (a double-click) shows it inside, the
+  // header counting one.
+  const car = await iconCentre('Car');
+  const folder = await iconCentre('Vehicles');
+  await dragIcon(car, folder);
+  const filed = await until(async () =>
+    (await folderProbe()).desktop.every((i) => i.label !== 'Car')
+  );
+  await dblclick(folder.x, folder.y);
+  await until(async () => {
+    const p = await folderProbe();
+    return p.windows.length === 1 && p.windows[0].icons.some((i) => i.label === 'Car');
+  });
+  f = await folderProbe();
+  const win = f.windows[0];
+  check(
+    'the Car’s icon dragged onto the folder files it: it leaves the desktop, and the folder’s window opens holding it, the header counting one',
+    filed &&
+      f.windows.length === 1 &&
+      win.heading === 'Vehicles' &&
+      win.count === 1 &&
+      win.icons.length === 1 &&
+      win.icons[0].label === 'Car' &&
+      f.desktop.find((i) => i.label === 'Vehicles')?.open === true,
+    JSON.stringify(f)
+  );
+  // Out of the window onto the desktop, then back in through the window's
+  // body: the container follows the drop each way, the count with it.
+  const inWin = await iconCentre('Car', `#${win.id}`);
+  const bare = await bareSpot();
+  await dragIcon(inWin, bare);
+  const out = await until(async () => {
+    const p = await folderProbe();
+    return p.desktop.some((i) => i.label === 'Car') && p.windows[0]?.count === 0;
+  });
+  const onDesk = await iconCentre('Car');
+  const field = await centreOf(`#${win.id} vf-icon-field`);
+  await dragIcon(onDesk, field);
+  const backIn = await until(async () => {
+    const p = await folderProbe();
+    return (
+      p.desktop.every((i) => i.label !== 'Car') &&
+      p.windows[0]?.count === 1 &&
+      p.windows[0].icons.some((i) => i.label === 'Car')
+    );
+  });
+  f = await folderProbe();
+  check(
+    'out of the window onto the desktop and back in through its body: the Car’s container follows each drop, the count with it',
+    out && backIn,
+    JSON.stringify({ out, backIn, desktop: f.desktop, window: f.windows[0] })
+  );
+  // The round trip: a reload restores the folder, the filing and the icon's
+  // position inside the folder (IndexedDB for the catalog, the desktop
+  // state for the position), and the Open listing carries the Car's row.
+  const before = f.windows[0].icons.find((i) => i.label === 'Car');
+  await send('Page.navigate', { url: SEED_URL });
+  await waitForGreet();
+  await dismissGreet();
+  const folderAgain = await iconCentre('Vehicles');
+  await dblclick(folderAgain.x, folderAgain.y);
+  await until(async () => (await folderProbe()).windows.length === 1);
+  f = await folderProbe();
+  const after = f.windows[0]?.icons.find((i) => i.label === 'Car');
+  const bare2 = await bareSpot();
+  await click(bare2.x, bare2.y);
+  await pickMenu('#menu-file', 'open');
+  const openDlgUp = () => evaluate(`document.querySelector('#dlg-open').open`);
+  await until(openDlgUp);
+  const listed = await evaluate(
+    `[...document.querySelectorAll('#open-list vf-list-item')].some((i) => i.value === '${before?.key}')`
+  );
+  const cancel = await centreOf('#btn-open-cancel');
+  await click(cancel.x, cancel.y);
+  await until(async () => !(await openDlgUp()));
+  check(
+    'a reload restores the folder, the filing and the Car’s position inside it; File → Open lists the Car’s row',
+    f.desktop.every((i) => i.label !== 'Car') &&
+      !!after &&
+      after.left === before.left &&
+      after.top === before.top &&
+      listed,
+    JSON.stringify({ before, after, listed, desktop: f.desktop })
+  );
+}
+
 // --- the run ----------------------------------------------------------------
 async function main() {
   for (let i = 0; i < 60; i++) {
@@ -2970,8 +3131,13 @@ async function main() {
     s27_saveOpenRoundTrip,
     s28_browserResize,
     s29_exportModel,
+    s30_folders,
   ];
-  for (const run of scenarios) await run();
+  // An optional second argument runs the scenarios whose function name
+  // contains it (`node tools/drive.mjs 5175 s30`) — for iterating on one
+  // journey; the gate is the whole list.
+  const only = process.argv[3] || '';
+  for (const run of scenarios) if (run.name.includes(only)) await run();
 
   console.log(
     `\n${passed} passed, ${failures.length} failed` +

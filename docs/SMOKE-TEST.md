@@ -6,7 +6,7 @@ contracts, `tools/drive.mjs` for the user journeys on trusted input,
 Chrome runs unreliably (chorded and right-button drags wedge its renderer),
 feel, the cursor, browser zoom, and the one input no script can give it (a
 dropped file). Run against `npm run dev` in a normal browser,
-`http://localhost:5173/`. Twenty-three items; a run is about ten minutes.
+`http://localhost:5173/`. Thirty items; a run is about twelve minutes.
 
 ## Gestures the drive cannot make
 
@@ -82,6 +82,40 @@ dropped file). Run against `npm run dev` in a normal browser,
       ramped, standing on the origin, four meters long at the default ten
       voxels per meter; exported Unlit, the colors flat and exact under no
       light.
+
+## Folders
+
+- [ ] **The drag is an outline**: press a desktop icon and drag it across
+      a document window, a windoid and the menu bar — a dotted outline of
+      the icon and its name travels over all of them, the icon itself
+      staying put; Esc mid-drag takes the outline down and nothing moves.
+- [ ] **The destination inverts**: File → New Folder, name it, then drag
+      the Car over its icon — the folder inverts while the outline is over
+      it and reverts when the outline leaves; release over it and the Car
+      leaves the desktop. Double-click the folder: its window opens with
+      the Car inside and the header reading one item, the windoids hidden
+      (the Finder's window is front); the folder's icon wears the open
+      ghost while the window is up.
+- [ ] **The rubber band**: on the bare desktop drag a rectangle across
+      two icons — both select as the rectangle touches them, deselect as
+      it leaves; with Shift held it toggles against what was selected. The
+      same inside a folder window's body.
+- [ ] **A selection drags as one**: band Car and Cube, drag one of them
+      into the folder's window — two outlines travel keeping their
+      arrangement, and both land in the window where their outlines were.
+- [ ] **Every direction**: out of the window onto the desktop, window to
+      window (open a second folder), and a folder into a folder (its icon
+      into the other's window) — each lands where the outline was let go;
+      the counts follow. Drag a folder onto its own icon inside its own
+      window's path (a child folder's window): nothing highlights and the
+      drop puts nothing anywhere.
+- [ ] **The Finder's window**: with a document window active, click into
+      a folder window — the windoids and the strip hide and Close reads
+      the folder window; its close box brings the application back where
+      it was. File → Close does the same from the menu.
+- [ ] **A closed folder keeps its arrangement**: drag icons around inside
+      a folder window, close it, reopen it — every icon where it was; then
+      reload — still where it was.
 
 ## Browser zoom and displays
 

@@ -35,6 +35,7 @@ import {
 import { initWindows } from './shell/windows.js';
 import { initMenus } from './shell/menus.js';
 import { initIcons } from './shell/icons.js';
+import { initFolders } from './shell/folders.js';
 import { initClock } from './shell/clock.js';
 import { initPatterns } from './shell/patterns.js';
 import { createDesktopState } from './shell/desktop-state.js';
@@ -157,15 +158,26 @@ const patterns = initPatterns(desktop, windows, { saved: dstate.desktopPattern()
 // a glb. The rebuilder below hands both every mesh through the onMesh seam.
 const ringFollow = initRing(createRingRenderer);
 const modelExport = initModelExport();
-const menus = initMenus(desktop, windows, {
+// The folder windows (shell/folders.js — the Finder's windows, panels of
+// the window layer), then the icon layer over them (its roots are the
+// desktop's field and every open folder's), then the menus over both. The
+// icon layer's open action is the menus' (dirty-checked), bound late: the
+// menus need the layer for New Folder's rename box and Select All.
+const folders = initFolders(desktop, windows);
+/** @type {ReturnType<typeof initMenus>} */
+let menus;
+const icons = initIcons(desktop, {
+  actions: { openDoc: (id) => menus.actions.openDoc(id) },
+  folders,
+  savedPos: dstate.iconPos,
+  fresh: boot.fresh,
+});
+menus = initMenus(desktop, windows, {
   patterns,
   ring: ringFollow,
   model: modelExport,
-});
-const icons = initIcons(desktop, {
-  actions: menus.actions,
-  savedPos: dstate.iconPos,
-  fresh: boot.fresh,
+  folders,
+  icons,
 });
 // The menu bar clock (shell/clock.js); ?now freezes it for captures.
 const clock = initClock(
@@ -178,9 +190,7 @@ repinDesktop = (before) => {
   windows.onDesktopResized(before);
   icons.onDesktopResized(before);
 };
-const stopPersist = dstate.start({
-  iconsRoot: desktop.querySelector('#desktop-icons'),
-});
+const stopPersist = dstate.start({ readIcons: icons.positions });
 // The address bar mirrors the active SAVED document (#<name>, replaceState),
 // so a plain reload restores what's on screen; ?fresh leaves even the URL
 // untouched (a capture boot writes nothing anywhere).
@@ -235,6 +245,7 @@ if (hot) {
     windows.dispose();
     menus.dispose();
     icons.dispose();
+    folders.dispose();
     clock.dispose();
     patterns.dispose();
     stopPersist();

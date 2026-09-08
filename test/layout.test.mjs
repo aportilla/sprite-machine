@@ -14,6 +14,12 @@ import {
   zoomedBox,
   centeredBox,
   iconDefault,
+  folderBox,
+  folderViewport,
+  iconGridDefault,
+  fieldExtent,
+  FOLDER_STRIP,
+  FOLDER_COUNT_AT,
   pinOf,
   pinTo,
   spriteHeightFor,
@@ -621,6 +627,49 @@ test('icon defaults: a raster-derived column below the Tools band, wrapping', ()
   // (a single row — the boot clamp pulls it up into frame).
   const p = iconDefault(3, 100);
   assert.ok(Number.isFinite(p.left) && Number.isFinite(p.top));
+});
+
+test('folder windows: the box cascades from the doc box’s corner, the lattice wraps at the plane’s width, the field’s extent holds every icon', () => {
+  const size = { width: 320, height: 224 };
+  const doc = initialPlacement(W, H, TOOLS).doc;
+  const first = folderBox(W, H, size, 0);
+  assert.deepEqual(first, { left: doc.left, top: doc.top, ...size });
+  const second = folderBox(W, H, size, 1);
+  assert.equal(second.left - first.left, CASCADE_STEP);
+  assert.equal(second.top - first.top, CASCADE_STEP);
+  // A raster smaller than the window still keeps the title bar grabbable.
+  const tiny = folderBox(200, 200, size, 3);
+  assert.equal(tiny.left, 0);
+  assert.equal(tiny.top, TOP_RESERVE);
+  // The header: the count's box sits above the rule.
+  assert.ok(FOLDER_STRIP > FOLDER_COUNT_AT.top + 12);
+  // The plane's viewport is the window less its chrome — smaller on both
+  // axes, never negative.
+  const vp = folderViewport(size);
+  assert.ok(vp.width < size.width && vp.height < size.height);
+  assert.deepEqual(folderViewport({ width: 10, height: 10 }), { width: 0, height: 0 });
+  // The lattice: the first cell at the inset; every cell of the first row
+  // fits inside the width; the wrap lands under the first cell one row down.
+  const c0 = iconGridDefault(0, vp.width);
+  assert.equal(c0.left, c0.top);
+  let cols = 0;
+  while (iconGridDefault(cols, vp.width).top === c0.top) cols++;
+  assert.ok(cols >= 1);
+  for (let s = 0; s < cols; s++) {
+    assert.ok(iconGridDefault(s, vp.width).left + ICON_CELL <= vp.width, `slot ${s}`);
+  }
+  const wrapped = iconGridDefault(cols, vp.width);
+  assert.equal(wrapped.left, c0.left);
+  assert.ok(wrapped.top > c0.top);
+  // A plane too narrow for one cell still deals a single column.
+  assert.equal(iconGridDefault(1, 10).left, c0.left);
+  // The extent: the viewport at least; an icon past it grows the field to
+  // hold it, and an icon inside it changes nothing.
+  assert.deepEqual(fieldExtent([], vp), vp);
+  assert.deepEqual(fieldExtent([c0], vp), vp);
+  const far = { left: vp.width + 40, top: vp.height + 40 };
+  const grown = fieldExtent([c0, far], vp);
+  assert.ok(grown.width >= far.left + ICON_CELL && grown.height >= far.top + ICON_CELL);
 });
 
 test('icon pin: the frame is the desktop below the MENU BAR, uniform bands, a fixed cell', () => {

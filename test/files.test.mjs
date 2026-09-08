@@ -9,7 +9,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createDoc } from '../src/state/doc.js';
-import { createFiles, docFilename, SOFTWARE } from '../src/state/files.js';
+import {
+  createFiles,
+  docFilename,
+  SOFTWARE,
+  UNTITLED_FOLDER,
+  childrenOf,
+  isInside,
+  folderPath,
+  nextFolderName,
+} from '../src/state/files.js';
 import { readTextChunks } from '../src/lib/png-chunks.js';
 import { fakeScheduler, memStorage, encodeAtlas, decodeAtlas } from './helpers.mjs';
 
@@ -196,6 +205,95 @@ test('remove deletes the record and the listing row', async () => {
   await files.remove('id-1');
   assert.equal(storage.map.size, 0);
   assert.equal(files.get().list.length, 0);
+});
+
+// --- folders ------------------------------------------------------------------
+
+test('folders: created names count up per container, a document files in and out, a rename lands in place', async () => {
+  const { files, storage, doc } = makeWorld();
+  await files.refresh();
+  const a = await files.createFolder();
+  const b = await files.createFolder();
+  assert.equal(a.name, UNTITLED_FOLDER);
+  assert.equal(b.name, `${UNTITLED_FOLDER} 2`);
+  // A container's count is its own: inside `a` the first name is free again.
+  assert.equal(nextFolderName(files.get(), a.id), UNTITLED_FOLDER);
+  await files.renameFolder(a.id, 'Vehicles');
+  assert.equal(storage.folders.get(a.id).name, 'Vehicles');
+
+  const { id } = await files.save(doc, { name: 'Car' });
+  assert.equal(files.get().list[0].folder, null, 'a first save lands on the desktop');
+  assert.equal(await files.moveDoc(id, a.id), true);
+  assert.equal(files.get().list[0].folder, a.id);
+  assert.deepEqual(
+    childrenOf(files.get(), a.id).docs.map((r) => r.name),
+    ['Car']
+  );
+  assert.equal(childrenOf(files.get(), null).docs.length, 0);
+  assert.equal(await files.moveDoc(id, a.id), false, 'already there: nothing moves');
+  assert.equal(await files.moveDoc(id, null), true, 'and back out to the desktop');
+  assert.equal(files.get().list[0].folder, null);
+});
+
+test('a record keeps its folder across an in-place save and a rename; a new record takes the identity’s', async () => {
+  const { files, storage, doc, frames } = makeWorld();
+  await files.refresh();
+  const f = await files.createFolder({ name: 'F' });
+  const { id } = await files.save(doc, { name: 'Ship', folder: f.id });
+  assert.equal(storage.map.get(id).folder, f.id);
+  stroke(doc);
+  frames.frame();
+  await files.save(doc, { fileId: id, name: 'Ship', folder: null });
+  assert.equal(storage.map.get(id).folder, f.id, 'a save never moves a file');
+  await files.renameById(id, 'Boat');
+  assert.equal(storage.map.get(id).folder, f.id, 'nor does a rename');
+});
+
+test('moveFolder nests, and refuses a folder into itself or a descendant; the tree selectors read the result', async () => {
+  const { files } = makeWorld();
+  await files.refresh();
+  const a = await files.createFolder({ name: 'A' });
+  const b = await files.createFolder({ name: 'B' });
+  const c = await files.createFolder({ name: 'C' });
+  assert.equal(await files.moveFolder(b.id, a.id), true);
+  assert.equal(await files.moveFolder(c.id, b.id), true);
+  const st = files.get();
+  assert.equal(isInside(st, c.id, a.id), true);
+  assert.equal(isInside(st, a.id, c.id), false);
+  assert.equal(isInside(st, a.id, a.id), false, 'a folder is not inside itself');
+  assert.deepEqual(folderPath(st, c.id), ['A', 'B', 'C']);
+  assert.deepEqual(folderPath(st, null), []);
+  assert.deepEqual(
+    childrenOf(st, null).folders.map((f) => f.name),
+    ['A']
+  );
+  assert.equal(await files.moveFolder(a.id, a.id), false, 'into itself');
+  assert.equal(await files.moveFolder(a.id, c.id), false, 'into a descendant');
+  assert.equal(files.get().folders.find((f) => f.id === a.id).parent, null);
+  assert.equal(await files.moveFolder(c.id, null), true, 'out to the desktop');
+  assert.deepEqual(folderPath(files.get(), c.id), ['C']);
+});
+
+test('removeFolder lifts its children into its container; an orphaned folder id reads as the desktop', async () => {
+  const { files, storage, doc } = makeWorld();
+  await files.refresh();
+  const a = await files.createFolder({ name: 'A' });
+  const b = await files.createFolder({ name: 'B', parent: a.id });
+  const { id } = await files.save(doc, { name: 'Car', folder: b.id });
+  await files.removeFolder(b.id);
+  let st = files.get();
+  assert.equal(st.folders.length, 1);
+  assert.equal(st.list[0].folder, a.id, 'the document lifted into B’s container');
+  // A record pointing at a folder that is gone (a stale write) shows on the
+  // desktop rather than nowhere.
+  await storage.put({ ...storage.map.get(id), folder: 'gone' });
+  await files.refresh();
+  st = files.get();
+  assert.deepEqual(
+    childrenOf(st, null).docs.map((r) => r.name),
+    ['Car']
+  );
+  assert.deepEqual(folderPath(st, 'gone'), []);
 });
 
 // --- export ------------------------------------------------------------------
