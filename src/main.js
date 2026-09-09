@@ -166,7 +166,7 @@ const modelExport = initModelExport();
 // for it), then the icon layer over them (its roots are the desktop's field
 // and every open folder's), then the menus over both. The icon layer's open
 // action is the menus' (dirty-checked), bound late: the menus need the
-// layer for New Folder's rename box and Select All.
+// layer for New Folder's rename box.
 const folders = initFolders(desktop, windows, { savedPin: dstate.windowPin });
 /** @type {ReturnType<typeof initMenus>} */
 let menus;

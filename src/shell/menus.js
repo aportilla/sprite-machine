@@ -17,9 +17,7 @@
 // in one stored zip — a browser gives one download per gesture. File →
 // Download is the source path.
 // Behavior only — the markup lives in
-// index.html, the aesthetics in the kit. (Settings… is parked: the render
-// toggle moved to the 3D View's controls strip, and the emptied item sits
-// disabled in the markup until it has contents again.)
+// index.html, the aesthetics in the kit.
 //
 // MULTI-DOCUMENT GRAMMAR: File actions target the ACTIVE workspace context;
 // New… / Open / a drop always open a NEW window (opening never discards
@@ -93,7 +91,7 @@ import { downloadPngBytes, downloadBlob, canvasToPngBytes } from '../image-io.js
  *   the folder windows — the Finder's), the 3D Sprite Atlas's renderer
  *   follower (Export Sprite Atlas… renders through it), the 3D model
  *   export's subject (Export 3D Model… writes its glb through it), and the
- *   icon layer (New Folder's rename box, Select All).
+ *   icon layer (New Folder's rename box).
  */
 export function initMenus(desktop, windows, panels) {
   const { folders, icons } = panels;
@@ -683,8 +681,6 @@ export function initMenus(desktop, windows, panels) {
   // --- menus ------------------------------------------------------------------
   on($('#menu-app'), 'vf-menu-select', (e) => {
     if (modalOpen()) return;
-    // No 'settings' case: the item sits disabled in the markup (parked — see
-    // the file header), and a disabled item never fires by kit contract.
     switch (menuDetail(e).value) {
       case 'about':
         showAbout();
@@ -819,12 +815,6 @@ export function initMenus(desktop, windows, panels) {
       case 'redo':
         workspace.active()?.history.redo();
         break;
-      case 'select-all':
-        // The Finder's: every icon in the front field — the active folder
-        // window's, else the desktop's (the item is greyed with the
-        // application active, so this only ever runs in the Finder role).
-        icons.selectAll(folders.activeFolder());
-        break;
       case 'pick-color':
         session.openPicker();
         break;
@@ -901,21 +891,18 @@ export function initMenus(desktop, windows, panels) {
   // Two roles share one menu bar (the single-application affordance): with
   // the desktop focused, every document-scoped item greys out. About /
   // Desktop Patterns / Quit / New / New Folder / Open stay — they're
-  // app-level (the parked Settings… is disabled in the markup in both
-  // roles); the ⌘J item (Arrange Windows — its value the arrange / zoom)
+  // app-level; the ⌘J item (Arrange Windows — its value the arrange / zoom)
   // keeps its own gate below (an open document window, and the windows'
   // state); the View menu's open-windows items (syncWindows below) are
   // live in both roles — a pick there is what brings the application back
   // — and Open wears the Finder grammar above: its label follows the
   // selection ("Open" on a selected icon, "Open…" for the listing dialog
-  // otherwise), never greyed. Two items read the FINDER'S front window
+  // otherwise), never greyed. One item reads the FINDER'S front window
   // beside the role: Close is live with a document window OR a folder
-  // window active (the Finder's Close closed its front window), and Select
-  // All — the Finder's — is live only with the application inactive (so
-  // ⌘A falls through to a focused field's own select-all otherwise); both
-  // re-read on every change of the desktop's active window (vf-activate:
-  // a folder window taking or losing active moves neither role flag). A
-  // third reads it beside the listing: New Folder greys while the Finder's
+  // window active (the Finder's Close closed its front window), re-read on
+  // every change of the desktop's active window (vf-activate: a folder
+  // window taking or losing active moves neither role flag). A
+  // second reads it beside the listing: New Folder greys while the Finder's
   // front window is the Trash's, or a trashed folder's (System 7's own — a
   // folder is not made in the Trash; the slice refuses regardless).
   // Disabling an item also parks its key equivalent (the kit never fires a
@@ -941,13 +928,11 @@ export function initMenus(desktop, windows, panels) {
   const docItems = DOC_SCOPED.map((v) => $(`vf-menu-item[value="${v}"]`));
   const itemOpen = $('vf-menu-item[value="open"]');
   const itemClose = $('vf-menu-item[value="close"]');
-  const itemSelectAll = $('vf-menu-item[value="select-all"]');
   const itemNewFolder = $('vf-menu-item[value="new-folder"]');
   const syncGate = () => {
     const s = shell.get();
     for (const item of docItems) item.disabled = !s.appActive;
     itemClose.disabled = !(s.appActive || folders.activeFolder() != null);
-    itemSelectAll.disabled = s.appActive;
     itemNewFolder.disabled = isTrashed(files.get(), folders.activeFolder());
     // The ellipsis is the System 7 promise of a dialog: "Open" acts at once
     // on the selection, "Open…" asks (the listing) — so the label is the

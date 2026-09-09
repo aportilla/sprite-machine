@@ -305,7 +305,8 @@ active window?**
   slotted light DOM, so only the page knows which presses mean "the Finder".
   Every document window goes plain, the windoids **hide**, the options strip
   hides with them, the bare-letter tool keys go inert, and the menus drop to
-  the **Finder grammar** — About / Settings / Quit / New… / Open stay enabled,
+  the **Finder grammar** — About / Desktop Patterns / Quit / New… / Open stay
+  enabled,
   and Open reads the selection (see [Menu bar](#menu-bar)). The selection
   **survives the trip to the menu bar**, since a press on the application's
   chrome is no press on the desktop; the kit's `vf-icon` would clear on it, so
@@ -344,8 +345,7 @@ the Undo/Redo enablement.
 
 ### Menu bar
 
-- **Sprite Machine** — _About…_ (also the boot greeting), _Settings…_ (parked
-  and disabled: the render toggle moved to the 3D View's strip), _Desktop
+- **Sprite Machine** — _About…_ (also the boot greeting), _Desktop
   Patterns_ (a window, not a dialog, so no ellipsis), _Empty Trash…_ (greyed
   while the Trash is empty, no key equivalent), _Quit_ (the System 7 cascade:
   every open document in turn, one unsaved-changes alert per dirty one with
@@ -396,8 +396,7 @@ the Undo/Redo enablement.
   whenever a model exists, the windoid shown or not.
 - **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (the ACTIVE document's history; disabled
   until it has something, which hands the key back to a focused field's native
-  undo), _Select All_ ⌘A (the Finder's: every icon in the front field, live
-  only in the Finder role), _Pick Color…_ ⌘K, and _Tile Size…_ (the active
+  undo), _Pick Color…_ ⌘K, and _Tile Size…_ (the active
   document's square tile size behind a modal that commits on OK alone — the
   one property that is an edit; see [Drawing editor](#drawing-editor)).
   **Tools** lists the six sticky

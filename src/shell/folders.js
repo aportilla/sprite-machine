@@ -55,7 +55,7 @@
 //   topmost document window (the kit promotes the survivor), and the
 //   application returns where it was. activeFolder() reads which folder's
 //   window holds active — the Finder's "front window", what New Folder
-//   creates in, what File → Close closes, what Select All selects in.
+//   creates in, what File → Close closes.
 //
 //   THE HEADER COUNT follows the model (the files slice's childrenOf), never
 //   the DOM — re-counted on every listing change, "N items", plain ink.
@@ -289,8 +289,6 @@ export function initFolders(desktop, windows, { savedPin = () => null } = {}) {
      *  @returns {[string, any][]} */
     fields: () =>
       [...wins].map(([id, win]) => /** @type {[string, any]} */ ([id, fieldOf(win)])),
-    /** The field element of an open folder, or null. */
-    fieldFor: (id) => (wins.has(id) ? fieldOf(wins.get(id)) : null),
     /** The folder whose window `el` is or sits in, or null. */
     folderOf(el) {
       const win = el instanceof VfWindow ? el : el?.closest?.('vf-window');

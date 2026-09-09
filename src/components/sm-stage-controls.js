@@ -12,9 +12,9 @@
 // (scene/rebuilder.js builds the wedge mesh unconditionally), so it is no
 // toggle and no state. Settings… used to hold the toggles; keeping a
 // control on the window it changes is the standing preference for
-// persistent in-flow controls over popups (the menu item stays, parked
-// disabled). The host is `display: contents`; nothing here is styled — the
-// header is the kit's band, the row the kit's stack.
+// persistent in-flow controls over popups (the emptied menu item was
+// retired Sep 9 2026). The host is `display: contents`; nothing here is
+// styled — the header is the kit's band, the row the kit's stack.
 //
 // The toggle acts on the CLICK — the kit's own checkbox activation, on the
 // release like System 7's. A windoid control needs no press-driven bridge:

@@ -27,10 +27,6 @@
       <vf-menu-bar shortcuts>
         <vf-menu id="menu-app" label="Sprite Machine">
           <vf-menu-item value="about">About Sprite Machine…</vf-menu-item>
-          <!-- Parked: the render toggle (rotate) moved to the 3D View's
-               controls strip, leaving Settings… empty. The item stays
-               disabled as the placeholder for a future settings surface. -->
-          <vf-menu-item value="settings" disabled>Settings…</vf-menu-item>
           <!-- The Desktop Patterns control panel (shell/patterns.js): a
                window, not a dialog, so no ellipsis — the Apple menu's
                Control Panels listed it bare. App-level like About, live in
@@ -87,15 +83,6 @@
           <vf-menu-item value="undo" shortcut="⌘Z" disabled>Undo</vf-menu-item>
           <vf-menu-item value="redo" shortcut="⇧⌘Z" disabled>Redo</vf-menu-item>
           <vf-separator></vf-separator>
-          <!-- Select All: the Finder's — every icon in the front field (the
-               active folder window's, else the desktop's). Finder-role
-               only: greyed with the application active, so ⌘A falls
-               through to a focused field's own select-all (menus.js gates
-               it the way it gates the document-scoped items, inverted). -->
-          <vf-menu-item value="select-all" shortcut="⌘A" disabled
-            >Select All</vf-menu-item
-          >
-          <vf-separator></vf-separator>
           <vf-menu-item value="pick-color" shortcut="⌘K">Pick Color…</vf-menu-item>
           <vf-separator></vf-separator>
           <!-- Tile Size…: the active document's square tile size, behind a
@@ -149,7 +136,7 @@
                empty workspace, like Undo/Redo — and, arranged, in the
                Finder role (no active window to zoom). ⌘J: one of the few
                clean letters left (no Mac browser binds it — Downloads is
-               ⇧⌘J — and ⌘A stays for a Select All), beside ⌘K. Off-Mac,
+               ⇧⌘J), beside ⌘K. Off-Mac,
                Ctrl+J IS the browser's Downloads, which the kit's claim
                pre-empts while the item is live; a disabled item claims
                nothing (the kit's contract — a greyed Undo's ⌘Z, likewise),

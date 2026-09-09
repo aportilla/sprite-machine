@@ -616,13 +616,6 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
       icon.setSelected(true);
       icon.startEditing();
     },
-    /** Edit → Select All: every icon in a container (null: the desktop),
-     *  through the kit's gesture route so vf-select reports each. */
-    selectAll(folder) {
-      const root = folder == null ? desktopField : folders.fieldFor(folder);
-      if (!root) return;
-      for (const icon of iconsIn(root)) icon.setSelected(true);
-    },
     dispose() {
       for (const fn of teardown) fn();
       highlight(null);
