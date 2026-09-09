@@ -131,8 +131,9 @@ const removeCursor = applyCursor();
 
 // --- persistence wiring ------------------------------------------------------
 // The files slice gets its browser dependencies here (it stays Node-testable
-// with stubs); desktop state (icons, edited faces — never window geometry)
-// rides localStorage, both disabled by ?fresh=1.
+// with stubs); desktop state (icons, the folder windows' pins, edited faces
+// — never an application window's geometry) rides localStorage, both
+// disabled by ?fresh=1.
 files.init({
   storage: createStorageIfAvailable(),
   encodeAtlas: imageDataToPngBytes,
@@ -143,8 +144,10 @@ files.init({
 const dstate = createDesktopState(boot.fresh);
 
 // --- shell ------------------------------------------------------------------
-// The windows take no saved state: their geometry is placed fresh from the
-// live raster at every boot and every open (shell/windows.js header).
+// The application's windows take no saved state: their geometry is placed
+// fresh from the live raster at every boot and every open (shell/windows.js
+// header); a folder window's remembered pin arrives through folders.js
+// below.
 const windows = initWindows(desktop, { hide: boot.hide });
 // The desktop pattern: the last session's choice restored onto the desktop
 // (nothing under ?fresh — the dither), written before the desktop's first
@@ -159,11 +162,12 @@ const patterns = initPatterns(desktop, windows, { saved: dstate.desktopPattern()
 const ringFollow = initRing(createRingRenderer);
 const modelExport = initModelExport();
 // The folder windows (shell/folders.js — the Finder's windows, panels of
-// the window layer), then the icon layer over them (its roots are the
-// desktop's field and every open folder's), then the menus over both. The
-// icon layer's open action is the menus' (dirty-checked), bound late: the
-// menus need the layer for New Folder's rename box and Select All.
-const folders = initFolders(desktop, windows);
+// the window layer, each reopening at the pin the desktop state remembers
+// for it), then the icon layer over them (its roots are the desktop's field
+// and every open folder's), then the menus over both. The icon layer's open
+// action is the menus' (dirty-checked), bound late: the menus need the
+// layer for New Folder's rename box and Select All.
+const folders = initFolders(desktop, windows, { savedPin: dstate.windowPin });
 /** @type {ReturnType<typeof initMenus>} */
 let menus;
 const icons = initIcons(desktop, {
@@ -190,7 +194,10 @@ repinDesktop = (before) => {
   windows.onDesktopResized(before);
   icons.onDesktopResized(before);
 };
-const stopPersist = dstate.start({ readIcons: icons.positions });
+const stopPersist = dstate.start({
+  readIcons: icons.positions,
+  readWindows: folders.pins,
+});
 // The address bar mirrors the active SAVED document (#<name>, replaceState),
 // so a plain reload restores what's on screen; ?fresh leaves even the URL
 // untouched (a capture boot writes nothing anywhere).

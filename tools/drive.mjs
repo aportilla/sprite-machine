@@ -2750,35 +2750,37 @@ async function s27_saveOpenRoundTrip() {
   );
 }
 
+// Emulation.setDeviceMetricsOverride changes the layout viewport and fires
+// a real `resize` — the same path a user's window drag takes. layoutSnap
+// reads the raster with every visible window's and desktop icon's box.
+const layoutSnap = () =>
+  evaluate(`(() => {
+    const d = document.querySelector('#desktop');
+    const wins = [...document.querySelectorAll('vf-window')]
+      .filter((w) => !w.hidden)
+      .map((w) => ({ id: w.id, left: w.left, top: w.top, w: w.width, h: w.height }));
+    const icons = [...document.querySelectorAll('#desktop-icons vf-icon')].map(
+      (i) => ({ id: i.dataset.key, left: i.left, top: i.top })
+    );
+    return { dw: d.width, dh: d.height, wins, icons };
+  })()`);
+const metrics = async (width, height) => {
+  const before = await layoutSnap();
+  await send('Emulation.setDeviceMetricsOverride', {
+    width,
+    height,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await until(async () => {
+    const now = await layoutSnap();
+    return now.dw !== before.dw || now.dh !== before.dh;
+  }, 3000);
+  await sleep(200);
+};
+
 async function s28_browserResize() {
   section('S28 a browser resize');
-  // Emulation.setDeviceMetricsOverride changes the layout viewport and fires
-  // a real `resize` — the same path a user's window drag takes.
-  const layoutSnap = () =>
-    evaluate(`(() => {
-      const d = document.querySelector('#desktop');
-      const wins = [...document.querySelectorAll('vf-window')]
-        .filter((w) => !w.hidden)
-        .map((w) => ({ id: w.id, left: w.left, top: w.top, w: w.width, h: w.height }));
-      const icons = [...document.querySelectorAll('#desktop-icons vf-icon')].map(
-        (i) => ({ id: i.dataset.key, left: i.left, top: i.top })
-      );
-      return { dw: d.width, dh: d.height, wins, icons };
-    })()`);
-  const metrics = async (width, height) => {
-    const before = await layoutSnap();
-    await send('Emulation.setDeviceMetricsOverride', {
-      width,
-      height,
-      deviceScaleFactor: 1,
-      mobile: false,
-    });
-    await until(async () => {
-      const now = await layoutSnap();
-      return now.dw !== before.dw || now.dh !== before.dh;
-    }, 3000);
-    await sleep(200);
-  };
   // The ⌘J item's value is \`arrange\` only while something is off its
   // placement; already arranged, there is nothing to pick.
   const arrangeIfNeeded = async () => {
@@ -2997,10 +2999,39 @@ async function s30_folders() {
     out && backIn,
     JSON.stringify({ out, backIn, desktop: f.desktop, window: f.windows[0] })
   );
+  const before = f.windows[0].icons.find((i) => i.label === 'Car');
+  // The window's box: a reopened folder window lands exactly where a
+  // browser resize would have carried it had it stayed open — the box
+  // persists as its nine-slice pin, re-expressed on the raster of the next
+  // open. The oracle is the app's own live re-pin, read off the page: the
+  // window dragged into the bottom-right corner on the wide raster (its
+  // right and bottom edges struts, its left and top springs — a mixed
+  // pin), the raster shrunk with the window OPEN (the re-pin carries it),
+  // grown back (home, exactly), the window closed at the wide size, the
+  // page reloaded at the narrow one, the folder reopened there.
+  const folderWin = (id) =>
+    evaluate(`(() => { const w = document.querySelector('#${id}');
+      return w ? { left: w.left, top: w.top, width: w.width, height: w.height } : null; })()`);
+  await metrics(1000, 850);
+  const wide = await layoutSnap();
+  const at = await folderWin(win.id);
+  await dragWindow(
+    `__q('#${win.id}')`,
+    wide.dw - 20 - at.width - at.left,
+    wide.dh - 26 - at.height - at.top,
+    9
+  );
+  await metrics(780, 640);
+  const carried = await folderWin(win.id);
+  await metrics(1000, 850);
+  // The Finder's Close on the front folder window (the drag made it front).
+  await pickMenu('#menu-file', 'close');
+  await until(async () => (await folderProbe()).windows.length === 0);
+  await metrics(780, 640);
   // The round trip: a reload restores the folder, the filing and the icon's
   // position inside the folder (IndexedDB for the catalog, the desktop
-  // state for the position), and the Open listing carries the Car's row.
-  const before = f.windows[0].icons.find((i) => i.label === 'Car');
+  // state for the position), and the Open listing carries the Car's row —
+  // and reopens the window where the re-pin had carried it.
   await send('Page.navigate', { url: SEED_URL });
   await waitForGreet();
   await dismissGreet();
@@ -3008,6 +3039,12 @@ async function s30_folders() {
   await dblclick(folderAgain.x, folderAgain.y);
   await until(async () => (await folderProbe()).windows.length === 1);
   f = await folderProbe();
+  const restored = await folderWin(f.windows[0].id);
+  check(
+    'a reload on a narrower browser reopens the folder window where a browser resize would have carried it had it stayed open (its box persists as its pin, re-expressed on the raster of the open)',
+    !!carried && JSON.stringify(restored) === JSON.stringify(carried),
+    JSON.stringify({ carried, restored })
+  );
   const after = f.windows[0]?.icons.find((i) => i.label === 'Car');
   const bare2 = await bareSpot();
   await click(bare2.x, bare2.y);
@@ -3029,6 +3066,7 @@ async function s30_folders() {
       listed,
     JSON.stringify({ before, after, listed, desktop: f.desktop })
   );
+  await send('Emulation.clearDeviceMetricsOverride');
 }
 
 // --- the run ----------------------------------------------------------------

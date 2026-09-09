@@ -30,16 +30,25 @@
 // reads as seeded (migrate — under the old rule its very existence had
 // already decided that), as do v1 / v2 blobs.
 //
-// WINDOW GEOMETRY IS NOT HERE — not the windoids', not the document
-// windows'. A browser is resized and reopened on another monitor all the
-// time, so a prior session's top/left is no truth worth re-asserting over a
-// raster that may be nothing like the one it was dragged on: every boot
-// places the windoids from the live raster and every document open lands
-// its window on the doc box, cascaded (shell/layout.js, applied by
-// shell/windows.js — this module never sees a window). Icons are different:
-// they're the Finder's furniture, arranged by hand and expected to stay put
-// (icons.js pulls a saved position on-raster at boot and re-pins it across
-// browser resizes).
+// AN APPLICATION WINDOW'S GEOMETRY IS NOT HERE — not the windoids', not the
+// document windows'. A browser is resized and reopened on another monitor
+// all the time, so a prior session's top/left is no truth worth
+// re-asserting over a raster that may be nothing like the one it was
+// dragged on: every boot places the windoids from the live raster and every
+// document open lands its window on the doc box, cascaded (shell/layout.js,
+// applied by shell/windows.js). The FINDER'S furniture is different —
+// arranged by hand and expected to stay put: the icons (icons.js pulls a
+// saved position on-raster at boot and re-pins it across browser resizes)
+// and, since Sep 8 2026, the FOLDER WINDOWS' boxes — `windows`, keyed like
+// their icons (`folder:<id>`) — stored not as boxes but as their nine-slice
+// PINS (layout.js pinOf: relative terms — each edge a strut's offset from
+// the raster's edge or a spring's fraction of its middle), read from the
+// live window at every snapshot (shell/folders.js pins(), merged over the
+// map last written like the icons, so a closed window's stays) and
+// re-expressed by the next open on the raster it has then (folders.js,
+// windows.js addPanel), so a folder window comes back on screen even when
+// the browser changed shape between opens. A v3 blob from before them
+// reads none; a record that is not a pin reads as none (layout.js isPin).
 //
 // Restore happens at boot before first paint (main.js reads `saved`;
 // icons.js applies positions). The `docs` entries are NOT reopened at boot —
@@ -56,6 +65,7 @@
 import { files } from '../state/files.js';
 import { shell } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
+import { isPin } from './layout.js';
 
 const KEY = 'sprite-machine:desktop';
 const VERSION = 3;
@@ -137,6 +147,17 @@ export function createDesktopState(fresh) {
       return Number.isFinite(p?.left) && Number.isFinite(p?.top) ? p : null;
     },
 
+    /** A saved folder window's nine-slice pin by key ("folder:<id>"), or
+     *  null — a blob from before them, or a record that is not a pin (a
+     *  garbled one reads as none, so the open takes the fresh placement
+     *  rather than throwing in pinTo).
+     *  @param {string} key
+     *  @returns {import('./layout.js').Pin | null} */
+    windowPin(key) {
+      const p = saved?.windows?.[key];
+      return isPin(p) ? p : null;
+    },
+
     /** The saved desktop pattern (a kit name or sixteen hex digits, as the
      *  panel set it), or null — a blob from before the setting, or a
      *  fresh boot. Validated by the wire (shell/patterns.js), not here. */
@@ -155,14 +176,20 @@ export function createDesktopState(fresh) {
      * folder window is not live, and a closed folder must not forget its
      * arrangement on the next write — so the blob keeps a position for
      * every item it has ever seen, each in its container's own
-     * coordinates. The windows are deliberately not an input: nothing
-     * about them persists.
-     * @param {{readIcons: () => Record<string, {left:number, top:number}|null>}} inputs
+     * coordinates. `readWindows` is the folder windows' reading of every
+     * pin it knows, by the same keys (shell/folders.js pins(): the open
+     * windows' read live, the closed ones' as remembered), merged the same
+     * way — the header's THE FINDER'S furniture. The application's windows
+     * are deliberately not an input: nothing about them persists.
+     * @param {{readIcons: () => Record<string, {left:number, top:number}|null>,
+     *          readWindows?: () => Record<string, import('./layout.js').Pin>}} inputs
      */
-    start({ readIcons }) {
+    start({ readIcons, readWindows = () => ({}) }) {
       if (fresh) return () => {};
       /** @type {Record<string, {left:number, top:number}>} */
       let known = { ...(saved?.icons ?? {}) };
+      /** @type {Record<string, import('./layout.js').Pin>} */
+      let knownWindows = { ...(saved?.windows ?? {}) };
 
       function snapshot() {
         // Open SAVED documents only: the edited face off each context.
@@ -179,11 +206,14 @@ export function createDesktopState(fresh) {
           else delete icons[key];
         }
         known = icons;
+        const windows = { ...knownWindows, ...readWindows() };
+        knownWindows = windows;
         return {
           v: VERSION,
           docs,
           activeFileId: workspace.active()?.fileId ?? null,
           icons,
+          windows,
           pattern: shell.get().desktopPattern,
           seeded,
         };

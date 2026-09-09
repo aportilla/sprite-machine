@@ -31,21 +31,29 @@
 //
 //   PANEL WINDOWS: document-tier windows that are NOT documents — the
 //   Desktop Patterns control panel (shell/patterns.js owns its lifecycle
-//   and its body). Adopted here (addPanel / removePanel) with the pure
-//   placement that puts them on a raster, so arrange() re-places them and
-//   the resize re-pin moves them like every window; the owner appends and
-//   removes the node. A panel holding the desktop's active state is the
-//   Finder's turn (see APP ACTIVATION below).
+//   and its body) and the folder windows (shell/folders.js). Adopted here
+//   (addPanel / removePanel) with the pure placement that puts them on a
+//   raster, so arrange() re-places them and the resize re-pin moves them
+//   like every window; the owner appends and removes the node. A folder
+//   window is the one window that REOPENS WHERE IT WAS: addPanel takes its
+//   remembered nine-slice pin (read by windowPin at its last close or
+//   snapshot) and re-expresses it on the current raster by the resize
+//   rule's own policy, clamped on-raster — the same arithmetic as a browser
+//   resize with the window open, then the boot clamp. A panel holding the
+//   desktop's active state is the Finder's turn (see APP ACTIVATION below).
 //
 // PLACEMENT comes from shell/layout.js (pure), and ONLY from there: the
 // smart arrangement is computed from the live raster at boot (windoids) and
 // per document open (the doc box, cascaded into the first free slot), then
-// clamped onto the raster's lattice. Nothing is restored from a prior
-// session — window geometry is never persisted (desktop-state.js doesn't
-// even see the windows): a browser is resized and reopened on another
+// clamped onto the raster's lattice. Nothing about an APPLICATION window is
+// restored from a prior session — a windoid's or a document window's
+// geometry is never persisted: a browser is resized and reopened on another
 // monitor all the time, so a remembered top/left is no truth worth
 // re-asserting over a raster that may be nothing like the one it was
-// dragged on. Within a session, what you drag is yours: the windoids keep
+// dragged on. (A folder window is the Finder's furniture, and what it
+// remembers is a PIN, not a top/left — relative terms any raster can
+// re-express; see PANEL WINDOWS above and shell/folders.js.) Within a
+// session, what you drag is yours: the windoids keep
 // their arrangement across deactivation and across close-to-zero — and
 // View → Arrange Windows (arrange(), below) re-runs the whole placement on
 // the current raster whenever you want it back. When the
@@ -851,13 +859,61 @@ export function initWindows(desktop, { hide = [] } = {}) {
       };
     },
     /** Adopt a PANEL window (see the header): `boxFor` is its pure placement
-     *  on a raster, applied now (+ the boot clamp), by arrange(), and —
-     *  through the pin — on every raster resize. The window must already be
-     *  a slotted child of the desktop (the clamp reads its live lattice). */
-    addPanel(win, boxFor) {
+     *  on a raster — applied by arrange(), read by arranged(), and the
+     *  open's box (+ the boot clamp) unless `pin` is given: a folder
+     *  window's remembered nine-slice pin (shell/folders.js — windowPin
+     *  below read it where the window sat, on the raster it sat on), which
+     *  the open re-expresses on THIS raster by the resize rule's own policy
+     *  for the window (pinTo + policyOf: a resizable window's edges
+     *  independent, floored at its grow floor) and clamps onto it like
+     *  every placement (the boot clamp — the one path that pulls a window
+     *  on-raster; the live re-pin never does), so a reopened window lands
+     *  exactly where a browser resize would have carried it had it stayed
+     *  open, on screen. Either way the re-pin moves it on every raster
+     *  resize from there, and arrange() sends it to `boxFor`. The window
+     *  must already be a slotted child of the desktop (the clamp reads its
+     *  live lattice). */
+    addPanel(win, boxFor, pin = null) {
       panels.set(win, boxFor);
-      placePanel(win);
+      if (pin) {
+        const cur = {
+          left: win.left ?? 0,
+          top: win.top ?? 0,
+          width: win.width ?? 0,
+          height: win.height ?? 0,
+        };
+        const g = pinTo(
+          pin,
+          { width: desktop.width, height: desktop.height },
+          WINDOW_FRAME,
+          policyOf(win, cur)
+        );
+        writeBox(win, clampedBox(desktop, win, g));
+      } else {
+        placePanel(win);
+      }
       notifyLayout();
+    },
+    /** A window's nine-slice pin where it sits, on the current raster, in
+     *  the frame the resize rule reads it in — what shell/folders.js
+     *  persists for a folder window: a pin, not a box, so the record is
+     *  relative terms (each edge a strut's offset from the raster's edge or
+     *  a spring's fraction of its middle) that any later raster can
+     *  re-express (addPanel). Read fresh from the live box: on the same
+     *  raster the pin maps back exactly, and the cache above is a guard
+     *  against ratcheting across a long resize drag, not a different
+     *  truth. */
+    windowPin(win) {
+      return pinOf(
+        {
+          left: win.left ?? 0,
+          top: win.top ?? 0,
+          width: win.width ?? 0,
+          height: win.height ?? 0,
+        },
+        { width: desktop.width, height: desktop.height },
+        WINDOW_FRAME
+      );
     },
     /** Drop a panel from the placement + re-pin set (the owner removes the
      *  node). */

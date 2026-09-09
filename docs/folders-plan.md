@@ -199,7 +199,9 @@ of opening (`n` captured at open, a session truth), clamped by
 `clampedBox`. **Nothing about the window persists** — not its box, not its
 scroll — the windows' principle (a browser reopens on another monitor all
 the time); the Finder remembered both, and §5 lists it as the decision it
-is. No zoom box in cut 1 (`onZoom` serves document windows alone; a zoom
+is. (Revisited Sep 8 2026: the box now persists, as its nine-slice pin —
+README §Folders; the scroll and the open state still do not.) No zoom box
+in cut 1 (`onZoom` serves document windows alone; a zoom
 that did nothing is worse than none) — §7.
 
 **It is the Finder's window.** Holding the desktop's active state, a panel
@@ -443,7 +445,11 @@ here: the folder window's body is the kit's own white paper.
    folder window's box; the app's principle is that no window geometry
    survives a session. Recommendation: hold the principle — the icon
    positions inside persist, the box places fresh — and revisit if it
-   grates.
+   grates. **Revisited Sep 8 2026 — it grated.** The box persists, in
+   relative terms: its nine-slice pin (the resize rule's own reading),
+   re-expressed on the raster of the next open and clamped on-screen, so
+   a browser resized between opens still shows the window — the
+   application's windows keep the principle (README §Folders).
 3. **Nesting: on.** It is free in the model and the container abstraction;
    the only cost is the cycle check. Recommendation: on.
 4. **Arrange Windows re-places folder windows.** As a panel, a folder

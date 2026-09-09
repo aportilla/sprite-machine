@@ -574,9 +574,13 @@ export function iconDefault(slot, desktopH) {
 // markup states), stepped down-right by CASCADE_STEP per folder window
 // already open when this one opened, at the window's authored size (the
 // Patterns panel's idiom: index.html states it, the placement takes it as
-// input). Nothing about the window persists — the Finder remembered every
-// folder window's box; the app's principle is that no window geometry
-// survives a session.
+// input) — the FRESH placement: where a window with no record lands, and
+// where Arrange Windows sends every one. A folder window's box PERSISTS
+// (Sep 8 2026 — the Finder remembered every folder window's rect), as its
+// nine-slice PIN (pinOf, below — relative terms, never the box), which the
+// next open re-expresses on the raster it has then (shell/folders.js,
+// shell/desktop-state.js, windows.js addPanel). The application's windows
+// still place fresh every session.
 //
 // The HEADER is the Finder's item-count line over the Finder's DOUBLE RULE
 // — black, white, black — measured off System 7's own Finder window (a 2×
@@ -741,6 +745,21 @@ export const ICON_FRAME = {
  * @typedef {{x: [EdgePin, EdgePin], y: [EdgePin, EdgePin]}} Pin
  *   per axis, the near edge (left / top) then the far edge (right / bottom).
  */
+
+/** Is `p` a pin — the shape pinOf reads, or one stored and parsed back? A
+ *  folder window's record in the desktop-state blob is one; a stale or
+ *  garbled record reads as none, so the window takes the fresh placement
+ *  instead of throwing in pinTo.
+ *  @param {any} p
+ *  @returns {p is Pin} */
+export function isPin(p) {
+  const edge = (e) =>
+    !!e &&
+    (e.kind === 'near' || e.kind === 'far' || e.kind === 'spring') &&
+    Number.isFinite(e.v);
+  const axis = (a) => Array.isArray(a) && a.length === 2 && edge(a[0]) && edge(a[1]);
+  return !!p && typeof p === 'object' && axis(p.x) && axis(p.y);
+}
 
 /** One edge classified on a span `s` with near band `n` and far band `f`.
  *  Near is tested first, so on a degenerate span (s < n + f, the bands

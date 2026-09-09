@@ -87,10 +87,13 @@ document (**`?file=Cube`**, or the bare fragment **`#Cube`**;
 case-insensitive, most-recently-modified on a name collision), which opens
 that library file directly, on its remembered edited face. A prior
 session's open windows deliberately don't reopen — the URL, not
-localStorage, says what a load shows — and **no window's geometry comes
-back either**: every session places the windoids, and every open places
-its document window, fresh from the live raster (see
-[Windows](#windows)); only the desktop icons restore. And
+localStorage, says what a load shows — and **no application window's
+geometry comes back either**: every session places the windoids, and
+every open places its document window, fresh from the live raster (see
+[Windows](#windows)); the Finder's furniture is what restores — the
+desktop icons, and a folder window's box, remembered as its nine-slice
+pin so it comes back on screen whatever shape the browser has by then
+(see [Folders](#folders)). And
 the URL keeps itself true: opening, saving or
 switching to a saved document **mirrors its name into the fragment**
 (`#Cube`, via `replaceState` — no history spam; an untitled document or the
@@ -855,7 +858,7 @@ tier but not documents: the Desktop Patterns control panel (see
   windoid rail — and records the size it grew from; a click on a window
   already at that state returns exactly that remembered pre-zoom size (a
   session truth, like a windoid arrangement you dragged: it never
-  persists — a reload still places every window fresh; the doc box's
+  persists — a reload still places every document window fresh; the doc box's
   size for the CURRENT raster is the no-memory fallback). **⌘J's zoom
   half is this toggle**: with everything arranged the View menu's
   _Arrange Windows_ item (its value `zoom`) expands the active window
@@ -1125,8 +1128,9 @@ the first slot no open document window holds (`cascadeFrom`: five slots,
 the last landing flush with the vacancy's edges; a closed or dragged-away
 window gives its slot back, and a full cascade wraps onto the first
 rather than running into the rail or off the bottom). That placement is the **only** source of
-window geometry — **nothing about a window persists across sessions**,
-not the windoids' arrangement and not a document window's box. A browser
+an application window's geometry — **nothing about a windoid or a
+document window persists across sessions**, not the windoids' arrangement
+and not a document window's box. A browser
 is resized and reopened on another monitor all the time, so a prior
 session's top/left is no truth worth re-asserting over a raster that may
 be nothing like the one it was dragged on: every session start places the
@@ -1136,10 +1140,12 @@ you drag is yours: the windoids keep their arrangement across
 deactivation and across closing to zero, until the page reloads — or
 until **View → Arrange Windows** (⌘J, while anything is off its
 placement — see [Menu bar](#menu-bar)) re-runs the placement on the
-raster as it is now, every window included. (Desktop
-icons are the exception — the Finder's furniture, arranged by hand; see
-[Desktop icons & state](#desktop-icons--state).) Everything clamps onto
-the raster's lattice.
+raster as it is now, every window included. (The Finder's furniture is
+the exception — the desktop icons, arranged by hand, and the folder
+windows, whose boxes persist as their nine-slice pins, the one window
+geometry a raster change can re-express; see
+[Desktop icons & state](#desktop-icons--state) and [Folders](#folders).)
+Everything clamps onto the raster's lattice.
 When the **browser window resizes**, the raster re-fits and **one rule
 moves every window**, placed or dragged alike — the **nine-slice pin**
 (`pinOf`/`pinTo` in `shell/layout.js`). The **open space below the options
@@ -1286,13 +1292,35 @@ orphaned id.
   (`fieldExtent`), which IS the scroll range: the kit sizes its plane to
   placed content and its rails follow a moved icon by themselves. It is
   **adopted by `shell/windows.js` as a panel** — the Desktop Patterns
-  panel's contract — placed by `folderBox` (the doc box's corner stepped
-  down-right by the cascade per folder window already open when it
-  opened, at the size the template authors: 320 × 224, three lattice
+  panel's contract — placed fresh by `folderBox` (the doc box's corner
+  stepped down-right by the cascade per folder window already open when
+  it opened, at the size the template authors: 320 × 224, three lattice
   columns by two rows), re-placed by Arrange Windows and re-pinned by a
-  browser resize like every window; **nothing about it persists** — the
-  Finder remembered every folder window's box, and this app places every
-  window fresh (its icons' positions do persist, below). And it **is the
+  browser resize like every window. And **its box persists** (Sep 8
+  2026 — the Finder remembered every folder window's rect, and so does
+  this app, the one window it remembers), **in relative terms**: not the
+  box but its **nine-slice pin** — the browser-resize rule's own reading
+  of where the window sits (`pinOf`: each edge a strut's offset from the
+  raster's edge or a spring's fraction of its middle), read off the live
+  window at every desktop-state snapshot and, at a close, remembered for
+  the session — stored in the desktop-state blob beside its icon, under
+  the same `folder:<id>` key. The next open, on whatever raster the
+  browser has by then, re-expresses it (`pinTo`, the resize rule's own
+  policy for a resizable window: edges independent, floored at the kit's
+  grow floor) and pulls it on-raster like every placement
+  (`clampedBox`), so **a reopened folder window lands exactly where a
+  browser resize would have carried it had it stayed open**, on screen:
+  a window left in the bottom-right corner comes back in the corner of a
+  smaller browser, one spanning the middle at its fraction of it, and a
+  box saved on a wide monitor never comes back hanging off a narrow one.
+  A first open — or a stored record that is not a pin (`isPin` in
+  `shell/layout.js`) — takes the fresh placement. Arrange Windows still
+  sends every folder window to its cascade slot (the arrangement is the
+  reset, and the memory follows it: what is on screen is what is
+  remembered), so a remembered window off its slot reads as `arrange` in
+  the ⌘J item, as a dragged one does. Nothing else about it persists —
+  not its scroll, and not that it was open: a boot never reopens a
+  window (its icons' positions persist too, below). And it **is the
   Finder's window**: holding the desktop's active state, a panel mirrors
   as the desktop-focused role, so opening a folder — or clicking into its
   window — deactivates the application (the windoids hide, the strip
@@ -1491,19 +1519,21 @@ the classic left-edge column is a strut that stays at its 16px, its rows
 spring with the middle, an icon dragged into a corner stays in that
 corner — the same unrounded truth cache, the same no-clamp
 reversibility, so a shrink-then-grow round-trips every icon exactly
-home. Icon layout, the open SAVED documents' edited faces (and which
-was active) and the **desktop pattern** (the Desktop Patterns panel's
-setting — the one desktop setting that persists; see
-[Desktop Patterns](#desktop-patterns))
+home. Icon layout, the **folder windows' pins** (`windows`, keyed
+`folder:<id>` like their icons — the Finder's other furniture, see
+[Folders](#folders); a v3 blob from before them reads none), the open
+SAVED documents' edited faces (and which was active) and the **desktop
+pattern** (the Desktop Patterns panel's setting — the one desktop
+setting that persists; see [Desktop Patterns](#desktop-patterns))
 persist in one versioned localStorage key (`shell/desktop-state.js`, v3 —
 a v1 or v2 blob migrates shallowly, the window geometry those versions
 persisted simply dropped, and a v3 blob from before the pattern reads the
 dither), beside the **`seeded` flag** — the first-boot seeding's record,
 above (`migrateDesktopState` is exported and Node-tested), snapshotted on
-change/exit. **No window
-geometry is in it**: the windoids and the document windows place fresh
-from the live raster every session (see [Windows](#windows)) — the
-persistence layer never sees a window. Icons restore at
+change/exit. **No application window's geometry is in it**: the windoids
+and the document windows place fresh from the live raster every session
+(see [Windows](#windows)) — the persistence layer sees the Finder's
+windows alone, and those as pins, never boxes. Icons restore at
 boot; the per-document entries are deliberately NOT reopened then — what
 a load shows is the URL's call (`?file=<name>`, else the About box; and
 the address bar tracks the active saved document as `#<name>`
@@ -1844,9 +1874,10 @@ src/scene/
                   the scale in voxels per meter — Export 3D Model…'s feed to lib/gltf.js
 src/shell/        the desktop's behavior modules (imperative wiring over the index.html skeleton)
   layout.js       the window + icon arithmetic (pure, Node-tested): initialPlacement (the smart
-                  boot/open arrangement from the raster — the ONLY source of window geometry;
-                  none persists; the atlas strip docked at the bottom, the doc box shortened
-                  only while it is shown) + cascadeFrom (the document windows' first-free-slot
+                  boot/open arrangement from the raster — the ONLY source of an application
+                  window's geometry, none of which persists; the atlas strip docked at the
+                  bottom, the doc box shortened only while it is shown) + cascadeFrom (the
+                  document windows' first-free-slot
                   cascade) + folderBox / folderViewport / iconGridDefault / fieldExtent +
                   FOLDER_STRIP / FOLDER_COUNT_LINE / FOLDER_COUNT_AT (the folder windows: the
                   placement, the plane's viewport, the in-window icon lattice, the field's
@@ -1865,7 +1896,8 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   (the raster-derived icon lattice) + pinOf/pinTo (the nine-slice pin across raster
                   resizes — struts in the outer bands, springs in the middle — framed per tier:
                   WINDOW_FRAME below the options strip with the rail-sized top/right bands,
-                  ICON_FRAME below the menu bar, uniform)
+                  ICON_FRAME below the menu bar, uniform) + isPin (the shape test a stored
+                  folder-window pin passes before pinTo re-expresses it)
   windows.js      the two window regimes: windoid visibility (appActive <-> hidden; non-closeable —
                   but for the 3D Sprite Atlas: appActive AND prefs.showRing, its close box the
                   uncheck, fitRing its height-follows-the-tile-size derivation — declared to
@@ -1918,13 +1950,16 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   folder's extent — the scroll range), adopted by windows.js as a PANEL
                   (layout.js folderBox: the doc box's corner, cascaded), removed by its close
                   box (existence IS visibility); open / close / isOpen / fields / folderOf /
-                  activeFolder (the Finder's front window) / fit; nothing about it persists
+                  activeFolder (the Finder's front window) / fit / pins; its box persists as
+                  its nine-slice pin (the desktop state's, by item — remembered at a close,
+                  read live at a snapshot), the next open re-expressing it on its raster
   desktop-state.js  icon layout (by item — doc:<id> / folder:<id> — in its container's own
                   coordinates, merged over the map last written so a closed folder window's
-                  icons keep theirs) + the open saved docs' edited faces (+ active) + the
-                  desktop pattern in one versioned localStorage key (v3; v1/v2 migrate, their
-                  window geometry dropped) — window geometry never persists; this module never
-                  sees a window
+                  icons keep theirs) + the folder windows' PINS (`windows`, keyed like their
+                  icons — the Finder's furniture; layout.js isPin guards a read) + the open
+                  saved docs' edited faces (+ active) + the desktop pattern in one versioned
+                  localStorage key (v3; v1/v2 migrate, their window geometry dropped) — an
+                  application window's geometry never persists
   url-state.js    the address-bar mirror: the ACTIVE saved document's name -> location.hash
                   (#Cube, replaceState; cleared for untitled/none) so a reload restores it
   clock.js        the menu bar clock: a kit vf-label at the bar's right end — the time on the

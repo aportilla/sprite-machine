@@ -22,6 +22,7 @@ import {
   FOLDER_COUNT_AT,
   pinOf,
   pinTo,
+  isPin,
   spriteHeightFor,
   SPRITE_CHROME,
   SPRITE_WIDTH,
@@ -500,6 +501,21 @@ test('pin: a degenerate span collapses the middle to a seam, and grows back exac
   const cpin = pinOf(corner, R, F);
   assert.deepEqual(pinTo(cpin, tiny, F), { left: 90, top: 60, width: 40, height: 40 });
   assert.deepEqual(pinTo(cpin, R, F), corner);
+});
+
+test('pin: what pinOf reads is a pin — stored and parsed back too — and a stale or garbled record is not', () => {
+  const pin = pinOf(box(300, 250, 400, 300), R, F);
+  assert.ok(isPin(pin));
+  assert.ok(isPin(JSON.parse(JSON.stringify(pin))));
+  for (const bad of [
+    null,
+    { left: 1, top: 2 },
+    { x: [], y: [] },
+    { x: pin.x, y: [pin.y[0], { kind: 'sideways', v: 1 }] },
+    { x: pin.x, y: [pin.y[0], { kind: 'near', v: NaN }] },
+  ]) {
+    assert.equal(isPin(bad), false, JSON.stringify(bad));
+  }
 });
 
 test('pin: the placement is a fixed point — a resize lands the windoids where Arrange would', () => {

@@ -18,11 +18,33 @@
 //   through the kit's one funnel. close(id) — the close box, File → Close on
 //   the front folder window, a vanished folder — drops it from the panel
 //   set and REMOVES the node: existence IS visibility, the document
-//   windows' discipline. Nothing about the window persists: not its box,
-//   not its scroll, not that it was open — the windows' principle (a
-//   browser reopens on another monitor all the time; the Finder remembered
-//   both, and this app does not). The icons inside keep their positions
-//   through the desktop-state blob, by item, the way the desktop's do.
+//   windows' discipline.
+//
+//   THE BOX PERSISTS (Sep 8 2026 — the Finder remembered every folder
+//   window's rect, and it grated that this app did not), but as its
+//   NINE-SLICE PIN, never the box: the resize rule's own reading of where
+//   the window sits (layout.js pinOf, through windows.windowPin — each edge
+//   a strut's offset from the raster's edge or a spring's fraction of its
+//   middle). A browser is resized and reopened on another monitor all the
+//   time, and an absolute box is no truth on a raster it was not dragged
+//   on; a pin re-expresses on any raster and keeps the window on screen —
+//   a window left in a corner comes back in the corner, one spanning the
+//   middle at its fraction of it. The record is the session's first
+//   (`remembered`, read at close() — the icon layer's idiom for a closed
+//   window's icons) and the desktop-state blob's next (savedPin: a prior
+//   session's, keyed like the folder's icon, `folder:<id>`; pins() hands
+//   the blob every pin this module knows at each snapshot, the open
+//   windows' read live — the box IS the truth after a drag, a grow, a
+//   re-pin or an Arrange). open() hands it to windows.addPanel, which
+//   re-expresses it on the raster of the moment by the resize rule's own
+//   policy and clamps it on-raster like every placement, so a reopened
+//   window lands exactly where a browser resize would have carried it had
+//   it stayed open. With no record — a first open, a garbled one — the
+//   fresh placement above, which is also where Arrange Windows sends every
+//   folder window (the arrangement is the reset; the memory follows). Not
+//   persisted, still: the scroll, and that it was open — a boot never
+//   reopens a window. The icons inside keep their positions the same way,
+//   by item, as the desktop's do.
 //
 //   THE FINDER'S TURN. A panel holding the desktop's active state mirrors
 //   as the desktop-focused role (windows.js applyActive: a DOCUMENT window
@@ -52,16 +74,26 @@ import { VfWindow } from 'vintage-frames';
 import { files, childrenOf } from '../state/files.js';
 import { folderBox, folderViewport, fieldExtent } from './layout.js';
 
+/** The item's key in the desktop-state blob — its icon's (shell/icons.js),
+ *  so one identity names both records. */
+const keyOf = (id) => `folder:${id}`;
+
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
  * @param {ReturnType<typeof import('./windows.js').initWindows>} windows
+ * @param {{savedPin?: (key: string) => import('./layout.js').Pin | null}} [opts]
+ *   savedPin: a prior session's pin for a folder window, by the item's key
+ *   (desktop-state.js windowPin), or null.
  */
-export function initFolders(desktop, windows) {
+export function initFolders(desktop, windows, { savedPin = () => null } = {}) {
   const tpl = /** @type {HTMLTemplateElement} */ (
     document.getElementById('tpl-folder-window')
   );
   /** @type {Map<string, VfWindow>} folder id -> its open window */
   const wins = new Map();
+  /** @type {Map<string, import('./layout.js').Pin>} folder id -> the pin
+   *  its window closed at, this session (the header's THE BOX PERSISTS) */
+  const remembered = new Map();
   /** @type {Set<() => void>} a window opened or closed */
   const changed = new Set();
   /** @type {Set<(id: string, field: HTMLElement) => void>} a window about
@@ -134,7 +166,15 @@ export function initFolders(desktop, windows) {
     // slot-in — the Finder's window coming forward.
     desktop.append(win);
     wins.set(id, win);
-    windows.addPanel(win, (w, h) => folderBox(w, h, size, n));
+    // Where it lands: the pin its window closed at this session, else the
+    // one a prior session stored, else the fresh placement — the cascade,
+    // also what Arrange Windows re-places it onto.
+    windows.addPanel(
+      win,
+      (w, h) => folderBox(w, h, size, n),
+      remembered.get(id) ?? savedPin(keyOf(id))
+    );
+    remembered.delete(id);
     desktop.bringToFront(win);
     count(id);
     fit(id);
@@ -146,6 +186,9 @@ export function initFolders(desktop, windows) {
     const win = wins.get(id);
     if (!win) return;
     for (const fn of willClose) fn(id, fieldOf(win));
+    // The box, remembered as its pin — read where the window sits, on the
+    // raster it sits on — for the next open and the next snapshot.
+    remembered.set(id, windows.windowPin(win));
     windows.removePanel(win);
     win.remove(); // existence IS visibility; the kit re-asserts active
     wins.delete(id);
@@ -224,6 +267,20 @@ export function initFolders(desktop, windows) {
     /** Re-derive a field's extent (the icon layer calls it after rendering
      *  into the field; a drop into it too). */
     fit,
+    /** Every folder window's pin this module knows, by the item's key —
+     *  the open windows' read live (the box IS the truth after a drag, a
+     *  grow, a re-pin, an Arrange) over the ones remembered from windows
+     *  closed this session. desktop-state.js merges it into the blob at
+     *  every snapshot, so a closed folder never forgets where its window
+     *  was.
+     *  @returns {Record<string, import('./layout.js').Pin>} */
+    pins() {
+      /** @type {Record<string, import('./layout.js').Pin>} */
+      const out = {};
+      for (const [id, pin] of remembered) out[keyOf(id)] = pin;
+      for (const [id, win] of wins) out[keyOf(id)] = windows.windowPin(win);
+      return out;
+    },
     /** A window opened or closed. Returns the unsubscribe. */
     onChange(fn) {
       changed.add(fn);
