@@ -124,7 +124,7 @@ transforms exist in the pipeline for sheets that don't follow the convention.
 The **document window** holds the drawing surface, the full-bleed white
 artwork well, and the 3D View rebuilds live as you draw. The tools live in the
 floating **Tools palette**, their options in the **options strip** under the
-menu bar, the tile-size stepper in File → Properties…. Edits write straight
+menu bar, the tile size behind Edit → Tile Size…. Edits write straight
 back into the current sheet, so Save persists exactly what you see, the Full
 Sprite View tracks every stroke at frame rate, and the model rebuilds
 (rAF-debounced) with no camera jump.
@@ -250,12 +250,16 @@ Sprite View tracks every stroke at frame rate, and the model rebuilds
   flank on your right. A **mirror-derived** face opens with an **empty
   canvas** and a faded **onion-skin** of its opposite behind it; it becomes
   its own art only once you change a pixel, and erasing it fully reverts it.
-- **Tile size** — a **square-tile number field** in File → Properties… retiles
-  the atlas to any integer **1–64** (the ceiling keeps the live per-stroke
-  carve tractable). Tiles are **locked square**, so every resize is
-  **registration-preserving**, and the stepper **keeps the art centered**, the
-  odd texel of an odd step alternating ends so repeated clicks can't drift it
-  off-center. Centering the vertical axis means a ground-rested sprite
+- **Tile size** — **Edit → Tile Size…** puts up one **square-tile number
+  field** over Cancel / OK, and **OK alone** (Return, by the dialog grammar)
+  retiles the atlas, to any integer **1–64** (the ceiling keeps the live
+  per-stroke carve tractable). Stepping or typing in the box moves nothing
+  behind it — the Colors dialog's pending model, not the Export Sprite
+  Atlas dialog's live one — and Cancel leaves the sheet as it was. Tiles are
+  **locked square**, so every resize is **registration-preserving**, and the
+  resize **keeps the art centered**, the odd texel of an odd step alternating
+  ends so repeated resizes can't drift it off-center. Centering the vertical
+  axis means a ground-rested sprite
   **floats up off the shadow plane** as the tile grows (an accepted trade).
   Square is the **only registering shape**: a 3×2 atlas shares its depth axis
   between the side tile's width and the top tile's height. The pure
@@ -363,8 +367,8 @@ the Undo/Redo enablement.
   the key equivalents note below), _Save_ ⌘S (an untitled's first save
   prompts for a name), _Duplicate_ ⌘D, _Rename…_, _Download_ ⇧⌘E (the
   document `.png` verbatim — the downloaded atlas IS the source format, hence
-  Download rather than Export, and no ellipsis: it acts immediately), the two
-  exports, and _Properties…_ (name, atlas dims, the tile-size stepper).
+  Download rather than Export, and no ellipsis: it acts immediately), and the
+  two exports.
 - **Export 3D Model…** writes the model as **one glTF 2.0 binary** from the
   app's own writer (`lib/gltf.js`; three's `GLTFExporter` encodes a texture
   through a canvas readback, which a privacy browser perturbs, so the skin
@@ -393,7 +397,10 @@ the Undo/Redo enablement.
 - **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (the ACTIVE document's history; disabled
   until it has something, which hands the key back to a focused field's native
   undo), _Select All_ ⌘A (the Finder's: every icon in the front field, live
-  only in the Finder role), _Pick Color…_ ⌘K. **Tools** lists the six sticky
+  only in the Finder role), _Pick Color…_ ⌘K, and _Tile Size…_ (the active
+  document's square tile size behind a modal that commits on OK alone — the
+  one property that is an edit; see [Drawing editor](#drawing-editor)).
+  **Tools** lists the six sticky
   modes with the active one checkmarked — the same session truth the tool
   strip and the S/B/R/G/E/I keys write, so a pick from any of the three moves
   all three.
@@ -778,7 +785,7 @@ as the box opens**, so Return OKs the splash: the kit's dialog grammar
 `autofocus`, else its first text field, else its default button, and **Return
 anywhere in a box fires the default button**, a focused link following itself
 instead. The same grammar runs every dialog here, so a value typed into
-Properties and Returned is committed and OK'd in one stroke. The version and
+Tile Size… and Returned is committed and OK'd in one stroke. The version and
 the date are **build facts, never markup** — `vite.config.js` defines them
 from package.json's `version` and HEAD's commit date, so every build of one
 commit says the same thing and a capture stays byte-identical — and

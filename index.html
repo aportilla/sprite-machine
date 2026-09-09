@@ -82,8 +82,6 @@
           <vf-menu-item value="download" shortcut="⇧⌘E">Download</vf-menu-item>
           <vf-menu-item value="export-model">Export 3D Model…</vf-menu-item>
           <vf-menu-item value="export-atlas">Export Sprite Atlas…</vf-menu-item>
-          <vf-separator></vf-separator>
-          <vf-menu-item value="properties">Properties…</vf-menu-item>
         </vf-menu>
         <vf-menu id="menu-edit" label="Edit">
           <vf-menu-item value="undo" shortcut="⌘Z" disabled>Undo</vf-menu-item>
@@ -99,6 +97,14 @@
           >
           <vf-separator></vf-separator>
           <vf-menu-item value="pick-color" shortcut="⌘K">Pick Color…</vf-menu-item>
+          <vf-separator></vf-separator>
+          <!-- Tile Size…: the active document's square tile size, behind a
+               modal that commits on OK alone (#dlg-tile below). The one
+               property that is an EDIT — a retile is an undoable change to
+               the sheet — so it lives here; File → Properties… (the name and
+               the atlas dims beside a live stepper) was retired for it,
+               Sep 9 2026. -->
+          <vf-menu-item value="tile-size">Tile Size…</vf-menu-item>
         </vf-menu>
         <!-- The tool items' bare-letter shortcuts are DISPLAY-only by kit
              contract (an unmodified printable key never matches), so
@@ -531,24 +537,26 @@
         </vf-button-group>
       </vf-dialog>
 
-      <vf-dialog id="dlg-props" heading="Properties" closable width="340" height="220">
+      <!-- The Tile Size dialog (Edit → Tile Size…): one field over Cancel /
+           OK, the Colors dialog's pending model — the field is seeded from
+           the active document at show and READ AT OK (shell/menus.js), so
+           a step or a typed value moves nothing behind the modal; Return is
+           OK by the kit's dialog grammar, Escape reads as Cancel. The
+           retired Properties… retiled live on every change. Arithmetic:
+           20 (bar + band) + 16 pad + one 25px row + the 44 footer + 16 + 5
+           = 126, taken in the way the export dialogs' heights were, for
+           the eye. -->
+      <vf-dialog id="dlg-tile" heading="Tile Size" width="340" height="130">
         <vf-stack width="292" gap="12">
-          <vf-stack fill-width direction="row" gap="8">
-            <vf-label width="80">Name:</vf-label>
-            <vf-label id="props-name"></vf-label>
-          </vf-stack>
-          <vf-stack fill-width direction="row" gap="8">
-            <vf-label width="80">Atlas:</vf-label>
-            <vf-label id="props-dims"></vf-label>
-          </vf-stack>
           <vf-stack fill-width direction="row" gap="8" place="start">
             <vf-stack pad="4 0 0">
-              <vf-label width="80" for="props-tile">Tile size:</vf-label>
+              <vf-label width="80" for="tile-size">Tile size:</vf-label>
             </vf-stack>
-            <vf-number-field id="props-tile" min="1" max="64" step="1"></vf-number-field>
+            <vf-number-field id="tile-size" min="1" max="64" step="1"></vf-number-field>
           </vf-stack>
         </vf-stack>
-        <vf-button id="btn-props-ok" slot="buttons" variant="default">OK</vf-button>
+        <vf-button id="btn-tile-cancel" slot="buttons">Cancel</vf-button>
+        <vf-button id="btn-tile-ok" slot="buttons" variant="default">OK</vf-button>
       </vf-dialog>
 
       <!-- The unsaved-changes alert: the classic "Save changes before
@@ -647,12 +655,7 @@
            + the 44 footer + 16 + 5 = 237, rounded up to 264 the way the
            atlas dialog's five rows land on 300 (the kit's own footer
            measure). -->
-      <vf-dialog
-        id="dlg-export-model"
-        heading="Export 3D Model"
-        width="360"
-        height="220"
-      >
+      <vf-dialog id="dlg-export-model" heading="Export 3D Model" width="360" height="220">
         <vf-stack width="312" gap="12">
           <vf-stack fill-width direction="row" gap="8" place="start">
             <vf-stack pad="4 0 0">

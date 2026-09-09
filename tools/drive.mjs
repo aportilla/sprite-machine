@@ -1406,30 +1406,33 @@ async function s15_faceSwap() {
   );
 }
 
-async function s16_properties() {
-  section('S16 Properties');
+async function s16_tileSize() {
+  section('S16 Tile Size');
   const boot = await freshPage();
   const TILE = boot.tileW;
-  await pickMenu('#menu-file', 'properties');
-  const open = await evaluate(`(() => {${DEEP} return !!__q('#dlg-props').open; })()`);
-  const up = await stepperUp('#props-tile');
+  await pickMenu('#menu-edit', 'tile-size');
+  const open = await evaluate(`(() => {${DEEP} return !!__q('#dlg-tile').open; })()`);
+  // The box commits on OK alone: a step of the field moves nothing behind
+  // it (the document is read after the kit's stepper has had its say).
+  const up = await stepperUp('#tile-size');
   await click(up.x, up.y);
-  const stepped = (await settle((p) => p.tileW > TILE)).tileW;
+  await sleep(300);
+  const stepped = (await probe()).tileW;
   // Return commits the typed size AND OKs the box in one stroke (the kit's
   // dialog grammar); ⌘Z waits on the box being down.
-  await typeInto('#props-tile', '24');
+  await typeInto('#tile-size', '24');
   const typed = await settle((p) => p.tileW === 24 && p.anyModalOpen === false);
   check(
-    'Properties: the stepper and a typed value retile the document, the editor staying on its face',
-    open && stepped > TILE && typed.tileW === 24 && typed.face === 'front',
+    'Tile Size: a step moves nothing behind the box; OK retiles the document to the typed size, the editor staying on its face',
+    open && stepped === TILE && typed.tileW === 24 && typed.face === 'front',
     JSON.stringify({ open, boot: TILE, stepped, typed: typed.tileW, face: typed.face })
   );
   await keyPress('z', META);
-  const s = await settle((p) => p.tileW === stepped);
+  const s = await settle((p) => p.tileW === TILE);
   check(
-    '⌘Z undoes the typed resize back to the stepped size',
-    s.tileW === stepped,
-    `tileW=${s.tileW} vs ${stepped}`
+    '⌘Z undoes the retile back to the boot size',
+    s.tileW === TILE,
+    `tileW=${s.tileW} vs ${TILE}`
   );
 }
 
@@ -3221,7 +3224,7 @@ async function main() {
     s12_rect,
     s13_selection,
     s15_faceSwap,
-    s16_properties,
+    s16_tileSize,
     s17_derivedFace,
     s18_colorsDialog,
     s19_undoRedo,

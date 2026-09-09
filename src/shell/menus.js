@@ -4,7 +4,7 @@
 // (one item per open document window, reconciled off the workspace — the
 // active one checked, a pick bringing its window forward), and every dialog
 // flow (About, Open, the
-// shared name prompt, Properties, the unsaved-changes alert, the
+// shared name prompt, Tile Size, the unsaved-changes alert, the
 // storage-unavailable notice, the Export 3D Model… dialog — a scale in
 // voxels per meter, a lit / unlit popup and two readouts over an Export
 // that writes the model as one glb, «slug».glb, its skin embedded from
@@ -121,7 +121,7 @@ export function initMenus(desktop, windows, panels) {
   const dlgNew = $('#dlg-new');
   const dlgOpen = $('#dlg-open');
   const dlgName = $('#dlg-name');
-  const dlgProps = $('#dlg-props');
+  const dlgTile = $('#dlg-tile');
   const dlgUnsaved = $('#dlg-unsaved');
   const dlgEmptyTrash = $('#dlg-empty-trash');
   const dlgStorage = $('#dlg-storage');
@@ -143,7 +143,6 @@ export function initMenus(desktop, windows, panels) {
   const showAbout = () => dlgAbout.show();
   on($('#btn-about-ok'), 'click', () => dlgAbout.close());
   on($('#btn-storage-ok'), 'click', () => dlgStorage.close());
-  on($('#btn-props-ok'), 'click', () => dlgProps.close());
 
   // --- Export 3D Model… -------------------------------------------------------
   // The model as ONE glb (lib/gltf.js, through the export subject in
@@ -533,38 +532,41 @@ export function initMenus(desktop, windows, panels) {
   on($('#btn-open-cancel'), 'click', () => dlgOpen.close());
   on(openList, 'dblclick', actOnOpenPick);
 
-  // --- the Properties dialog --------------------------------------------------
-  // Reads the ACTIVE document; re-syncs while open on any workspace change or
-  // structural change of the active doc (followActive re-wires the latter).
-  const propsName = $('#props-name');
-  const propsDims = $('#props-dims');
-  const propsTile = $('#props-tile');
-  propsTile.min = TILE_MIN;
-  propsTile.max = TILE_MAX;
-  const syncProps = () => {
-    if (!dlgProps.open) return;
-    const ctx = workspace.active();
-    const d = ctx?.doc.get();
-    propsName.textContent = ctx?.name ?? '';
-    propsDims.textContent = d?.atlasImage
-      ? `${d.atlasImage.width}px × ${d.atlasImage.height}px`
-      : '—';
-    propsTile.value = String(d?.tileW || 0);
-  };
-  teardown.push(
-    workspace.subscribe(syncProps),
-    followActive(workspace, (ctx) => (ctx ? ctx.doc.subscribe(syncProps) : undefined))
-  );
-  on(propsTile, 'vf-change', (e) => {
+  // --- the Tile Size dialog ---------------------------------------------------
+  // Edit → Tile Size…: the ACTIVE document's square tile size behind the
+  // Colors dialog's pending model — the field is seeded from the document
+  // at show and read back at OK, so a step or a typed value moves nothing
+  // while the box is up; Cancel (Escape) leaves the document as it was. The
+  // kit's number field mirrors the typed text into `value` on every
+  // keystroke and clamps only on its own commit, so OK reads the raw text
+  // and clamps it here — the same whether Return fired the default button
+  // (the dialog grammar) or the mouse did. An empty or unparsable field OKs
+  // to nothing. The retired File → Properties… (Sep 9 2026) retiled on
+  // every vf-change of its stepper, the canvas moving behind the modal.
+  const tileField = $('#tile-size');
+  tileField.min = TILE_MIN;
+  tileField.max = TILE_MAX;
+  function showTileDialog() {
+    const d = workspace.active()?.doc.get();
+    if (!d) return;
+    tileField.value = String(d.tileW);
+    dlgTile.show();
+  }
+  const commitTileDialog = () => {
+    dlgTile.close();
     const ctx = workspace.active();
     if (!ctx) return;
-    const n = e.detail.valueAsNumber;
-    if (Number.isFinite(n) && n !== ctx.doc.get().tileW) {
-      // The relocated tile stepper: a square, centered, undoable resize —
-      // on the active document, in its own history.
+    const typed = Math.round(Number(tileField.value));
+    if (!(typed >= 1)) return;
+    const n = clampTile(typed);
+    if (n !== ctx.doc.get().tileW) {
+      // A square, centered, undoable resize — on the active document, in
+      // its own history, one whole-sheet step.
       ctx.history.withAtlasSnapshot(() => ctx.doc.resizeTiles(n, n));
     }
-  });
+  };
+  on($('#btn-tile-cancel'), 'click', () => dlgTile.close());
+  on($('#btn-tile-ok'), 'click', commitTileDialog);
 
   // --- the Export Sprite Atlas dialog ----------------------------------------
   // The 3D Sprite Atlas windoid's settings as a form, bound LIVE to the ring
@@ -805,10 +807,6 @@ export function initMenus(desktop, windows, panels) {
       case 'export-atlas':
         showRingDialog();
         break;
-      case 'properties':
-        dlgProps.show();
-        syncProps();
-        break;
     }
   });
 
@@ -829,6 +827,9 @@ export function initMenus(desktop, windows, panels) {
         break;
       case 'pick-color':
         session.openPicker();
+        break;
+      case 'tile-size':
+        showTileDialog();
         break;
     }
   });
@@ -927,8 +928,8 @@ export function initMenus(desktop, windows, panels) {
     'download',
     'export-model',
     'export-atlas',
-    'properties',
     'pick-color',
+    'tile-size',
     'ring',
     'tool-select',
     'tool-pencil',
