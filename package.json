@@ -24,6 +24,6 @@
   "dependencies": {
     "lit": "^3.3.0",
     "three": "0.185.1",
-    "vintage-frames": "^0.7.1"
+    "vintage-frames": "^0.7.2"
   }
 }
