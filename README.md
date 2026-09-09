@@ -37,7 +37,7 @@ compares a fresh set against them: every "does it look right" question — a
 label's ink, a dotted rule, a header's height, the DITL, the paper — lives
 there as pixels, and a golden changes only in a commit that changed the look
 on purpose, after an eye on the diff. `drive.mjs` covers what no screenshot
-can: about ninety checks over twenty-nine user journeys, driving the desktop
+can: about ninety checks over thirty user journeys, driving the desktop
 over the DevTools Protocol with real trusted input (keys, menu picks,
 ⌘-equivalents, drags — a window's bar, a grow box, an icon filed into a
 folder — the dialogs, a save → reopen round-trip through IndexedDB),
@@ -65,7 +65,9 @@ that live as **files on the desktop**, saved in the browser and reopened by
 double-clicking their icons, and **folders** to file them in, the Finder's
 way: File → New Folder makes one, dragging an icon onto it (or into its
 open window) files it, and a folder opens as a Finder window of its own —
-see [Folders](#folders). Clicking the desktop is "switching to the Finder": the application
+see [Folders](#folders) — and the **Trash** to delete them by, the
+Finder's way too: drag an icon onto it, empty it from Sprite Machine →
+Empty Trash… — see [The Trash](#the-trash). Clicking the desktop is "switching to the Finder": the application
 deactivates, its windoids hide, and the menus fall back to the desktop's
 grammar. See [The desktop](#the-desktop).
 
@@ -532,8 +534,9 @@ stepper, face picker, dialog, swatch pick, hover preview, rect drag, fill click,
 and selection marquee / move
 can't be driven headlessly. Seven shell-era params round the set out:
 `?fresh=1` boots with **storage ignored** (no desktop-state restore, no
-`?file` resolution, no saved-doc icons — a bare desktop now, every icon
-being a saved doc — no first-boot seeding, no About box greet, and no
+`?file` resolution, no saved-doc icons — the bare desktop with the Trash
+alone in its corner, every other icon being a saved doc — no first-boot
+seeding, no About box greet, and no
 state writes — deterministic
 captures on a machine with saved docs) and `?hide=<window>[,<window>]`
 (`document|tools|sprite|stage|ring`) hides windows a capture needs out of frame,
@@ -656,7 +659,11 @@ forward.
   as a placeholder for a future settings surface), _Desktop Patterns_ (the
   control panel — see [Desktop Patterns](#desktop-patterns); a window, not
   a dialog, so no ellipsis — the Apple menu's Control Panels listed it
-  bare — and live in both roles), _Quit_ (the System 7
+  bare — and live in both roles), _Empty Trash…_ (the Finder's command,
+  here rather than in a Special menu for now — see
+  [The Trash](#the-trash): the alert with the count and the K, then
+  everything in the Trash gone for good; live in both roles, greyed while
+  the Trash is empty, no key equivalent), _Quit_ (the System 7
   cascade: every open document in
   turn, one unsaved-changes alert per dirty one — its window brought forward
   as it's asked about, Cancel anywhere aborting the rest — down to the bare
@@ -671,11 +678,13 @@ forward.
   folder_, counted up per container, in the front folder window, else on
   the desktop, its name selected for typing in the icon's rename box; no
   key equivalent, System 7's ⌘N being the browser's; live in both roles,
-  like _New…_ — see [Folders](#folders)), _Open…_ ⌘O (two grammars, one
+  like _New…_, greyed only while the Finder's front window is the
+  Trash's — see [Folders](#folders)), _Open…_ ⌘O (two grammars, one
   item, the label its readout: _Open…_ raises the saved-docs listing
   dialog — the application's while a document is focused, the Finder's
   browse with the desktop focused and nothing selected, each filed
-  document's row carrying its folder path ahead of its name; with an icon
+  document's row carrying its folder path ahead of its name, a trashed
+  document no row at all; with an icon
   selected — on the desktop or in a folder window — it relabels to a bare
   _Open_ and opens that icon at once, a document into its window, a folder
   into its Finder window, Finder-style — the ellipsis being System 7's
@@ -1370,15 +1379,105 @@ orphaned id.
 - **Duplicate** lands the copy beside the original, in its folder; a
   first **Save** lands on the desktop; a dropped PNG opens as an untitled
   whose first save lands on the desktop too. `?file=` resolves by name
-  across every folder. `?fresh=1` renders no icon and no folder window.
-  With storage unavailable, New Folder raises the storage notice like
-  Save.
-- **Not yet**: no delete (the **Trash** is the planned follow-up — a
-  folder icon at the bottom right, Special → Empty Trash; a folder made by
-  mistake is permanent for now), no small-icon view (the field's `size`
-  is the whole mechanism, given 16×16 art), no zoom box on folder windows,
-  no Clean Up, and the Finder's two alerts (a name too long, a folder into
-  itself) are silent refusals.
+  across every folder but the Trash. `?fresh=1` renders no icon but the
+  Trash, and no folder window. With storage unavailable, New Folder
+  raises the storage notice like Save.
+- **Not yet**: no small-icon view (the field's `size` is the whole
+  mechanism, given 16×16 art), no zoom box on folder windows, no Clean
+  Up, no Put Away, and the Finder's two alerts (a name too long, a folder
+  into itself) are silent refusals. Deleting is the Trash's — the next
+  section.
+
+### The Trash
+
+The Finder's delete, since Sep 9 2026 (the plan is
+[docs/trash-plan.md](docs/trash-plan.md)): **the Trash is a folder** —
+the one folder with no record. The files slice leads every listing with a
+synthetic row for it (`TRASH` in `state/files.js`, the id `trash`; the
+store holds the row before any listing and keeps it with none, so the
+Trash is on the desktop whether or not there is a library), and from
+there every folder path serves it unchanged: a document whose `folder` is
+the Trash's sits in it, the icon layer renders it among the desktop's
+folders, its window is a folder window, and its desktop-state keys are
+the folder keys (`folder:trash` for its icon's position and its window's
+pin). Four things it refuses, each a silent no-op in the slice: a rename,
+a move, a removal, and a folder made inside it (File → New Folder greys
+while the Trash's window — or a trashed folder's — is the Finder's front
+window, System 7's own).
+
+- **Deleting is the drag** — there is no Delete key and no Delete
+  command, as System 7 had none: an icon dragged onto the Trash's, or
+  into its open window, files it there through the folders' own drop (a
+  document or a folder, one icon or a banded set; a folder goes in with
+  its subtree), the can wearing `target` under the outline. A move is
+  catalog, not content — bytes, name and modified time stand — and
+  nothing is destroyed until the Trash is emptied, so a trashed item
+  comes back by dragging it out onto the desktop or into a folder. The
+  Trash itself is never filed: a set that holds it is refused wherever it
+  is dropped, and a drop of it on the bare desktop is the kit's own move.
+- **The icon** is the user's 32×32 1-bit art, two cans
+  (`src/assets/trash.png` and `trash-full.png` — black ink, white fill,
+  transparent outside, the folder icon's three values): the plain can
+  while the Trash holds nothing, the bulging one with anything in it,
+  swapped by the reconciler off the listing, so the kit's selection and
+  `target` inversions and its open ghost are exact treatments of
+  whichever can is up. `selectable movable`, not `editable`; its default
+  place is the raster's **bottom-right corner** (`trashDefault` in
+  `shell/layout.js`: the icon column's own inset in from the right and
+  bottom edges), the one icon whose default is not the lattice's next
+  free cell — a saved position wins, the boot clamp pulls it on-raster,
+  and across a browser resize a corner icon is two struts, so it stays
+  in the corner.
+- **Its window** is a folder window — _Trash_, _N items_, the lattice,
+  its box persisting as its pin — from a double-click, ⌘O or File → Open
+  on its selected icon; a trashed folder's icon inside opens its own
+  window with its contents intact. Both wear the Finder's **"in the
+  Trash" mark**: the user's small 12×12 1-bit trash glyph
+  (`src/assets/trash-indicator.png`, through the kit's `vf-img` at 1:1)
+  at the head of the count line, the count stepping right to make room
+  (`FOLDER_TRASH_MARK_AT` and `FOLDER_COUNT_AT_TRASHED` in
+  `shell/layout.js`, numbers for the eye) — present exactly while the
+  folder is trashed, so a folder dragged into the Trash with its window
+  open takes the mark and one dragged out loses it; System 7's own header
+  for a folder in the Trash.
+- **Sprite Machine → Empty Trash…** — in the application's menu rather
+  than System 7's Special menu, for now (a Special menu earns its place
+  the day Clean Up gives it a second item), live in both roles (a
+  command over the catalog: it opens no window and changes no role),
+  greyed while the Trash is empty, no key equivalent — raises the
+  Finder's alert in the unsaved box's anatomy: _The Trash contains N
+  items, which use XK of disk space. Are you sure you want to
+  permanently remove these items?_ — N everything in it, folders'
+  contents included; X the trashed documents' stored bytes rounded up to
+  whole K, a listing cache (`size` on the row) — over Cancel and a
+  default OK (Return). OK removes every document and every folder under
+  the Trash from IndexedDB (`files.emptyTrash`, the one destructive
+  operation in the app), and the listing's refresh does the rest: the
+  icons in the Trash's window go, its count reads 0 items, the can
+  flattens, a trashed folder's open window closes, the item greys. The
+  seeding's record stands, so an emptied Car or Cube never comes back.
+- **Open documents.** Trashing one is allowed — it is a move; the window
+  stays, its title stays, Save saves in place, and its icon in the
+  Trash's window wears the open ghost (System 7 refused a file in use
+  because the application held it open; here a window holds pixels, not
+  a lock, and the drag out reverses it). Emptying with one inside
+  **reverts its window to an unsaved document, dirty**: the pixels and
+  the name stay, the stored identity goes (a dropped PNG's state), and
+  the dirty mark says nothing stored backs them now — Close asks _Save
+  changes to "Car" before closing?_, a reload warns, a Save stores it
+  afresh. The URL mirror clears with the identity.
+- **The library looks past the Trash**: the Open dialog lists no trashed
+  document and `?file=` resolves none (the Finder's Trash folder was
+  invisible to Standard File) — the way to one is its icon in the
+  Trash's window. Duplicate on a trashed open document lands beside it,
+  in the Trash.
+- **Nothing else changed**: no storage schema, no blob version (an
+  emptied item's position and pin stay in the blob as orphan keys,
+  harmless), no kit ask. `?fresh=1` shows the Trash and nothing else —
+  it is furniture, so the goldens carry it in their corner. Not yet: Put
+  Away ⌘Y (the record does not remember where a trashed item came from),
+  the Finder's "in use" alert, and a caution icon on the alert (the
+  unsaved box has none either).
 
 ### The About box
 
@@ -1473,7 +1572,8 @@ renames in place, converging on the same workspace action as File →
 Rename…, so any open window of that document retitles along) — and so does
 every folder (see [Folders](#folders): the field the icons sit in, the
 folder windows, the drag that files them, the per-container positions) —
-and saved items are the ONLY icons: the built-in defaults (Car, Cube) are **seeded
+and the **Trash** (see [The Trash](#the-trash)), the one icon that is no
+saved item; every other icon is one: the built-in defaults (Car, Cube) are **seeded
 into the library at the first-ever boot** (`seedDefaultDocs` in
 `loaders.js`, through the same save path as ⌘S — real PNG bytes, chunks,
 generated icon) and are ordinary mutable documents from then on; the
@@ -1814,8 +1914,10 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
                       Sprite Atlas's settings, seeded at open from the document's chunk, a
                       change dirtying the context, every save writing it),
                       activeKey (the kit's vf-activate mirrored in), untitled naming, per-context
-                      dirty tracking, the stored flows (openStored/save/duplicate/rename/export),
-                      and followActive() — the follow-the-active-document primitive
+                      dirty tracking, the stored flows (openStored/save/duplicate/rename/export/
+                      removeStored/emptyTrash — a context whose stored file is gone keeps its
+                      pixels and name, loses its identity and reads DIRTY), and followActive()
+                      — the follow-the-active-document primitive
   session.js          editor session (app-level): tool, ink, per-tool options (the pencil's and the
                       eraser's tip size AND tip shape, each tool's its own; circle every load), picker
                       flag — one palette, one ink, however many documents are open
@@ -1843,7 +1945,11 @@ src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-test
                       FOLDERS: the catalog's tree (createFolder / renameFolder / moveDoc /
                       moveFolder — a folder never into itself or a descendant — / removeFolder)
                       and its pure selectors (childrenOf / isInside / folderPath /
-                      nextFolderName) — browser deps (storage, PNG codec, icon art) injected
+                      nextFolderName) + the TRASH: a folder with no record (TRASH — a synthetic
+                      row every listing leads with; a rename, a move, a removal and a folder
+                      made inside it refused) and emptyTrash (its whole subtree removed, the one
+                      destructive op) with isTrashed / descendantsOf — browser deps (storage,
+                      PNG codec, icon art) injected
   shell.js            appActive + icon selection (the menus and the focus gating share one
                       truth; the windoids are permanent — no flags) + the desktop pattern
                       (the Desktop Patterns panel's Set; the one desktop setting that persists)
@@ -1893,7 +1999,8 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   a derived height — the chrome over one row of tile-size cells — the row's
                   own width, and a seeded, user-owned width: the row floored at its strip,
                   capped at the vacancy) + iconDefault
-                  (the raster-derived icon lattice) + pinOf/pinTo (the nine-slice pin across raster
+                  (the raster-derived icon lattice) + trashDefault (the Trash's bottom-right
+                  corner) + pinOf/pinTo (the nine-slice pin across raster
                   resizes — struts in the outer bands, springs in the middle — framed per tier:
                   WINDOW_FRAME below the options strip with the rail-sized top/right bands,
                   ICON_FRAME below the menu bar, uniform) + isPin (the shape test a stored
@@ -1927,12 +2034,17 @@ src/shell/        the desktop's behavior modules (imperative wiring over the ind
                   every dialog flow (About — the boot greeting too, its version + date
                   lines stamped at wire-up from vite.config.js's define — / Settings / New
                   Document (templates + tile size) / Open / name prompt / Properties /
-                  unsaved-changes / storage notice / Export Sprite Atlas — the ring slice's
+                  unsaved-changes / the Empty Trash alert (Sprite Machine → Empty Trash…: the
+                  count and the K, OK → workspace.emptyTrash; the item greyed while the Trash
+                  is empty, New Folder greyed with the Trash's window front) / storage notice
+                  / Export Sprite Atlas — the ring slice's
                   settings as a live form, Export = the strip's sheet as «slug»-atlas.zip: the
                   PNG with the ring chunk + its TexturePacker JSON); the quit cascade
   icons.js        the icon layer: a RECONCILER over containers — the desktop's vf-icon-field and
                   every open folder window's — one vf-icon per saved doc (generated front-tile
-                  art, `color`) and per folder (the app's 1-bit folder art, `data-folder`),
+                  art, `color`), per folder (the app's 1-bit folder art, `data-folder`) and
+                  for the TRASH (its two cans, empty / full off its contents; not editable,
+                  never filed, its default the corner; on every desktop, ?fresh too),
                   open/rename wiring, open ghosts, placement (a saved position by item in its
                   container's coordinates, else the container's first free lattice cell) + the
                   desktop's boot clamp + its resize re-pin (below the menu bar), the session
@@ -2042,7 +2154,7 @@ src/
   assets/         the app's own raster art, every piece through the kit's vf-img at 1:1: tools/ (the
                   tool strip's six 22×19 1-bit icons — no icon library), faces/ (the face picker's
                   21×26 1-bit cubes + the selected dither, black ink), the 32×32 application icon
-                  (the About box)
+                  (the About box), the 32×32 1-bit folder and the Trash's two cans (empty / full)
 ```
 
 ### UI layer: Lit + a hand-rolled store

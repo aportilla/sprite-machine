@@ -56,18 +56,37 @@
 // cancelled and nothing moves; no highlight either). Under a drag the
 // folder icon under the pointer wears the kit's `target` — the Finder's
 // inverted destination.
+//
+// THE TRASH (Sep 9 2026) is the third kind, rendered from the files slice's
+// synthetic row like any desktop folder — so a drop onto it or into its
+// window IS deleting, through the paths above with nothing new — with
+// three differences and one addition: its art follows its contents (the
+// plain can empty, the bulging one with anything in it — src/assets/, the
+// user's 1-bit art, swapped by src, so the kit's ghost and `target` are
+// derivations of whichever can is up); it is not `editable` (the slice
+// refuses a rename regardless); its default place is the raster's
+// bottom-right corner (layout.js trashDefault), a saved position winning
+// as for every icon; and it is NEVER FILED — canFile refuses any set that
+// holds it, so a banded selection cannot carry it into a folder or a
+// window, while a drop of it on the bare desktop is the kit's own move.
+// It is furniture: on the desktop with or without a library, under ?fresh
+// too (the listing is never read there, so a capture stays deterministic
+// with the one icon in its corner).
 // ---------------------------------------------------------------------------
 
 import { snapSys, systemPxQuantum } from 'vintage-frames';
 import folderArtUrl from '../assets/folder.png';
+import trashArtUrl from '../assets/trash.png';
+import trashFullArtUrl from '../assets/trash-full.png';
 import { genericDocIconDataUri } from '../image-io.js';
 import { build } from '../state/build.js';
-import { files, childrenOf, isInside } from '../state/files.js';
+import { files, childrenOf, isInside, TRASH } from '../state/files.js';
 import { shell } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
 import {
   iconDefault,
   iconGridDefault,
+  trashDefault,
   pinOf,
   pinTo,
   ICON_CELL,
@@ -83,13 +102,9 @@ const FOLDER = 'folder:';
  * @param {import('vintage-frames').VfDesktop} desktop
  * @param {{ actions: {openDoc(id: string): void},
  *           folders: ReturnType<typeof import('./folders.js').initFolders>,
- *           savedPos?: (key: string) => {left:number, top:number}|null,
- *           fresh?: boolean }} opts
+ *           savedPos?: (key: string) => {left:number, top:number}|null }} opts
  */
-export function initIcons(
-  desktop,
-  { actions, folders, savedPos = () => null, fresh = false }
-) {
+export function initIcons(desktop, { actions, folders, savedPos = () => null }) {
   const desktopField = /** @type {any} */ (desktop.querySelector('#desktop-icons'));
   /** @type {(() => void)[]} */
   const teardown = [];
@@ -285,6 +300,7 @@ export function initIcons(
     if (img.getAttribute('src') !== src) img.src = src;
   }
 
+  /** @param {'doc'|'folder'|'trash'} kind */
   function makeIcon(key, label, root, folder, kind) {
     const icon = /** @type {any} */ (document.createElement('vf-icon'));
     icon.dataset.key = key;
@@ -292,20 +308,26 @@ export function initIcons(
     icon.width = 64;
     icon.selectable = true;
     icon.movable = true;
-    icon.editable = true;
-    if (kind === 'folder') {
-      // The drop's marker (the kit's recipe): what a drag files into.
-      icon.dataset.folder = key.slice(FOLDER.length);
-    } else {
+    icon.editable = kind !== 'trash'; // the Trash keeps its name
+    if (kind === 'doc') {
       icon.color = true; // generated color art: selection darkens, not inverts
+    } else {
+      // The drop's marker (the kit's recipe): what a drag files into — a
+      // folder's, and the Trash's the same way.
+      icon.dataset.folder = key.slice(FOLDER.length);
     }
     root.append(icon); // appended first: the snap below reads the live scale
     // Where it lands: a filing's landing (or its next free cell), else the
     // position remembered from a window closed this session, else the
-    // saved one, else the lattice's next free cell.
+    // saved one, else the container's default — the lattice's next free
+    // cell, or the Trash's corner.
+    const fallback = () =>
+      kind === 'trash'
+        ? trashDefault(desktop.width, desktop.height)
+        : nextFree(root, folder);
     const pos = pending.has(key)
-      ? (pending.get(key) ?? nextFree(root, folder))
-      : (remembered.get(key) ?? savedPos(key) ?? nextFree(root, folder));
+      ? (pending.get(key) ?? fallback())
+      : (remembered.get(key) ?? savedPos(key) ?? fallback());
     pending.delete(key);
     remembered.delete(key);
     place(icon, folder, pos);
@@ -340,20 +362,28 @@ export function initIcons(
   // container it is (the folders first, then the documents, each in listing
   // order): an item that moved away is removed here and re-created in its
   // new root if that root is on screen (its landing under `pending`); the
-  // label, the art and the open ghost are re-read every pass. Skipped
-  // entirely under ?fresh=1 so a capture on a machine with saved docs stays
-  // deterministic (a ?fresh boot therefore shows a bare desktop — no icon
-  // is anything but a saved item).
+  // label, the art and the open ghost are re-read every pass. Under
+  // ?fresh=1 the listing is never read (main.js), so the slice holds the
+  // Trash's row alone and the desktop shows the one icon, in its corner —
+  // deterministic on a machine with saved docs, as a capture needs.
+  /** The Trash's can: plain while it holds nothing, bulging otherwise. */
+  const trashArt = (st) => {
+    const c = childrenOf(st, TRASH);
+    return c.docs.length || c.folders.length ? trashFullArtUrl : trashArtUrl;
+  };
   function sync() {
     const st = files.get();
     /** @type {[string|null, any][]} */
     const roots = [[null, desktopField], ...folders.fields()];
     for (const [folder, root] of roots) {
       const kids = childrenOf(st, folder);
-      /** @type {Map<string, {kind: 'doc'|'folder', rec: any}>} */
+      /** @type {Map<string, {kind: 'doc'|'folder'|'trash', rec: any}>} */
       const wanted = new Map();
       for (const f of kids.folders)
-        wanted.set(`${FOLDER}${f.id}`, { kind: 'folder', rec: f });
+        wanted.set(`${FOLDER}${f.id}`, {
+          kind: f.id === TRASH ? 'trash' : 'folder',
+          rec: f,
+        });
       for (const r of kids.docs) wanted.set(`${DOC}${r.id}`, { kind: 'doc', rec: r });
       for (const icon of iconsIn(root)) if (!wanted.has(keyOf(icon))) icon.remove();
       for (const [key, { kind, rec }] of wanted) {
@@ -371,7 +401,7 @@ export function initIcons(
           // The kit's `open` ghost marks every stored doc with a window open.
           icon.open = !!workspace.byFileId(rec.id);
         } else {
-          setArt(icon, folderArtUrl);
+          setArt(icon, kind === 'trash' ? trashArt(st) : folderArtUrl);
           icon.open = folders.isOpen(rec.id);
         }
       }
@@ -382,17 +412,11 @@ export function initIcons(
     // gone) — re-read so the shell's selection never names a vanished key.
     readSelection();
   }
-  if (!fresh) {
-    // The listing drives which icons exist and where; the workspace drives
-    // the open ghosts (windows opening and closing move them); the folder
-    // windows are the roots.
-    teardown.push(
-      files.subscribe(sync),
-      workspace.subscribe(sync),
-      folders.onChange(sync)
-    );
-    sync();
-  }
+  // The listing drives which icons exist and where; the workspace drives
+  // the open ghosts (windows opening and closing move them); the folder
+  // windows are the roots.
+  teardown.push(files.subscribe(sync), workspace.subscribe(sync), folders.onChange(sync));
+  sync();
 
   // --- filing: the drag ----------------------------------------------------------
   /** What is under the pointer, the travelling icons skipped: a folder
@@ -418,10 +442,12 @@ export function initIcons(
       desktop: stack.includes(desktop),
     };
   };
-  /** Can this set be filed into `folder`? Never a folder into itself or a
-   *  descendant (the slice refuses the move; this keeps the highlight
-   *  honest and the drop silent). */
+  /** Can this set be filed into `folder`? Never the Trash (it is the
+   *  desktop's, and a set that swept it up files nowhere), and never a
+   *  folder into itself or a descendant (the slice refuses both moves;
+   *  this keeps the highlight honest and the drop silent). */
   const canFile = (icons, folder) => {
+    if (icons.some((icon) => icon.dataset.folder === TRASH)) return false;
     if (folder == null) return true;
     const st = files.get();
     return icons.every((icon) => {

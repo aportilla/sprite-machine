@@ -14,8 +14,11 @@ import {
   docFilename,
   SOFTWARE,
   UNTITLED_FOLDER,
+  TRASH,
   childrenOf,
   isInside,
+  isTrashed,
+  descendantsOf,
   folderPath,
   nextFolderName,
 } from '../src/state/files.js';
@@ -88,6 +91,7 @@ test('save persists PNG bytes with the metadata chunks and returns the identity'
   assert.equal(s.list[0].h, 4);
 
   const rec = storage.map.get('id-1');
+  assert.equal(s.list[0].size, rec.png.byteLength, 'the row caches the record’s size');
   const meta = readTextChunks(rec.png);
   assert.equal(meta.Title, 'Cargo Ship');
   assert.equal(meta.Software, SOFTWARE);
@@ -265,7 +269,8 @@ test('moveFolder nests, and refuses a folder into itself or a descendant; the tr
   assert.deepEqual(folderPath(st, null), []);
   assert.deepEqual(
     childrenOf(st, null).folders.map((f) => f.name),
-    ['A']
+    ['Trash', 'A'],
+    'the desktop’s folders: the Trash, then the stored ones'
   );
   assert.equal(await files.moveFolder(a.id, a.id), false, 'into itself');
   assert.equal(await files.moveFolder(a.id, c.id), false, 'into a descendant');
@@ -282,7 +287,7 @@ test('removeFolder lifts its children into its container; an orphaned folder id 
   const { id } = await files.save(doc, { name: 'Car', folder: b.id });
   await files.removeFolder(b.id);
   let st = files.get();
-  assert.equal(st.folders.length, 1);
+  assert.equal(storage.folders.size, 1, 'B’s record is gone');
   assert.equal(st.list[0].folder, a.id, 'the document lifted into B’s container');
   // A record pointing at a folder that is gone (a stale write) shows on the
   // desktop rather than nowhere.
@@ -294,6 +299,60 @@ test('removeFolder lifts its children into its container; an orphaned folder id 
     ['Car']
   );
   assert.deepEqual(folderPath(st, 'gone'), []);
+});
+
+// --- the Trash ----------------------------------------------------------------
+
+test('the Trash is listed without a record, refuses a rename, a move, a removal and a folder made inside it; emptying removes its whole subtree and nothing else', async () => {
+  const { files, storage, doc } = makeWorld();
+  assert.equal(files.get().folders[0]?.id, TRASH, 'on the desktop before any listing');
+  await files.refresh();
+  assert.equal(files.get().folders[0]?.id, TRASH, 'and first in every listing');
+  assert.equal(storage.folders.size, 0, 'never stored');
+
+  await files.renameFolder(TRASH, 'Bin');
+  assert.equal(await files.moveFolder(TRASH, null), false);
+  await files.removeFolder(TRASH);
+  assert.equal(await files.createFolder({ parent: TRASH }), null);
+  assert.equal(files.get().folders[0].name, 'Trash');
+  assert.equal(storage.folders.size, 0, 'nothing of the Trash reached storage');
+
+  const keep = await files.createFolder({ name: 'Keep' });
+  const kept = await files.save(doc, { name: 'Kept', folder: keep.id });
+  const gone = await files.createFolder({ name: 'Gone' });
+  const nested = await files.createFolder({ name: 'Nested', parent: gone.id });
+  const deep = await files.save(doc, { name: 'Deep', folder: nested.id });
+  const loose = await files.save(doc, { name: 'Loose' });
+  assert.equal(
+    await files.moveFolder(gone.id, TRASH),
+    true,
+    'a folder files into it whole'
+  );
+  assert.equal(await files.moveDoc(loose.id, TRASH), true);
+  let st = files.get();
+  assert.equal(isTrashed(st, nested.id), true, 'inside a trashed folder is trashed');
+  assert.equal(isTrashed(st, keep.id), false);
+  assert.equal(isTrashed(st, null), false);
+  assert.equal(await files.createFolder({ parent: nested.id }), null, 'nor made there');
+  const d = descendantsOf(st, TRASH);
+  assert.deepEqual(d.docs.map((r) => r.name).sort(), ['Deep', 'Loose']);
+  assert.deepEqual(
+    d.folders.map((f) => f.name),
+    ['Gone', 'Nested'],
+    'parents before their children'
+  );
+
+  const removed = await files.emptyTrash();
+  assert.deepEqual(removed.docs.sort(), [deep.id, loose.id].sort());
+  assert.deepEqual(removed.folders, [gone.id, nested.id]);
+  st = files.get();
+  assert.deepEqual([...storage.map.keys()], [kept.id], 'the kept document alone');
+  assert.deepEqual([...storage.folders.keys()], [keep.id], 'the kept folder alone');
+  assert.equal(st.folders[0].id, TRASH, 'the Trash stands, empty');
+  assert.equal(
+    childrenOf(st, TRASH).docs.length + childrenOf(st, TRASH).folders.length,
+    0
+  );
 });
 
 // --- export ------------------------------------------------------------------

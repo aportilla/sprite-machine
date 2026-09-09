@@ -59,6 +59,14 @@
 //
 //   THE HEADER COUNT follows the model (the files slice's childrenOf), never
 //   the DOM — re-counted on every listing change, "N items", plain ink.
+//   And the Finder's "IN THE TRASH" MARK (Sep 9 2026): the Trash's own
+//   window and every trashed folder's wear the user's small trash glyph
+//   (src/assets/trash-indicator.png, the kit's vf-img at 1:1) at the head
+//   of the count line, the count stepping right to make room (layout.js
+//   FOLDER_TRASH_MARK_AT / FOLDER_COUNT_AT_TRASHED) — present exactly while
+//   the folder is trashed (isTrashed, re-read with the count: a folder
+//   dragged into the Trash with its window open takes the mark, one dragged
+//   out loses it). Existence IS visibility, the windows' discipline.
 //
 //   THE FIELD'S EXTENT (fit): the field is a declared box — the plane's
 //   viewport at least, so the rubber band reaches every visible px, grown
@@ -71,8 +79,17 @@
 // ---------------------------------------------------------------------------
 
 import { VfWindow } from 'vintage-frames';
-import { files, childrenOf } from '../state/files.js';
-import { folderBox, folderViewport, fieldExtent } from './layout.js';
+import trashMarkUrl from '../assets/trash-indicator.png';
+import { files, childrenOf, isTrashed } from '../state/files.js';
+import {
+  folderBox,
+  folderViewport,
+  fieldExtent,
+  FOLDER_COUNT_AT,
+  FOLDER_COUNT_AT_TRASHED,
+  FOLDER_TRASH_MARK,
+  FOLDER_TRASH_MARK_AT,
+} from './layout.js';
 
 /** The item's key in the desktop-state blob — its icon's (shell/icons.js),
  *  so one identity names both records. */
@@ -107,21 +124,50 @@ export function initFolders(desktop, windows, { savedPin = () => null } = {}) {
   const fieldOf = (win) =>
     /** @type {any} */ (win.querySelector(':scope > vf-icon-field'));
   const countOf = (win) => /** @type {any} */ (win.querySelector('.folder-count'));
+  const lineOf = (win) =>
+    /** @type {any} */ (win.querySelector(':scope > vf-container[slot="header"]'));
+  const markOf = (win) => /** @type {any} */ (win.querySelector('.folder-trash-mark'));
   /** The folder a window shows, or null (not a folder window). */
   const idOf = (win) => {
     for (const [id, w] of wins) if (w === win) return id;
     return null;
   };
 
-  /** The header line: the folder's item count off the model. */
+  /** The "in the Trash" mark (header): the small trash glyph through the
+   *  kit's vf-img at 1:1 — one image px one system px — placed at the
+   *  head of the count line. */
+  function makeMark() {
+    const mark = /** @type {any} */ (document.createElement('vf-img'));
+    mark.className = 'folder-trash-mark';
+    mark.width = FOLDER_TRASH_MARK.width;
+    mark.height = FOLDER_TRASH_MARK.height;
+    mark.left = FOLDER_TRASH_MARK_AT.left;
+    mark.top = FOLDER_TRASH_MARK_AT.top;
+    const img = document.createElement('img');
+    img.alt = 'in the Trash';
+    img.src = trashMarkUrl;
+    mark.append(img);
+    return mark;
+  }
+
+  /** The header line: the folder's item count off the model — and the
+   *  mark, present exactly while the folder is trashed, the count stepping
+   *  right beside it. */
   function count(id) {
     const win = wins.get(id);
     if (!win) return;
-    const c = childrenOf(files.get(), id);
+    const st = files.get();
+    const c = childrenOf(st, id);
     const n = c.docs.length + c.folders.length;
     const label = countOf(win);
     const text = `${n} item${n === 1 ? '' : 's'}`;
     if (label && label.textContent !== text) label.textContent = text;
+    const trashed = isTrashed(st, id);
+    const mark = markOf(win);
+    if (trashed && !mark) lineOf(win)?.prepend(makeMark());
+    else if (!trashed && mark) mark.remove();
+    const at = trashed ? FOLDER_COUNT_AT_TRASHED : FOLDER_COUNT_AT;
+    if (label && label.left !== at.left) label.left = at.left;
   }
 
   // The close box fires vf-close on the window itself (it never removes

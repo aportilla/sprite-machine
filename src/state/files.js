@@ -30,6 +30,21 @@
 // shell and the tests alike; a document whose folder record is gone reads
 // as the desktop's, so nothing can vanish into an orphaned id.
 //
+// THE TRASH IS A FOLDER WITH NO RECORD (Sep 9 2026): the root's one fixed
+// child, `TRASH` — a synthetic row the store's initial state holds and every
+// refresh() outcome keeps first in `folders` (with a listing, without one,
+// under ?fresh), never written to storage, so every consumer sees a folder:
+// a document whose `folder` is TRASH sits in it (containerOf resolves it),
+// the icon layer renders it among the desktop's folders, its window is a
+// folder window, and the desktop-state keys are the folder keys. It refuses
+// four things — a rename, a move, a removal, and a folder made inside it
+// (System 7 greyed New Folder with the Trash front) — each a silent no-op.
+// Deleting IS filing into it (moveDoc / moveFolder, nothing new), and
+// nothing is destroyed until emptyTrash(): the whole subtree removed —
+// descendantsOf, documents and folders — the one destructive operation
+// here. isTrashed tells the library's listing (the Open dialog, ?file) to
+// look past it: the Finder's Trash folder was invisible to Standard File.
+//
 // WHAT THIS SLICE DOES NOT KNOW (the multi-document split): which documents
 // are open, which is active, their dirty state, or their identity — that is
 // the workspace's (state/workspace.js). Every per-document operation here
@@ -47,6 +62,17 @@ export const UNTITLED = 'untitled';
 /** A new folder's name — the Finder's, counted up like the workspace's
  *  untitled documents (nextFolderName). */
 export const UNTITLED_FOLDER = 'untitled folder';
+/** The Trash's folder id — the one folder with no record (header). */
+export const TRASH = 'trash';
+/** The Trash's row, as every listing carries it: the root's fixed child,
+ *  older than anything stored so it sorts first. @type {FolderRow} */
+const TRASH_ROW = Object.freeze({
+  id: TRASH,
+  name: 'Trash',
+  parent: null,
+  createdAt: 0,
+  modifiedAt: 0,
+});
 // The Software chunk value — doubles as the document-schema marker.
 export const SOFTWARE = 'sprite-machine 1';
 
@@ -79,7 +105,10 @@ export const modelFilename = (name) => `${slugOf(name)}.glb`;
 
 /**
  * @typedef {{id: string, name: string, createdAt: number, modifiedAt: number,
- *   icon: string|null, w: number, h: number, folder: string|null}} DocRow
+ *   icon: string|null, w: number, h: number, folder: string|null,
+ *   size: number}} DocRow
+ *   size: the stored PNG's byte length — a listing cache like w / h, read
+ *   off the record's bytes (the Empty Trash alert's "which use 12K").
  * @typedef {{id: string, name: string, parent: string|null,
  *   createdAt: number, modifiedAt: number}} FolderRow
  * @typedef {{available: boolean, list: DocRow[], folders: FolderRow[]}} FilesState
@@ -152,6 +181,45 @@ export function folderPath(state, id) {
 }
 
 /**
+ * Is a container the Trash, or inside it? (`folder` as a record states it:
+ * an id, null for the desktop.) What the library's listing looks past.
+ * @param {FilesState} state @param {string|null|undefined} folder
+ */
+export function isTrashed(state, folder) {
+  const c = containerOf(state, folder ?? null);
+  return c === TRASH || (c != null && isInside(state, c, TRASH));
+}
+
+/**
+ * A container's whole subtree — every document and every folder under it,
+ * however deep, each in listing order, parents before their children (an
+ * emptying removes them all; the alert counts them). A chain that loops
+ * — a corrupt catalog — is walked once.
+ * @param {FilesState} state
+ * @param {string|null} folder
+ * @returns {{docs: DocRow[], folders: FolderRow[]}}
+ */
+export function descendantsOf(state, folder) {
+  /** @type {DocRow[]} */
+  const docs = [];
+  /** @type {FolderRow[]} */
+  const folders = [];
+  const seen = new Set();
+  const walk = (id) => {
+    const kids = childrenOf(state, id);
+    docs.push(...kids.docs);
+    for (const f of kids.folders) {
+      if (seen.has(f.id)) continue;
+      seen.add(f.id);
+      folders.push(f);
+      walk(f.id);
+    }
+  };
+  walk(containerOf(state, folder));
+  return { docs, folders };
+}
+
+/**
  * The next free folder name in a container: "untitled folder", "untitled
  * folder 2", … over the folder names already there (the workspace's
  * untitled rule).
@@ -186,7 +254,9 @@ export function createFiles(deps = null) {
       // private-mode IndexedDB reads as "Save unavailable", not a crash.
       available: false,
       list: [],
-      folders: [],
+      // The Trash is furniture: on the desktop before any listing, and
+      // whether or not there is one (header).
+      folders: [TRASH_ROW],
     })
   );
 
@@ -236,17 +306,18 @@ export function createFiles(deps = null) {
 
     /** Re-read the listing — the documents AND the folders — from storage;
      *  resolves availability as a side effect (success ⇒ true,
-     *  failure/absence ⇒ false). */
+     *  failure/absence ⇒ false). The Trash's row leads `folders` in every
+     *  outcome. */
     async refresh() {
       if (!d?.storage) {
-        store.patch({ available: false, list: [], folders: [] });
+        store.patch({ available: false, list: [], folders: [TRASH_ROW] });
         return;
       }
       try {
         const records = await d.storage.list();
         const folderRecords = d.storage.listFolders ? await d.storage.listFolders() : [];
         const list = records
-          .map(({ id, name, createdAt, modifiedAt, icon, w, h, folder }) => ({
+          .map(({ id, name, createdAt, modifiedAt, icon, w, h, folder, png }) => ({
             id,
             name,
             createdAt,
@@ -255,6 +326,7 @@ export function createFiles(deps = null) {
             w,
             h,
             folder: folder ?? null,
+            size: png?.byteLength ?? 0,
           }))
           .sort(byCreation);
         const folders = folderRecords
@@ -266,9 +338,9 @@ export function createFiles(deps = null) {
             modifiedAt,
           }))
           .sort(byCreation);
-        store.patch({ available: true, list, folders });
+        store.patch({ available: true, list, folders: [TRASH_ROW, ...folders] });
       } catch {
-        store.patch({ available: false, list: [], folders: [] });
+        store.patch({ available: false, list: [], folders: [TRASH_ROW] });
       }
     },
 
@@ -390,12 +462,15 @@ export function createFiles(deps = null) {
 
     /**
      * Make a folder in a container (`parent` null: the desktop), named as
-     * given or the next free "untitled folder". Resolves `{id, name}`.
+     * given or the next free "untitled folder". Resolves `{id, name}` —
+     * or null, REFUSED, for a container that is the Trash or inside it (a
+     * folder made to be deleted; the Finder greyed New Folder there).
      * @param {{name?: string, parent?: string|null}} [init]
      */
     async createFolder({ name, parent = null } = {}) {
       const state = store.get();
       const target = containerOf(state, parent);
+      if (isTrashed(state, target)) return null;
       const finalName = name ?? nextFolderName(state, target);
       const id = newId();
       const t = now();
@@ -411,10 +486,11 @@ export function createFiles(deps = null) {
     },
 
     /** Rename a folder in place (the desktop icon's in-place rename lands
-     *  here; a folder window's title follows through the listing). */
+     *  here; a folder window's title follows through the listing). The
+     *  Trash keeps its name. */
     async renameFolder(id, name) {
       const rec = folderRec(id);
-      if (!rec) return;
+      if (!rec || id === TRASH) return;
       await d.storage.putFolder({ ...rec, name, modifiedAt: now() });
       await this.refresh();
     },
@@ -423,13 +499,14 @@ export function createFiles(deps = null) {
      * Move a folder into another (`null`: the desktop). REFUSED — a no-op
      * resolving false — when the target is the folder itself or inside it
      * (a folder cannot be put into itself, the Finder's one rule); false
-     * too for a folder that is gone or already there.
+     * too for a folder that is gone or already there — and for the Trash,
+     * which is the desktop's and never files anywhere.
      * @param {string} id @param {string|null} parent
      */
     async moveFolder(id, parent) {
       const state = store.get();
       const rec = folderRec(id);
-      if (!rec) return false;
+      if (!rec || id === TRASH) return false;
       const target = containerOf(state, parent);
       if (target === id || (target != null && isInside(state, target, id))) return false;
       if ((rec.parent ?? null) === target) return false;
@@ -441,14 +518,14 @@ export function createFiles(deps = null) {
     /**
      * Delete a folder record. Its children — documents and folders — are
      * lifted into ITS container first, so nothing is ever orphaned (the
-     * Trash's recursive emptying is its own day; nothing in the UI calls
-     * this yet).
+     * recursive removal is emptyTrash's; nothing in the UI calls this).
+     * The Trash itself is never removed.
      * @param {string} id
      */
     async removeFolder(id) {
       const state = store.get();
       const rec = folderRec(id);
-      if (!rec) return;
+      if (!rec || id === TRASH) return;
       const into = containerOf(state, rec.parent);
       for (const f of state.folders) {
         if ((f.parent ?? null) === id) await d.storage.putFolder({ ...f, parent: into });
@@ -461,6 +538,22 @@ export function createFiles(deps = null) {
       }
       await d.storage.removeFolder(id);
       await this.refresh();
+    },
+
+    /**
+     * Empty the Trash: every document and every folder under it, however
+     * deep, removed from storage — the one destructive operation here —
+     * then one refresh. Resolves the removed ids (the workspace reverts
+     * any open context holding one of the documents). The Trash's own
+     * row stands.
+     * @returns {Promise<{docs: string[], folders: string[]}>}
+     */
+    async emptyTrash() {
+      const { docs, folders } = descendantsOf(store.get(), TRASH);
+      for (const r of docs) await d.storage.remove(r.id);
+      for (const f of folders) await d.storage.removeFolder(f.id);
+      await this.refresh();
+      return { docs: docs.map((r) => r.id), folders: folders.map((f) => f.id) };
     },
 
     /**

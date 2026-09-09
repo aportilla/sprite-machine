@@ -14,7 +14,7 @@ import { SAMPLES } from './lib/sprite-data.js';
 import { PALETTE_168 } from './lib/constants.js';
 import { session } from './state/session.js';
 import { prefs } from './state/prefs.js';
-import { files } from './state/files.js';
+import { files, isTrashed } from './state/files.js';
 import { workspace } from './state/workspace.js';
 import { parseBootParams } from './boot/params.js';
 import { createStage } from './scene/stage.js';
@@ -174,7 +174,6 @@ const icons = initIcons(desktop, {
   actions: { openDoc: (id) => menus.actions.openDoc(id) },
   folders,
   savedPos: dstate.iconPos,
-  fresh: boot.fresh,
 });
 menus = initMenus(desktop, windows, {
   patterns,
@@ -341,8 +340,12 @@ async function bootDocuments() {
 
   if (boot.file && files.get().available) {
     const q = boot.file.toLowerCase();
+    const st = files.get();
     let match = null;
-    for (const r of files.get().list) {
+    // The library, the Trash excluded: a trashed document is reached from
+    // the Trash's window, never named from the address bar.
+    for (const r of st.list) {
+      if (isTrashed(st, r.folder)) continue;
       if (r.name.toLowerCase() === q && (!match || r.modifiedAt > match.modifiedAt)) {
         match = r;
       }

@@ -440,7 +440,8 @@ here: the folder window's body is the kit's own white paper.
    is a folder with a menu command: cheap. Recommendation: cut 1 without
    delete, the Trash as the first follow-up (§7). The alternative, a
    Finder-role _Delete_ command on the selection, is quicker and not
-   System 7.
+   System 7. **Built Sep 9 2026** — [trash-plan.md](trash-plan.md),
+   README §The Trash.
 2. **Folder window geometry: not persisted.** The Finder remembered every
    folder window's box; the app's principle is that no window geometry
    survives a session. Recommendation: hold the principle — the icon
@@ -494,7 +495,8 @@ here: the folder window's body is the kit's own white paper.
 - **The Trash** (§5.1): the icon, Special → Empty Trash, the question with
   its count; a folder emptied recursively; an open document whose file is
   trashed reverting to untitled (`workspace.removeStored` already does
-  that half).
+  that half). **BUILT Sep 9 2026** ([trash-plan.md](trash-plan.md)) —
+  Empty Trash… in the Sprite Machine menu for now, no Special menu yet.
 - **The Finder's two alerts** — _That name is too long_ and _A folder
   can't be put into itself_ — as `vf-dialog frame="plain"` boxes with the
   app's own 32×32 caution art (the kit ships no alert; `vf-name-too-long`

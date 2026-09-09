@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createDoc } from '../src/state/doc.js';
-import { createFiles, UNTITLED } from '../src/state/files.js';
+import { createFiles, UNTITLED, TRASH } from '../src/state/files.js';
 import { createWorkspace, followActive } from '../src/state/workspace.js';
 import { fakeScheduler, memStorage, encodeAtlas, decodeAtlas } from './helpers.mjs';
 
@@ -263,14 +263,33 @@ test('rename: untitled takes the display name; saved rewrites the store and ever
   assert.equal(saved.name, 'Newer', 'the icon rename path follows into the context');
 });
 
-test('removeStored reverts an open context to an untitled identity', async () => {
+test('removeStored reverts an open context to an untitled identity, dirty', async () => {
   const { ws, storage } = makeWorld();
   const ctx = openLoaded(ws);
   await ws.save(ctx.key, 'Doomed');
+  assert.equal(ctx.dirty, false);
   await ws.removeStored('id-1');
   assert.equal(storage.map.size, 0);
   assert.equal(ctx.fileId, null);
   assert.equal(ctx.name, 'Doomed', 'the pixels and name stay open');
+  assert.equal(ctx.dirty, true, 'and nothing stored backs them: a Close must ask');
+});
+
+test('emptyTrash removes what the Trash holds and reverts every open context holding one of them, dirty; the rest stand', async () => {
+  const { ws, files, storage } = makeWorld();
+  const trashed = openLoaded(ws);
+  const kept = openLoaded(ws);
+  await ws.save(trashed.key, 'Trashed');
+  await ws.save(kept.key, 'Kept');
+  await files.moveDoc(trashed.fileId, TRASH);
+  const removed = await ws.emptyTrash();
+  assert.deepEqual(removed.docs, ['id-1']);
+  assert.deepEqual([...storage.map.keys()], ['id-2']);
+  assert.equal(trashed.fileId, null);
+  assert.equal(trashed.dirty, true);
+  assert.equal(trashed.name, 'Trashed');
+  assert.equal(kept.fileId, 'id-2');
+  assert.equal(kept.dirty, false);
 });
 
 // --- followActive -----------------------------------------------------------------

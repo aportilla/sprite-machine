@@ -36,6 +36,18 @@
                both roles; it IS the Finder's window, so opening it
                deactivates the application. -->
           <vf-menu-item value="desktop-patterns">Desktop Patterns</vf-menu-item>
+          <!-- Empty Trash… (shell/menus.js → workspace.emptyTrash): the
+               Finder's command over the Trash's contents, behind the
+               Finder's alert (#dlg-empty-trash below — the ellipsis,
+               System 7's promise of a box). Here rather than in a Special
+               menu, for now (Sep 9 2026): System 7's Special menu would
+               hold this one command; the day Clean Up joins it, both move
+               there. A command over the catalog — it opens no window and
+               changes no role — so live in both roles like New Folder;
+               greyed while the Trash is empty (menus.js re-reads the
+               listing), which on a virgin profile is this `disabled`. No
+               key equivalent, as System 7 gave it none. -->
+          <vf-menu-item value="empty-trash" disabled>Empty Trash…</vf-menu-item>
           <vf-separator></vf-separator>
           <vf-menu-item value="quit">Quit</vf-menu-item>
         </vf-menu>
@@ -562,6 +574,38 @@
         <vf-button id="btn-unsaved-cancel" left="186" top="85">Cancel</vf-button>
       </vf-dialog>
 
+      <!-- The Empty Trash alert (shell/menus.js): the Finder's — "The Trash
+           contains N items, which use XK of disk space. Are you sure you
+           want to permanently remove these items?" — in the unsaved box's
+           anatomy: the plain dBoxProc frame, the question in the display
+           face across the top (written at show: the count of everything
+           in the Trash, folders' contents included, and the K the trashed
+           documents' bytes use), Cancel and OK at the bottom right, OK the
+           default (Return; Escape reads as Cancel). No caution icon yet:
+           the kit ships no alert, its recipe is a row stack with a 32×32
+           vf-img at the left, and the unsaved box carries none either —
+           the day the user draws one, both take it. Placed by top/left in
+           the content area; the numbers are for the eye. -->
+      <vf-dialog
+        id="dlg-empty-trash"
+        frame="plain"
+        label="Empty Trash"
+        width="340"
+        height="150"
+      >
+        <vf-paragraph
+          face="display"
+          id="empty-trash-msg"
+          width="320"
+          left="3"
+          top="0"
+        ></vf-paragraph>
+        <vf-button id="btn-empty-trash-cancel" left="170" top="95">Cancel</vf-button>
+        <vf-button id="btn-empty-trash-ok" variant="default" left="246" top="95"
+          >OK</vf-button
+        >
+      </vf-dialog>
+
       <vf-dialog
         id="dlg-storage"
         heading="Storage Unavailable"
@@ -800,7 +844,13 @@
          rows of white paper over one row of ink, its own bottom rule — the
          divider's first line), holding one body-face label placed at
          FOLDER_COUNT_AT against its corner (the header's own: the
-         container sits at the header's origin in flow); under it the
+         container sits at the header's origin in flow) — and, for the
+         Trash's window and every trashed folder's, the Finder's "in the
+         Trash" mark ahead of it: a vf-img of the user's 12×12 trash
+         glyph, made and placed by folders.js (layout.js
+         FOLDER_TRASH_MARK_AT) with the count stepped right
+         (FOLDER_COUNT_AT_TRASHED), present exactly while the folder is
+         trashed — nothing of it in this markup; under it the
          header's white shows for one row, then the header's own rule,
          which `header-height` counts: 18 + 1 + 1 = 20 = FOLDER_STRIP in
          shell/layout.js (the container's 18 is FOLDER_COUNT_LINE there),

@@ -117,6 +117,24 @@ export function createWorkspace(deps = {}) {
     touch();
   };
 
+  /** Stored documents that are gone (a delete, an emptied Trash): every
+   *  open context holding one keeps its pixels and its display name but
+   *  loses its stored identity — the state a dropped PNG opens in — and
+   *  reads dirty, since nothing stored backs it any more: a Close asks, a
+   *  reload warns, a Save stores it afresh. One touch for the batch.
+   *  @param {string[]} ids */
+  const forgetStored = (ids) => {
+    const gone = new Set(ids);
+    let moved = false;
+    for (const c of store.get().contexts) {
+      if (c.fileId == null || !gone.has(c.fileId)) continue;
+      c.fileId = null;
+      c.dirty = true;
+      moved = true;
+    }
+    if (moved) touch();
+  };
+
   const api = {
     store,
     get: store.get,
@@ -347,17 +365,21 @@ export function createWorkspace(deps = {}) {
 
     /** Delete a stored doc. An open context holding it reverts to an
      *  untitled identity (its pixels stay open — only the stored copy is
-     *  gone). */
+     *  gone) and reads DIRTY: the window's copy is the only one now, so
+     *  Close asks and the beforeunload guard holds (forgetStored). */
     async removeStored(id) {
       await files.remove(id);
-      let moved = false;
-      for (const c of store.get().contexts) {
-        if (c.fileId === id) {
-          c.fileId = null;
-          moved = true;
-        }
-      }
-      if (moved) touch();
+      forgetStored([id]);
+    },
+
+    /** Empty the Trash (files.emptyTrash — every document and folder in
+     *  it, however deep); every open context holding one of the removed
+     *  documents reverts the way removeStored's does, dirty. Resolves what
+     *  was removed. */
+    async emptyTrash() {
+      const removed = await files.emptyTrash();
+      forgetStored(removed.docs);
+      return removed;
     },
 
     /** The bytes File → Download saves for a context. */

@@ -59,6 +59,10 @@ import {
 import {
   files,
   folderPath,
+  childrenOf,
+  descendantsOf,
+  isTrashed,
+  TRASH,
   UNTITLED,
   docFilename,
   ringFilename,
@@ -119,6 +123,7 @@ export function initMenus(desktop, windows, panels) {
   const dlgName = $('#dlg-name');
   const dlgProps = $('#dlg-props');
   const dlgUnsaved = $('#dlg-unsaved');
+  const dlgEmptyTrash = $('#dlg-empty-trash');
   const dlgStorage = $('#dlg-storage');
   const dlgExportModel = $('#dlg-export-model');
   const dlgExportAtlas = $('#dlg-export-atlas');
@@ -319,6 +324,37 @@ export function initMenus(desktop, windows, panels) {
     discardPending = null;
   });
 
+  // The Empty Trash alert (Sprite Machine → Empty Trash…): the Finder's
+  // question, written at show — N is everything the emptying removes (the
+  // Trash's whole subtree, documents and folders), the K the trashed
+  // documents' stored bytes summed and rounded up to whole K, the listing
+  // row's `size` — over Cancel and a default OK. OK empties through the
+  // workspace (files.emptyTrash, then every open context holding a removed
+  // document reverts, dirty); the listing's refresh does the rest — the
+  // icons in the Trash's window go, its count reads 0 items, the can
+  // flattens, a trashed folder's open window closes, the item greys. A
+  // failure lands on the build slice like every file op's.
+  const emptyTrashMsg = $('#empty-trash-msg');
+  function showEmptyTrash() {
+    const st = files.get();
+    const { docs, folders: dirs } = descendantsOf(st, TRASH);
+    const n = docs.length + dirs.length;
+    if (!n) return;
+    const k = Math.ceil(docs.reduce((sum, r) => sum + (r.size ?? 0), 0) / 1024);
+    emptyTrashMsg.textContent =
+      n === 1
+        ? `The Trash contains 1 item, which uses ${k}K of disk space. Are you sure you want to permanently remove it?`
+        : `The Trash contains ${n} items, which use ${k}K of disk space. Are you sure you want to permanently remove these items?`;
+    dlgEmptyTrash.show();
+  }
+  on($('#btn-empty-trash-cancel'), 'click', () => dlgEmptyTrash.close());
+  on($('#btn-empty-trash-ok'), 'click', () => {
+    dlgEmptyTrash.close();
+    workspace
+      .emptyTrash()
+      .catch((err) => build.setError(`Empty Trash failed: ${err.message}`));
+  });
+
   // --- save / open flows ------------------------------------------------------
   // Save a context, then run `next`. An untitled doc prompts for its name
   // first; a Cancel there cancels the whole chain (System 7 semantics).
@@ -468,12 +504,16 @@ export function initMenus(desktop, windows, panels) {
   // and a template belongs to File → New…, not Open. A filed document's row
   // carries its folder PATH ahead of its name ("Vehicles ▸ Car — …", nested
   // folders joined the same way); folders themselves are not rows — the
-  // dialog opens documents, a folder opens from its icon.
+  // dialog opens documents, a folder opens from its icon. The Trash is not
+  // in the library: a trashed document has no row (the Finder's Trash
+  // folder was invisible to Standard File) — its icon in the Trash's
+  // window is the way to it.
   const openList = $('#open-list');
   function showOpenDialog() {
     const rows = [];
     const st = files.get();
     for (const r of st.list) {
+      if (isTrashed(st, r.folder)) continue;
       const when = new Date(r.modifiedAt).toLocaleDateString();
       const path = folderPath(st, r.folder)
         .map((n) => `${n} ▸ `)
@@ -653,6 +693,12 @@ export function initMenus(desktop, windows, panels) {
         // the application: it's the Finder's window.
         panels.patterns.open();
         break;
+      case 'empty-trash':
+        // The Finder's command over the catalog (the alert above): live in
+        // both roles, and it changes neither — nothing on screen but icons
+        // moves. Greyed while the Trash is empty (syncTrash below).
+        showEmptyTrash();
+        break;
       case 'quit':
         quit();
         break;
@@ -676,7 +722,9 @@ export function initMenus(desktop, windows, panels) {
         // first: with a document window active, the desktop's turn — the
         // windoids hide, the way a desktop press does; a folder window
         // front keeps its turn. Storage unavailable raises the notice, like
-        // Save.
+        // Save. With the Trash's window front the item is greyed (syncGate
+        // below) and the slice refuses regardless — a folder is not made
+        // in the Trash.
         if (!files.get().available) {
           dlgStorage.show();
           break;
@@ -685,7 +733,9 @@ export function initMenus(desktop, windows, panels) {
         if (shell.get().appActive) desktop.clearActive();
         files
           .createFolder({ parent })
-          .then(({ id }) => icons.startRename(`folder:${id}`))
+          .then((made) => {
+            if (made) icons.startRename(`folder:${made.id}`);
+          })
           .catch((err) => build.setError(`New Folder failed: ${err.message}`));
         break;
       }
@@ -863,7 +913,10 @@ export function initMenus(desktop, windows, panels) {
   // All — the Finder's — is live only with the application inactive (so
   // ⌘A falls through to a focused field's own select-all otherwise); both
   // re-read on every change of the desktop's active window (vf-activate:
-  // a folder window taking or losing active moves neither role flag).
+  // a folder window taking or losing active moves neither role flag). A
+  // third reads it beside the listing: New Folder greys while the Finder's
+  // front window is the Trash's, or a trashed folder's (System 7's own — a
+  // folder is not made in the Trash; the slice refuses regardless).
   // Disabling an item also parks its key equivalent (the kit never fires a
   // disabled item's shortcut), so ⌘S/⌘K gate with their menus; the
   // bare-letter tool keys get the same guard in src/shortcuts.js.
@@ -888,20 +941,37 @@ export function initMenus(desktop, windows, panels) {
   const itemOpen = $('vf-menu-item[value="open"]');
   const itemClose = $('vf-menu-item[value="close"]');
   const itemSelectAll = $('vf-menu-item[value="select-all"]');
+  const itemNewFolder = $('vf-menu-item[value="new-folder"]');
   const syncGate = () => {
     const s = shell.get();
     for (const item of docItems) item.disabled = !s.appActive;
     itemClose.disabled = !(s.appActive || folders.activeFolder() != null);
     itemSelectAll.disabled = s.appActive;
+    itemNewFolder.disabled = isTrashed(files.get(), folders.activeFolder());
     // The ellipsis is the System 7 promise of a dialog: "Open" acts at once
     // on the selection, "Open…" asks (the listing) — so the label is the
     // grammar's own readout. The item is the markup's default-slot text.
     const label = finderSelection() ? 'Open' : 'Open…';
     if (itemOpen.textContent !== label) itemOpen.textContent = label;
   };
-  teardown.push(shell.subscribe(syncGate), folders.onChange(syncGate));
+  teardown.push(
+    shell.subscribe(syncGate),
+    folders.onChange(syncGate),
+    files.subscribe(syncGate)
+  );
   on(desktop, 'vf-activate', syncGate);
   syncGate();
+
+  // Empty Trash… is live exactly while the Trash holds something — the
+  // Finder's reading, off the listing (a drop into it, an emptying, a drag
+  // out all refresh it).
+  const itemEmptyTrash = $('vf-menu-item[value="empty-trash"]');
+  const syncTrash = () => {
+    const c = childrenOf(files.get(), TRASH);
+    itemEmptyTrash.disabled = !c.docs.length && !c.folders.length;
+  };
+  teardown.push(files.subscribe(syncTrash));
+  syncTrash();
 
   // --- Arrange Windows: one item, ⌘J, a STATE rule -------------------------------
   // The View menu's ⌘J item carries two commands, and which one is a

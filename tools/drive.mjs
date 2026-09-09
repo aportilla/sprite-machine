@@ -868,9 +868,11 @@ const seededFlag = () =>
   );
 const seedProbe = () =>
   evaluate(`(() => {${DEEP}
+    // The saved documents' icons — what the seeding makes; the Trash is
+    // furniture on every desktop and not one of them.
     const icons = __qa('vf-icon[data-key]').map((i) => ({
       key: i.dataset.key, label: i.label, open: !!i.open,
-    }));
+    })).filter((i) => i.key.startsWith('doc:'));
     const d = __doc();
     return {
       icons,
@@ -2943,7 +2945,7 @@ async function s30_folders() {
   let f = await folderProbe();
   check(
     'File → New Folder makes a folder icon on the desktop with its rename box open; the typed name lands on the folder',
-    made && named && f.desktop.filter((i) => i.folder != null).length === 1,
+    made && named && f.desktop.filter((i) => i.label === 'Vehicles').length === 1,
     JSON.stringify(f.desktop)
   );
   // Filing by drag: the Car's icon dropped onto the folder's leaves the
@@ -3069,6 +3071,70 @@ async function s30_folders() {
   await send('Emulation.clearDeviceMetricsOverride');
 }
 
+async function s31_trash() {
+  section('S31 the Trash: a document dragged onto it, Empty Trash…, the round trip');
+  // The plain boot's desktop: the seeded Cube (S30 left the Car filed in
+  // its folder), the About box OK'd, and the Trash in its corner — a
+  // folder icon with no record.
+  await send('Page.navigate', { url: SEED_URL });
+  await waitForGreet();
+  await dismissGreet();
+  const cubeKey = (await folderProbe()).desktop.find((i) => i.label === 'Cube')?.key;
+  // Trashing IS filing (S30's wiring — a folder icon is a folder icon, so
+  // no check on the drop itself): the Cube's icon dropped onto the Trash's
+  // leaves the desktop, and the Trash opened holds it.
+  const cube = await iconCentre('Cube');
+  const trash = await iconCentre('Trash');
+  await dragIcon(cube, trash);
+  await until(async () => (await folderProbe()).desktop.every((i) => i.label !== 'Cube'));
+  await dblclick(trash.x, trash.y);
+  await until(async () => {
+    const p = await folderProbe();
+    return p.windows.length === 1 && p.windows[0].icons.some((i) => i.label === 'Cube');
+  });
+  // Sprite Machine → Empty Trash… (live now that the Trash holds something)
+  // raises the Finder's alert; Return fires its default OK (the kit's
+  // dialog grammar), and the emptying lands on the listing: the window
+  // reads 0 items.
+  await pickMenu('#menu-app', 'empty-trash');
+  const alertUp = () => evaluate(`document.querySelector('#dlg-empty-trash').open`);
+  await until(alertUp);
+  await keyPress('Enter');
+  await until(async () => !(await alertUp()));
+  await until(async () => (await folderProbe()).windows[0]?.count === 0);
+  // The round trip: a reload lists the library from IndexedDB, and the
+  // seeding's record keeps the built-ins from coming back — the Cube is
+  // gone from the desktop, from the Trash's window and from the Open
+  // listing.
+  await send('Page.navigate', { url: SEED_URL });
+  await waitForGreet();
+  await dismissGreet();
+  const trashAgain = await iconCentre('Trash');
+  await dblclick(trashAgain.x, trashAgain.y);
+  await until(async () => (await folderProbe()).windows.length === 1);
+  const f = await folderProbe();
+  const bare = await bareSpot();
+  await click(bare.x, bare.y);
+  await pickMenu('#menu-file', 'open');
+  const openDlgUp = () => evaluate(`document.querySelector('#dlg-open').open`);
+  await until(openDlgUp);
+  const listed = await evaluate(
+    `[...document.querySelectorAll('#open-list vf-list-item')].map((i) => i.value)`
+  );
+  const cancel = await centreOf('#btn-open-cancel');
+  await click(cancel.x, cancel.y);
+  await until(async () => !(await openDlgUp()));
+  check(
+    'the Cube dragged onto the Trash and the Trash emptied: after a reload the Cube is gone from the desktop, from the Trash’s window and from the Open listing, and the seeding does not bring it back',
+    !!cubeKey &&
+      f.desktop.every((i) => i.label !== 'Cube') &&
+      f.windows[0].icons.length === 0 &&
+      f.windows[0].count === 0 &&
+      !listed.includes(cubeKey),
+    JSON.stringify({ cubeKey, desktop: f.desktop, window: f.windows[0], listed })
+  );
+}
+
 // --- the run ----------------------------------------------------------------
 async function main() {
   for (let i = 0; i < 60; i++) {
@@ -3170,6 +3236,7 @@ async function main() {
     s28_browserResize,
     s29_exportModel,
     s30_folders,
+    s31_trash,
   ];
   // An optional second argument runs the scenarios whose function name
   // contains it (`node tools/drive.mjs 5175 s30`) — for iterating on one

@@ -564,6 +564,26 @@ export function iconDefault(slot, desktopH) {
   };
 }
 
+/**
+ * The Trash's default place (Sep 9 2026): the raster's bottom-right corner,
+ * the icon column's own inset (ICON_COL_X) in from the right and bottom
+ * edges with the cell inside — where System 7's Trash sat; the one icon
+ * whose default is not the lattice's next free cell. A saved position wins,
+ * the boot clamp pulls it on-raster, and the icon pin treats it like any
+ * icon (a corner icon is two struts, so it stays in the corner). Floored
+ * at the menu bar on a raster too short to hold it.
+ *
+ * @param {number} desktopW
+ * @param {number} desktopH
+ * @returns {{left: number, top: number}}
+ */
+export function trashDefault(desktopW, desktopH) {
+  return {
+    left: Math.max(0, desktopW - ICON_COL_X - ICON_CELL),
+    top: Math.max(MENU_BAR, desktopH - ICON_COL_X - ICON_CELL),
+  };
+}
+
 // --- folder windows (Sep 7 2026) ---------------------------------------------
 // The Finder's window: a document-tier window, movable, resizable,
 // scrollbars="both", its header line the item count and its body a placed
@@ -620,6 +640,25 @@ export const FOLDER_COUNT_AT = { left: 8, top: 2 };
 export const FOLDER_COUNT_LINE = FOLDER_COUNT_PAPER + 1;
 /** The header: the count line, the white row, the header's own rule. */
 export const FOLDER_STRIP = FOLDER_COUNT_LINE + 1 + 1;
+/** The Finder's "in the Trash" mark (Sep 9 2026): the user's 12×12 1-bit
+ *  trash glyph (src/assets/trash-indicator.png, its ink in columns 1–10)
+ *  at the head of the count line of the Trash's own window and every
+ *  trashed folder's — System 7's header for a folder in the Trash. Its
+ *  box; its place — the ink starting at the count's own inset, level with
+ *  the label's top, so the glyph's twelve rows sit on 2–13 around the
+ *  digits' 5–11 (first placed a row higher; the user's eye moved it down
+ *  one, Sep 9 2026); and where the count moves to make room: the mark,
+ *  then a gap of three. Numbers for the eye (shell/folders.js places
+ *  both). */
+export const FOLDER_TRASH_MARK = { width: 12, height: 12 };
+export const FOLDER_TRASH_MARK_AT = {
+  left: FOLDER_COUNT_AT.left - 1,
+  top: FOLDER_COUNT_AT.top,
+};
+export const FOLDER_COUNT_AT_TRASHED = {
+  left: FOLDER_TRASH_MARK_AT.left + FOLDER_TRASH_MARK.width + 3,
+  top: FOLDER_COUNT_AT.top,
+};
 const FOLDER_CHROME = { w: 2 + 15, h: 1 + 18 + FOLDER_STRIP + 15 + 1 };
 const GRID_INSET = 16;
 

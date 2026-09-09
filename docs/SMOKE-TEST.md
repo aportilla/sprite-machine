@@ -6,7 +6,7 @@ contracts, `tools/drive.mjs` for the user journeys on trusted input,
 Chrome runs unreliably (chorded and right-button drags wedge its renderer),
 feel, the cursor, browser zoom, and the one input no script can give it (a
 dropped file). Run against `npm run dev` in a normal browser,
-`http://localhost:5173/`. Thirty items; a run is about twelve minutes.
+`http://localhost:5173/`. Thirty-one items; a run is about twelve minutes.
 
 ## Gestures the drive cannot make
 
@@ -116,6 +116,11 @@ dropped file). Run against `npm run dev` in a normal browser,
 - [ ] **A closed folder keeps its arrangement**: drag icons around inside
       a folder window, close it, reopen it — every icon where it was; then
       reload — still where it was.
+- [ ] **The Trash**: drag the Car onto the Trash — the can inverts under
+      the outline and bulges once the Car lands; open it — the Car inside,
+      its icon ghosted if its window is up; Sprite Machine → Empty Trash…
+      names one item and its K; OK empties the window, flattens the can,
+      and the Car's open window now asks to save on Close.
 
 ## Browser zoom and displays
 
