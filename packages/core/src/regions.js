@@ -34,8 +34,7 @@
 // island inside a hole is its own region.
 // ---------------------------------------------------------------------------
 
-import { FACE_KEYS } from './carve.js';
-import { FACE_NORMAL } from './views.js';
+import { FACE_KEYS, FACE_NORMAL } from './views.js';
 import { FACE_GEO, idxFor } from './faces.js';
 
 /**

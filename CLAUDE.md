@@ -20,3 +20,8 @@ Read `README.md` first; it is the spec. The testing policy is
   never claim a test pins something unless it does.
 - Never edit `~/MyProjects/vintage-frames` from here. A kit behavior that
   needs changing or pinning is a kit ask (`docs/kit-asks-*.md`).
+- The engine (pipeline, mesher, file formats) is `packages/core`, published
+  to npm as `sprite-machine`; the app imports it by that name through the
+  workspace link, and the package typechecks with no DOM lib. Engine code
+  never reaches for the DOM; app code never reaches into `packages/core`
+  except through its barrel. `npm test` runs both packages' suites.

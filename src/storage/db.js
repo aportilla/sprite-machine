@@ -4,7 +4,7 @@
 // object stores:
 //
 //   `docs` (keyPath `id`): a record is `{id, png}` — the PNG bytes ARE the
-//   document (lib/png-chunks.js) — plus rebuildable listing caches (name,
+//   document (the engine's png-chunks.js) — plus rebuildable listing caches (name,
 //   timestamps, icon data-URI, atlas dims) denormalized for a fast boot
 //   listing; on any disagreement the chunk wins. And ONE field that is
 //   neither chunk nor cache: `folder` — the id of the folder the document

@@ -43,7 +43,7 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { DEFAULT_WORLD_SIZE } from '../lib/constants.js';
+import { DEFAULT_WORLD_SIZE } from 'sprite-machine';
 import {
   ringYaws,
   ringFrame,

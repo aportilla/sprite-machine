@@ -1,9 +1,12 @@
 {
-  "name": "sprite-machine",
+  "name": "sprite-machine-app",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Turn low-res pixel sprites (face views) into Three.js 3D objects.",
+  "description": "Turn low-res pixel sprites (face views) into Three.js 3D objects — the System 7 desktop app over the sprite-machine engine.",
+  "workspaces": [
+    "packages/*"
+  ],
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
@@ -11,12 +14,13 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test test/*.test.mjs",
-    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test test/*.test.mjs packages/core/test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json && tsc -p packages/core/tsconfig.json",
     "format": "prettier --write .",
     "lint": "prettier --check ."
   },
   "devDependencies": {
+    "@types/node": "^22.20.2",
     "prettier": "3.4.2",
     "typescript": "5.7.3",
     "vite": "8.1.5"

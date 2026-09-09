@@ -20,8 +20,15 @@
 // ---------------------------------------------------------------------------
 
 import { unpackRGBA, packRGBA } from './ingest.js';
-import { voxIndex, unvoxIndex, FACE_KEYS } from './carve.js';
-import { VIEWS, FACE_NORMAL, FACE_TO_VIEW, FACE_OPPOSITE, FACE_AXIS } from './views.js';
+import { voxIndex, unvoxIndex } from './carve.js';
+import {
+  VIEWS,
+  FACE_KEYS,
+  FACE_NORMAL,
+  FACE_TO_VIEW,
+  FACE_OPPOSITE,
+  FACE_AXIS,
+} from './views.js';
 import { DEFAULT_MIRROR } from './constants.js';
 
 /** Build the deduped palette (union of all solid sprite pixels). */

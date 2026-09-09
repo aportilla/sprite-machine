@@ -1465,7 +1465,7 @@ export class SmDrawCanvas extends LitElement {
   // (every row) by dx and BACK's mirrored columns by −dx, the sides
   // untouched (x is their depth axis); a +dy shifts LEFT's, RIGHT's and
   // BACK's rows y0..y1 (every column) by dy, TOP/BOTTOM untouched. The
-  // per-face bounds and deltas come from lib/views.js's axis mappings
+  // per-face bounds and deltas come from the engine's views.js axis mappings
   // (VIEW_IMAGE_AXES — the table the sheet resize registers by); the
   // per-face edit is lib/select.js's lift / clear / composite
   // over each face's own slice; the undo is ONE whole-atlas snapshot

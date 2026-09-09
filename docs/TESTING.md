@@ -27,7 +27,8 @@ are the spec; the eye verifies them; no assertion restates them.
 
 Each layer does the one thing it is cheapest at. Nothing is covered twice.
 
-1. **Node unit tests** (`npm test`, `test/*.test.mjs`) — pure code where
+1. **Node unit tests** (`npm test`: the app's `test/*.test.mjs` and the
+   engine package's `packages/core/test/*.test.mjs`) — pure code where
    bugs are silent and expensive: the pipeline (ingest, carve, colorize),
    the meshes (regions, wedges, T-junctions, the skin), the rasterizers
    (rect, fill, brush, ants, select), the file formats (PNG chunks, the
@@ -86,9 +87,10 @@ the gates do not already cover.
   retired feature stays absent.
 - No literal UI copy. A generated value's **shape** is fine (a version
   number's pattern, a count's digits); the words are not.
-- No re-derivation: the drive imports nothing from `src/` but the three
-  file readers it needs to open the exports (PNG chunks, zip, glb) and
-  checks that the app applied its own arithmetic, read off the page.
+- No re-derivation: the drive imports nothing of the app's or the engine's
+  but the three file readers it needs to open the exports (PNG chunks,
+  zip, glb) and checks that the app applied its own arithmetic, read off
+  the page.
 - No store discipline per setter; it is tested once, in
   `test/store.test.mjs`.
 - No precondition logged as a check; a helper that cannot find its target

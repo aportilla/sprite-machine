@@ -5,8 +5,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { voxIndex, unvoxIndex, reconcileDims, extractSurface } from '../src/lib/carve.js';
-import { placeView } from '../src/lib/ingest.js';
+import { voxIndex, unvoxIndex, reconcileDims, extractSurface } from '../src/carve.js';
+import { placeView } from '../src/ingest.js';
 
 // FACE_KEYS order (px nx py pz-order) drives the 6-bit surface mask: bit i is set
 // when FACE_KEYS[i]'s outward neighbor is empty/out-of-bounds. px=0 nx=1 py=2

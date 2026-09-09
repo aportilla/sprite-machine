@@ -1,7 +1,7 @@
 // Browser image decoding helpers -> ImageData (the {width,height,data} shape the
 // pipeline consumes). Standalone so the loaders and the topbar's download share it.
 
-import { contentBounds } from './lib/atlas.js';
+import { contentBounds } from 'sprite-machine';
 
 async function bitmapToImageData(bmp) {
   const c = document.createElement('canvas');
@@ -48,7 +48,7 @@ export function imageDataToBlob(imageData) {
 }
 
 // The document format's byte-level pair: an atlas as finished PNG bytes (ready
-// for lib/png-chunks.js surgery), and PNG/image bytes back to ImageData.
+// for the engine's png-chunks.js surgery), and PNG/image bytes back to ImageData.
 export async function imageDataToPngBytes(imageData) {
   const blob = await imageDataToBlob(imageData);
   return new Uint8Array(await blob.arrayBuffer());

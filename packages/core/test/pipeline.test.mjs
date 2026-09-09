@@ -5,11 +5,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildVoxels } from '../src/lib/pipeline.js';
-import { packRGBA } from '../src/lib/ingest.js';
-import { voxIndex } from '../src/lib/carve.js';
-import { faceRegions } from '../src/lib/regions.js';
-import { VIEWS } from '../src/lib/views.js';
+import { buildVoxels } from '../src/pipeline.js';
+import { packRGBA } from '../src/ingest.js';
+import { voxIndex } from '../src/carve.js';
+import { faceRegions } from '../src/regions.js';
+import { VIEWS } from '../src/views.js';
 import { C, img, fill } from './helpers.mjs';
 
 const pk = (name) => packRGBA(...C[name], 255);

@@ -9,9 +9,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { colorize, buildPalette, makeSnapper } from '../src/lib/colorize.js';
-import { packRGBA } from '../src/lib/ingest.js';
-import { extractSurface, voxIndex } from '../src/lib/carve.js';
+import { colorize, buildPalette, makeSnapper } from '../src/colorize.js';
+import { packRGBA } from '../src/ingest.js';
+import { extractSurface, voxIndex } from '../src/carve.js';
 import { C } from './helpers.mjs';
 
 const pk = (name) => packRGBA(...C[name], 255);

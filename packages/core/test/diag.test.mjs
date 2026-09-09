@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { computeDiag } from '../src/lib/diag.js';
+import { computeDiag } from '../src/diag.js';
 
 // A geometry-like stub: computeDiag only reads geo.attributes.position.array,
 // geo.attributes.normal.array, and geo.index (null => non-indexed geometry,

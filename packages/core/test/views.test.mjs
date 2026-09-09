@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { VIEW_IMAGE_AXES } from '../src/lib/views.js';
+import { VIEW_IMAGE_AXES } from '../src/views.js';
 
 // Spot-check the well-known orientations the resize's registration relies on.
 test('VIEW_IMAGE_AXES: front/top orientations', () => {

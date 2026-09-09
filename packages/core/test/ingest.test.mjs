@@ -5,9 +5,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { packRGBA, flip, applyTransform, ingestSprite } from '../src/lib/ingest.js';
-import { buildVoxels } from '../src/lib/pipeline.js';
-import { voxIndex } from '../src/lib/carve.js';
+import { packRGBA, flip, applyTransform, ingestSprite } from '../src/ingest.js';
+import { buildVoxels } from '../src/pipeline.js';
+import { voxIndex } from '../src/carve.js';
 import { C, img, fill } from './helpers.mjs';
 
 // --- tiny builders ----------------------------------------------------------

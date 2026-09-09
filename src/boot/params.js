@@ -10,9 +10,8 @@
 // halves ride as one-shot props on <sm-draw-canvas>.
 // ---------------------------------------------------------------------------
 
-import { clampTile } from '../lib/atlas.js';
-import { VIEW_NAMES } from '../lib/views.js';
-import { PALETTE_168 } from '../lib/constants.js';
+import { clampTile, VIEW_NAMES } from 'sprite-machine';
+import { PALETTE_168 } from '../lib/palette.js';
 import { PENCIL_SHAPES } from '../lib/brush.js';
 import { RING_DEFAULTS, RING_PAPERS } from '../state/ring-settings.js';
 

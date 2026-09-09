@@ -1,14 +1,14 @@
-// The glb writer (lib/gltf.js): the header and padded chunks, one primitive
+// The glb writer (gltf.js): the header and padded chunks, one primitive
 // over 4-aligned views with the PNG verbatim, positions scaled with their
 // bounds, the NEAREST sampler, the unlit extension on request — and a wedge
 // mesh's own buffers exported whole. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { glbFromModel, glbParts, glbViewBytes } from '../src/lib/gltf.js';
-import { encodePng } from '../src/lib/png-encode.js';
-import { buildVoxels } from '../src/lib/pipeline.js';
-import { wedgeMesh } from '../src/lib/wedge-mesh.js';
+import { glbFromModel, glbParts, glbViewBytes } from '../src/gltf.js';
+import { encodePng } from '../src/png-encode.js';
+import { buildVoxels } from '../src/pipeline.js';
+import { wedgeMesh } from '../src/wedge-mesh.js';
 import { img, fill } from './helpers.mjs';
 
 const quad = () => ({

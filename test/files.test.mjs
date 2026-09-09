@@ -22,7 +22,7 @@ import {
   folderPath,
   nextFolderName,
 } from '../src/state/files.js';
-import { readTextChunks } from '../src/lib/png-chunks.js';
+import { readTextChunks } from 'sprite-machine';
 import { fakeScheduler, memStorage, encodeAtlas, decodeAtlas } from './helpers.mjs';
 
 // A broken storage (private-mode IndexedDB): every call rejects.

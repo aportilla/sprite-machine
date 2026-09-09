@@ -1,4 +1,4 @@
-// The PNG encoder from bytes (lib/png-encode.js): a file node:zlib inflates
+// The PNG encoder from bytes (png-encode.js): a file node:zlib inflates
 // back to the rows it was given, framed as IHDR / IDAT / IEND with valid
 // CRCs; the stored zlib stream spans blocks past 65535 bytes with zlib's own
 // Adler-32 after the last. Run: node --test
@@ -6,8 +6,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { inflateSync } from 'node:zlib';
 
-import { encodePng, zlibStored, adler32 } from '../src/lib/png-encode.js';
-import { readChunks, crc32, isPng } from '../src/lib/png-chunks.js';
+import { encodePng, zlibStored, adler32 } from '../src/png-encode.js';
+import { readChunks, crc32, isPng } from '../src/png-chunks.js';
 
 const noise = (n) => {
   const out = new Uint8Array(n);

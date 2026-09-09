@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { EDGE_SEAMS, EDGE_NAMES, edgeHintFrame } from '../src/lib/edges.js';
-import { VIEW_NAMES } from '../src/lib/views.js';
+import { VIEW_NAMES } from 'sprite-machine';
 
 const N = 5; // square tiles: the registering shape
 

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createSession } from '../src/state/session.js';
-import { PENCIL_PALETTE } from '../src/lib/constants.js';
+import { PENCIL_PALETTE } from '../src/lib/palette.js';
 import { PENCIL_SHAPES } from '../src/lib/brush.js';
 
 const RED = { r: 255, g: 0, b: 0 };

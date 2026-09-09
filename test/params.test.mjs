@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { parseBootParams } from '../src/boot/params.js';
-import { PALETTE_168 } from '../src/lib/constants.js';
+import { PALETTE_168 } from '../src/lib/palette.js';
 import { RING_DEFAULTS } from '../src/state/ring.js';
 
 test('?file / #fragment: the boot document request', () => {

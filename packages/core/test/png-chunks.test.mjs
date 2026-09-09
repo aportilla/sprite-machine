@@ -12,7 +12,7 @@ import {
   readChunks,
   readTextChunks,
   setTextChunks,
-} from '../src/lib/png-chunks.js';
+} from '../src/png-chunks.js';
 
 // --- fixture: a tiny synthetic PNG ------------------------------------------
 // Chunks hand-assembled here (not via the module under test) so the suite

@@ -30,7 +30,7 @@ import {
   resizeAtlas,
   clampTile,
   isBlank,
-} from '../lib/atlas.js';
+} from 'sprite-machine';
 import { replaceColorInRect } from '../lib/fill.js';
 
 /**

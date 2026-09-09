@@ -15,7 +15,7 @@
 // ---------------------------------------------------------------------------
 
 import { createStore } from './store.js';
-import { PENCIL_PALETTE } from '../lib/constants.js';
+import { PENCIL_PALETTE } from '../lib/palette.js';
 import { PENCIL_SHAPES } from '../lib/brush.js';
 
 const clampBrush = (n, max) => Math.max(1, Math.min(max, Math.round(Number(n) || 1)));

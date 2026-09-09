@@ -1,4 +1,4 @@
-// The skin (src/lib/skin.js — pure, no THREE): the texture the mesher's
+// The skin (skin.js — pure, no THREE): the texture the mesher's
 // occupancy merge paints from. A chart per multi-color region holding its
 // pieces' colors verbatim (the round-trip, and each face's center sampling its
 // own texel — the one test an orientation drift fails), a swatch per color for
@@ -8,12 +8,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildVoxels } from '../src/lib/pipeline.js';
-import { FACE_GEO, idxFor, pointOf } from '../src/lib/faces.js';
-import { faceRegions, traceRegions } from '../src/lib/regions.js';
-import { bakeSkin, uvOfLattice, swatchUV } from '../src/lib/skin.js';
-import { packRGBA } from '../src/lib/ingest.js';
-import { AXIS_INDEX, FACE_INDEX } from '../src/lib/views.js';
+import { buildVoxels } from '../src/pipeline.js';
+import { FACE_GEO, idxFor, pointOf } from '../src/faces.js';
+import { faceRegions, traceRegions } from '../src/regions.js';
+import { bakeSkin, uvOfLattice, swatchUV } from '../src/skin.js';
+import { packRGBA } from '../src/ingest.js';
+import { AXIS_INDEX, FACE_INDEX } from '../src/views.js';
 import { img, fill } from './helpers.mjs';
 
 // A wall painted in two colors over a full side and top: the +z face (and the

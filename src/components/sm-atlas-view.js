@@ -61,7 +61,7 @@ import { classMap } from 'lit/directives/class-map.js';
 import { createRef, ref } from 'lit/directives/ref.js';
 import { workspace, followActive } from '../state/workspace.js';
 import { StoreController } from '../state/store-controller.js';
-import { DEFAULT_ATLAS_LAYOUT } from '../lib/atlas.js';
+import { DEFAULT_ATLAS_LAYOUT } from 'sprite-machine';
 import { ATLAS_GRID } from '../shell/layout.js';
 import { baseStyles } from './base-styles.js';
 import { parsePatternAttr } from './ui-bits.js';

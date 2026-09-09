@@ -1,0 +1,65 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# GITHUB_TOKEN needs to write a Pages deployment and mint the OIDC token
+# deploy-pages authenticates with. Everything else stays read-only.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time. Unlike CI, an in-flight run is not cancelled: a
+# half-finished deploy is worse than a superseded one, so a newer push queues.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Enables Pages on the repo, with Actions as the source, the first time
+      # this runs — no Settings click. The base path it reports is not needed:
+      # vite.config.js builds with `base: './'`, every emitted URL relative, so
+      # the same bundle serves from /sprite-machine/ as from /.
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      # The app's ordinary build. The About box's date is HEAD's commit date
+      # (vite.config.js, `git log -1`), which the default shallow checkout
+      # carries, so a deploy says what a local build of that commit says.
+      - run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

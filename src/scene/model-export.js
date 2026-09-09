@@ -2,11 +2,10 @@
 // The 3D model export's SUBJECT: the rebuilder's current mesh, held through
 // the onMesh seam (main.js fans the seam out to the 3D Sprite Atlas's
 // follower and to this), and the glb made from it on demand (File → Export
-// 3D Model…, shell/menus.js). Nothing here runs the pipeline or renders:
-// the mesh's own buffers ARE the export — its welded positions, per-face
-// normals and UVs, its index, and the skin's bytes off the material's map
-// (a DataTexture keeps its array), encoded as a PNG from those bytes and
-// never through a canvas (lib/png-encode.js). The writer is lib/gltf.js.
+// 3D Model…, shell/menus.js). Nothing here runs the pipeline or renders,
+// and nothing here writes: the engine's `modelToGlb` does — the mesh's own
+// buffers ARE the export, the skin encoded from bytes and never through a
+// canvas — so this path and a headless build are one function.
 //
 // The scale: the stage's world units are DEFAULT_WORLD_SIZE over the
 // lattice's longest side (wedge-mesh.js), so a position over that unit is
@@ -16,9 +15,7 @@
 // anchor: a model and its sprite sheet share an origin.
 // ---------------------------------------------------------------------------
 
-import { DEFAULT_WORLD_SIZE } from '../lib/constants.js';
-import { encodePng } from '../lib/png-encode.js';
-import { glbFromModel } from '../lib/gltf.js';
+import { DEFAULT_WORLD_SIZE, modelToGlb } from 'sprite-machine';
 
 /** @typedef {{mesh: import('three').Mesh, dims: {nx:number, ny:number, nz:number}}} Subject */
 
@@ -64,24 +61,10 @@ export function initModelExport() {
     exportGlb({ name, voxelsPerMeter, unlit, generator }) {
       if (!subject) return null;
       const { mesh, dims } = subject;
-      const geo = mesh.geometry;
-      const material = /** @type {import('three').MeshStandardMaterial} */ (
-        mesh.material
+      return modelToGlb(
+        { mesh, dims, unitsPerVoxel: unitsPerVoxel(dims) },
+        { name, voxelsPerMeter, unlit, generator }
       );
-      const map = material.map;
-      return glbFromModel({
-        name,
-        position: geo.attributes.position.array,
-        normal: geo.attributes.normal.array,
-        uv: geo.attributes.uv.array,
-        index: geo.index.array,
-        scale: 1 / (unitsPerVoxel(dims) * voxelsPerMeter),
-        image: map ? { bytes: encodePng(map.image) } : null,
-        color: map ? null : material.color.toArray(),
-        unlit,
-        generator,
-        extras: { 'sprite-machine': { voxelsPerMeter, dims: { ...dims } } },
-      });
     },
     /** HMR teardown. */
     dispose() {

@@ -7,7 +7,7 @@
 // rendering) arrive through `init()` at boot, so this module imports nothing
 // it can't run under Node.
 //
-// THE DOCUMENT IS THE PNG (lib/png-chunks.js): a save encodes the drained
+// THE DOCUMENT IS THE PNG (the engine's png-chunks.js): a save encodes the drained
 // atlas, splices the metadata text chunks (Title / Creation Time / Software /
 // sprite-machine:transforms — only when non-identity — / sprite-machine:ring
 // — the 3D Sprite Atlas's four settings, whenever the caller passes them),
@@ -55,7 +55,7 @@
 // ---------------------------------------------------------------------------
 
 import { createStore } from './store.js';
-import { readTextChunks, setTextChunks } from '../lib/png-chunks.js';
+import { readTextChunks, setTextChunks } from 'sprite-machine';
 import { RING_CHUNK_KEY, ringChunk, parseRingChunk } from './ring-settings.js';
 
 export const UNTITLED = 'untitled';

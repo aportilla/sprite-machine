@@ -22,7 +22,7 @@
 // consumer outside the stage — the 3D Sprite Atlas's renderer (scene/ring.js
 // takes a shared-geometry clone) — and null BEFORE the mesh is disposed, so
 // no clone is left holding disposed geometry — or a disposed skin: the mesh's
-// material samples a texture (lib/skin.js, the model's colour), and the
+// material samples a texture (the engine's skin.js, the model's colour), and the
 // rebuilder disposes it with the geometry and the material on every swap.
 // The rebuilder stays the pipeline's only consumer; the seam carries its
 // product.
@@ -31,9 +31,7 @@
 // Web-Worker carve a drop-in: making this function async is a local change.
 // ---------------------------------------------------------------------------
 
-import { buildVoxels } from '../lib/pipeline.js';
-import { wedgeMesh } from '../lib/wedge-mesh.js';
-import { VIEW_NAMES } from '../lib/views.js';
+import { buildVoxels, wedgeMesh, computeDiag, VIEW_NAMES } from 'sprite-machine';
 import { workspace, followActive } from '../state/workspace.js';
 import { build } from '../state/build.js';
 
@@ -100,16 +98,9 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     // 2026, and its dead module with the test trim of Sep 5.)
     current = wedgeMesh(result, { flat });
     if (diag && current?.geometry) {
-      const geo = current.geometry; // captured: current may change before load resolves
-      import('../lib/diag.js').then(({ computeDiag }) => {
-        // A fast live edit can run another rebuild() (disposing this geometry) before
-        // the dynamic import settles; skip a stale read rather than measure a mesh
-        // that's already been replaced.
-        if (geo !== current?.geometry) return;
-        // The wedge mesh is guaranteed watertight (its T-junctions are repaired
-        // lattice-exactly), so a nonzero boundary/odd-edge count here is a hole.
-        document.title = 'DIAG ' + JSON.stringify(computeDiag(geo));
-      });
+      // The wedge mesh is guaranteed watertight (its T-junctions are repaired
+      // lattice-exactly), so a nonzero boundary/odd-edge count here is a hole.
+      document.title = 'DIAG ' + JSON.stringify(computeDiag(current.geometry));
     }
     stage.scene.add(current);
     stage.setSpinTarget(current);

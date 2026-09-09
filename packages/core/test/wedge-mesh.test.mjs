@@ -10,8 +10,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildVoxels } from '../src/lib/pipeline.js';
-import { wedgeMesh } from '../src/lib/wedge-mesh.js';
+import { buildVoxels } from '../src/pipeline.js';
+import { wedgeMesh } from '../src/wedge-mesh.js';
 import { img, fill, oddEdges } from './helpers.mjs';
 
 const wedgeCount = (views) => wedgeMesh(buildVoxels(views)).userData.wedges;

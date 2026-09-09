@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PALETTE_168 } from '../src/lib/constants.js';
+import { PALETTE_168 } from '../src/lib/palette.js';
 
 const COLS = 21;
 const ROWS = 8;

@@ -9,7 +9,7 @@
 // leaves an empty window behind.
 //
 // A dropped PNG may BE an exported document (the format is one .png with
-// metadata text chunks — lib/png-chunks.js), so `loadFile` reads the bytes
+// metadata text chunks — the engine's png-chunks.js), so `loadFile` reads the bytes
 // first: a `Title` chunk restores the document's name, a
 // `sprite-machine:transforms` chunk its per-view reorientation, and a
 // `sprite-machine:ring` chunk its 3D Sprite Atlas settings — the lossless
@@ -22,8 +22,7 @@
 // one-shot (see its doc comment).
 // ---------------------------------------------------------------------------
 
-import { validateSheet, clampTile } from './lib/atlas.js';
-import { isPng, readTextChunks } from './lib/png-chunks.js';
+import { validateSheet, clampTile, isPng, readTextChunks } from 'sprite-machine';
 import { urlToImageData, bytesToImageData } from './image-io.js';
 import { workspace } from './state/workspace.js';
 import { createDoc } from './state/doc.js';

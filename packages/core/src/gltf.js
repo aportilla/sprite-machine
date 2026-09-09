@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
 // A glTF 2.0 BINARY writer for one textured mesh — what File → Export 3D
 // Model… hands over — and its reader (the tests' and the drive's). Pure:
-// typed arrays and a PNG in, bytes out; no THREE (scene/model-export.js
-// reads the arrays off the mesh). One node, one mesh, one primitive, one
-// material, one texture: the model and its skin (lib/skin.js) sampled
+// typed arrays and a PNG in, bytes out; no THREE (model.js reads the
+// arrays off the mesh). One node, one mesh, one primitive, one
+// material, one texture: the model and its skin (skin.js) sampled
 // NEAREST both ways with clamped wrap — the hard texel is part of the file
 // — under a metallic-roughness material (metalness 0, roughness 1, the 3D
 // View's) or, asked for, the KHR_materials_unlit extension: the paint
@@ -14,7 +14,7 @@
 // gesture — a .gltf is three files, or one inflated by base64. Why a
 // writer of our own: three's GLTFExporter encodes a texture by drawing it
 // into a canvas and reading it back, the readback privacy browsers
-// perturb; this one takes the PNG as bytes (lib/png-encode.js), so the skin
+// perturb; this one takes the PNG as bytes (png-encode.js), so the skin
 // lands verbatim. Its subset is small enough to own, like the zip writer.
 //
 // The layout (the spec's, little-endian): a 12-byte header (the magic

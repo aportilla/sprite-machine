@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { eliminateTJunctions } from '../src/lib/t-junction.js';
+import { eliminateTJunctions } from '../src/t-junction.js';
 import { hasTJunction } from './helpers.mjs';
 
 // Twice the triangle area = magnitude of the edge cross-product.

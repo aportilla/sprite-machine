@@ -49,7 +49,7 @@
 import 'vintage-frames';
 import { LitElement, html, nothing } from 'lit';
 import { live } from 'lit/directives/live.js';
-import { PALETTE_168 } from '../lib/constants.js';
+import { PALETTE_168 } from '../lib/palette.js';
 import { hexToRgb, normalizeHex, rgbKey, rgbToHex } from '../lib/color.js';
 import { session } from '../state/session.js';
 import { StoreController } from '../state/store-controller.js';

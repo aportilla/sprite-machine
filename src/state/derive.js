@@ -4,8 +4,7 @@
 // face (the old `showFace()` derivation, now Node-testable).
 // ---------------------------------------------------------------------------
 
-import { VIEW_OPPOSITE, MIRROR_AXIS } from '../lib/views.js';
-import { flip } from '../lib/ingest.js';
+import { VIEW_OPPOSITE, MIRROR_AXIS, flip } from 'sprite-machine';
 import { edgeHintFrame } from '../lib/edges.js';
 
 // Mirror a tile for display (an axis-flip in image space), so a mirror-derived

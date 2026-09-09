@@ -79,12 +79,12 @@ import {
   rmSync,
 } from 'node:fs';
 import { join } from 'node:path';
-// The three imports from src/: the document format's chunk reader, the
-// stored zip's reader and the glb's reader, to read the exported files back
-// (an app outcome no unit can reach: the download).
-import { readTextChunks } from '../src/lib/png-chunks.js';
+// The three readers, and nothing else of the app's: the document format's
+// chunk reader and the glb's reader (the engine package's), and the stored
+// zip's reader (src/), to read the exported files back (an app outcome no
+// unit can reach: the download).
+import { readTextChunks, glbParts } from 'sprite-machine';
 import { zipEntries } from '../src/lib/zip.js';
-import { glbParts } from '../src/lib/gltf.js';
 
 const APP_PORT = process.argv[2] || '5173';
 const DBG_PORT = +(process.env.DRIVE_DEBUG_PORT || 9333);

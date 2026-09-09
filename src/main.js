@@ -11,7 +11,7 @@ import './style.css';
 import 'vintage-frames';
 import { applyCursor, onScaleChange } from 'vintage-frames';
 import { SAMPLES } from './lib/sprite-data.js';
-import { PALETTE_168 } from './lib/constants.js';
+import { PALETTE_168 } from './lib/palette.js';
 import { session } from './state/session.js';
 import { prefs } from './state/prefs.js';
 import { files, isTrashed } from './state/files.js';

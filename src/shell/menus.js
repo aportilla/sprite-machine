@@ -8,7 +8,7 @@
 // storage-unavailable notice, the Export 3D Model… dialog — a scale in
 // voxels per meter, a lit / unlit popup and two readouts over an Export
 // that writes the model as one glb, «slug».glb, its skin embedded from
-// bytes (lib/gltf.js through scene/model-export.js) — and the Export Sprite
+// bytes (the engine's modelToGlb through scene/model-export.js) — and the Export Sprite
 // Atlas… dialog: the 3D Sprite Atlas windoid's settings as a form, bound
 // two-way to the ring slice (a change moves the strip behind the modal at
 // once; Cancel doesn't revert — the strip IS the preview), whose Export
@@ -69,10 +69,9 @@ import {
   slugOf,
 } from '../state/files.js';
 import { workspace, followActive } from '../state/workspace.js';
-import { TILE_MIN, TILE_MAX, clampTile } from '../lib/atlas.js';
+import { TILE_MIN, TILE_MAX, clampTile, setTextChunks } from 'sprite-machine';
 import { SAMPLES } from '../lib/sprite-data.js';
 import { ringFrame, ringSheet, ringAnchor, ringYaws } from '../lib/ring.js';
-import { setTextChunks } from '../lib/png-chunks.js';
 import { zipStore } from '../lib/zip.js';
 import { loadSample, loadBlank } from '../loaders.js';
 import { downloadPngBytes, downloadBlob, canvasToPngBytes } from '../image-io.js';
@@ -143,7 +142,7 @@ export function initMenus(desktop, windows, panels) {
   on($('#btn-storage-ok'), 'click', () => dlgStorage.close());
 
   // --- Export 3D Model… -------------------------------------------------------
-  // The model as ONE glb (lib/gltf.js, through the export subject in
+  // The model as ONE glb (the engine's gltf.js, through the export subject in
   // scene/model-export.js — the rebuilder's current mesh, its skin embedded
   // from bytes): a scale field, voxels per meter (glTF is in meters, and ten
   // a meter makes the forty-voxel Car four meters long — the parked form's

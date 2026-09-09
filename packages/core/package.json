@@ -1,0 +1,52 @@
+{
+  "name": "sprite-machine",
+  "version": "0.1.0",
+  "description": "Turn a 3×2 sheet of pixel-art face sprites into a low-poly, textured three.js mesh or a glTF binary — the engine behind Sprite Machine.",
+  "license": "MIT",
+  "author": "Adam Portilla",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aportilla/sprite-machine.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://aportilla.github.io/sprite-machine/",
+  "keywords": [
+    "pixel-art",
+    "sprite",
+    "voxel",
+    "visual-hull",
+    "low-poly",
+    "three",
+    "threejs",
+    "gltf",
+    "glb"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.js",
+    "./node": "./src/node.js"
+  },
+  "bin": {
+    "sprite-machine": "./bin/sprite-machine.mjs"
+  },
+  "files": [
+    "src",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "three": "^0.185.0"
+  },
+  "dependencies": {
+    "pngjs": "^7.0.0"
+  }
+}

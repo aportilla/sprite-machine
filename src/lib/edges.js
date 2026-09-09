@@ -63,8 +63,8 @@ import {
   AXIS_INDEX,
   MIRROR_AXIS,
   faceKeyOf,
-} from './views.js';
-import { flip } from './ingest.js';
+  flip,
+} from 'sprite-machine';
 
 // How deep the hint band is, in texels, on each side of the canvas. ONE: a
 // seam is one lattice line, and the strip is that line. It is a constant so

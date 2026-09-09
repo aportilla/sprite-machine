@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
-// Geometry self-check — dev-only, loaded on demand (dynamic import under
-// ?diag=1) so it stays out of the normal bundle. Watertightness via
+// Geometry self-check — a dev probe (the app reads it under ?diag=1; a
+// consumer can read it off any built mesh). Watertightness via
 // position-based edge parity + a per-face normal histogram: a closed surface
 // uses every undirected edge exactly twice; edges used an odd number of times
 // are boundaries — a genuine hole in a mesh that should be closed.

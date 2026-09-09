@@ -15,6 +15,19 @@ npm run lint       # prettier --check .   (npm run format to fix)
 npm run build      # static bundle in dist/
 ```
 
+The **engine** — the pipeline, the mesher and the file formats — is its own
+npm package, **`sprite-machine`** (`packages/core`, this repository's second
+workspace; its [README](packages/core/README.md) is the API), with `three` a
+peer dependency and one headless entry: `buildModel` hands back the
+THREE.Mesh at one unit per voxel, `modelToGlb` writes the glb File → Export
+3D Model… writes, `sprite-machine/node` adds `readSheet` / `sheetToGlb` over
+a document PNG's bytes, and `npx sprite-machine build` does it from a shell.
+The app imports the engine by name through the workspace link, so a change
+to the engine and to its consumer land in one commit, and
+`npm publish -w packages/core` releases the engine alone. The app itself
+deploys to **GitHub Pages** on every push to `main`
+(`.github/workflows/pages.yml`): <https://aportilla.github.io/sprite-machine/>.
+
 Three headless-Chrome tools verify what Node can't, all against a running dev
 server:
 
@@ -290,7 +303,7 @@ Sprite View tracks every stroke at frame rate, and the model rebuilds
   **floats up off the shadow plane** as the tile grows (an accepted trade).
   Square is the **only registering shape**: a 3×2 atlas shares its depth axis
   between the side tile's width and the top tile's height. The pure
-  `resizeAtlas` (`lib/atlas.js`) still **defaults to origin-anchored** for the
+  `resizeAtlas` (the engine's `atlas.js`) still **defaults to origin-anchored** for the
   pipeline and still accepts an asymmetric pair (the `?tile=WxH` hook, which
   **warns** and shears) so the shear path stays testable.
 
@@ -399,7 +412,8 @@ the Undo/Redo enablement.
   Download rather than Export, and no ellipsis: it acts immediately), and the
   two exports.
 - **Export 3D Model…** writes the model as **one glTF 2.0 binary** from the
-  app's own writer (`lib/gltf.js`; three's `GLTFExporter` encodes a texture
+  engine's own writer (`gltf.js`, through its `modelToGlb` — the headless
+  path and the menu are one function; three's `GLTFExporter` encodes a texture
   through a canvas readback, which a privacy browser perturbs, so the skin
   goes in from bytes): one primitive of welded positions, per-face normals,
   UVs and index, the **skin** as an embedded PNG behind a **`NEAREST`**
@@ -823,7 +837,7 @@ Bumping `version` is the whole release ritual.
 ### Documents: a document IS a .png
 
 A document is exactly one sprite `.png` — the 3×2 atlas — with all metadata in
-standard PNG text chunks (`lib/png-chunks.js`): `Title`, `Creation Time`,
+standard PNG text chunks (the engine's `png-chunks.js`): `Title`, `Creation Time`,
 `Software`, `sprite-machine:transforms` (written only when non-identity) and
 `sprite-machine:ring`, the **3D Sprite Atlas's settings** (always written,
 since a setting's default is the writing version's choice rather than an
@@ -921,14 +935,14 @@ at any angle — 1 pixel = 1 voxel = 1 cube.
    Faces no view can see fall through a principled chain: mirrored opposite →
    neighbor average → dominant body color.
 6. **Mesh** — exposed faces (interior culled) are merged **on occupancy
-   alone** into coplanar **regions** (`lib/regions.js`): a plane's exposed
+   alone** into coplanar **regions** (`regions.js`): a plane's exposed
    faces, and the gable caps of the wedge blocks ending on it, traced as one
    polygon on the lattice with every straight run one edge, holes included,
    and triangulated by earcut — so a flat wall is two triangles instead of
    one-per-texel and the wall beside a windshield has one straight diagonal
    edge.
 
-   The color rides a **texture, the skin** (`lib/skin.js`), not the geometry.
+   The color rides a **texture, the skin** (`skin.js`), not the geometry.
    A region whose cells cross a color boundary carries a **chart**: its
    bounding box as texels, one per cell, with every texel the cells don't
    cover flooded from the nearest one, so a fragment on the region's edge
@@ -989,7 +1003,8 @@ match the glass down to its foot); to keep an edge sharp — a roof/window seam,
 a tyre/body join — paint them differently and it can never round. The
 strictness is the triangle count's too: opening the gate to match the
 occupancy merge was measured on the Car and **loses**, 900 → 1092, more wedges
-being more gable caps and more split base faces. See `lib/wedge-mesh.js`.
+being more gable caps and more split base faces. See the engine's
+`wedge-mesh.js`.
 
 ### Missing faces
 
@@ -1004,7 +1019,7 @@ unconstrained for carving — the shape fills to the bounding box and warns.
 
 World: `+x` right, `+y` up, `+z` toward the camera/front. In a **side (left)**
 sprite the object's front is the left column; in a **top** sprite the front is
-the top row. See `src/lib/views.js` for all six projection mappings.
+the top row. See the engine's `views.js` for all six projection mappings.
 
 ---
 
@@ -1013,7 +1028,7 @@ the top row. See `src/lib/views.js` for all six projection mappings.
 The whole grid pipeline is **pure typed-array code — no THREE, no DOM**, the
 app-state layer (`src/state/`) is pure JS, and the desktop's arithmetic
 (`shell/layout.js`) is a pure module — all of it Node-tested (`npm test` over
-`test/*.test.mjs`, about two hundred cases), densest where a bug would be
+both packages' `test/*.test.mjs`), densest where a bug would be
 silent and expensive: the visual-hull carve and coloring, the wedge mesh's
 watertightness and its gate, the region trace, the skin's bake and its UV
 read, the rasterizers, the document format, the document and library
@@ -1049,13 +1064,21 @@ with a test when it adds a risk the gates do not cover, and commit messages do
 not report check or test counts.
 
 ```
-src/lib/      the domain — pure, no THREE and no DOM but for the mesh: the pipeline
-              (ingest → carve → colorize), the mesher (regions, wedge-mesh, t-junction,
-              skin, mesh-util), the atlas's geometry (ring), the editor's rasterizers
-              (rect, fill, select, brush, ants) and its edge hints (edges, probed off
-              views), the file formats (png-chunks, zip,
-              png-encode, gltf), the vocabularies (views, faces, atlas, color, constants
-              — PALETTE_168 among them) and the built-in sprites
+packages/core/  THE ENGINE, published as `sprite-machine` — pure, no DOM, THREE only
+                for the mesh, typechecked with no DOM lib so the wall holds by
+                construction: the pipeline (ingest → carve → colorize), the mesher
+                (regions, wedge-mesh, t-junction, skin, mesh-util), the atlas's
+                slicing and resizing (atlas), the file formats (png-chunks, png-encode,
+                gltf), the vocabularies (views, faces, constants), the mesh probe
+                (diag), the headless entry (model: buildModel → modelToGlb) and the
+                Node adapter (node: readSheet / sheetToGlb over pngjs) behind an
+                explicit barrel (index); its tests beside it, its own README the API,
+                bin/ the CLI
+src/lib/      the editor's domain — pure, no THREE and no DOM: the atlas's ring geometry
+              (ring), the rasterizers (rect, fill, select, brush, ants), the edge hints
+              (edges, probed off the engine's views), the zip writer, the color helpers
+              and the two palettes (palette — PALETTE_168 among them), and the
+              built-in sprites
 src/state/    the app-state layer, pure JS and Node-tested: store + the Lit bridges; doc
               (two channels) and history, FACTORIES one per open document; workspace (the
               open documents as DocContexts, activeKey, the stored flows); files (the
@@ -1086,8 +1109,8 @@ src/assets/   the app's own raster art, every piece through vf-img at 1:1: the s
 The chrome is `lit`, the library `vintage-frames` itself is built on (one
 deduped copy), in **three layers with dependency arrows only pointing down**:
 presentation (`components/` + `scene/` + `shell/`) → app state (`state/`) →
-domain (`lib/`, with `storage/` a leaf the files slice takes by injection, so
-it stays Node-testable). The state mechanism is a ~40-line observable store.
+domain (the `sprite-machine` package and the editor's `lib/`, with `storage/`
+a leaf the files slice takes by injection, so it stays Node-testable). The state mechanism is a ~40-line observable store.
 **Connected** components read slices and call named actions, and the `shell/`
 modules wire the desktop's skeleton to the same slices; the editor **leaves**
 are dumb — props down, bubbling `sm-*` events up, no store imports — so store

@@ -15,11 +15,6 @@
 import { placeView } from './ingest.js';
 import { VIEWS, VIEW_AXES, FACE_KEYS, FACE_NORMAL } from './views.js';
 
-// FACE_KEYS lives with FACE_NORMAL in views.js (the face-metadata module) but is
-// re-exported here so its long-standing consumers (faces.js, colorize.js,
-// wedge-mesh.js) keep importing it from carve.js unchanged.
-export { FACE_KEYS };
-
 export const voxIndex = (x, y, z, d) => x + d.nx * (y + d.ny * z);
 
 /** Inverse of voxIndex: linear grid index -> {x,y,z}. Kept next to voxIndex so

@@ -1,4 +1,4 @@
-// The coplanar regions (src/lib/regions.js — pure, no THREE): a plane's
+// The coplanar regions (regions.js — pure, no THREE): a plane's
 // pieces traced into loops with every collinear run merged, outers and holes
 // told apart and paired, two cells meeting at a corner two regions while a
 // bay open at a corner rides one loop through it twice, and a staircase wall
@@ -7,8 +7,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { traceRegions, faceRegions } from '../src/lib/regions.js';
-import { buildVoxels } from '../src/lib/pipeline.js';
+import { traceRegions, faceRegions } from '../src/regions.js';
+import { buildVoxels } from '../src/pipeline.js';
 import { fill } from './helpers.mjs';
 
 /** Rows of '#' (top row first, b counting up from the bottom row) -> cells. */

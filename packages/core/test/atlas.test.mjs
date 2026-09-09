@@ -15,10 +15,10 @@ import {
   resizeTileTo,
   resizeAtlas,
   splitLow,
-} from '../src/lib/atlas.js';
-import { buildVoxels } from '../src/lib/pipeline.js';
-import { voxIndex } from '../src/lib/carve.js';
-import { VIEW_DISPLAY_ORDER, VIEW_NAMES } from '../src/lib/views.js';
+} from '../src/atlas.js';
+import { buildVoxels } from '../src/pipeline.js';
+import { voxIndex } from '../src/carve.js';
+import { VIEW_DISPLAY_ORDER, VIEW_NAMES } from '../src/views.js';
 
 // A divisible sheet where every one of the six cells has fully-opaque content,
 // so sliceAtlas returns a non-null tile for each (no blank→null) and the blit
