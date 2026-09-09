@@ -40,6 +40,7 @@
 // event becomes a session action. `:host` IS the strip — the desktop lays it
 // out in flow right under the menu bar (shell/windows.js's TOP_RESERVE keeps
 // the window tier clear of the band).
+//
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';
@@ -59,6 +60,10 @@ export class SmOptionsBar extends LitElement {
     css`
       :host {
         display: block;
+        /* The band's tier: over every window and icon, under the menu tier
+           (see the header). */
+        position: relative;
+        z-index: 1500000;
       }
       /* The row inside the band (see header): fills the paper to the rule and
        lays the controls out; every length in system px rides --vf-scale. The
