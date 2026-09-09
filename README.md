@@ -15,112 +15,81 @@ npm run lint       # prettier --check .   (npm run format to fix)
 npm run build      # static bundle in dist/
 ```
 
-Three headless-Chrome tools verify what Node can't, all against a running
-dev server:
+Three headless-Chrome tools verify what Node can't, all against a running dev
+server:
 
 ```bash
 tools/capture.sh shot 'http://localhost:5173/?sample=car' /tmp/shot.png
 tools/capture.sh dom  'http://localhost:5173/?diag=1'   # light-DOM shell + title
-tools/goldens.sh check                                          # the look, against docs/goldens/
-node tools/drive.mjs                                             # the user journeys, on trusted input
+tools/goldens.sh check                                  # the look, against docs/goldens/
+node tools/drive.mjs                                    # the user journeys, on trusted input
 ```
 
-`capture.sh` shows what the app **looks** like — its shots are byte-deterministic
-(fixed window size, DSF 1, a virtual time budget, a fresh profile per run so
-no machine's saved docs leak into the frame, the model at rest, `?now=<when>`
-whenever the menu bar's clock is in frame, and a selection only ever through
-`?select=…`, whose ants stand still), so `cmp` between two runs is a real
-regression check rather than a judgment call (its `dom` mode only serializes
-light DOM — the desktop skeleton and `<title>`, never the components' shadow
-internals). `goldens.sh` holds eight such shots under `docs/goldens/` and
-compares a fresh set against them: every "does it look right" question — a
-label's ink, a dotted rule, a header's height, the DITL, the paper — lives
+`capture.sh` shows what the app **looks** like, and its shots are
+byte-deterministic — fixed window size, DSF 1, a virtual time budget, a fresh
+profile per run, the model at rest, `?now=` whenever the clock is in frame —
+so `cmp` between two runs is a real regression check. `goldens.sh` holds eight
+such shots under `docs/goldens/`: every "does it look right" question lives
 there as pixels, and a golden changes only in a commit that changed the look
-on purpose, after an eye on the diff. `drive.mjs` covers what no screenshot
-can: about ninety checks over thirty user journeys, driving the desktop
-over the DevTools Protocol with real trusted input (keys, menu picks,
-⌘-equivalents, drags — a window's bar, a grow box, an icon filed into a
-folder — the dialogs, a save → reopen round-trip through IndexedDB),
-probing through the components' shadow roots, and exiting non-zero on any
-failure (a second argument runs one journey by name while iterating on it). Its waits are on **the app's own
-readiness contract**, never a pause: `main.js` marks the root element
-`data-sm-boot="ready"` once the whole boot chain has landed, a reload yields
-a document without the mark until its own boot completes, and every wait
-after an input is on the outcome the next check reads. The residue none of
-them can cover is a short manual checklist: `docs/SMOKE-TEST.md`. What gets
-a test, and what does not, is stated under [Testing](#testing).
+on purpose. `drive.mjs` covers what no screenshot can — about ninety checks
+over thirty journeys, driving the desktop over the DevTools Protocol with real
+trusted input, probing through shadow roots, exiting non-zero on any failure.
+Its waits are on **the app's own readiness contract**, never a pause:
+`main.js` marks the root `data-sm-boot="ready"` once the boot chain has
+landed, and every wait after an input is on the outcome the next check reads.
+The residue is a manual checklist, `docs/SMOKE-TEST.md`. What gets a test is
+[Testing](#testing).
 
 The app is a **System 7 virtual desktop**, drawn end to end with the
 [`vintage-frames`](https://github.com/aportilla/vintage-frames) web component
 kit: a menu bar, an options strip, one movable **document window per open
-document** (the pixel canvas — several documents can be open at
-once), and floating **utility windoids** that serve whichever document
-is active — three permanent ones, the **Tools palette**, the **Full Sprite
-View** (the face picker over the whole atlas as a clickable face-tile grid,
-live), and the **3D View**, plus the toggleable **3D Sprite Atlas** (View
-→ 3D Sprite Atlas: the model rendered orthographically from a ring of
-angles, the rotation set an engine consumes — and what File → Export Sprite
-Atlas… saves) — plus documents
-that live as **files on the desktop**, saved in the browser and reopened by
-double-clicking their icons, and **folders** to file them in, the Finder's
-way: File → New Folder makes one, dragging an icon onto it (or into its
-open window) files it, and a folder opens as a Finder window of its own —
-see [Folders](#folders) — and the **Trash** to delete them by, the
-Finder's way too: drag an icon onto it, empty it from Sprite Machine →
-Empty Trash… — see [The Trash](#the-trash). Clicking the desktop is "switching to the Finder": the application
-deactivates, its windoids hide, and the menus fall back to the desktop's
-grammar. See [The desktop](#the-desktop).
+document**, and floating **utility windoids** serving whichever document is
+active — the **Tools palette**, the **Full Sprite View** (the face picker over
+the whole atlas as a live, clickable face-tile grid) and the **3D View**, plus
+the toggleable **3D Sprite Atlas** (the model rendered orthographically from a
+ring of angles, the rotation set an engine consumes, and what File → Export
+Sprite Atlas… saves). Documents live as **files on the desktop**, saved in the
+browser and reopened by double-clicking their icons, with **folders** to file
+them in and the **Trash** to delete them by. Clicking the desktop is
+"switching to the Finder": the application deactivates, its windoids hide, and
+the menus fall back to the desktop's grammar. See
+[The desktop](#the-desktop).
 
-The first-ever boot **seeds two starter documents** (Car, Cube) into the
-library as perfectly ordinary saved files — edit, rename or delete them like
-anything you saved yourself; they're created once and never come back (the
-profile records the seeding once every built-in is stored — a `seeded` flag
-in the desktop state — and that record, not the mere presence of state, is
-what suppresses it: a first boot cut short by a reload finishes seeding on
-the next one, nothing doubled, while deleting or emptying later never
-resurrects them). Every
-load **boots to the About box** — the classic launch splash: the icon, the
-version, the blurb, the same dialog as Sprite Machine → About… (see
-[The About box](#the-about-box)); OK it — or click anywhere outside it —
-and the bare desktop is yours,
-File → New…, an icon's double-click or File → Open… the ways in — unless
-the URL names a saved
-document (**`?file=Cube`**, or the bare fragment **`#Cube`**;
-case-insensitive, most-recently-modified on a name collision), which opens
-that library file directly, on its remembered edited face. A prior
-session's open windows deliberately don't reopen — the URL, not
-localStorage, says what a load shows — and **no application window's
-geometry comes back either**: every session places the windoids, and
-every open places its document window, fresh from the live raster (see
-[Windows](#windows)); the Finder's furniture is what restores — the
-desktop icons, and a folder window's box, remembered as its nine-slice
-pin so it comes back on screen whatever shape the browser has by then
-(see [Folders](#folders)). And
-the URL keeps itself true: opening, saving or
-switching to a saved document **mirrors its name into the fragment**
-(`#Cube`, via `replaceState` — no history spam; an untitled document or the
-bare desktop clears it, and any `?file=` is canonicalized away), so a plain
-browser reload restores exactly what's on screen. The same
-built-ins live on as **templates in File → New…**, the New Document
-dialog: an Empty Document at a chosen tile size, or a template as a
-fresh untitled copy. **Double-click a desktop icon**, pick File → Open…, or
-drop your own **3×2 sprite sheet** PNG anywhere on the window. **Smooth slopes** (low-poly additive 45° wedges) are
-**always on** — no toggle: the "smooth" checkbox that could switch them off
-left the 3D View's controls strip on Sep 4 2026, and the one control there
-now is **rotate**, the auto-spin, **off every load** (the model sits still
-until you check it); the planar merge is always on too.
-Sprites are hard pixel art — every texel is fully opaque or fully
-transparent — and every face with no view of its own is mirror-filled from
-its opposite at render time. The **face picker** (six pixel-art cube icons
-over radio buttons, the Full Sprite View windoid's header)
-switches which of the six you're editing (a
-mirror-derived face reads empty — an honest view of the sheet) — see
-[Drawing editor](#drawing-editor).
+The first-ever boot **seeds two starter documents** (Car, Cube) as ordinary
+saved files. They are created once and never come back: the profile records
+the seeding (a `seeded` flag written only once every built-in is stored), and
+that record, not the mere presence of state, suppresses it — so a first boot
+cut short by a reload finishes seeding on the next one, nothing doubled, while
+deleting or emptying later never resurrects them.
+
+Every load **boots to the About box** (see [The About box](#the-about-box)).
+OK it, or click outside it, and the bare desktop is yours — unless the URL
+names a saved document (**`?file=Cube`**, or the bare fragment **`#Cube`**;
+case-insensitive, most-recently-modified on a collision), which opens that
+file on its remembered edited face. A prior session's open windows
+deliberately don't reopen — the URL, not localStorage, says what a load shows
+— and **no application window's geometry comes back either**: every session
+places the windoids, and every open places its document window, fresh from the
+live raster (see [Windows](#windows)). The Finder's furniture is what
+restores: the desktop icons, and a folder window's box as its nine-slice pin.
+The URL keeps itself true — opening, saving or switching to a saved document
+**mirrors its name into the fragment** (`replaceState`; an untitled document
+clears it), so a plain reload restores what's on screen. The same built-ins
+live on as **templates in File → New…**, and you can drop your own **3×2
+sprite sheet** PNG anywhere on the window.
+
+**Smooth slopes** (low-poly additive 45° wedges) are **always on** — no
+toggle, and the planar merge too; the one control in the 3D View's strip is
+**rotate**, the auto-spin, **off every load**. Sprites are hard pixel art —
+every texel fully opaque or fully transparent — and every face with no view of
+its own is mirror-filled from its opposite at render time. The **face picker**
+switches which of the six you're editing; a mirror-derived face reads empty,
+an honest view of the sheet.
 
 ## Input: a 3×2 atlas
 
-One sheet, six tiles, in this fixed layout (empty cells are fine — they fall back
-to mirroring):
+One sheet, six tiles, in this fixed layout (empty cells are fine — they fall
+back to mirroring):
 
 ```
 LEFT   FRONT  TOP
@@ -129,11 +98,11 @@ RIGHT  BACK   BOTTOM
 
 The **tile size is auto-derived** from the image dimensions and the grid (a
 120×80 sheet ⇒ 40×40 tiles). Each tile is a **literal slice of the voxel
-lattice** — a pixel's position inside its tile _is_ its position in the object,
-so tiles are read at full size (**no auto-crop**) and must be **registered across
-faces**: a FRONT pixel only becomes solid where the SIDE covers its row and the
-TOP covers its column. Use **square tiles** (a cubic lattice); the in-app
-editor's onion-skin helps you line pixels up across faces.
+lattice** — a pixel's position inside its tile _is_ its position in the
+object, so tiles are read at full size (**no auto-crop**) and must be
+**registered across faces**: a FRONT pixel only becomes solid where the SIDE
+covers its row and the TOP covers its column. Use **square tiles** (a cubic
+lattice); the editor's onion-skin helps you line pixels up.
 
 **Tile orientation** (world: `+x` right, `+y` up, `+z` = front toward camera) —
 draw each tile this way for a zero-transform ingest:
@@ -146,1501 +115,736 @@ draw each tile this way for a zero-transform ingest:
 | TOP          | plan view, width horizontal                             | top edge     | width × depth  |
 | BOTTOM       | plan from below (car rolled sideways, not end-over-end) | top edge     | width × depth  |
 
-The **face picker** switches which tile you're editing; check each tile's
-orientation against this table's **Front points** column, using the faded
-onion-skin of the mirrored opposite behind the canvas.
-Per-tile `rot`/`flip` transforms exist in the pipeline for sheets that don't
-follow the convention.
+Check each tile against the **Front points** column, using the faded
+onion-skin of the mirrored opposite behind the canvas. Per-tile `rot`/`flip`
+transforms exist in the pipeline for sheets that don't follow the convention.
 
 ## Drawing editor
 
-The **document window** holds the drawing surface — the full-bleed white
-artwork well (it runs edge to edge, title bar to status strip) — and the 3D
-View rebuilds live as you draw; the **face picker** rides the Full Sprite
-View windoid (see its bullet below).
-The tools live in the floating **Tools palette**, their per-tool options in
-the **options strip** under the menu bar, and the tile-size stepper in
-File → Properties…. Every control is a `vintage-frames` System 7 web
-component (`vf-number-field`, `vf-radio-group`, `vf-slider`, `vf-checkbox`,
-`vf-swatch`, `vf-grid`, `vf-dialog`, `vf-menu`, …), driven from a Lit
-template — see [UI layer: Lit](#ui-layer-lit).
+The **document window** holds the drawing surface, the full-bleed white
+artwork well, and the 3D View rebuilds live as you draw. The tools live in the
+floating **Tools palette**, their options in the **options strip** under the
+menu bar, the tile-size stepper in File → Properties…. Edits write straight
+back into the current sheet, so Save persists exactly what you see, the Full
+Sprite View tracks every stroke at frame rate, and the model rebuilds
+(rAF-debounced) with no camera jump.
 
-- **Canvas layout** — the pixel canvas fills the artwork well — its height is
-  **CSS-driven** (flex), no JS pin — and the square editable canvas is drawn
-  on the kit's own **virtual system-pixel grid**: the texel size is **the
-  largest whole count of system px that fits** — a texel is then a whole
-  count of device px by the kit's scale contract (crisp at any display
-  density or browser zoom, never a fractional pixel) and a whole multiple of
-  the unit the surrounding 1-bit chrome is drawn in — and the canvas layers
-  ride a **placed `vf-container`**: `#layout()` states its
-  width/height/top/left in whole system px (the DITL rectangle, centered by
-  arithmetic — no flex centering, no measured correction), so the box lands
-  on the pixel lattice **by construction** and the container's own grid-snap
-  holds it there against any upstream fraction. It **re-fits responsively**
-  when the window (or its grow box) resizes and when the display density or
-  browser zoom changes. The onion-skin background under the art and the
-  cursor + selection overlays over it draw at system-px resolution, so their
-  hairlines are 1 system px — the kit's hairline unit. See `#layout()` in
-  `src/components/sm-draw-canvas.js`. The canvas is **1-bit but for the
-  art**: its paper is the kit's **12% dither** — `gray-12`, a sparse field
-  of dots, one ink px in eight, painted by the kit as the stack container's
-  `pattern` (declared, never inherited: a bare `vf-container` paints the
-  desktop's own pattern, and paints it smeared — kit ask #6,
-  [docs/kit-asks-pattern-paper.md](docs/kit-asks-pattern-paper.md)) — the
-  transparency indicator, so an empty texel reads as dotted paper, a
-  painted one covers it, and **white art** reads as a clear patch in the
-  dots (the kit's own raster, not a painter of the app's — no checkerboard,
-  no drawn lattice); and nothing is drawn over the art — no lattice of grid
-  lines, so a fresh canvas is paper and art alone. The sprite is the only
+- **Canvas layout** — the canvas fills the well, its height CSS-driven (flex,
+  no JS pin), drawn on the kit's **virtual system-pixel grid**: the texel size
+  is the largest whole count of system px that fits, so a texel is a whole
+  count of device px at any density or zoom. The layers ride a **placed
+  `vf-container`** whose box `#layout()` states in whole system px, centered
+  by arithmetic — no flex centering, no measured correction — so it lands on
+  the pixel lattice by construction. The canvas is **1-bit but for the art**:
+  its paper is the kit's **12% dither** (`gray-12`), declared as the
+  container's `pattern` and never inherited, since a bare `vf-container`
+  paints the desktop's own pattern, smeared (kit ask #6). The dither is the
+  transparency indicator, so **white art** reads as a clear patch in the dots.
+  Nothing is drawn over the art — no grid lines — and the sprite is the only
   color on the canvas.
-- **Tools** — the **Tools palette** holds the **tool strip**: a single column of
-  **22×19** cells (the **selection `S`** first — MacPaint's palette led with it — then
-  **pencil `B`**, **rect `R`**, **fill `G`**, the **eraser `E`**, and the
-  **eyedropper `I`**; the selected cell inverts) — each cell exactly one
-  **22×19 1-bit pixel-art icon**, the app's own art (`src/assets/tools/`,
-  black ink on transparency and nothing else — no icon library: the Adobe
-  Spectrum glyphs that once drew them are gone, dependency and all),
-  through the kit's **`vf-img`** at 1:1 — one image pixel one system px,
-  nearest-neighbor on whole device pixels, so the glyphs are crisp at any
-  display scale — and the inverted cell's white glyph is a CSS `invert` of
-  the same file, exact because the art is pure black; the cell IS the icon
-  (`TOOL_CELL` in `shell/layout.js`, which derives the windoid's authored
-  box, `TOOLS_BOX`, from it) in a frameless `vf-grid` lattice run
-  flush to the windoid's edge — no inner padding, the cells sharing the
-  window frame's own black line. A cell **picks on the press**, not the
-  click — System 7's tool palettes act on mouse-down: the cell inverts the
-  instant the button goes down and the tool is live before it comes back
-  up. That is feel, not a bridge (see [Windows](#windows)): the click that
-  follows lands, and is a no-op on the tool already current. The **options
-  strip** (a kit-drawn band under the menu bar — a `vf-container` in the
-  kit's own grammar, `pattern="white" rule="bottom"`: white paper over one
-  row of ink, the menu bar's anatomy, no drop shadow — so its rule and every
-  metric in it scale with the raster) holds the **current-ink swatch** plus
-  the tool's options — no tool-name caption: the palette's inverted cell and
-  the Tools menu's checkmark already say which tool is live, an
-  eyedropper strip is just the swatch, and the selection's strip (no
-  swatch — the one tool besides the eraser that lays no color) is a
-  **readout**: the active window's marquee as `width × height` in texels —
-  the size alone, never the position — live through a drag, `0 × 0` at
-  rest (the `left, top ·` prefix and the "no selection" caption both went
-  Sep 5 2026). **Every label in the strip is plain ink** — the pencil's and
-  the eraser's `N px`, the `radius` caption, the two readouts: none wears
-  the kit's `dim` (it went the same day: dim is the disabled look, and
-  nothing in the strip is disabled). And **the strip's cells are walled**
-  by the kit's own rule — `<vf-separator vertical>`, a 1-system-px line
-  that stretches itself to its row's height, so each wall runs from the
-  band's top to its bottom rule (the options area stretches to the band for
-  it; the controls still center), drawn **dotted** — one px on, one off, in
-  the kit's black — through the separator's own restyle hook
-  (`--vf-separator-style`, the one the kit's menus set for their rule),
-  declared once on the strip's row and inherited into the options leaf —
-  with one grammar: a rule stands between
-  **different things**, never between a control and its own readout. The
-  bar puts one between the ink swatch and the tool's options whenever both
-  are up (the pencil, the rect, the fill — the ink is app-level, the
-  options the tool's own; no rule dangles after the eyedropper's lone
-  swatch, and a strip with no swatch has none), and the rect's strip
-  carries a second between its radius stepper (a setting) and its readout
-  (a value): swatch | radius | readout, three cells. The pencil's popup,
-  its slider and its `N px` are one cell (two settings of one tool), the
-  fill's two boxes one group. For the **pencil**, a **tip-shape popup**
-  (`circle` / `square` — the kit's `vf-select`, System 7's popup menu, in
-  that order; **circle every load**) and a **tip-size slider** (with an
-  `N px` readout; the slider is half the width it was — 130 system px at
-  most — since the popup joined it, Sep 5 2026) that stamps an **N-texel
-  tip**: the **circle** is the disc inscribed in the N×N box — the classic
-  pixel disc, the midpoint circle's own rows (one texel, a 2×2, a plus at
-  3, a 4×4 less its corners, 3-5-5-5-3 at 5, …), so a stroke lays a
-  round-ended line — and the **square** the whole box; one pure primitive
-  states which texels of the box a shape covers (`brushRows` in
-  `src/lib/brush.js`, Node-tested), and the stamp, the stroke and the hover
-  preview all read it, so what you see is what you paint. The pencil
-  **previews the tip filled with the active ink** on the
-  canvas as you hover — the exact texels a stamp will cover, looking exactly as
-  the art would after the click (under a **right button** — the momentary
-  erase — the footprint wears the **erase treatment** instead for the
-  stroke's length: the marching ants around the tip's own outline, see the
-  eraser below) — with the **OS
-  crosshair kept on top** marking the position. For the **rect**, a **corner-radius
-  stepper** (`radius: N px`, `0` = sharp) and, across a rule, a **readout** of the drag
-  in flight — the box's `width × height` in texels, the square-locked box
-  the release would paint, `0 × 0` between drags (the label always there,
-  so nothing in the strip shifts when a drag begins): **drag** a box and a **live preview**
-  (the exact filled texels in the ink at **full opacity** — the box exactly as
-  the release will leave it, with no outline around it: the 50% tint under a
-  haloed bounding box went Sep 5 2026, the paint itself being the extent's
-  readout; a **right-drag**, erasing, wears the **erase treatment** instead —
-  the marching ants around the drag's bounding box, the rectangle walk the
-  selection's ring is, so the corner texels a radius spares sit inside the
-  ring rather than traced) tracks the drag on the top overlay; **release**
-  commits it, and
-  **Esc** (or switching tool with `B`/`R`) **cancels** the in-flight box with
-  nothing written. Hold **Shift** while dragging to lock the box to a **square** (the
-  shorter extent wins, anchored at the start corner) — toggleable mid-drag, so the
-  preview re-fits the instant you press or release Shift. Each corner rounds with a **convex** quarter-circle arc (bulging
-  outward like a real rounded rectangle, not a concave scoop; clamped to half the
-  shorter side), so even `radius: 1` clips the corner texel; a
-  **right-drag** drags a rectangular **erase**. The rounded-rect rasterization is a pure, Node-tested
-  primitive (`src/lib/rect.js`) shared by the preview and the commit, so what you
-  see is exactly what lands. For the **fill** (paint-bucket), two **checkboxes**:
-  **contiguous** (on by default) keeps a click a **contiguous 4-connected
-  flood** from the clicked texel (the connected region sharing its color
-  becomes the active ink); turned **off**, the click becomes a **whole-face
-  recolor** — _every_ texel matching the clicked color on the face, contiguous
-  or not. **on all faces** (only enabled while **contiguous** is off) extends
-  the recolor across **every face in the atlas**, so it's a global
-  find-and-replace of one color. Transparency is a first-class "color": clicking
-  empty space targets transparent (so **replace** floods every empty texel with the
-  ink), and a **right-click** fills _to_ transparent (delete a
-  color). The flood + replace are pure, Node-tested primitives (`src/lib/fill.js`).
-  The **selection** (`S`) is MacPaint's selection rectangle: **drag a box**
-  out on the canvas and it takes the **marching ants** — a 1-system-px
-  black/white dashed border on the selection's outermost texels, walking the
-  perimeter briskly (its own topmost canvas layer, so no hover painter can
-  wipe it; it stands still under the OS's reduce-motion preference), and
-  **1-bit by construction**: the ring is a clockwise pixel walk emitted as
-  black and white **runs on whole system px** (`src/lib/ants.js`, pure,
-  Node-tested — four on, four off, a phase step marching them one px
-  forward, the classic seam at the start corner) that the painter fills,
-  never a dashed stroke — a stroke's dashes are measured along a path that
-  starts on a half pixel, so every dash end anti-aliases to gray — with
-  the kit's **arrow** over the selection and the crosshair outside; **drag
-  inside** the box and the selected pixels **move** with the pointer,
-  leaving transparency behind (the sprite's "white" IS transparency — there
-  is no paper color); **Shift** while moving constrains to the dominant axis
-  (toggleable mid-drag). **Transparent texels inside the selection are not
-  pixels and never travel**: a moved selection overwrites the destination
-  only where it is painted, so art under its empty texels shows through
-  untouched — the lasso's most useful property, for free. Click outside,
-  press **Esc**, or pick another tool and the selection **drops** where it
-  sits (a click with no drag makes no selection and never flashes a
-  one-texel box: a press is a click until the pointer moves a few px — the
-  OS's own drag threshold — or onto another texel, and from then on it is a
-  marquee whose box runs anchor to corner inclusive, so **one texel** is the
-  smallest selection, a wiggle inside it; the 1×2 floor of the earlier rule,
-  "a marquee that ends on its anchor is a click", went Sep 5 2026. Esc
-  mid-drag cancels the marquee, or puts a
-  moving float back where it was grabbed). Push the float off the canvas
-  and what's off-tile at the drop is gone, as MacPaint lost what you dragged
-  off the page (Undo has it). A right-click does nothing with this tool; an
-  Alt-click still samples (an empty sample selects the eraser — a tool
-  change, so the selection drops). Each **move gesture is one undo step**; a
-  marquee writes nothing. The selection is canvas state and **dies with the
-  working buffer** — any structural change (undo/redo, a face switch, a tile
-  resize, an all-faces replace) drops it, its pixels already in the document
-  (MacPaint kept a selection through Undo; re-deriving a float from a
-  restored tile isn't worth the machinery). Each **document window holds its
-  own**: switching windows leaves both up, ants marching; Esc drops only the
-  active window's, a tool switch drops every window's — and the options
-  strip's readout follows the active one (the canvas reports its outline
-  through `sm-selection` — and the rect tool its drag box through
-  `sm-rect-drag` — onto its context's own per-window selection store,
-  the plumbing Edit → Cut/Copy will gate on). A move edits **this face
-  alone** today — which can break the carve's registration (a roof shifted
-  on FRONT no longer lines up with TOP); the **registered move** ("on all
-  faces": a FRONT marquee is a slab of voxels, so its columns shift on
-  TOP/BOTTOM and its rows on the sides) is the planned follow-up, spelled
-  out beside `#applyMove` in `sm-draw-canvas.js`. Under the hood the
-  model is base + float (`src/lib/select.js`, pure, Node-tested): the
-  marquee's texels are lifted out **once** on the first move press, the hole
-  they leave is cleared on a pristine copy, and every offset composites
-  (base, float, offset) into the working buffer **in place** — so a drag
-  across the sprite and back never smears what it crossed, and the buffer's
-  identity (which the document holds by reference) never changes.
-  Every edit is **undoable** (Edit → Undo ⌘Z / Redo ⇧⌘Z): a gesture — stroke,
-  rect, fill, selection move — undoes as one step, and an all-faces replace or tile resize as
-  one whole-sheet step (bounded history, ~50 entries, cleared on a document
-  load). The **eraser** (`E`) is a formal _tool_ mode, a full sibling
-  of the drawing ops in the strip — not a "transparent color" in the wells: a
-  pencil that writes **transparency**, sharing the pencil's stroke path but
-  carrying its **own tip-size** setting and its **own tip-shape** popup (a
-  separate slider and popup, separately persisted values — the two tools'
-  settings are deliberately independent; circle every load for both), its
-  hover footprint the **erase treatment**: the selection's own **marching
-  ants** around the texels the tip would clear — the same 1-bit ring
-  (`src/lib/ants.js`, whole-px black and white runs), marching at the same
-  pace on the same ticker, standing still under reduce-motion — with **no
-  fill** inside it (transparency can't be previewed on an overlay) and **no
-  outline** around it; the translucent red block under a haloed hairline that
-  erasing wore went Sep 5 2026. **The ring is the tip's own outline**: a
-  circle eraser's ants ring the **disc** — `antsOutlineRuns` walks the thin
-  boundary of any row-convex shape (every px with a neighbour outside, each
-  once, clockwise from the top row's left end, treads walked and risers
-  stepped diagonally so the ring stays one px thin and 8-connected the way a
-  circle outline is drawn), the rectangle's walk its exact special case —
-  over the tip's clipped system-px rows (`brushSpans`), so at the tile's
-  edge the ring closes along the edge. It is the one treatment every erase
-  wears: the eraser's hover and stroke, a right-button pencil stroke (the
-  pencil's own disc), the rect tool's right-drag (its box). The ink stays a
-  solid color throughout, and **picking any
-  color while the eraser is held returns to the pencil** — a pick means "paint
-  with this". A **right-click** is the _momentary_ erase with any tool (the
-  right-drag rect is the rectangular erase; a right-click fill deletes a
-  region); the eraser cell is the _sticky_ one. The **current-ink swatch**
-  lives in the **options strip** (a lone `vf-swatch` well wearing the kit's
-  hard shadow), shown for **every tool but the eraser** — the one mode that
-  paints no color — and, **clicked**, it opens the **"Colors" dialog** over
-  the **full 168-color named palette**. There is no "recent colors" row and no
-  used-color marking — the grid is the plain palette, every open. The
-  **eyedropper** (`I`) is a sticky mode exactly like its siblings: it stays
-  selected, and every canvas click samples the clicked texel — a painted texel's
-  color becomes the **ink**, and **empty space hands you the eraser** (sampling
-  emptiness selects the eraser tool) — until another tool is picked (while it's
-  active the **marching ants** ring the one texel it would sample, under the
-  OS crosshair — the selection's ring, the erase treatment's, marching on the
-  same ticker, nothing inside it and nothing translucent; the haloed hairline
-  that marked the target went Sep 5 2026, the last translucent mark on the
-  canvas). Hold **Alt** instead for a momentary sample that doesn't leave the
-  current tool (with the same two exceptions: a color pick leaves the eraser, an
-  empty sample selects it). The
-  dialog is a System 7 movable modal (`vf-dialog`) laid out as a traditional
-  form: the 21×8 `vf-grid` of **168 distinct named** swatches over a **hover
-  readout line** and a row holding a larger **preview swatch** of the
-  _pending_ selection (a kit shadow well) beside a **hex text field**
-  (`vf-text-field`), and a **Cancel / OK** button row. **Hovering** (or
-  keyboard-focusing) any palette cell makes the readout line show that color
-  as a **chip beside its name and hex** ("Teal `#009a96`") — the cells
-  themselves wear no hover chrome, System 7 style; at rest the line shows the
-  _pending_ selection instead,
-  named through the palette — a typed color no swatch holds reads **"Custom"**
-  — so the row always names what OK would commit. Opening seeds the form from
-  the current ink; clicking a palette swatch
-  **selects** — preview and field update, the dialog stays up — and the field
-  takes **manual hex entry** (3- or 6-digit, `#` optional, any case — _any_
-  color, not just the 168). Only **OK** (or **Enter** in the field) commits
-  the ink, through the same single pick path as ever; while the field's text
-  isn't a valid hex code **OK is disabled** and the preview holds the last
-  valid color. **Cancel**, **Esc**, or the **close box** discards the pending
-  selection. The palette is laid out as **value-banded hue rows**: row 1 is
-  the grayscale ramp (White and Black up front, then a dark-to-light run),
-  and rows 2–8 each sweep the hue wheel red → yellow → green → cyan → blue →
-  violet → magenta at one value band, ordered darkest ("darkest", "dark",
-  "deep", "strong", "vivid") down to "light" and "palest" — so a column reads
-  roughly as one hue across seven values. The arrangement is a fixed,
-  hand-verified layout spelled out in `src/lib/constants.js` (`PALETTE_168`),
-  every entry carrying the **human color name** the readout shows.
-  **Wedge-safety caveat:** a few same-hue neighbors fall _within_ the low-poly
-  wedge merge tolerance (`sameMat`, `TOL2 = 12²` squared-L2), so a staircase of
-  two such shades can auto-smooth into a wedge. Recomputed against the real
-  palette + gate there are **8 within-tolerance pairs**, all same-hue value
-  neighbors in the darkest and palest rows — Dark Olive/Olive, Deep
-  Teal/Petrol, Teal/Persian Green, Blush/Peach, Vanilla/Cream, Ice Blue/Pale
-  Sky, Celeste/Pale Cyan, Frost/Glacier — and, unlike the earlier xterm-256
-  set, **no gray pair merges** (the grayscale ramp steps ~10–13/channel, well
-  clear of the gate). An author can still place two of those eight pairs on
-  adjacent staircase voxels and get an unintended (but near-imperceptible)
-  wedge (the set as of Sep 2026; no test pins it). Every stroke is
-  hard-pixel: fully opaque or fully erased, never anti-aliased.
-- **Face picker** — six **cube-view icons** over a radio row (a `vf-radio-group`)
-  in the **Full Sprite View windoid's** header switch which face
-  the **active document's** window edits (each document keeps its own
-  selection — the picker, like every utility windoid, shows the active
-  one's), laid out as mirror pairs
-  (`left`/`right`, `front`/`back`, `top`/`bottom`)
-  so you can flip between a pair for reference. A pick is an ordinary
-  **click** on the radio or its icon (see [Windows](#windows) for why no
-  windoid control needs a press-driven bridge). Each icon is a **21×26 1-bit
-  pixel-art** isometric cube (`src/assets/faces/` — black ink, white paper,
-  transparent outside the silhouette and nothing else; wired up inside
-  `sm-face-picker.js`, the one
-  component that renders and styles them): the three
-  quads the view shows (`front`, `left`, `top`) fill **solid black**, and their hidden
-  opposites (`back`, `right`, `bottom`) draw a thin black **sliver** peeking out along
-  the silhouette edge they hide behind — "the far side of this one". Left/right in
-  the icons is the **object's own** handedness (stage-left): `left` is the cube's
-  lower-**right** quad, the way a car facing you shows its left flank on your right —
-  deliberately not the world-axis reading (`left` = −x, on the viewer's left). The **checked**
-  face takes a **50% black dither** (`selected.png`) laid over its whole cube —
-  it vanishes over the filled quad and reads as the classic selected gray over
-  the white ones; the
-  overlay is always in the DOM and the picker's template flips its visibility class
-  off the `selected` prop, so it never re-mounts (and never depends on the kit's
-  internal radio state). Being raster pixel art, every tile goes through
-  the kit's **`vf-img`** — one image pixel is one system px, magnified
-  nearest-neighbor on whole device pixels — and the dither is positioned with
-  `vf-img`'s own `top`/`left` (system px), so it stays registered to the art's grid
-  at any display scale. The **atlas grid** below the strip is a picking
-  surface too: pressing any face's tile selects that face (the same
-  press-not-click rule), and the selected tile is **stroked in black ink**
-  (a 2-system-px inset ring over the tile's edge) — see the Full Sprite View
-  bullet under [Windows](#windows). A **mirror-derived** face (one with
-  no art of its own) opens with an **empty canvas** and a **faded onion-skin** of
-  the mirrored opposite behind it for reference; it becomes its own independent art
-  only once you actually change a pixel — switching away and back leaves it derived,
-  and erasing it fully reverts it to derived.
-- **Live + canonical** — edits write straight back into the current sheet, so
-  File → Save persists exactly what you see, File → Download downloads it (see
-  [Documents](#documents-a-document-is-a-png)), the **Full Sprite View**
-  tracks every stroke at frame rate, and the model rebuilds (rAF-debounced)
-  with no camera jump.
-- **Tile size** — a single **square-tile number field** in File → Properties…
-  retiles the whole atlas to any integer **1–64** (the ceiling keeps the
-  live per-stroke carve — a synchronous O(n³) walk — tractable). Tiles are **locked square**, so
-  every resize is **registration-preserving**, and the stepper **keeps the art centered**:
-  each axis splits the size change around the sprite (`resizeAtlas` with `anchor:'center'`)
-  so it stays put in the canvas as the tile grows / shrinks instead of hugging a corner —
-  growing pads transparency on **both** sides, shrinking crops **both**. The odd texel of
-  an odd-sized ± step **alternates ends** (by the new size's parity) so repeated clicks
-  can't drift the art off-center, and a **typed jump divides the difference** as evenly as
-  it can (`splitLow`). Because a square resize just **translates** the whole solid, no
-  sprite shears out of registration — but centering the **vertical** axis means the object
-  no longer pins to `y=0`, so a ground-rested sprite **floats up off the shadow plane** as
-  the tile grows (an accepted trade for centered authoring). Square is the **only
-  registering shape** — a 3×2 atlas shares its depth axis between the side tile's width and
-  the top tile's height, so a non-square tile would over-constrain that axis and shear the
-  depth; locking the stepper square makes that impossible from the UI. The pure
-  `resizeAtlas` in `src/lib/atlas.js` still **defaults to origin-anchored** (each axis's
-  origin line fixed, `y=0` pinned) for the pipeline, and still accepts an asymmetric pair
-  (the `?tile=WxH` dev hook, which **warns** and shears) so the shear path stays testable.
+- **Tools** — a column of **22×19** cells: **selection `S`** first (MacPaint's
+  palette led with it), then **pencil `B`**, **rect `R`**, **fill `G`**,
+  **eraser `E`**, **eyedropper `I`**; the selected cell inverts. Each cell is
+  exactly one **22×19 1-bit pixel-art icon**, the app's own art through
+  **`vf-img`** at 1:1, the inverted cell's white glyph a CSS `invert` of the
+  same file — exact because the art is pure black, and there is no icon
+  library. The cell IS the icon (`TOOL_CELL`, from which `TOOLS_BOX` derives),
+  and it **picks on the press**, not the click: System 7's tool palettes act
+  on mouse-down. That is feel, not a bridge.
+- **The options strip** is a kit-drawn band (`pattern="white" rule="bottom"`,
+  the menu bar's anatomy) holding the **current-ink swatch** plus the tool's
+  options. No tool-name caption: the inverted cell and the Tools menu's
+  checkmark already say which tool is live. **Every label is plain ink** — no
+  `dim` anywhere, dim being the disabled look — and **the cells are walled**
+  by the kit's dotted `<vf-separator vertical>` under one grammar: a rule
+  stands between **different things**, never between a control and its own
+  readout.
+- **Pencil** — a **tip-shape popup** (`circle` / `square`; circle every load)
+  and a **tip-size slider** stamp an **N-texel tip**: the circle is the disc
+  inscribed in the N×N box, the square the whole box. One pure primitive says
+  which texels a shape covers (`brushRows`), read by the stamp, the stroke and
+  the hover preview alike, so what you see is what you paint. The pencil
+  **previews the tip filled with the active ink** as you hover; under a
+  **right button** — the momentary erase — it wears the **erase treatment**.
+- **Rect** — a **corner-radius stepper** (`0` = sharp) and a **readout** of
+  the drag, `0 × 0` between drags so nothing shifts when one begins. A drag
+  previews the exact filled texels at full opacity, no outline; a
+  **right-drag** erases; **release** commits, and **Esc** or a tool switch
+  cancels with nothing written. **Shift** locks the box square, toggleable
+  mid-drag. Corners round with a **convex** quarter-circle arc, so even
+  `radius: 1` clips the corner texel. Pure and Node-tested (`lib/rect.js`),
+  shared by preview and commit.
+- **Fill** — **contiguous** (on by default) keeps a click a **4-connected
+  flood**; off, it becomes a **whole-face recolor** of every texel matching
+  the clicked color, and **on all faces** (enabled only then) extends that
+  across the atlas. Transparency is a first-class "color": clicking empty
+  space targets transparent, a **right-click** fills _to_ transparent.
+- **Selection** (`S`) is MacPaint's selection rectangle. **Drag a box** and it
+  takes the **marching ants** — a 1-system-px black/white dashed border on the
+  outermost texels, on its own topmost layer so no hover painter can wipe it,
+  still under reduce-motion, and **1-bit by construction**: a clockwise pixel
+  walk emitted as black and white **runs on whole system px**
+  (`lib/ants.js`), never a dashed stroke, whose dashes would anti-alias to
+  gray. **Drag inside** and the pixels **move**, leaving transparency behind
+  (the sprite's "white" IS transparency); **Shift** constrains to the dominant
+  axis. **Transparent texels inside the selection are not pixels and never
+  travel**: a moved selection overwrites only where it is painted, so art
+  under its empty texels shows through untouched — the lasso's most useful
+  property, for free. Click outside, press **Esc**, or pick another tool and
+  it **drops** where it sits. A click with no drag makes no selection and
+  never flashes a one-texel box: a press is a click until the pointer crosses
+  the OS's drag threshold or another texel, and from then on a marquee running
+  anchor to corner inclusive, so **one texel** is the smallest selection. Push
+  the float off the canvas and what's off-tile at the drop is gone (Undo has
+  it). Each **move gesture is one undo step**; a marquee writes nothing. The
+  selection **dies with the working buffer** — any structural change drops it,
+  its pixels already in the document — and each **document window holds its
+  own**. A move edits **this face alone** today, which can break the carve's
+  registration; the **registered move** is the planned follow-up, beside
+  `#applyMove` in `sm-draw-canvas.js`. Under the hood it is base + float
+  (`lib/select.js`): the texels are lifted **once** on the first move press
+  and every offset composites in place, so a drag across the sprite and back
+  never smears what it crossed.
+- **Undo** — a gesture (stroke, rect, fill, move) undoes as one step, an
+  all-faces replace or tile resize as one whole-sheet step; bounded history,
+  ~50 entries, cleared on a document load.
+- **Eraser** (`E`) is a formal _tool_ mode, not a "transparent color" in the
+  wells: a pencil that writes **transparency**, with its **own tip size and
+  shape**, the two tools' settings deliberately independent. Its footprint is
+  the **erase treatment**: the selection's **marching ants** around the texels
+  the tip would clear, **no fill** inside (transparency can't be previewed)
+  and no outline — **the ring is the tip's own outline**, so a circle eraser's
+  ants ring the disc. Every erase wears it: the eraser's hover and stroke, a
+  right-button pencil stroke, the rect's right-drag. **Picking any color while
+  the eraser is held returns to the pencil**: a pick means "paint with this".
+  A **right-click** is the momentary erase with any tool; the eraser cell is
+  the sticky one.
+- **Eyedropper** (`I`) is sticky too: every click samples the clicked texel —
+  a painted texel's color becomes the **ink**, **empty space hands you the
+  eraser** — with the ants ringing the texel it would sample. Hold **Alt** for
+  a momentary sample that doesn't leave the current tool.
+- **The current-ink swatch** sits in the strip for **every tool but the
+  eraser** and **clicked** opens the **Colors dialog**: a System 7 movable
+  modal over the 21×8 grid of **168 distinct named** swatches, a **hover
+  readout line**, a **preview swatch** of the pending selection beside a **hex
+  field**, Cancel / OK. No "recent colors" row and no used-color marking. The
+  readout names the hovered color, and at rest the pending one — a typed color
+  no swatch holds reading **"Custom"** — so the row always names what OK would
+  commit. The field takes **manual hex** (3- or 6-digit, _any_ color); only
+  **OK** or **Enter** commits, and while the text isn't valid hex **OK is
+  disabled**. The palette is **value-banded hue rows** in `PALETTE_168`, every
+  entry carrying the **human color name** the readout shows. **Wedge-safety
+  caveat:** eight same-hue value pairs fall _within_ the wedge merge tolerance
+  (`sameMat`, `TOL2 = 12²`), so a staircase of two such shades can auto-smooth
+  into a wedge; **no gray pair merges**. No test pins it.
+- **Face picker** — six **cube-view icons** over a radio row in the **Full
+  Sprite View's** header switch which face the **active document's** window
+  edits (each document keeps its own), as mirror pairs so you can flip between
+  a pair for reference; a pick is an ordinary **click**. Each icon is a
+  **21×26 1-bit** isometric cube, rendered and styled inside
+  `sm-face-picker.js` alone: the three quads the view shows fill **solid
+  black**, their hidden opposites draw a thin **sliver** along the silhouette
+  edge they hide behind, and the **checked** face takes a **50% black
+  dither**. Left/right is the **object's own** handedness (stage-left): `left`
+  is the cube's lower-**right** quad, the way a car facing you shows its left
+  flank on your right. A **mirror-derived** face opens with an **empty
+  canvas** and a faded **onion-skin** of its opposite behind it; it becomes
+  its own art only once you change a pixel, and erasing it fully reverts it.
+- **Tile size** — a **square-tile number field** in File → Properties… retiles
+  the atlas to any integer **1–64** (the ceiling keeps the live per-stroke
+  carve tractable). Tiles are **locked square**, so every resize is
+  **registration-preserving**, and the stepper **keeps the art centered**, the
+  odd texel of an odd step alternating ends so repeated clicks can't drift it
+  off-center. Centering the vertical axis means a ground-rested sprite
+  **floats up off the shadow plane** as the tile grows (an accepted trade).
+  Square is the **only registering shape**: a 3×2 atlas shares its depth axis
+  between the side tile's width and the top tile's height. The pure
+  `resizeAtlas` (`lib/atlas.js`) still **defaults to origin-anchored** for the
+  pipeline and still accepts an asymmetric pair (the `?tile=WxH` hook, which
+  **warns** and shears) so the shear path stays testable.
 
-Drawn pixels map 1:1 to voxels at their **literal tile position** — `buildVoxels`
-reads each view at full size (no crop, no re-centering) and the carve intersects
-the extruded silhouettes, so a pixel survives only where every view sharing an
-axis agrees. To help meet that stricter requirement the editor draws a **faded
-onion-skin** of the opposite face behind the canvas. There is **no auto ground-rest**: an object sits at whatever Y
-you paint it (paint at the tile's bottom to rest on the ground). The editor is
-pure authoring — no changes to the carve / colorize / mesh pipeline. See
-`src/components/` (the `<sm-editor>` container and its leaves).
+There is **no auto ground-rest**: an object sits at whatever Y you paint it,
+and to help you register a face against its neighbours the editor draws a
+**faded onion-skin** of the opposite face behind the canvas.
 
-**Dev hook:** append `?edit=<face>` (e.g. `?edit=front`) to boot with the editor
-on that face — it's always open now, so this just picks the starting tab. It's how
-the editor gets exercised in headless screenshots (the capture tool can't click),
-and it's handy for jumping straight to a face while iterating. It joins the other
-test-only URL params: `?sample=<index|name>`, `?flat=1`, `?diag=1`
-(watertightness self-check over the wedge mesh, which is guaranteed
-watertight — a nonzero boundary/odd-edge count in the `DIAG` title is a
-hole; `?rotate=0` and `?lowpoly=0|1` are gone with their toggles, Sep 4
-2026: auto-rotate is off every load and the wedge pass always on, so a
-capture's model is at rest and smooth with nothing said), `?cam=top|front|fq|bq`,
-`?tile=<N>` (or `<W>x<H>` to force an asymmetric, out-of-registration resize the
-locked-square UI can't produce) to apply one **centered** tile resize (the same
-`anchor:'center'` path the stepper drives) after the first build,
-`?palette=1` to open the 168-color "Colors" dialog on the first mount, `?cursor=<N>[,<shape>]`
-to set the pencil size to N (and its tip shape, `circle` or `square`; an
-unknown name leaves the session's) and draw its filled footprint preview at the tile center
-on mount, `?pick=<N>` to select `PALETTE_168[N]` as the ink on mount (as if picked
-from the dialog) so a shot can show it landing as the current-ink swatch, and
-`?rect=<x0,y0,x1,y1[,r[,sq]]>` to select the rect tool and draw its live drag preview
-for that box (corner radius `r`; `sq=1` for the Shift square-lock) on mount so a shot
-can show the tool mid-drag, and `?fill=<x,y[,c[,a]]>` to select the fill tool, set its
-checkboxes (`contiguous=c`, defaulting on; `on-all-faces=a`), and fill at `(x,y)` on
-mount (the mount fill is always applied to the current tile only — combine with
-`?pick=<N>` to fill with a specific palette color) so a shot can show the tool +
-result, and `?select=<x0,y0,x1,y1[,dx,dy]>` to select the selection tool and
-put that box up on mount — with an offset, lifted and floated there, the
-pixels landing like a mount fill (no undo entry) — its **ants standing at
-phase 0** (no ticker, so the shot stays byte-identical across runs) — the
-stepper, face picker, dialog, swatch pick, hover preview, rect drag, fill click,
-and selection marquee / move
-can't be driven headlessly. Seven shell-era params round the set out:
-`?fresh=1` boots with **storage ignored** (no desktop-state restore, no
-`?file` resolution, no saved-doc icons — the bare desktop with the Trash
-alone in its corner, every other icon being a saved doc — no first-boot
-seeding, no About box greet, and no
-state writes — deterministic
-captures on a machine with saved docs) and `?hide=<window>[,<window>]`
-(`document|tools|sprite|stage|ring`) hides windows a capture needs out of frame,
-`?ring=<views>[,<elevation>[,<offset>[,<size>[,<paper>]]]]` shows the
-**3D Sprite Atlas** windoid (View → 3D Sprite Atlas, which boots hidden)
-with those settings seeded into the **boot sample's** document (the
-settings are the document's — a `?file` boot keeps the stored document's
-own and the hook only shows the windoid) — `?ring=4` the default set,
-`?ring=8,30,45,128,gray` eight views at 30° from 45° in 128 px tiles on
-the gray paper (the fifth field is the body's paper, `white` / `black` /
-`gray` — a setting nothing in the UI writes today, so this hook is the
-one way to see the other two); a missing trailing field keeps its
-default —
-and `?now=<when>` (an ISO date-time like `2026-08-24T19:27`, read as local
-time, or epoch milliseconds) **freezes the menu bar clock** at that instant —
-a live clock would otherwise make every shot with the bar in frame differ by
-the minute — `?patterns=1` opens the **Desktop Patterns** control
-panel once the boot document has landed (the capture tool can't pull a
-menu; under `?fresh` the desktop is on the dither, so the panel shows it
-seeded), `?about=1` opens the **About box** over the boot document
-(the plain boot's own greet — but that boot's virgin seeding is an
-IndexedDB round-trip the capture tool's virtual-time budget stalls on, so
-under `?fresh` this is the way to a shot of it), and `?export=1` opens the
-**Export 3D Model** dialog over the boot document (no menu pull headless).
-`?sample` shares the storage-untouched discipline: it opens the named
-built-in as an untitled from in-memory data, skipping the seeding and the
-`?file`/dialog boot alike (the deterministic path `drive.mjs` drives).
+**Dev hooks** let the headless tools reach what they can't click; the full set
+is parsed in `src/boot/params.js`. Two carry rules of their own:
+`?sample=<index|name>` opens a built-in as an untitled from in-memory data,
+skipping the seeding and the `?file`/dialog boot alike (the deterministic path
+`drive.mjs` drives), and **`?fresh=1`** boots with **storage ignored** — no
+state restore, no `?file`, no saved-doc icons (the bare desktop with the Trash
+alone in its corner), no seeding, no About greet, no state writes. The rest
+place a window, a face, a resize or a tool's gesture on screen at mount, the
+selection's ants standing at **phase 0** so a shot stays byte-identical and a
+mount fill or float writing no undo entry.
 
 ---
 
 ## The desktop
 
 The shell is a full System 7 virtual desktop: `index.html` is one
-`<vf-desktop>` skeleton (menu bar, options strip, the three utility
-windoids, dialogs, the icon layer, plus a `<template>` the document windows
-clone from) fitted to the viewport at boot (`fitWithin` + `onScaleChange`),
-with the kit's page-drawn cursor (`applyCursor`) on top. The page sets
-**layout only** — every aesthetic is the kit's.
+`<vf-desktop>` skeleton (menu bar, options strip, the utility windoids,
+dialogs, the icon layer, plus a `<template>` the document windows clone from)
+fitted to the viewport at boot, with the kit's page-drawn cursor on top. The
+page sets **layout only** — every aesthetic is the kit's.
 
 ### One machine, two roles
 
-On a real System 7 machine the desktop belonged to the **Finder**: clicking
-it switched applications — the app's windows lost their stripes and its
-palettes hid. Sprite Machine has exactly one application, so both roles
-share one menu bar and one boolean decides everything: **is a document
-window the desktop's active window?**
+On a real System 7 machine the desktop belonged to the **Finder**: clicking it
+switched applications — the app's windows lost their stripes and its palettes
+hid. Sprite Machine has exactly one application, so both roles share one menu
+bar and one boolean decides everything: **is a document window the desktop's
+active window?**
 
 - **Clicking the desktop background or a desktop icon deactivates the
-  application** — the PAGE owns the press test (the kit's position: its
-  furniture is slotted light DOM, so only the page knows which presses mean
-  "the Finder"): `shell/windows.js` routes a press on the bare dither, and
-  the icon layer its own presses, through `desktop.clearActive()`. Then
-  every document window
-  goes plain, the three windoids **hide** (they return with the
-  application), the options strip hides with them, the bare-letter tool keys
-  go inert, and the menus drop to the **Finder grammar** — About / Settings
-  / Quit / New… / Open stay enabled, and Open reads the selection: with
-  nothing selected it is **Open…**, the listing dialog (the Finder's
-  browse); with a desktop icon selected it becomes a bare **Open** — no
-  ellipsis, no dialog — and opens that icon directly, by pointer or ⌘O
-  (the selection **survives the trip to the menu bar**, since a press on
-  the application's chrome — the menu bar, a dropped menu, a modal dialog
-  — is no press on the desktop; the kit's `vf-icon` would clear on it, so
-  `shell/icons.js` re-selects across that press, a page-side bridge until
-  the kit exempts its own chrome). Everything document-scoped greys out. A
-  disabled item's key equivalent never fires (the kit's contract), so
-  ⌘S/⌘Z/⌘K gate with their menus.
-- **Clicking any document window — or opening one** (File → New…, an icon
-  double-click, a drop) — **reactivates**: the windoids come back exactly
-  where they were, aimed at the newly active document — and the activation
-  **clears the Finder selection** (double-click, bare Open and ⌘O alike):
-  the highlight names what the next Finder action acts on, and the
-  application is forward now.
-- **Sprite Machine → Desktop Patterns opens the Finder's window**: the
-  Desktop Patterns control panel is a document-tier window (a striped
-  bar, a close box — not a windoid), and on a real System 7 machine a
-  control panel opened in the Finder's layer. `appActive` is "a
-  **document** window is the desktop's active window", not "any window
-  is", so the panel holding active mirrors as the desktop-focused state
-  exactly like none: opening it deactivates the application (the windoids
-  and the strip hide, the Finder grammar lands — which also clears the
-  desktop for previewing), and its close box hands active to the topmost
-  document window (the kit promotes the survivor), so the application
-  returns where it was. See [Desktop Patterns](#desktop-patterns). **A
-  folder's window is the Finder's too** — the same panel contract:
-  opening one, or clicking into one, is the Finder's turn; see
-  [Folders](#folders).
-- Closing the last document window leaves the same desktop-focused state:
-  a bare desktop whose windoid arrangement survives for the next open. And
-  **boot begins in this state too**: until the first document window opens
-  (a `?file` load, File → New…'s Create, a drop), nothing has activated —
-  an About-greeted load shows the Finder grammar with the windoids hidden,
-  and OK — or a click away — leaves it so (the splash opens nothing).
-  A windoid is on screen _because_ a document window is, never before.
+  application** — the PAGE owns the press test, the kit's furniture being
+  slotted light DOM, so only the page knows which presses mean "the Finder".
+  Every document window goes plain, the windoids **hide**, the options strip
+  hides with them, the bare-letter tool keys go inert, and the menus drop to
+  the **Finder grammar** — About / Settings / Quit / New… / Open stay enabled,
+  and Open reads the selection (see [Menu bar](#menu-bar)). The selection
+  **survives the trip to the menu bar**, since a press on the application's
+  chrome is no press on the desktop; the kit's `vf-icon` would clear on it, so
+  `shell/icons.js` re-selects across that press — a page-side bridge until the
+  kit exempts its own chrome (kit ask #5). Everything document-scoped greys
+  out, and a disabled item's key equivalent never fires (the kit's contract),
+  so ⌘S/⌘Z/⌘K gate with their menus.
+- **Clicking any document window — or opening one — reactivates**: the
+  windoids come back exactly where they were, aimed at the newly active
+  document, and the activation **clears the Finder selection** (double-click,
+  bare Open and ⌘O alike): the highlight names what the next Finder action
+  acts on, and the application is forward now.
+- **Panels are the Finder's windows.** `appActive` is "a **document** window
+  is the desktop's active window", not "any window is", so a panel holding
+  active mirrors as the desktop-focused state exactly like none: opening the
+  Desktop Patterns panel or a folder window deactivates the application, and
+  closing it hands active to the topmost document window.
+- Closing the last document window leaves the same state: a bare desktop whose
+  windoid arrangement survives for the next open. **Boot begins here too**:
+  until the first document window opens nothing has activated, so an
+  About-greeted load shows the Finder grammar with the windoids hidden. A
+  windoid is on screen _because_ a document window is, never before.
 
 ### Documents are windows
 
-**One document = one window.** File → New…, the Open flow, and a dropped
-PNG each open a **new** document window (staggered System 7
-style); nothing ever loads over an open document — the unsaved-changes
-question lives entirely on the close paths. Opening an already-open stored
-document just activates its existing window. Untitled names count up
-(`untitled`, `untitled 2`, …). Each document window carries its own
-editor, its own edited-face selection, and its own bounded undo history;
-the tool and ink stay app-level (one palette, one ink, System 7
-style). The utility windoids and the Edit menu always serve the **active**
-document: switching windows re-targets the 3D View (the camera re-frames —
-a window switch is a new subject), the Full Sprite View, the options
-strip's clamp bounds, and the Undo/Redo enablement. The View menu lists
-every open document window by name, the active one checked (see
-[Menu bar](#menu-bar)) — a pick brings a window buried under the others
-forward.
+**One document = one window.** File → New…, the Open flow and a dropped PNG
+each open a **new** window (staggered System 7 style); nothing ever loads over
+an open document — the unsaved-changes question lives entirely on the close
+paths. Opening an already-open stored document just activates its window.
+Untitled names count up. Each window carries its own editor, edited face and
+bounded undo history; the tool and ink stay app-level (one palette, one ink).
+The windoids and the Edit menu always serve the **active** document, so
+switching windows re-targets the 3D View (the camera re-frames — a window
+switch is a new subject), the Full Sprite View, the strip's clamp bounds and
+the Undo/Redo enablement.
 
 ### Menu bar
 
-- **Sprite Machine** — _About…_ (the About box — see
-  [The About box](#the-about-box); it is also the boot greeting),
-  _Settings…_ (parked: the render toggle
-  moved to the 3D View's controls strip, so the emptied item sits disabled
-  as a placeholder for a future settings surface), _Desktop Patterns_ (the
-  control panel — see [Desktop Patterns](#desktop-patterns); a window, not
-  a dialog, so no ellipsis — the Apple menu's Control Panels listed it
-  bare — and live in both roles), _Empty Trash…_ (the Finder's command,
-  here rather than in a Special menu for now — see
-  [The Trash](#the-trash): the alert with the count and the K, then
-  everything in the Trash gone for good; live in both roles, greyed while
-  the Trash is empty, no key equivalent), _Quit_ (the System 7
-  cascade: every open document in
-  turn, one unsaved-changes alert per dirty one — its window brought forward
-  as it's asked about, Cancel anywhere aborting the rest — down to the bare
-  desktop, windoid arrangement intact).
-- **File** — _New…_ (the New Document dialog: an Empty Document at a chosen
-  square tile size — the field is live for Empty only, since a template's
-  art has a native size and a retile crops/pads rather than scales — or a
-  built-in template (Car, Cube) as a fresh untitled copy; Create or a
-  double-clicked row opens the new window), _New Folder_ (a **Finder
-  command**: it brings the Finder forward — with a document window active
-  the windoids hide, as a desktop click would — and makes _untitled
-  folder_, counted up per container, in the front folder window, else on
-  the desktop, its name selected for typing in the icon's rename box; no
-  key equivalent, System 7's ⌘N being the browser's; live in both roles,
-  like _New…_, greyed only while the Finder's front window is the
-  Trash's — see [Folders](#folders)), _Open…_ ⌘O (two grammars, one
-  item, the label its readout: _Open…_ raises the saved-docs listing
-  dialog — the application's while a document is focused, the Finder's
-  browse with the desktop focused and nothing selected, each filed
-  document's row carrying its folder path ahead of its name, a trashed
-  document no row at all; with an icon
-  selected — on the desktop or in a folder window — it relabels to a bare
-  _Open_ and opens that icon at once, a document into its window, a folder
-  into its Finder window, Finder-style — the ellipsis being System 7's
-  promise of a dialog), _Close_
-  (the active document, dirty-checked — or, in the Finder role, the front
-  folder window, the Finder's own Close), _Save_ ⌘S (first save of an untitled
-  doc prompts for a name), _Duplicate_ ⌘D (the stored copy opens in its own
-  window), _Rename…_, _Download_ ⇧⌘E (the document `.png` verbatim — the
-  downloaded atlas IS the source format, hence Download rather than Export,
-  and no ellipsis: it acts immediately), _Export 3D Model…_ (**live**, Sep 7 2026: the
-  model as **one glTF 2.0 binary**, `«slug».glb` — `car.glb` — from the
-  app's own writer (`src/lib/gltf.js`, pure, Node-tested; three's
-  `GLTFExporter` encodes a texture through a canvas readback, which a
-  privacy browser perturbs, so the skin goes in from bytes through
-  `src/lib/png-encode.js`, verbatim): one primitive of the mesh's own
-  welded positions, per-face normals, UVs and index, the **skin** as an
-  embedded PNG behind a **`NEAREST`** sampler — the hard texel is part of
-  the file — under a metallic-roughness material, metalness 0 and
-  roughness 1, the 3D View's, or, on request, `KHR_materials_unlit`. The
-  dialog: **Scale** in **voxels per meter** (glTF is in meters; ten a
-  meter makes the forty-voxel Car four meters long), a **Lighting** popup
-  (lit / unlit), and two readouts — the model, its triangles and its
-  skin's size, and its **extent in meters** at the scale typed, live. The
-  origin is the **lattice floor's center**, the atlas export's anchor, so
-  a model and its sprite sheet share one origin; Y up, the winding CCW,
-  and every engine's first-party importer reads it as it lands — the
-  reason the color is a texture at all. The fields are the dialog's own
-  for the session (ten and lit every load; nothing persists — the export
-  is a derivation, the scale a reader's choice). Enabled whenever a model
-  exists), _Export Sprite Atlas…_ (**live**: the 3D Sprite
-  Atlas windoid's four settings as a form — views, elevation, first angle,
-  size — over a readout of the sheet they produce; the fields
-  are bound to the same slice the windoid's strip edits, so a change here
-  moves the strip behind the modal at once and Cancel reverts nothing — the
-  strip IS the preview; **Export** saves exactly the pixels the strip shows,
-  the whole sheet, as **one zip** — `«slug»-atlas.zip`, `car-atlas.zip` —
-  holding two siblings by name: **`car-atlas.png`**, the sheet with a
-  `Title` (`«name» atlas`), the `Software` marker and a
-  **`sprite-machine:ring`** text chunk carrying the settings, the frame
-  size, the yaw list and the engine **anchor** (where the lattice floor's
-  center lands in every frame, the feet-row), and **`car-atlas.json`**, a
-  **TexturePacker** sheet description in the JSON-hash shape Phaser, PixiJS
-  and the Godot / Unity importers load by filename pair: a frame per view
-  (`car-0`, `car-1`, … in yaw order, each an untrimmed `size × size` box at
-  its column) carrying the anchor as its normalized **`pivot`** — so the
-  feet-row is the origin the engine uses, with no reader code; four
-  decimals, TexturePacker's own short form, the record keeping the px
-  exact — an
-  `animations` block naming the ring as one sequence, and `meta` naming the
-  sibling PNG, the sheet size and, under a `sprite-machine` key, the same
-  record the chunk holds. The zip is **stored** (no compression — the PNG is
-  deflated already, the JSON tiny) and written by the app's own
-  sixty-line primitive (`src/lib/zip.js`, pure, Node-tested against zlib's
-  CRC), no dependency; a zip because a browser gives **one download per
-  gesture** and the export is a pair. Enabled whenever a model exists, the
-  windoid shown or not — see the 3D Sprite Atlas under
-  [Windows](#windows)), and _Properties…_
-  (name, atlas dims, the tile-size stepper — all of the active document).
-- **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (the ACTIVE document's history;
-  disabled until it has something — which also hands the key back to a
-  focused field's native undo), _Select All_ ⌘A (the Finder's: every icon
-  in the front field — the active folder window's, else the desktop's;
-  live only in the Finder role, so with the application active ⌘A falls
-  through to a focused field's own), _Pick Color…_ ⌘K (the 168-color
-  dialog — app-level, like the ink it picks).
-- **Tools** — the six sticky tool modes — _Selection_, _Pencil_, _Rectangle_,
-  _Fill_, _Eraser_, _Eyedropper_ — with the active one checkmarked (the same
-  session truth the palette's tool strip and the S/B/R/G/E/I keys write, so a
-  pick from any of the three moves all three).
-- **View** — _Arrange Windows_ ⌘J **leading the menu**, the
-  one command over the whole screen (**one item, one label, two commands
-  under a state rule** — which one is a reading of the windows, never of
-  what was pressed last: with anything on screen off its placement — a
-  drag, a grow, a zoom, the 3D Sprite Atlas shown into the doc box's
-  band, a browser resize the document window sprung with — it is the
-  **arrange**, the boot placement re-run on the **current** raster: the
-  windoids back to the rail at their placed sizes, every open document
-  window onto the doc box at its size, cascaded in stacking order so the
-  front window tops the cascade; with everything already where the
-  placement puts it — Arrange would change nothing — it is the **zoom**,
-  the active document window through the zoom box's own toggle
-  (see [Windows](#windows)), Arrange's variant for a screen already
-  arranged. A window zoomed from its slot still reads
-  arranged — the zoom is the zoom box's own toggle — so repeats of ⌘J
-  toggle the focused document between its slot and the vacancy while
-  nothing else moves, and from any other state the first ⌘J lands the
-  arrangement. The test is what's on screen — every visible window's
-  live box against the box its placement would write, `arranged()` in
-  `shell/windows.js`; hidden windows don't count, nor does the atlas
-  strip's width, the user's own (Arrange still re-seeds it), nor which
-  document sits on which cascade slot (a raise is stacking bookkeeping,
-  not layout: two documents swapped across the cascade by a click still
-  read arranged, where Arrange itself, once something is off, cascades
-  in stacking order). Only the item's **value** turns with the state
-  (`arrange` / `zoom`, what a pick dispatches on); the **label never
-  does** — it reads _Arrange Windows_ in both states, the markup's own
-  text. A label that turned with the state (_Zoom Window_ once arranged,
-  the Open… / Open idiom) was retired Sep 7 2026: the zoom is a variant
-  of arranging, not a second command to announce. Greyed with no document
-  window open — nothing on screen to arrange — and, arranged, in the
-  Finder role (no active window to zoom); off its placement it is live
-  in both roles, so from the Finder role a pick re-rails the hidden
-  windoids too, nothing activating); then, after a separator,
-  _3D Sprite Atlas_ (a checkmark toggle over `prefs.showRing`:
-  shows and hides the **3D Sprite Atlas** windoid — see
-  [Windows](#windows) — **off every load**, the item unchecked; the
-  windoid's own close box is the same uncheck, MacPaint's palettes closing
-  from their box and coming back from the menu; document-scoped, so it
-  greys with the desktop focused) — and then, after a second separator,
-  the menu's tail: the **open document windows**, one item per open document
-  window (System 7's Window-menu idiom). Each reads the document's name
-  (its window's title, so a rename or a first save relabels it); the
-  **active** window's item is checked — a reading of which window holds
-  the active state, so none is checked in the Finder role — and the order
-  is **creation order**, the cascade's own (a raise never reorders the
-  list); a pick brings that window forward through the same activation
-  funnel a click on its title bar takes, from the Finder role too, where
-  the application returns with it — the way back to a window buried under
-  the others. Nothing in the markup: `shell/menus.js` keeps the section
-  reconciled off the workspace, and with no document window open it is
-  absent, separator included. The three
-  permanent windoids need no toggles: they're up whenever a document
-  window is active; the 3D Sprite Atlas is the one exception. And **no
-  _Fullscreen_ item**, on purpose — built and retired the same day (Sep 4
-  2026): the browser's Fullscreen API reserves **Esc** for its own exit,
-  in every browser and beyond the page's reach, so the editor's Esc
-  bindings (drop a selection, cancel a drag) went dead in it, and Chrome's
-  top layer put the fullscreened page over the kit's page-drawn cursor
-  (clicks landed, the arrow vanished). The browser's own window fullscreen
-  (⌃⌘F on the Mac) leaves Esc to the page.
-- **The clock** — System 7.5's menu bar clock at the bar's right end
-  (`shell/clock.js` over a kit `vf-label` slotted after the last menu): the
-  time in the bar's own Chicago (`7:27 PM`), ticking on the minute, its em
-  on the menu titles' own rows (the label's line box is pinned to the bar's
-  20px — no measured nudge). **Pressing it** (pointer down — the bar's own
-  title rule) shows the **date** (`8/24/26` — System 7.5's own unpadded
-  M/D/YY) for three seconds
-  before the time returns; a second press returns it early. It's chrome,
-  not a menu: the bar's press controller hit-tests titles by coordinate and
-  ignores it, a press on it keeps the Finder selection like any menu-bar
-  press and never deactivates the application, and it takes no focus. No
-  icons beside it — the application menu and Balloon Help were furniture a
-  one-application machine has no use for. `?now=<when>` freezes it for
-  captures.
+- **Sprite Machine** — _About…_ (also the boot greeting), _Settings…_ (parked
+  and disabled: the render toggle moved to the 3D View's strip), _Desktop
+  Patterns_ (a window, not a dialog, so no ellipsis), _Empty Trash…_ (greyed
+  while the Trash is empty, no key equivalent), _Quit_ (the System 7 cascade:
+  every open document in turn, one unsaved-changes alert per dirty one with
+  its window brought forward as it's asked about, Cancel anywhere aborting the
+  rest). All four are live in both roles.
+- **File** — _New…_ (an Empty Document at a chosen square tile size — the
+  field is live for Empty only, a template's art having a native size — or a
+  built-in template as a fresh untitled copy), _New Folder_ (a **Finder
+  command**: it brings the Finder forward, as a desktop click would, and makes
+  _untitled folder_ in the front folder window else on the desktop, its name
+  selected for typing; no key equivalent, System 7's ⌘N being the browser's;
+  greyed while the Finder's front window is the Trash's), _Open…_ ⌘O (**two
+  grammars, one item, the label its readout**: _Open…_ raises the saved-docs
+  listing, each filed row carrying its folder path and a trashed document no
+  row at all; with an icon selected it relabels to a bare _Open_ and opens
+  that icon at once, the ellipsis being System 7's promise of a dialog),
+  _Close_ (the active document, dirty-checked — or, in the Finder role, the
+  front folder window), _Save_ ⌘S (an untitled's first save prompts for a
+  name), _Duplicate_ ⌘D, _Rename…_, _Download_ ⇧⌘E (the document `.png`
+  verbatim — the downloaded atlas IS the source format, hence Download rather
+  than Export, and no ellipsis: it acts immediately), the two exports, and
+  _Properties…_ (name, atlas dims, the tile-size stepper).
+- **Export 3D Model…** writes the model as **one glTF 2.0 binary** from the
+  app's own writer (`lib/gltf.js`; three's `GLTFExporter` encodes a texture
+  through a canvas readback, which a privacy browser perturbs, so the skin
+  goes in from bytes): one primitive of welded positions, per-face normals,
+  UVs and index, the **skin** as an embedded PNG behind a **`NEAREST`**
+  sampler — the hard texel is part of the file — under a metallic-roughness
+  material or, on request, `KHR_materials_unlit`. The dialog takes a **Scale**
+  in **voxels per meter** and a **Lighting** popup over live readouts. The
+  origin is the **lattice floor's center**, the atlas export's anchor, so a
+  model and its sprite sheet share one origin; Y up, the winding CCW, and
+  every engine's first-party importer reads it as it lands — the reason the
+  color is a texture at all.
+- **Export Sprite Atlas…** puts the atlas windoid's four settings up as a form
+  bound to the same slice its strip edits, so a change here moves the strip
+  behind the modal at once and Cancel reverts nothing: **the strip IS the
+  preview**. **Export** saves exactly the pixels the strip shows as **one
+  zip**, two siblings by name: the **sheet PNG**, carrying a
+  **`sprite-machine:ring`** chunk with the settings, the frame size, the yaw
+  list and the engine **anchor**; and the **TexturePacker JSON**, the hash
+  shape Phaser, PixiJS and the Godot / Unity importers load by filename pair —
+  a frame per view in yaw order carrying the anchor as its normalized
+  **`pivot`**. The zip is **stored** and written by the app's own sixty-line
+  primitive (`lib/zip.js`), no dependency; a zip because a browser gives **one
+  download per gesture** and the export is a pair. Both exports are enabled
+  whenever a model exists, the windoid shown or not.
+- **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (the ACTIVE document's history; disabled
+  until it has something, which hands the key back to a focused field's native
+  undo), _Select All_ ⌘A (the Finder's: every icon in the front field, live
+  only in the Finder role), _Pick Color…_ ⌘K. **Tools** lists the six sticky
+  modes with the active one checkmarked — the same session truth the tool
+  strip and the S/B/R/G/E/I keys write, so a pick from any of the three moves
+  all three.
+- **View** — _Arrange Windows_ ⌘J **leads the menu**: **one item, one label,
+  two commands under a state rule**, and which one is a reading of the
+  windows, never of what was pressed last. With anything on screen off its
+  placement it is the **arrange**, the boot placement re-run on the
+  **current** raster, every document window cascaded in stacking order. With
+  everything already where the placement puts it, it is the **zoom**, the
+  active window through the zoom box's own toggle — so repeats of ⌘J toggle
+  the focused document between its slot and the vacancy while nothing else
+  moves. The test is what's on screen: every visible window's live box against
+  the box its placement would write (`arranged()`); hidden windows don't
+  count, nor the atlas strip's width, nor which document sits on which slot.
+  Only the item's **value** turns with the state; the **label never does** —
+  the zoom is a variant of arranging, not a second command to announce.
+  Greyed with no document window open, and, arranged, in the Finder role.
 
-Key equivalents are the kit's own (`shortcut` on `vf-menu-item`; Ctrl stands
-in for ⌘ off-Mac). ⌘N/⌘W stay unassigned on purpose — the browser owns them
-before the page ever sees them. Arrange Windows' ⌘J is one of the few
-clean letters left (no Mac browser binds it — Downloads is ⇧⌘J — and ⌘A
-stays for a Select All); off-Mac, where Ctrl+J IS the browser's Downloads,
-the kit's claim (`preventDefault` on a match) pre-empts it while the item
-is live, and a disabled item claims nothing, so with no document open the
-stroke falls through to the browser — exactly as a greyed Undo leaves ⌘Z
-to a focused field's native undo. The bare-letter tool keys (S/B/R/G/E/I) keep
-living in `src/shortcuts.js`; the kit deliberately never matches an
-unmodified printable key — which is also what lets the Tools menu _display_
-those letters in its shortcut column without ever double-firing them.
+  Then, after a separator, _3D Sprite Atlas_ (a checkmark toggle, **off every
+  load**; the windoid's close box is the same uncheck, MacPaint's palettes
+  closing from their box and coming back from the menu; document-scoped, so it
+  greys with the desktop focused). Then, after a second separator, the **open
+  document windows**, one item each (System 7's Window-menu idiom): each reads
+  its document's name, the **active** one is checked, the order is **creation
+  order**, and a pick brings that window forward through the same activation
+  funnel a title-bar click takes. Nothing of it is in the markup —
+  `shell/menus.js` reconciles the section off the workspace, and with no
+  document window open it is absent, separator included.
+
+  And **no _Fullscreen_ item**, on purpose: the Fullscreen API reserves
+  **Esc** for its own exit, beyond the page's reach, so the editor's Esc
+  bindings die in it, and Chrome's top layer puts the fullscreened page over
+  the kit's page-drawn cursor.
+
+- **The clock** — System 7.5's menu bar clock at the bar's right end, ticking
+  on the minute; **pressing it** shows the **date** for three seconds. It's
+  chrome, not a menu: a press keeps the Finder selection, never deactivates
+  the application, and takes no focus.
+
+Key equivalents are the kit's own (Ctrl stands in for ⌘ off-Mac). ⌘N/⌘W stay
+unassigned on purpose — the browser owns them before the page sees them. A
+disabled item claims nothing, so with no document open ⌘J falls through to
+off-Mac browsers' own Downloads, exactly as a greyed Undo leaves ⌘Z to a
+focused field's native undo. The bare-letter tool keys live in
+`src/shortcuts.js`; the kit deliberately never matches an unmodified printable
+key, which is what lets the Tools menu _display_ those letters without
+double-firing them.
 
 ### Windows
 
-Two tiers, two regimes — plus the **panel windows** on demand, document
-tier but not documents: the Desktop Patterns control panel (see
-[Desktop Patterns](#desktop-patterns)) and the folder windows (see
-[Folders](#folders)):
+Two tiers, two regimes — plus the **panel windows** on demand, document tier
+but not documents: the Desktop Patterns control panel and the folder windows.
 
-- **Document windows** (document tier): one per open document, cloned from
-  the `#tpl-document-window` template by the reconciler in
-  `shell/windows.js` — created on open (the doc box, cascaded into the
-  first free slot — never a remembered position), removed on close
-  (existence IS visibility).
-  Each is `movable resizable zoomable`; its title is its document's name,
-  its `status` strip names the face it's editing ("Front Face"), and its
-  `<sm-editor>` lives exactly as long as the document is open. The title
-  bar's **zoom box** (the kit's, at the bar's right end) is a stateless
-  toggle with the top-left held in both directions — a zoom never moves a
-  window, only its far edges: one click grows the window right and down
-  to the vacant middle's own edges (`zoomedBox` in `shell/layout.js` —
-  the rail's inset gutter at the right, the bottom margin below), filling
-  the open area from wherever its top-left sits without running under the
-  windoid rail — and records the size it grew from; a click on a window
-  already at that state returns exactly that remembered pre-zoom size (a
-  session truth, like a windoid arrangement you dragged: it never
-  persists — a reload still places every document window fresh; the doc box's
-  size for the CURRENT raster is the no-memory fallback). **⌘J's zoom
-  half is this toggle**: with everything arranged the View menu's
-  _Arrange Windows_ item (its value `zoom`) expands the active window
-  from its doc box; the next ⌘J — the value still `zoom`, a window zoomed
-  from its slot reading as arranged — restores it, nothing else moving (see
-  [Menu bar](#menu-bar)). And because a
-  zoomed window's far edges are struts of the nine-slice pin, a browser
-  resize keeps a zoomed window zoomed.
-- **Utility windoids** (floating tier, `variant="utility"`): the **Tools
-  palette**, the **Full Sprite View**, and the **3D View** — static markup,
-  **permanently open**: persistent panels with no close box and no menu
-  toggle, always on screen for the active document (only the desktop's
-  deactivation hides them) — and the **3D Sprite Atlas**, the one
-  toggleable windoid (below). They float above every document window, never
-  take the active state (clicking the 3D View can't deactivate the window
-  you're drawing in), show the kit's slim 11px dot bar (no title text, no
-  close box — the heading still names the window for assistive tech), and
-  hide as a set whenever the application deactivates, returning with it.
-  A control in a windoid acts on the ordinary **click** unless mouse-down
-  is the authentic feel (the Tools palette's cells and the Sprite View's
-  face tiles) — no
-  press-driven _bridges_ anywhere: raising a windoid re-inserts its node
-  (the desktop keeps DOM order in step with z-order), and the kit does
-  that in a task **after** the press's click has landed (vintage-frames
-  0.5.4 — Chrome drops a click whose mousedown node left the tree, and the
-  re-insert used to run at pointerup, which cost a control in a windoid
-  behind another windoid its first click; the pointerdown picks the app
-  once carried to dodge it are gone). The
-  3D windoid stays `resizable` — its canvas re-fits via its own
-  ResizeObserver, so the grow box works for free. Every windoid's controls
-  strip is the window's **header** (`slot="header"` — vintage-frames
-  0.6.1: the Finder window's header line, a white band over a 1px rule
-  between the title bar and the body, a positioning anchor; its
-  `header-height` authored on the window in `index.html`, the kit's
-  grammar, at the same number the chrome arithmetic in `shell/layout.js`
-  carries — `STAGE_STRIP`, `SPRITE_STRIP`, `RING_STRIP`). The **Full Sprite
-  View** carries the **face picker** in its header (`sm-atlas-controls`:
-  the six cube-view radios — see the Drawing-editor bullet — in a placed
-  `vf-container` at the picker block's rectangle, `SPRITE_PICKER_AT`,
-  centered across the fixed header, declaring `pattern="white"` for the
-  paper a bare container would otherwise inherit from the desktop — kit
-  ask #6's bridge, the draw canvas's;
-  [docs/kit-asks-pattern-paper.md](docs/kit-asks-pattern-paper.md)) over the
-  **atlas grid**, its body (`sm-atlas-view`) — a formal 3×2 `vf-grid` holding one face tile per cell
-  in the sheet's own arrangement, each cell a live canvas of that face's
-  slice drawn nearest-neighbor, the grid's 1px rules the only lines
-  between (frameless — the windoid frame is its perimeter), every cell
-  on a **1-bit kit pattern** (`pattern` on `<sm-atlas-view>`, `gray-12`
-  — the draw canvas's own paper, so a face reads the same in the grid as
-  on the canvas; any of the kit's 38 MacPaint patterns by name, or
-  sixteen hex digits;
-  painted per cell by the kit's own `PatternFillController` at the cell's
-  declared size, so a tile's transparent texels read against paper, and
-  dropping the attribute gives plain white cells back). The grid
-  follows the ACTIVE document's **live channel**, so it tracks strokes at
-  rAF rate (the second live subscriber ever, after the rebuilder), and it
-  is a **picking surface**: pressing a tile selects that face — on the
-  press, the Tools palette's mouse-down feel — with the picker radios and
-  the edit canvas
-  following, and the selected tile **stroked in black ink** (a 2-system-px
-  inset ring over the tile's edge, the kit's own black — the face art's
-  ink: the windoid's chrome is 1-bit end to end, the sprite art the only
-  color in it); the
-  windoid carries **no status strip** (its status slot stays empty, so
-  the kit draws no bottom bar — the grid runs down to the frame).
-  The windoid is a **fixed-size picture frame** — movable but not
-  resizable, no grow box: its width is the atlas grid block's
-  (`SPRITE_WIDTH` = 3 cells + rules + borders, the narrower picker block
-  centered in the header), and its height is derived through the active
-  tile's own ratio plus the fixed chrome, the header's `SPRITE_STRIP`
-  included (`spriteHeightFor` in `shell/layout.js`, applied by
-  `fitSprite` in `shell/windows.js`), so the grid exactly fills the body
-  below the header — no margins — at boot and across document switches
-  and tile resizes; the **3D View** carries its **controls strip** in its
-  header (`STAGE_STRIP` tall) — one render toggle as a checkbox,
-  **rotate** (the auto-spin, **off every load**: the model sits still
-  until asked), a kit row stack writing the prefs slice live
-  (`sm-stage-controls`; it lived in Settings… before, and a **smooth**
-  box sat beside it until Sep 4 2026 — the low-poly wedge pass is always
-  on now, no toggle) — over the THREE canvas in a **kit pattern
-  well** (`#stage-well`, a `vf-container pattern="gray-12"` filling the
-  body by its own `fill-width fill-height`): the renderer clears
-  **transparent** (`alpha: true`, no scene
-  background), so the model and its shadow composite over the 1-bit
-  pattern rather than a flat gray — the same paper the Sprite View's
-  cells and the draw canvas wear, one paper under every view of the
-  art, all the kit's own fill; its status strip reading the model's
-  **triangle count** — `1,784 triangles`, the Finder's "N items" idiom,
-  live with every rebuild, empty until the first build lands; the count
-  alone (the fixed "3D Model View" label with grid / voxels / tris on a
-  hover tooltip went Sep 7 2026), and no build error or warning ever takes
-  the line. The 3D View
-  carries its own size floor (`shell/windows.js` — declared to the grow box
-  as the kit's `min-width` / `min-height`, and applied to any boot geometry
-  and raster re-pin alike): one rule on both axes, the fixed chrome plus
-  enough canvas to still read as a view — the strip's one checkbox sits
-  well inside the width (the two-box row used to floor it).
-- **The 3D Sprite Atlas** (`sm-ring-view`, `#win-ring` — "ring" is the
-  feature's code name throughout the source: the model rendered from a
-  **ring** of yaw angles) — the active document's model rendered
-  **orthographically** from a ring of evenly stepped yaws at one
-  elevation, the way an engine consumes a pre-rendered rotation set, as a
-  **row of tiles**: one cell per view, each the **tile at 1:1** — `size`
-  system px square, one image pixel per system pixel — butted, no rules
-  between (`rules="none"` on the grid), on **one sheet** of **white**
-  kit paper that runs across the whole body — the ring slice's `paper`
-  setting, which admits `white` / `black` / `gray` (each a kit pattern by
-  name, `RING_PAPERS` in `state/ring.js`; gray is the kit's `dots`
-  dither, a 1-bit surface's gray) but which **nothing in the UI writes**:
-  a column of radios for it was built and retired the same day, the
-  intent being that the app pick the paper for you one day from the
-  sheet's own content (a sprite with a lot of white in it reads better on
-  black, and the reverse) rather than ask; the plumbing stays, and the
-  `?ring=` hook can seed it for a capture. A viewing choice either way —
-  the export clears transparent whatever the setting says — (the Sprite
-  View's pattern grammar, but the body's rather than the cells': a
-  `vf-container pattern` under the grid, filling the body's width —
-  `fill-width`, the kit's own fill, so it spans the scroll plane past
-  the last tile and under a scrolled row — and the tile tall; the
-  Desktop Patterns panel's element, its raster measured on the filled
-  axis by the kit's own contract; each cell a `vf-stack` at the tile's
-  declared size, the kit's box that paints nothing, so a frame's
-  transparent margin reads as the same unbroken paper; the app-side
-  bridge for kit ask #11, a window body's paper as a kit pattern —
-  [docs/kit-asks-body-pattern.md](docs/kit-asks-body-pattern.md)),
-  under a **two-row controls strip** of four
-  labeled number fields — `views` (1–16, a 360/n step), `elev` (0–90°
-  above the horizon), `from` (the first view's yaw, 0–359° from the
-  front) and `size` (the tile's edge in px, 2–255). The strip is the
-  window's **header** (`slot="header"` — vintage-frames 0.6.1: the Finder
-  window's header line, a white band over a 1px rule between the title
-  bar and the body across the whole window, outside the scroll area, so
-  the controls hold while the row scrolls under them by construction;
-  `header-height="63"` authored in `index.html`, `RING_STRIP` in
-  `shell/layout.js` the same number), and it is a **DITL** (`sm-ring-controls`):
-  the four captions (`vf-label`, a declared column width each,
-  right-aligned so a caption hugs its field) and the four fields sit at
-  the top/left `RING_FIELDS` in `shell/layout.js` states, against the
-  header's own corner, in whole system px the kit writes as live
-  `calc()` — two rows 4 in and 4 apart, a caption dropped 4 below its row
-  (where its baseline meets the field's), an 8 inset, 40 and 36 caption
-  columns, 6 gaps, the kit's 74 × 25 number field. That arithmetic IS the
-  header's height (`RING_STRIP` = 62 + the rule) and the windoid's width
-  floor (`RING_MIN_WIDTH` = 258 + the borders) — derivations, not
-  measurements. The body is the row alone (`sm-ring-view`): the paper
-  container in flow at the plane's origin, as wide as the plane — the
-  kit sizes its scrolled plane to in-flow content that cannot wrap, and
-  a filled box contributes its content's width, so the row IS the scroll
-  range and the paper covers all of it — holding the `vf-grid` with its
-  surface token cleared (the kit's own knob for what is behind the
-  cells, `--vf-surface`) so the paper shows through, each cell a
-  `vf-stack` at the tile's declared size. Nothing in the windoid is
-  flexed, nothing but the paper's filled axis is measured — by the kit,
-  for its raster — and neither component styles layout beyond that one
-  token. No
-  status line: the windoid's bottom edge is the kit's **horizontal scroll
-  rail** (below). Defaults: four views at a 90° step, 45° up, from the
-  front, 64 px tiles, white paper. **Yaw runs front → right → back → left** (yaw 0
-  puts the camera on `+z`, the FRONT toward it; positive yaw walks it
-  toward `+x`). **The frame is the tile**, and what fills it is the
-  lattice's envelope, not the content's: the `nx×nz` footprint's bounding
-  circle swept up the height — the same at every yaw — has its larger
-  extent fit to the tile's edge, so the whole voxel box fits at every
-  angle, the frame never changes between angles, strokes or first-angle
-  offsets (a sprite can't jitter in an animation), and **px per voxel is
-  derived**, a fraction (the Car at 40³ and 45° in a 64 tile is 0.94 px
-  per voxel; loose at yaw 0, the margin transparent). The model is
-  centered on the lattice's center, and the lattice floor's center lands
-  on the **same row in every frame** — the engine anchor the export writes
-  out, beside the derived scale. The **lights ride with the camera** (the
-  stage's ambient + key + fill, re-posed per yaw in the camera's own
-  frame): in an engine the camera and the sun are fixed and the object
-  turns, so every angle is lit the same way; no ground plane, no shadow in
-  a sprite. No antialiasing and no smoothing anywhere in the copy chain —
-  every px a hard sample of the mesh — and the renderer clears
-  transparent, so the margin is paper in the windoid and transparency in
-  the file. It has its **own THREE world on an offscreen canvas**
-  (`scene/ring-renderer.js`, made lazily on the first render — a strip
-  never shown costs no GL context) fed the rebuilder's mesh through one
-  `onMesh` seam (a shared-geometry clone — the rebuilder stays the
-  pipeline's only consumer), renders the whole strip into **one sheet
-  canvas** that the cells slice with `drawImage` and Export encodes
-  verbatim, and renders **only while shown** (`scene/ring.js`: a change
-  behind a hidden windoid marks the sheet dirty, the show renders it;
-  shown, at most one render per animation frame, so a stroke follows at
-  the Sprite View's cost class). **The settings are the document's**:
-  every open document carries its own store of the four (`ctx.ring`,
-  `state/ring-settings.js`), a change **dirties the document** like a
-  stroke, **Save writes them into the PNG** as a `sprite-machine:ring`
-  text chunk (the four as JSON, always written; the paper — a viewing
-  choice — never), and every open path restores them — a stored open, a
-  dropped PNG, a Duplicate's copy — so a document reopens with the ring
-  it was saved with, and a chunkless PNG (an older save, a foreign sheet)
-  opens at the defaults (four views, 45° up, from the front, 64 px).
-  The strip, the Export dialog and the renderer read the **active**
-  document's through one façade (`state/ring.js`'s `ring`), so switching
-  windows switches the settings the way it switches the model: a
-  document with a 128-px tile brings the windoid to that height, and
-  another at the default takes it back; with the desktop focused the
-  windoid, hidden, keeps aiming at the document it last served, and
-  returns with it. The windoid
-  is **toggleable**: View → 3D Sprite Atlas shows it (hidden every load)
-  and its **close box** — the kit's, kept on this one windoid — hides it,
-  one flag both ways (`prefs.showRing`); a show brings it to the front of
-  the windoid band. It is the **classic scrolling document window turned
-  windoid** (`resizable scrollbars="horizontal"` — vintage-frames 0.5.5:
-  the rail on the frame's bottom edge and, the status slot being empty,
-  the rail's corner cell reserved for the grow box; the viewport runs to
-  the frame's edge, since a window body or a scroll viewport carries **no
-  inset of its own** — 0.6.0, which retired the `flush` attribute every
-  window here used to set; an inset is the content's, a `vf-stack pad`,
-  and the Desktop Patterns panel is the one window that states one): its
-  **height is a derivation**, `ringHeightFor(size)`
-  — the chrome over one row of tile-size cells — re-fit as the size
-  changes with the **top-left held** (only the bottom edge moves: a bigger
-  tile grows the window down from where its bar sits, never up or
-  sideways — so a strip left docked on the bottom margin grows past it at
-  a big tile; drag it up, or Arrange re-docks it). The size being a
-  document's, a change also arrives with a **document switch** — the same
-  re-fit while the strip is on screen — and, at boot or from the Finder
-  role, behind a strip that is **hidden**: a hidden strip has nothing on
-  screen to hold, so it **re-runs its placement** instead, and the show
-  (or the boot) finds it docked at the height this document's tile
-  derives rather than hanging off the margin by a size nobody typed
-  (hidden by its own toggle and unchanged in size, it comes back exactly
-  where it was). It is **declared to the
-  grow box as the kit's size rect**
-  (vintage-frames 0.5.6: `min-height` = `max-height` locks the axis, the
-  kit's own Patterns-strip idiom, stated from `shell/windows.js` rather
-  than the markup because the bound moves with the tile), so the window
-  **resizes on the horizontal axis alone**; its **width is the user's** —
-  seeded by the placement with the natural row (`ringWidthFor(views,
-size)`: one cell per view, butted, plus the frame's borders, floored at
-  the strip — the default four 64s sit two px under it, so the default
-  row seeds at the floor with two px of paper right of the last tile —
-  and capped at the vacant middle so a fresh strip never runs under
-  the rail), moved by the grow box within the rect's `min-width` (the
-  controls' DITL plus the borders, `RING_MIN_WIDTH`) — and a row that
-  outgrows it **scrolls under the rail** while the header holds still
-  above it (window chrome, outside the scroll area; the view count no
-  longer touches the window). The
-  placement **docks it on the bottom margin, left-aligned with the
-  document window**, and — only while it is shown — takes its band (the
-  tile's own height) out of the vacancy so a fresh open, Arrange Windows
-  and the zoom box all land the document clear of it (toggling it on
-  never moves an existing window: System 7 didn't rearrange your windows
-  when you showed a palette — Arrange does, and re-seeds the strip's
-  width). In the resize rule it is a **mixed box, without touching the
-  frame's bands**: its y axis a fixed size (the bottom edge in the bottom
-  band, a far strut; the top follows through the anchor rule) and its x
-  axis a resizable one floored at the strip (the left edge in the left
-  band, a near strut; the right edge springs with the middle, like the
-  document window's above it) — so a resize keeps it docked at the
-  document's left at its derived height, at any size, its width content
-  rather than a fixed point. `?ring=…` shows it for captures.
+- **Document windows**: one per open document, cloned from a template by the
+  reconciler in `shell/windows.js` — created on open (the doc box, cascaded
+  into the first free slot, never a remembered position), removed on close
+  (existence IS visibility). Each is `movable resizable zoomable`; its title
+  is its document's name, its `status` strip names the face it's editing, and
+  its `<sm-editor>` lives exactly as long as the document is open. The title
+  bar's **zoom box** is a stateless toggle with the top-left held both ways —
+  a zoom never moves a window, only its far edges: one click grows it right
+  and down to the vacant middle's edges and records the size it grew from, and
+  a click on a window already there returns exactly that size (a session
+  truth). **⌘J's zoom half is this toggle**, and because a zoomed window's far
+  edges are struts of the nine-slice pin, a browser resize keeps it zoomed.
+- **Utility windoids**: the **Tools palette**, the **Full Sprite View** and
+  the **3D View** — static markup, **permanently open**, no close box and no
+  menu toggle, on screen whenever the application is active — plus the **3D
+  Sprite Atlas**, the one toggleable windoid. They float above every document
+  window, never take the active state (clicking the 3D View can't deactivate
+  the window you're drawing in), and hide as a set when the application
+  deactivates. A control in a windoid acts on the ordinary **click** unless
+  mouse-down is the authentic feel (the Tools palette's cells, the Sprite
+  View's face tiles); **no press-driven bridges anywhere** — raising a windoid
+  re-inserts its node, and the kit does that in a task after the press's click
+  has landed. Every windoid's controls strip is the window's **header**, a
+  white band over a 1px rule outside the scroll area, its `header-height`
+  authored in `index.html` at the same number `shell/layout.js` carries.
+- **The Full Sprite View** carries the **face picker** in its header (a placed
+  `vf-container` declaring `pattern="white"`, since a bare one would inherit
+  the desktop's — kit ask #6's bridge) over the **atlas grid**, its body: a
+  3×2 `vf-grid`, one live canvas per face drawn nearest-neighbor, frameless,
+  every cell on the **`gray-12`** paper the draw canvas wears. The grid
+  follows the ACTIVE document's **live channel**, tracking strokes at rAF
+  rate, and it is a **picking surface**: pressing a tile selects that face,
+  the radios and the edit canvas following, and the selected tile is
+  **stroked in black ink** — the chrome is 1-bit end to end, the sprite art
+  the only color in it. It is a **fixed-size picture frame**, movable but not
+  resizable: its width the grid block's, its height derived through the active
+  tile's ratio plus the chrome, so the grid exactly fills the body at boot and
+  across document switches and tile resizes.
+- **The 3D View** carries one checkbox in its header — **rotate**, the
+  auto-spin, **off every load** — over the THREE canvas in a **kit pattern
+  well**: the renderer clears **transparent**, no scene background, so the
+  model and its shadow composite over the 1-bit pattern, one paper under every
+  view of the art. Its status strip reads the model's **triangle count** (the
+  Finder's "N items" idiom, live with every rebuild); the count alone, and no
+  build error or warning ever takes the line.
 
-Positions/sizes come from a **smart placement** computed against the live
-raster (`shell/layout.js`, pure): the Tools palette top-left; the Full
-Sprite View over the 3D View as a right-hand rail — **one column**, both
-right-flush at the **same width** (the sprite windoid's fixed one), the
-3D View absorbing the rest of the height below the options strip; and
-the document window **top-left aligned beside the Tools palette** (its
-top, a side inset to its right), filling the vacant middle but for the
-**cascade room** it leaves at the right and bottom — so each further
-document window opens at the **same size**, **cascaded** down-right into
-the first slot no open document window holds (`cascadeFrom`: five slots,
-the last landing flush with the vacancy's edges; a closed or dragged-away
-window gives its slot back, and a full cascade wraps onto the first
-rather than running into the rail or off the bottom). That placement is the **only** source of
-an application window's geometry — **nothing about a windoid or a
-document window persists across sessions**, not the windoids' arrangement
-and not a document window's box. A browser
-is resized and reopened on another monitor all the time, so a prior
-session's top/left is no truth worth re-asserting over a raster that may
-be nothing like the one it was dragged on: every session start places the
-windoids for the raster it actually has, and every open — a saved
-document or an untitled — lands on the cascade. Within a session, what
-you drag is yours: the windoids keep their arrangement across
-deactivation and across closing to zero, until the page reloads — or
-until **View → Arrange Windows** (⌘J, while anything is off its
-placement — see [Menu bar](#menu-bar)) re-runs the placement on the
-raster as it is now, every window included. (The Finder's furniture is
-the exception — the desktop icons, arranged by hand, and the folder
-windows, whose boxes persist as their nine-slice pins, the one window
-geometry a raster change can re-express; see
-[Desktop icons & state](#desktop-icons--state) and [Folders](#folders).)
-Everything clamps onto the raster's lattice.
-When the **browser window resizes**, the raster re-fits and **one rule
-moves every window**, placed or dragged alike — the **nine-slice pin**
-(`pinOf`/`pinTo` in `shell/layout.js`). The **open space below the options
-strip** (the menu-bar + strip band is fixed-height chrome — the frame's
-y = 0 line is the strip's bottom edge) is cut by a **ring of outer
-bands** — 100 system px at the left and bottom, and at the top and right
-widened to hold the rail: the top band runs through the 3D View's top
-edge, the right band is the rail column — around a **middle that grows
-and shrinks**. Each window edge keeps its place in its slice: an edge in
-a band is a **strut** (its offset from that raster edge holds), an edge
-in the middle a **spring** (its fraction of the middle holds). So a
-window tucked against the right edge stays tucked, a window wholly
-inside a corner never moves, a window spanning the middle **breathes**
-with it, and a window left hanging off an edge keeps hanging by the same
-amount. Because the bands hold the furniture, every **placed windoid is
-all struts** and the placement is a **fixed point** of the rule: a resize
-lands the rail exactly where Arrange Windows would — right-flush,
-full-height — with nothing remembering whether a window was ever touched,
-which is also what makes a resize **behind the boot dialog** (windoids
-hidden, nothing open) come up right when the first document opens. A
-document window is content, not furniture: its top-left (the cascade
-slot) is a strut pair, its right and bottom edges spring with the
-vacancy, so it keeps filling the middle proportionally (Arrange
-re-applies the absolute cascade room). A **fixed-size** window (the
-Tools palette, the Sprite View) resolves its edges through an **anchor
-rule** — a lone strut holds, opposite struts keep the near edge (the
-title bar is the handle), two springs keep the center — and a resizable
-one floors its size the same way. All of it runs live, per resize event
-(the raster itself re-fits live, so the windows track it in the same
-stroke). The **unrounded pin is the per-window truth** between events,
-re-derived only when the window has actually been moved or resized by
-something else (a drag, a grow, a placement) — re-reading it each event
-from the just-snapped geometry ratchets, because the placement lattice's
-round-half-up walks windows down the screen across a long resize drag,
-one notch at a time, never back up. Deliberately **no position clamp**
-and no visibility guarantee on this path: a window near an edge may hang
-partly off a shrunk raster, and that's the point — the same pin always
-maps back exactly, so growing back returns it whole (clamping at the
-small size rewrites the pin and turns the round trip into a drift). Sizes
-get exactly **one intervention** past the pin: a resizable window
-**bigger than the open area** shrinks to fit it — hanging off is
-recoverable by a drag, but bigger-than-the-area is not (the title bar
-can't leave the raster upward, so the grow-box corner would be
-unreachable at any position); the shrink never touches the pin, so
-growing the raster back restores the size exactly. The same oversize
-clamp guards every placement (`clampWindow`) — the smart placement's
-size floors on a tiny raster, a cascaded document window near the
-raster's edge.
+**The 3D Sprite Atlas** ("ring" is the feature's code name in the source) is
+the active document's model rendered **orthographically** from a ring of
+evenly stepped yaws at one elevation, as a **row of tiles**: one cell per
+view, each the tile at 1:1, butted, no rules between, on one sheet of kit
+paper running across the whole body. Its header is a **DITL** of four labeled
+number fields — `views` (1–16, a 360/n step), `elev` (0–90°), `from` (the
+first yaw, 0–359°) and `size` (the tile's edge, 2–255) — placed against the
+header's own corner in whole system px the kit writes as live `calc()`. That
+arithmetic IS the header's height and the windoid's width floor: derivations,
+not measurements.
+
+- **Defaults**: four views at a 90° step, 45° up, from the front, 64 px tiles,
+  white paper. **Yaw runs front → right → back → left** (yaw 0 puts the camera
+  on `+z`). **The frame is the tile**, and what fills it is the lattice's
+  envelope, not the content's: the footprint's bounding circle swept up the
+  height — the same at every yaw — is fit to the tile's edge, so the whole
+  voxel box fits at every angle and the frame never changes between angles,
+  strokes or offsets (a sprite can't jitter in an animation). The model is
+  centered on the lattice, whose floor's center lands on the **same row in
+  every frame** — the engine anchor the export writes out. The **lights ride
+  with the camera**: in an engine the camera and the sun are fixed and the
+  object turns, so every angle is lit the same way; no ground, no shadow. No
+  antialiasing anywhere in the copy chain, and the renderer clears
+  transparent, so the margin is paper in the windoid and transparency in the
+  file.
+- **The paper** is the ring slice's `paper` setting (`white` / `black` /
+  `gray`) — which **nothing in the UI writes**: the intent is that the app
+  pick it from the sheet's own content one day rather than ask, and the export
+  clears transparent whatever it says. It is the Sprite View's pattern grammar
+  moved to the body: a `vf-container pattern` under the grid, filling the
+  body's width so it spans the scroll plane past the last tile, the grid's
+  `--vf-surface` cleared and each cell a bare `vf-stack` — the bridge for kit
+  ask #11.
+- **The settings are the document's**: every open document carries its own
+  store of the four, a change **dirties the document** like a stroke, **Save
+  writes them into the PNG** as a `sprite-machine:ring` chunk (the paper, a
+  viewing choice, never), and every open path restores them, so a document
+  reopens with the ring it was saved with and a chunkless PNG opens at the
+  defaults. The strip, the Export dialog and the renderer read the **active**
+  document's through one façade, so a switch brings the windoid to that
+  document's tile height. It has its **own THREE world on an offscreen
+  canvas**, made lazily and fed the rebuilder's mesh through one `onMesh`
+  seam, rendering the strip into **one sheet canvas** the cells slice and
+  Export encodes verbatim — and only while shown.
+- It is **toggleable** (View → 3D Sprite Atlas shows it, its close box hides
+  it, one flag both ways) and is the **classic scrolling document window
+  turned windoid**, the rail on its bottom edge. Its **height is a
+  derivation** re-fit as the tile size changes with the **top-left held**, and
+  behind a **hidden** strip a change **re-runs the placement** instead of
+  holding a box nobody can see. It is **declared to the grow box as the kit's
+  size rect**, so it **resizes horizontally alone**; its **width is the
+  user's**, seeded with the natural row and floored at the strip, and a row
+  that outgrows it **scrolls under the rail** while the header holds still.
+  The placement **docks it on the bottom margin, left-aligned with the
+  document window** and — only while shown — takes its band out of the
+  vacancy, so a fresh open, Arrange and the zoom box land clear of it;
+  toggling it on never moves an existing window (System 7 didn't rearrange
+  your windows when you showed a palette — Arrange does).
+
+Positions and sizes come from a **smart placement** computed against the live
+raster (`shell/layout.js`, pure): the Tools palette top-left; the Full Sprite
+View over the 3D View as a right-hand rail, one column, both right-flush at
+the same width; and the document window **top-left aligned beside the Tools
+palette**, filling the vacant middle but for the **cascade room** at the right
+and bottom — so each further document window opens at the **same size**,
+**cascaded** down-right into the first slot no open window holds (five slots,
+a closed or dragged-away window giving its slot back, a full cascade wrapping
+onto the first).
+
+That placement is the **only** source of an application window's geometry —
+**nothing about a windoid or a document window persists across sessions**. A
+browser is resized and reopened on another monitor all the time, so a prior
+session's top/left is no truth worth re-asserting over a raster that may be
+nothing like the one it was dragged on. Within a session, what you drag is
+yours, until the page reloads or **View → Arrange Windows** re-runs the
+placement on the raster as it is now. (The Finder's furniture is the
+exception: the desktop icons, and the folder windows' boxes as pins.)
+
+When the **browser window resizes**, the raster re-fits and **one rule moves
+every window**, placed or dragged alike — the **nine-slice pin**
+(`pinOf`/`pinTo`). The open space below the options strip is cut by a **ring
+of outer bands** — 100 system px at the left and bottom, widened at the top
+and right to hold the rail — around a **middle that grows and shrinks**. Each
+window edge keeps its place in its slice: an edge in a band is a **strut**
+(its offset from that raster edge holds), an edge in the middle a **spring**
+(its fraction of the middle holds). So a window tucked against the right edge
+stays tucked, one wholly inside a corner never moves, one spanning the middle
+**breathes**, and one hanging off an edge keeps hanging by the same amount.
+Because the bands hold the furniture, every **placed windoid is all struts**
+and the placement is a **fixed point** of the rule: a resize lands the rail
+exactly where Arrange Windows would. A document window is content, not
+furniture: its top-left is a strut pair, its far edges spring with the
+vacancy. A **fixed-size** window resolves its edges through an **anchor
+rule** — a lone strut holds, opposite struts keep the near edge, two springs
+keep the center — and a resizable one floors its size the same way. The
+**unrounded pin is the per-window truth** between events, re-derived only when
+something else has moved or resized the window, since re-reading it from the
+just-snapped geometry ratchets windows down the screen across a long resize
+drag. Deliberately **no position clamp** on this path — a window near an edge
+may hang partly off a shrunk raster, and that's the point: the same pin maps
+back exactly, so growing back returns it whole. Sizes get exactly **one
+intervention**: a resizable window bigger than the open area shrinks to fit,
+and the shrink never touches the pin.
 
 ### Desktop Patterns
 
-**Sprite Machine → Desktop Patterns** opens System 7.5's Desktop Patterns
-control panel — the composition of the original (the **preview well**
-across the top, the chooser under it, **Set Desktop Pattern** along the
-bottom) with the classic scrollbar (one pattern at a time, "67/74")
+**Sprite Machine → Desktop Patterns** opens System 7.5's control panel — the
+composition of the original (the **preview well** across the top, the chooser
+under it, **Set Desktop Pattern** along the bottom) with the classic scrollbar
 replaced by a **grid of every pattern the kit ships**: the 38 standard
-MacPaint fills (`PATTERN_NAMES`, palette order — vintage-frames
-`docs/PATTERNS.md`) as a 13×3 `vf-grid` of 16px cells, a cell being
-exactly two repeats of its 8×8 pattern the way MacPaint's own pattern bar
-showed them (the last well stays empty — 38 tiles no rectangle). Every
-fill is the kit's own: the well and each cell are `vf-container
-pattern="…"` boxes at declared sizes (222×160 and 16×16), so the rasters
-are exact and 1-bit at every density — the well framed by the kit's
-`rule` on all four edges. The semantics are the Colors dialog's: opening
-seeds the **pending** pattern from the desktop's current one; **clicking**
-a cell selects it — the well previews it and a ring marks the cell (1px
-black over the edge, 1px white inside it, so it reads on `black` and
-`white` alike) — while the desktop stays as it was; only
-**Set Desktop Pattern** commits, through the shell slice's one setter
-(`shell.desktopPattern` → `shell/patterns.js` writes it onto
-`vf-desktop`'s `pattern`, the kit's whole-screen raster repainting under
-every window), and the close box discards a selection never set. The
-pattern is the **one desktop setting that persists** (`desktop-state.js`,
-in the same v3 blob as the icons; `?fresh=1` boots the dither), restored
-onto the desktop before its first render — a corrupt value is ignored
-through the kit's own `parsePattern`, never warned about. The window
-itself is a fixed-size `vf-window` (`heading="Desktop Patterns" movable`,
-248×304 — index.html's `#tpl-patterns-window` states the arithmetic; no
-grow box, no zoom box; its body a `vf-stack pad="12"`, the content's own
-12px inset, since a window body carries none of its own — vintage-frames
-0.6.0 — and this is the one window whose content wants one) cloned per
-open and **removed by its close box**
-(existence IS visibility, the document windows' discipline; a second pick
-while it's open just brings it forward — one panel, ever), placed by
-`centeredBox` in `shell/layout.js` (centered in the open area below the
-options strip's band) and **adopted by `shell/windows.js` as a panel**, so
-View → Arrange Windows re-centers it and a browser resize re-pins it like
-every window (centered, both edges spring — it keeps its center). It is
-the Finder's window: see [One machine, two roles](#one-machine-two-roles)
-for what opening and closing it does to the application. `?patterns=1`
-opens it over the boot document for captures.
+MacPaint fills in palette order as a 13×3 grid of 16px cells, a cell being two
+repeats of its 8×8 pattern the way MacPaint's own pattern bar showed them.
+Every fill is the kit's own — `vf-container pattern="…"` boxes at declared
+sizes — so the rasters are exact and 1-bit at every density.
+
+The semantics are the Colors dialog's: opening seeds the **pending** pattern
+from the desktop's current one; **clicking** a cell selects it — the well
+previews it and a ring marks the cell (1px black over the edge, 1px white
+inside, so it reads on `black` and `white` alike) — while the desktop stays as
+it was; only **Set Desktop Pattern** commits, through the shell slice's one
+setter, and the close box discards a selection never set. The pattern is the
+**one desktop setting that persists** (`?fresh=1` boots the dither), restored
+before the desktop's first render, a corrupt value ignored through the kit's
+own `parsePattern`. The window is a fixed-size `vf-window` (no grow box, no
+zoom box; its body a `vf-stack pad="12"`, since a window body carries no inset
+of its own and this is the one window whose content wants one) cloned per open
+and **removed by its close box** — a second pick just brings it forward, one
+panel ever — centered by `centeredBox` and **adopted as a panel**, so Arrange
+re-centers it and a resize re-pins it like every window. It is the Finder's
+window: see [One machine, two roles](#one-machine-two-roles).
 
 ### Folders
 
-The Finder's filing system, since Sep 7 2026, on vintage-frames 0.7.0 (its
-`docs/FINDER.md` is the recipe; the plan is
-[docs/folders-plan.md](docs/folders-plan.md)). A **folder is catalog
-structure, not document content**: where a file _sits_ is the HFS
-catalog's business, and a downloaded PNG carries none of it (a dropped one
-lands on the desktop), so a folder is a record of its own in IndexedDB's
-second store (`folders`: id, name, parent, timestamps — the desktop is the
-root and has no record) and a document's membership is one field on its
-record, `folder` — never a chunk, never localStorage. Folders **nest**
-freely; the one rule is that a folder cannot be put into itself or a
-descendant (the files slice refuses the move). A document whose folder
-record is gone reads as the desktop's, so nothing can vanish into an
-orphaned id.
+The Finder's filing system, on vintage-frames 0.7.0 (its `docs/FINDER.md` is
+the recipe; the plan is [docs/folders-plan.md](docs/folders-plan.md)). A
+**folder is catalog structure, not document content**: where a file _sits_ is
+the catalog's business, and a downloaded PNG carries none of it, so a folder
+is a record of its own in IndexedDB's second store (`folders`: id, name,
+parent, timestamps — the desktop is the root and has no record) and a
+document's membership is one field on its record, `folder` — never a chunk,
+never localStorage. Folders **nest** freely; the one rule is that a folder
+cannot be put into itself or a descendant. A document whose folder record is
+gone reads as the desktop's, so nothing vanishes into an orphaned id. The icon
+is the app's own 32×32 1-bit art, a `vf-icon` with no `color`, so the kit's
+selection inversion, its **`target`** inversion (the destination under a drag)
+and its derived **open ghost** are exact treatments of that one file.
 
-- **The icon** is the app's own 32×32 1-bit art (`src/assets/folder.png`),
-  a `vf-icon` with no `color`, so the kit's selection inversion, its
-  **`target`** inversion (the destination under a drag) and its derived
-  **open ghost** — outline held, interior dithered, worn while the
-  folder's window is on screen — are exact treatments of that one file.
-  It renames in place like a document's (`files.renameFolder`; the
-  window's title follows through the listing).
-- **The desktop's icons sit in a `vf-icon-field`** (`#desktop-icons`, the
-  kit's container for a field of icons — the listbox owner), **filled,
-  not placed**: it stays static, so its icons keep anchoring to the
-  desktop's raster and every saved position means what it meant (a placed
-  field would move the origin under the menu bar); filled, it has a
-  surface to press, which is what the **rubber band** needs — a drag on
-  the bare desktop selects what the rectangle touches, Shift toggles
-  against the selection, Escape cancels — and a press anywhere in it is a
-  press on the Finder. The selection is one per screen (the kit clears on
-  any press outside an icon, across containers), so `shell.iconSelection`
-  names icons in any container.
-- **A folder window** (`#tpl-folder-window`, `shell/folders.js`) is the
-  Finder's: a document-tier window — the striped bar, a close box,
-  `movable resizable scrollbars="both"` — cloned per open and removed by
-  its close box (existence IS visibility), its header the Finder's: the
-  folder's **item count** (`N items`, plain ink, off the model — a
-  body-face label placed at `FOLDER_COUNT_AT`) over the Finder's **double
-  rule** — black, white, black — made of two kit rules and no stylesheet:
-  the count line is a container in the options strip's anatomy,
-  `vf-container fill-width pattern="white" rule="bottom"`, 17 rows of
-  white paper over one row of ink (`FOLDER_COUNT_LINE` = 18); the header's
-  white shows for one row under it, and the header's own rule closes it —
-  `header-height` = `FOLDER_STRIP` = 20 in `shell/layout.js`, System 7's
-  own header, measured off the real Finder (Sep 8 2026) — its body one
-  **placed `vf-icon-field`** at the
-  plane's origin (so the window's `placementAt()` and the field's
-  coordinates agree) sized to the folder's **extent** — the body's
-  viewport at least, grown to hold every icon plus the lattice's inset
-  (`fieldExtent`), which IS the scroll range: the kit sizes its plane to
-  placed content and its rails follow a moved icon by themselves. It is
-  **adopted by `shell/windows.js` as a panel** — the Desktop Patterns
-  panel's contract — placed fresh by `folderBox` (the doc box's corner
-  stepped down-right by the cascade per folder window already open when
-  it opened, at the size the template authors: 320 × 224, three lattice
-  columns by two rows), re-placed by Arrange Windows and re-pinned by a
-  browser resize like every window. And **its box persists** (Sep 8
-  2026 — the Finder remembered every folder window's rect, and so does
-  this app, the one window it remembers), **in relative terms**: not the
-  box but its **nine-slice pin** — the browser-resize rule's own reading
-  of where the window sits (`pinOf`: each edge a strut's offset from the
-  raster's edge or a spring's fraction of its middle), read off the live
-  window at every desktop-state snapshot and, at a close, remembered for
-  the session — stored in the desktop-state blob beside its icon, under
-  the same `folder:<id>` key. The next open, on whatever raster the
-  browser has by then, re-expresses it (`pinTo`, the resize rule's own
-  policy for a resizable window: edges independent, floored at the kit's
-  grow floor) and pulls it on-raster like every placement
-  (`clampedBox`), so **a reopened folder window lands exactly where a
-  browser resize would have carried it had it stayed open**, on screen:
-  a window left in the bottom-right corner comes back in the corner of a
-  smaller browser, one spanning the middle at its fraction of it, and a
-  box saved on a wide monitor never comes back hanging off a narrow one.
-  A first open — or a stored record that is not a pin (`isPin` in
-  `shell/layout.js`) — takes the fresh placement. Arrange Windows still
-  sends every folder window to its cascade slot (the arrangement is the
-  reset, and the memory follows it: what is on screen is what is
-  remembered), so a remembered window off its slot reads as `arrange` in
-  the ⌘J item, as a dragged one does. Nothing else about it persists —
-  not its scroll, and not that it was open: a boot never reopens a
-  window (its icons' positions persist too, below). And it **is the
-  Finder's window**: holding the desktop's active state, a panel mirrors
-  as the desktop-focused role, so opening a folder — or clicking into its
-  window — deactivates the application (the windoids hide, the strip
-  goes, the document-scoped items grey) and closing it hands active to
-  the topmost document window, the application back where it was. No
-  zoom box yet (the Finder's zoom fit the window to its icons; a
-  follow-up).
-- **The icon layer is a reconciler over containers** (`shell/icons.js`):
-  the desktop's field for the items whose container is the desktop, plus
-  one field per open folder window for that folder's children — folders
-  first, then documents, each in listing order — an item that moves away
-  removed from its old root and re-created in its new one if that root
-  is on screen. **Positions persist by item** in the desktop-state blob
-  (`doc:<id>`, `folder:<id>`), each in its **current container's**
-  coordinates — the desktop's are screen coordinates, a window's its
-  plane's — and a saved position wins over the lattice; a new item, or
-  one filed with no landing, takes the container's **first free cell**
-  (`iconDefault` on the desktop, `iconGridDefault` inside a window: rows
-  from the plane's origin at the desktop's own 80 × 72 pitch, wrapping
-  at the plane's width). The layer remembers a closed window's icon
-  positions for the session and hands desktop-state every position it
-  knows, so a closed folder never forgets its arrangement. Only the
-  desktop's icons re-pin on a browser resize; a window's travel with it.
-- **Filing is the drag**, and the drag is the kit's (0.7.0): a movable
-  icon drags as the classic **dotted outline** over everything — windows,
-  palettes, the menu bar — the icon staying put, **every selected icon of
-  its field travelling as one**, Escape cancelling; the kit reports
-  `vf-drag` and a cancelable `vf-drop` with the pointer and the outline's
-  origin, and **the page decides what the drop means** (`icons.js`, the
-  kit's stated division: it reports, the consumer decides). Three
-  destinations, hit-tested with `elementsFromPoint` (the travelling icons
-  skipped — the outline is never a hit): onto a **folder icon** files the
-  set into that folder at its lattice's next free cells; into a **folder
-  window** it did not come from files it there, each member exactly where
-  its own outline was let go (the window's `placementAt`, held at the
-  origin); out onto the **desktop** from a window files it to the root,
-  each where its outline was (the desktop's `placementAt`, held below the
-  menu bar). Each cancels the kit's default action and moves the
-  **model** (`files.moveDoc` / `moveFolder` — the icon follows through the
-  reconciler, landing at the drop's position; a move is catalog, not
-  content: the bytes, the name and the modified time all stand); a drop in
-  the container the set came from is the kit's own move, whole. Under a
-  drag the folder icon under the pointer wears `target`, the Finder's
-  inverted destination — never for a folder over itself or a descendant,
-  where the drop is refused and nothing moves. Nothing about the gesture
-  is drawn, measured or clamped by the page.
-- **Duplicate** lands the copy beside the original, in its folder; a
-  first **Save** lands on the desktop; a dropped PNG opens as an untitled
-  whose first save lands on the desktop too. `?file=` resolves by name
-  across every folder but the Trash. `?fresh=1` renders no icon but the
-  Trash, and no folder window. With storage unavailable, New Folder
-  raises the storage notice like Save.
-- **Not yet**: no small-icon view (the field's `size` is the whole
-  mechanism, given 16×16 art), no zoom box on folder windows, no Clean
-  Up, no Put Away, and the Finder's two alerts (a name too long, a folder
-  into itself) are silent refusals. Deleting is the Trash's — the next
-  section.
+- **The desktop's icons sit in a `vf-icon-field`**, **filled, not placed**: it
+  stays static, so its icons keep anchoring to the desktop's raster and every
+  saved position means what it meant; filled, it has a surface to press, which
+  is what the **rubber band** needs — a drag on the bare desktop selects what
+  the rectangle touches, Shift toggles, Escape cancels — and a press anywhere
+  in it is a press on the Finder. The selection is one per screen, so
+  `shell.iconSelection` names icons in any container.
+- **A folder window** is the Finder's: a document-tier window — striped bar,
+  close box, `movable resizable scrollbars="both"` — cloned per open and
+  removed by its close box. Its header is the folder's **item count** (`N
+items`, plain ink, off the model) over the Finder's **double rule** — black,
+  white, black — made of two kit rules and no stylesheet. Its body is one
+  **placed `vf-icon-field`** at the plane's origin, so the window's
+  `placementAt()` and the field's coordinates agree, sized to the folder's
+  **extent** — the viewport at least, grown to hold every icon — which IS the
+  scroll range. It is **adopted by `shell/windows.js` as a panel**, placed
+  fresh by `folderBox` (the doc box's corner stepped down-right per folder
+  window already open), re-placed by Arrange Windows and re-pinned by a
+  browser resize.
+- **Its box persists** — the Finder remembered every folder window's rect, and
+  so does this app, the one window it remembers — **in relative terms**: not
+  the box but its **nine-slice pin**, read off the live window at every
+  desktop-state snapshot and, at a close, remembered for the session, stored
+  beside its icon under the same `folder:<id>` key. The next open re-expresses
+  it on whatever raster the browser has by then and pulls it on-raster like
+  every placement, so **a reopened folder window lands exactly where a browser
+  resize would have carried it had it stayed open** — a box saved on a wide
+  monitor never comes back hanging off a narrow one. A first open, or a stored
+  record that is not a pin (`isPin`), takes the fresh placement. Arrange
+  Windows still sends every folder window to its cascade slot: the arrangement
+  is the reset, and what is on screen is what is remembered. Nothing else
+  persists — not the scroll, and not that it was open. No zoom box yet.
+- **The icon layer is a reconciler over containers**: the desktop's field for
+  the items whose container is the desktop, plus one field per open folder
+  window for that folder's children — folders first, then documents, in
+  listing order. **Positions persist by item**, each in its **current
+  container's** coordinates, and a saved position wins over the lattice; a new
+  item, or one filed with no landing, takes the container's **first free
+  cell**. The layer remembers a closed window's positions for the session, so
+  a closed folder never forgets its arrangement. Only the desktop's icons
+  re-pin on a browser resize; a window's travel with it.
+- **Filing is the drag**, and the drag is the kit's: a movable icon drags as
+  the classic **dotted outline** over everything — windows, palettes, the menu
+  bar — the icon staying put, **every selected icon of its field travelling as
+  one**, Escape cancelling; the kit reports the drag and a cancelable drop,
+  and **the page decides what the drop means**. Three destinations, hit-tested
+  with `elementsFromPoint`: onto a **folder icon** files the set into it at
+  the next free cells; into a **folder window** it did not come from, or out
+  onto the **desktop**, files it there, each member where its own outline was
+  let go. Each cancels the kit's default and moves the **model** — a move is
+  catalog, not content: the bytes, the name and the modified time all stand.
+  Under a drag the folder icon under the pointer wears `target`, never for a
+  folder over itself or a descendant, where the drop is refused. Nothing about
+  the gesture is drawn, measured or clamped by the page.
+- **Duplicate** lands the copy beside the original, in its folder; a first
+  **Save** lands on the desktop, as does a dropped PNG's. `?file=` resolves by
+  name across every folder but the Trash. **Not yet**: no small-icon view, no
+  zoom box, no Clean Up, no Put Away, and the Finder's two alerts (a name too
+  long, a folder into itself) are silent refusals.
 
 ### The Trash
 
-The Finder's delete, since Sep 9 2026 (the plan is
-[docs/trash-plan.md](docs/trash-plan.md)): **the Trash is a folder** —
-the one folder with no record. The files slice leads every listing with a
-synthetic row for it (`TRASH` in `state/files.js`, the id `trash`; the
-store holds the row before any listing and keeps it with none, so the
-Trash is on the desktop whether or not there is a library), and from
-there every folder path serves it unchanged: a document whose `folder` is
-the Trash's sits in it, the icon layer renders it among the desktop's
-folders, its window is a folder window, and its desktop-state keys are
-the folder keys (`folder:trash` for its icon's position and its window's
-pin). Four things it refuses, each a silent no-op in the slice: a rename,
-a move, a removal, and a folder made inside it (File → New Folder greys
-while the Trash's window — or a trashed folder's — is the Finder's front
-window, System 7's own).
+The Finder's delete (the plan is [docs/trash-plan.md](docs/trash-plan.md)):
+**the Trash is a folder** — the one folder with no record. The files slice
+leads every listing with a synthetic row for it (the id `trash`; the store
+holds the row before any listing and keeps it with none, so the Trash is on
+the desktop whether or not there is a library), and from there every folder
+path serves it unchanged: a document whose `folder` is the Trash's sits in it,
+its window is a folder window, its desktop-state keys are the folder keys.
+Four things it refuses, each a silent no-op: a rename, a move, a removal, and
+a folder made inside it.
 
-- **Deleting is the drag** — there is no Delete key and no Delete
-  command, as System 7 had none: an icon dragged onto the Trash's, or
-  into its open window, files it there through the folders' own drop (a
-  document or a folder, one icon or a banded set; a folder goes in with
-  its subtree), the can wearing `target` under the outline. A move is
-  catalog, not content — bytes, name and modified time stand — and
-  nothing is destroyed until the Trash is emptied, so a trashed item
-  comes back by dragging it out onto the desktop or into a folder. The
-  Trash itself is never filed: a set that holds it is refused wherever it
-  is dropped, and a drop of it on the bare desktop is the kit's own move.
-- **The icon** is the user's 32×32 1-bit art, two cans
-  (`src/assets/trash.png` and `trash-full.png` — black ink, white fill,
-  transparent outside, the folder icon's three values): the plain can
-  while the Trash holds nothing, the bulging one with anything in it,
-  swapped by the reconciler off the listing, so the kit's selection and
-  `target` inversions and its open ghost are exact treatments of
-  whichever can is up. `selectable movable`, not `editable`; its default
-  place is the raster's **bottom-right corner** (`trashDefault` in
-  `shell/layout.js`: the icon column's own inset in from the right and
-  bottom edges), the one icon whose default is not the lattice's next
-  free cell — a saved position wins, the boot clamp pulls it on-raster,
-  and across a browser resize a corner icon is two struts, so it stays
-  in the corner.
-- **Its window** is a folder window — _Trash_, _N items_, the lattice,
-  its box persisting as its pin — from a double-click, ⌘O or File → Open
-  on its selected icon; a trashed folder's icon inside opens its own
-  window with its contents intact. Both wear the Finder's **"in the
-  Trash" mark**: the user's small 12×12 1-bit trash glyph
-  (`src/assets/trash-indicator.png`, through the kit's `vf-img` at 1:1)
-  at the head of the count line, the count stepping right to make room
-  (`FOLDER_TRASH_MARK_AT` and `FOLDER_COUNT_AT_TRASHED` in
-  `shell/layout.js`, numbers for the eye) — present exactly while the
-  folder is trashed, so a folder dragged into the Trash with its window
-  open takes the mark and one dragged out loses it; System 7's own header
-  for a folder in the Trash.
-- **Sprite Machine → Empty Trash…** — in the application's menu rather
-  than System 7's Special menu, for now (a Special menu earns its place
-  the day Clean Up gives it a second item), live in both roles (a
-  command over the catalog: it opens no window and changes no role),
-  greyed while the Trash is empty, no key equivalent — raises the
-  Finder's alert in the unsaved box's anatomy: _The Trash contains N
-  items, which use XK of disk space. Are you sure you want to
-  permanently remove these items?_ — N everything in it, folders'
-  contents included; X the trashed documents' stored bytes rounded up to
-  whole K, a listing cache (`size` on the row) — over Cancel and a
-  default OK (Return). OK removes every document and every folder under
-  the Trash from IndexedDB (`files.emptyTrash`, the one destructive
-  operation in the app), and the listing's refresh does the rest: the
-  icons in the Trash's window go, its count reads 0 items, the can
-  flattens, a trashed folder's open window closes, the item greys. The
-  seeding's record stands, so an emptied Car or Cube never comes back.
+- **Deleting is the drag** — there is no Delete key and no Delete command, as
+  System 7 had none: an icon dragged onto the can, or into its open window, is
+  filed there through the folders' own drop, a folder going in with its
+  subtree. A move is catalog, not content, and nothing is destroyed until the
+  Trash is emptied, so a trashed item comes back by dragging it out. The Trash
+  itself is never filed.
+- **The icon** is the user's 32×32 1-bit art, two cans: the plain one while
+  the Trash holds nothing, the bulging one with anything in it, swapped by the
+  reconciler off the listing. `selectable movable`, not `editable`; its
+  default place is the raster's **bottom-right corner**, the one icon whose
+  default is not the lattice's next free cell — and a corner icon is two
+  struts, so it stays in the corner across a resize.
+- **Its window** is a folder window — _Trash_, _N items_, the lattice, its box
+  persisting as its pin; a trashed folder's icon inside opens its own window
+  with its contents intact. Both wear the Finder's **"in the Trash" mark**: a
+  small 12×12 1-bit trash glyph at the head of the count line, the count
+  stepping right to make room, present exactly while the folder is trashed.
+- **Sprite Machine → Empty Trash…** — in the application's menu rather than
+  System 7's Special menu for now (a Special menu earns its place the day
+  Clean Up gives it a second item) — raises the Finder's alert in the unsaved
+  box's anatomy, naming N items and the K they use, over Cancel and a default
+  OK. OK removes every document and folder under the Trash from IndexedDB
+  (`files.emptyTrash`, the one destructive operation in the app), and the
+  listing's refresh does the rest: the icons go, the count reads 0 items, the
+  can flattens, a trashed folder's open window closes. The seeding's record
+  stands, so an emptied Car or Cube never comes back.
 - **Open documents.** Trashing one is allowed — it is a move; the window
-  stays, its title stays, Save saves in place, and its icon in the
-  Trash's window wears the open ghost (System 7 refused a file in use
-  because the application held it open; here a window holds pixels, not
-  a lock, and the drag out reverses it). Emptying with one inside
-  **reverts its window to an unsaved document, dirty**: the pixels and
-  the name stay, the stored identity goes (a dropped PNG's state), and
-  the dirty mark says nothing stored backs them now — Close asks _Save
-  changes to "Car" before closing?_, a reload warns, a Save stores it
-  afresh. The URL mirror clears with the identity.
+  stays, Save saves in place, and its icon wears the open ghost (System 7
+  refused a file in use because the application held it open; here a window
+  holds pixels, not a lock). Emptying with one inside **reverts its window to
+  an unsaved document, dirty**: the pixels and the name stay, the stored
+  identity goes, and the URL mirror clears with it.
 - **The library looks past the Trash**: the Open dialog lists no trashed
-  document and `?file=` resolves none (the Finder's Trash folder was
-  invisible to Standard File) — the way to one is its icon in the
-  Trash's window. Duplicate on a trashed open document lands beside it,
-  in the Trash.
-- **Nothing else changed**: no storage schema, no blob version (an
-  emptied item's position and pin stay in the blob as orphan keys,
-  harmless), no kit ask. `?fresh=1` shows the Trash and nothing else —
-  it is furniture, so the goldens carry it in their corner. Not yet: Put
-  Away ⌘Y (the record does not remember where a trashed item came from),
-  the Finder's "in use" alert, and a caution icon on the alert (the
-  unsaved box has none either).
+  document and `?file=` resolves none (the Finder's Trash was invisible to
+  Standard File) — the way to one is its icon in the Trash's window.
+  `?fresh=1` shows the Trash and nothing else; it is furniture, so the goldens
+  carry it in their corner. Not yet: Put Away ⌘Y (the record does not remember
+  where a trashed item came from) and the "in use" alert.
 
 ### The About box
 
 **Sprite Machine → About…** — and every load the URL gives no document to
-open (the top of this README): the classic launch splash, System 7's
-About box on the plain dBoxProc frame (no bar, no close box; OK, Escape,
-or a **click anywhere outside the box** dismisses it onto whatever was
-there — at boot, the bare desktop in the Finder role, nothing opened and
-nothing activated). The click-away is the kit's own **`light-dismiss`**
-(vintage-frames 0.5.3), an opt-in the markup states on this one dialog:
-a splash dismisses on a click away, while System 7's modal boxes refused
-an outside click, and every question dialog here still does (a stray
-click must never answer "Save changes?"). The kit consumes the click, so
-nothing beneath reacts — a desktop icon under the pointer neither selects
-nor opens, and a Finder selection survives — and nothing here listens
-for the close (it arrives as `vf-close` with reason `outside`; the box
-holds no pending state). The application's
-**32×32 icon** (`src/assets/sprite-machine-icon.png`, through the kit's
-`vf-img` at 1:1 — one image pixel one system px) sits beside three lines
-— **Sprite Machine** in the display face, then **version N** with the
-date beside it and **created by Adam Portilla** in the body face — over
-the two-paragraph blurb in the same body face (Chicago for the title
-alone; the reading lines in Geneva), whose
-**Vintage Frames** is a real link to the kit's
-[npm page](https://www.npmjs.com/package/vintage-frames) — opened in a new
-tab, so the app and any unsaved document stay put; inked by `style.css`
-in the paragraph's own black with the underline as its whole affordance,
-and the arrow stays the arrow over it (System 7 had no pointing hand, and
-the kit ships none) — and a default OK, **holding the focus as the box
-opens**, so Return OKs the splash. That is the kit's dialog grammar
-(vintage-frames 0.6.2, Sep 6 2026 — kit ask #12,
-[docs/kit-asks-dialog-default-focus.md](docs/kit-asks-dialog-default-focus.md),
-shipped the day it was written): a `vf-dialog` opens on a slotted
-`autofocus`, else its first text field, else its default button, and
-**Return anywhere in a box fires the default button** — a focused link
-follows itself instead, and Tab from OK reaches this one, with the kit's
-dotted ring. Before 0.6.2 the native `<dialog>`'s own focusing steps
-handed the first focusable thing in the box the focus — that link — and
-Return at the greet opened the npm page in a new tab with the splash still
-up; the app carried no workaround, on purpose. The same grammar runs
-every dialog here: a value typed into Properties or Export Sprite Atlas…
-and Returned is committed and OK'd / exported in one stroke, the classic
-Mac's own. The version and the
-date are **build facts, never markup**: `vite.config.js` `define`s
-`__APP_VERSION__` (package.json's `version`) and `__APP_DATE__` (HEAD's
-commit date — the date of the code that is running, so every build of one
-commit says the same thing and a capture stays byte-identical across runs;
-formatted in Node as `Aug 24, 2026`, so no runtime locale or timezone can
-move it, and a checkout without git reads the build day), and
-`shell/menus.js` writes them into the box's two empty spans at wire-up,
-so the markup never carries a stale number. Bumping `version` in
-package.json is the whole release ritual. `?about=1` opens the box over
-the boot document for captures.
+open: the classic launch splash, System 7's About box on the plain dBoxProc
+frame (no bar, no close box; OK, Escape, or a **click anywhere outside the
+box** dismisses it onto whatever was there — at boot, the bare desktop in the
+Finder role, nothing opened and nothing activated). The click-away is the
+kit's own **`light-dismiss`**, an opt-in the markup states on this one dialog:
+a splash dismisses on a click away, while System 7's modal boxes refused an
+outside click, and every question dialog here still does — a stray click must
+never answer "Save changes?". The kit consumes the click, so nothing beneath
+reacts.
+
+The application's **32×32 icon** sits beside three lines — **Sprite Machine**,
+**version N** with the date beside it, and **created by Adam Portilla** — over
+a two-paragraph blurb whose **Vintage Frames** is a real link to the kit's
+[npm page](https://www.npmjs.com/package/vintage-frames), opened in a new tab
+so the app and any unsaved document stay put. A default OK **holds the focus
+as the box opens**, so Return OKs the splash: the kit's dialog grammar
+(vintage-frames 0.6.2 — kit ask #12) is that a `vf-dialog` opens on a slotted
+`autofocus`, else its first text field, else its default button, and **Return
+anywhere in a box fires the default button**, a focused link following itself
+instead. The same grammar runs every dialog here, so a value typed into
+Properties and Returned is committed and OK'd in one stroke. The version and
+the date are **build facts, never markup** — `vite.config.js` defines them
+from package.json's `version` and HEAD's commit date, so every build of one
+commit says the same thing and a capture stays byte-identical — and
+`shell/menus.js` writes them into the box's two empty spans at wire-up.
+Bumping `version` is the whole release ritual.
 
 ### Documents: a document IS a .png
 
-A document is exactly one sprite `.png` — the 3×2 atlas — with all metadata
-in standard PNG text chunks (`lib/png-chunks.js`): `Title`, `Creation Time`,
-`Software`, `sprite-machine:transforms` (written only when
-non-identity) and `sprite-machine:ring` — the **3D Sprite Atlas's
-settings** (`views`, `elevation`, `offset`, `size` as JSON; always
-written, since a setting's default is the writing version's choice
-rather than an identity; the same keyword the exported sheet carries,
-there with the frame, the anchor and the yaw list beside the settings —
-the Title tells the two files apart). The pixels alone are already a
-complete document (tile size derives from the dimensions), so **Save,
-Download and drop-import converge on a single format**: File → Download
-downloads the saved bytes verbatim, dropping any downloaded PNG back
-restores it losslessly (title and atlas settings included — the drop path
-reads the chunks), and any foreign 3×2 sheet is a legal, if anonymous,
-document at the default ring. A chunk-stripping optimizer costs the name,
-the timestamps and the ring settings only.
+A document is exactly one sprite `.png` — the 3×2 atlas — with all metadata in
+standard PNG text chunks (`lib/png-chunks.js`): `Title`, `Creation Time`,
+`Software`, `sprite-machine:transforms` (written only when non-identity) and
+`sprite-machine:ring`, the **3D Sprite Atlas's settings** (always written,
+since a setting's default is the writing version's choice rather than an
+identity). The pixels alone are already a complete document — tile size
+derives from the dimensions — so **Save, Download and drop-import converge on
+a single format**: Download writes the saved bytes verbatim, dropping any
+downloaded PNG back restores it losslessly, and any foreign 3×2 sheet is a
+legal, if anonymous, document at the default ring. A chunk-stripping optimizer
+costs the name, the timestamps and the ring settings only.
 
-Storage is IndexedDB (`storage/db.js`, version 2: a `docs` store — the
-record is the PNG bytes plus rebuildable listing caches — name, timestamps,
-icon data-URI, dims — where the chunk wins on any disagreement, plus the
-one field that is neither chunk nor cache, `folder`, where the file sits —
-and a `folders` store, the catalog's structure; see [Folders](#folders)),
-driven by the `files` slice (`state/files.js` — the pure LIBRARY layer:
-listing, availability, the folder tree and its pure selectors, and the
-per-document storage operations, each taking an explicit doc + identity;
-which documents are open and their dirty state is the workspace's). Explicit Save is the contract (System 7 idiom); per-document
-dirty tracking rides each context's doc channels, and a `beforeunload`
-guard over ANY dirty open document is the safety net. Where IndexedDB is
-broken (private windows), Save raises an explanatory dialog and everything
-else still works.
+Storage is IndexedDB (`storage/db.js`, version 2: a `docs` store — the PNG
+bytes plus rebuildable listing caches, where the chunk wins on any
+disagreement, plus the one field that is neither chunk nor cache, `folder` —
+and a `folders` store), driven by the `files` slice: the pure LIBRARY layer,
+listing, availability, the folder tree and its selectors, and the per-document
+storage operations, each taking an explicit doc + identity. Which documents
+are open, and their dirty state, is the workspace's. Explicit Save is the
+contract, with a `beforeunload` guard over ANY dirty open document as the
+safety net. Where IndexedDB is broken (private windows), Save raises an
+explanatory dialog and everything else still works.
 
 ### Desktop icons & state
 
 Every saved doc gets a `vf-icon` (`selectable movable editable` — Return
-renames in place, converging on the same workspace action as File →
-Rename…, so any open window of that document retitles along) — and so does
-every folder (see [Folders](#folders): the field the icons sit in, the
-folder windows, the drag that files them, the per-container positions) —
-and the **Trash** (see [The Trash](#the-trash)), the one icon that is no
-saved item; every other icon is one: the built-in defaults (Car, Cube) are **seeded
-into the library at the first-ever boot** (`seedDefaultDocs` in
-`loaders.js`, through the same save path as ⌘S — real PNG bytes, chunks,
-generated icon) and are ordinary mutable documents from then on; the
-seeding runs while the profile carries **no record of having seeded** —
-the desktop state's `seeded` flag, which `main.js` sets and writes at once
-only after the last built-in is stored (the transaction's commit; the old
-gate, "any desktop-state blob exists", was a snapshot the persist layer
-wrote on its own schedule mid-boot, so a reload during the seeding's
-IndexedDB round-trips — a crash, Chrome's phantom reload under the drive —
-left a profile that never seeded); a boot interrupted mid-seeding seeds
-again next time, skipping the built-ins already stored by name, and
-deleting or emptying later never resurrects them — the flag stays; a blob
-from before the flag reads as seeded. The
-virgin boot then greets like any other — the About box, unless
-`?file` names a doc (the just-seeded Car and Cube are already nameable).
-Double-click opens
-(into the existing window if one is open, deselecting the icon as the
-application takes focus),
-selecting an icon deactivates the application (a press in the icon layer is
-a press on the Finder) and turns File → Open… into a bare File → Open
-aimed at the selection — which holds through the menu-bar press that picks
-it — and every open doc's icon wears the kit's `open` ghost. Icon art is generated **from
-the document itself**: the FRONT tile, **trimmed to its content's bounding
-box** (`contentBounds` — the art fills the icon however small it sits in its
-tile), drawn into 32×32 → data URI, regenerated on every save (empty front
-tile ⇒ a generic document glyph),
-declared `color` so selection darkens instead of inverting. Icon
-**placement is the windows' regime in the icons' own frame** — the whole
-desktop below the **menu bar** (icons are the Finder's furniture; the
-options strip is application chrome, hidden whenever the desktop takes
-focus, so unlike the windows it reserves nothing above an icon): the
-default lattice derives from the live raster (`iconDefault` in
-`shell/layout.js` — the classic left-edge column below the Tools band,
-folding into further columns when a cell would run off a short raster's
-bottom), a saved position wins, pulled on-raster at boot (an off-raster
-icon has nothing to grab, so it would be unreachable — the windows'
-boot-clamp discipline), and on a **browser resize** every icon keeps its
-**nine-slice pin** in the same stroke as the windows, in the icons' own
-frame (`ICON_FRAME`: the desktop below the menu bar, uniform 100px
-bands — no application furniture lives in the Finder's frame — and the
-64px cell a fixed size, so an icon resolves through the anchor rule):
-the classic left-edge column is a strut that stays at its 16px, its rows
-spring with the middle, an icon dragged into a corner stays in that
-corner — the same unrounded truth cache, the same no-clamp
-reversibility, so a shrink-then-grow round-trips every icon exactly
-home. Icon layout, the **folder windows' pins** (`windows`, keyed
-`folder:<id>` like their icons — the Finder's other furniture, see
-[Folders](#folders); a v3 blob from before them reads none), the open
-SAVED documents' edited faces (and which was active) and the **desktop
-pattern** (the Desktop Patterns panel's setting — the one desktop
-setting that persists; see [Desktop Patterns](#desktop-patterns))
-persist in one versioned localStorage key (`shell/desktop-state.js`, v3 —
-a v1 or v2 blob migrates shallowly, the window geometry those versions
-persisted simply dropped, and a v3 blob from before the pattern reads the
-dither), beside the **`seeded` flag** — the first-boot seeding's record,
-above (`migrateDesktopState` is exported and Node-tested), snapshotted on
-change/exit. **No application window's geometry is in it**: the windoids
-and the document windows place fresh from the live raster every session
-(see [Windows](#windows)) — the persistence layer sees the Finder's
-windows alone, and those as pins, never boxes. Icons restore at
-boot; the per-document entries are deliberately NOT reopened then — what
-a load shows is the URL's call (`?file=<name>`, else the About box; and
-the address bar tracks the active saved document as `#<name>`
-— `shell/url-state.js` — so a plain reload restores it) — they hand a
-saved doc its remembered edited face whenever it IS opened. Untitled
-windows don't survive a reload either way (no autosave — explicit Save is
-the contract). The documents themselves live in IndexedDB.
+renames in place, converging on the same action as File → Rename…, so any open
+window retitles along), and so does every folder and the **Trash**, the one
+icon that is no saved item. The built-ins are **seeded at the first-ever
+boot** through the same save path as ⌘S and are ordinary mutable documents
+from then on; the seeding runs while the profile carries **no record of having
+seeded** — the `seeded` flag, written only after the last built-in is stored,
+so an interrupted boot seeds again next time, skipping what is already stored
+by name. Double-click opens (into the existing window if one is open,
+deselecting the icon as the application takes focus); selecting an icon
+deactivates the application and aims File → Open at the selection; every open
+doc's icon wears the kit's `open` ghost. Icon art is generated **from the
+document itself**: the FRONT tile, **trimmed to its content's bounding box**,
+drawn into 32×32 → data URI, regenerated on every save, declared `color` so
+selection darkens instead of inverting.
+
+Icon **placement is the windows' regime in the icons' own frame** — the whole
+desktop below the **menu bar**, since icons are the Finder's furniture and the
+options strip is application chrome: the default lattice derives from the live
+raster (the classic left-edge column below the Tools band, folding into
+further columns on a short raster), a saved position wins, pulled on-raster at
+boot, and on a **browser resize** every icon keeps its **nine-slice pin** in
+the same stroke as the windows, in `ICON_FRAME` — uniform 100px bands, since
+no application furniture lives in the Finder's frame. An icon dragged into a
+corner stays there, and the same no-clamp reversibility means a
+shrink-then-grow round-trips every icon exactly home.
+
+Icon layout, the **folder windows' pins**, the open SAVED documents' edited
+faces (and which was active) and the **desktop pattern** persist in one
+versioned localStorage key (`shell/desktop-state.js`, v3 — a v1 or v2 blob
+migrates shallowly, the window geometry those versions persisted simply
+dropped), beside the **`seeded` flag**, snapshotted on change/exit. **No
+application window's geometry is in it**: the persistence layer sees the
+Finder's windows alone, and those as pins, never boxes. Icons restore at boot;
+the per-document entries are deliberately NOT reopened then — what a load
+shows is the URL's call — they hand a saved doc its remembered edited face
+whenever it IS opened. Untitled windows don't survive a reload either way (no
+autosave). The documents themselves live in IndexedDB.
 
 ---
 
@@ -1649,146 +853,112 @@ the contract). The documents themselves live in IndexedDB.
 Given orthographic pixel sprites of an object's faces, we reconstruct a voxel
 solid and color its surface. Chosen over three alternatives (textured box,
 sprite-stacking, mesh boolean-extrude) because it's the only one that yields a
-genuine solid that self-occludes, casts a true blocky shadow, and stays crisp at
-any angle — 1 pixel = 1 voxel = 1 cube.
+genuine solid that self-occludes, casts a true blocky shadow, and stays crisp
+at any angle — 1 pixel = 1 voxel = 1 cube.
 
-1. **Ingest** — each sprite is read at native pixel resolution into occupancy +
-   packed-RGB typed arrays at **full tile size (no crop)**. Strict registration:
-   a tile is a literal slice of the lattice, so texel (u,v) maps 1:1 to a fixed
-   lattice line and must line up across faces (the author's job — the editor's
-   onion-skin helps).
-2. **Reconcile dims** — one integer resolution per axis comes straight from the
-   (uniform) tile size: `front → W×H`, `side → D×H`, `top → W×D` (MagicaVoxel's
-   `12×30 + 10×30 → 12×10×30` rule). Views are placed at **identity position** —
-   no re-centering, no bottom-anchor — so a pixel stays exactly where it was
-   painted. Well-formed sheets use **square tiles** (depth reads as a width in the
-   side view but a height in the top view, so only a square tile registers on all
-   three planes); a non-square or mismatched sheet takes the max per axis, places
-   from the origin, and **warns**.
-3. **Carve** — a voxel is solid iff it lands inside the silhouette of **every**
-   provided view. For axis-aligned orthographic sprites this is just a boolean
-   **AND of extruded masks** — no camera matrices, no CSG. Because opposite views
-   project to the same plane, three orthogonal views fully constrain the shape;
-   the extra three only add color.
+1. **Ingest** — each sprite is read at native resolution into occupancy +
+   packed-RGB typed arrays at **full tile size (no crop)**. A tile is a
+   literal slice of the lattice, so texel (u,v) maps 1:1 to a fixed lattice
+   line and must line up across faces.
+2. **Reconcile dims** — one integer resolution per axis comes straight from
+   the tile size: `front → W×H`, `side → D×H`, `top → W×D`. Views are placed
+   at **identity position** — no re-centering, no bottom-anchor — so a pixel
+   stays where it was painted. Well-formed sheets use **square tiles**, depth
+   reading as a width in the side view but a height in the top view; a
+   mismatched sheet takes the max per axis, places from the origin, and
+   **warns**.
+3. **Carve** — a voxel is solid iff it lands inside the silhouette of
+   **every** provided view: for axis-aligned orthographic sprites, a boolean
+   **AND of extruded masks**, no camera matrices and no CSG. Opposite views
+   project to the same plane, so three orthogonal views fully constrain the
+   shape and the extra three only add color.
 4. **Surface extract** — keep only voxels with ≥1 exposed face; record a 6-bit
    exposure mask per voxel.
-5. **Color** — the part most likely to look wrong. Each exposed face is colored
-   by the view that **actually sees it first** along its axis
-   (depth-aware first-hit), snapped to the sprite palette. This is what stops the
-   naive "stamp one sprite pixel down the whole depth ray" smear. Faces no view
-   can see fall through a principled chain: mirrored opposite → neighbor average
-   → dominant body color.
+5. **Color** — the part most likely to look wrong. Each exposed face is
+   colored by the view that **actually sees it first** along its axis
+   (depth-aware first-hit), snapped to the sprite palette — which is what
+   stops the naive "stamp one sprite pixel down the whole depth ray" smear.
+   Faces no view can see fall through a principled chain: mirrored opposite →
+   neighbor average → dominant body color.
 6. **Mesh** — exposed faces (interior culled) are merged **on occupancy
-   alone** into coplanar **regions** (`src/lib/regions.js`, pure,
-   Node-tested): a plane's exposed faces — and the gable caps of the wedge
-   blocks that end on it — traced as one polygon on the lattice with every
-   straight run one edge, holes included, whatever is painted on them, and
-   triangulated by earcut (three's `ShapeUtils`), so a flat wall is two
-   triangles instead of one-per-texel and the wall beside a windshield has
-   one straight diagonal edge — and the color rides a **texture, the
-   skin** (`src/lib/skin.js`, pure, Node-tested), not the geometry. A
-   region whose cells cross a color boundary carries a **chart**: its
-   bounding box as texels, one per cell, the cells' colors verbatim (a
-   cap's cell the wedge's), and every texel the cells don't cover — the
-   one-texel gutter, a hole, the box beyond a diagonal — flooded from the
-   nearest cell, so a fragment on the region's edge never reads a
-   neighbour (and an importer with bilinear filtering on gets no bleed); a
-   region of one color — every one-color wall, and every wedge, one
-   material by its gate — points at that color's **swatch**, a 1×1 chart
-   in a strip, sampled at its center. The skin is therefore only the
-   regions that cross a color plus the strip, its size bounded by those
-   regions' boxes and never by the grid; it is packed deterministically
-   onto a power-of-two sheet, sampled **nearest** with no mipmaps, and
-   built straight from bytes — a `DataTexture`, never a canvas, so a
-   privacy browser's canvas farble can't touch it. Every triangle's UVs
-   are an affine read of its vertices' lattice positions, taken _after_
-   the T-junction repair, so nothing is plumbed through a split. Until Sep
-   7 2026 every triangle carried a vertex color and the merge could only
-   join faces of one color, so a painted wall shattered into a rect per
-   color region and each boundary fed the repair — color doing geometry's
-   job; the Car went **1784 → 900** triangles the day the merge stopped
-   looking (the reference cube's 768 → **12** is the all-one-color case,
-   which always merged whole), and **900 → 244** the same day, when the
-   wedges merged into slope blocks and the rectangles into regions (see
-   [Low-poly](#low-poly-additive-wedges)). The count is the bonus; the reason is the
-   **shape of the export**: the default materials in Unity, Godot and
-   Unreal ignore vertex colors — each needs a custom shader, a toggle or a
-   material-graph node — while a mesh with a `map` renders in every
-   engine's default material as it lands. Emitted into one
-   `BufferGeometry`, rendered `MeshStandardMaterial({ map, flatShading })`
-   (the skin declares sRGB, so the GPU's sampler does the decode the CPU
-   used to). One draw call, real shadows, and `flatShading` lets the
-   directional light separate top from sides for free.
+   alone** into coplanar **regions** (`lib/regions.js`): a plane's exposed
+   faces, and the gable caps of the wedge blocks ending on it, traced as one
+   polygon on the lattice with every straight run one edge, holes included,
+   and triangulated by earcut — so a flat wall is two triangles instead of
+   one-per-texel and the wall beside a windshield has one straight diagonal
+   edge.
+
+   The color rides a **texture, the skin** (`lib/skin.js`), not the geometry.
+   A region whose cells cross a color boundary carries a **chart**: its
+   bounding box as texels, one per cell, with every texel the cells don't
+   cover flooded from the nearest one, so a fragment on the region's edge
+   never reads a neighbour and bilinear filtering gets no bleed. A region of
+   one color — every one-color wall, and every wedge, one material by its
+   gate — points at that color's **swatch**, a 1×1 chart in a strip. The skin
+   is therefore only the crossing regions plus the strip, its size bounded by
+   their boxes and never by the grid, packed deterministically onto a
+   power-of-two sheet, sampled **nearest** with no mipmaps, and built straight
+   from bytes as a `DataTexture` — never a canvas, so a privacy browser's
+   farble can't touch it. UVs are an affine read of each triangle's lattice
+   positions, taken _after_ the T-junction repair.
+
+   The triangle count is the bonus; the reason for a texture is the **shape of
+   the export**: the default materials in Unity, Godot and Unreal ignore
+   vertex colors — each needs a custom shader, a toggle or a material-graph
+   node — while a mesh with a `map` renders in every engine's default material
+   as it lands. (A vertex-colored merge could only join faces of one color, so
+   a painted wall shattered into a rect per color region: the Car went
+   **1784 → 900** triangles when the merge stopped looking at color, and
+   **900 → 244** when the wedges merged into slope blocks.) Emitted into one
+   `BufferGeometry` as `MeshStandardMaterial({ map, flatShading })` — one draw
+   call, real shadows, and `flatShading` separates top from sides for free.
 
 ### Render modes
 
-One, always: the **low-poly** mesh — the visual-hull voxel solid (above),
-greedy-meshed, with 45° wedges added over same-surface staircases — is
-what the 3D View, the 3D Sprite Atlas and the export all render. The
-"smooth" checkbox that could switch the wedges off (leaving the plain
-greedy-voxel solid, every step a hard step) went on Sep 4 2026, and the
-builder it switched to, `voxelMesh` in `src/lib/mesh.js`, went with the
-test trim of Sep 5 2026 — dead code with no consumer; `lib/mesh-util.js`
-keeps the framing and the material — the skin as its texture — the wedge
-mesh finishes with.
+One, always: the **low-poly** mesh — the visual-hull voxel solid,
+greedy-meshed, with 45° wedges added over same-surface staircases — is what
+the 3D View, the 3D Sprite Atlas and the export all render. There is no
+plain-voxel builder any more.
 
 ### Low-poly (additive wedges)
 
 The low-poly mesh keeps the voxel solid and **adds 45° wedges** into concave
 unit-step notches — a staircase of same-surface voxels becomes a smooth ramp
-(windshield, roof, wheel arch). It's **additive only**: wedges fill notches, so
-they can never punch a hole or eat the object, and a shape with no staircase (a
-plain cube) gets no wedges and stays sharp. Every vertex lands on the integer
+(windshield, roof, wheel arch). It's **additive only**: wedges fill notches,
+so they can never punch a hole or eat the object, and a shape with no
+staircase gets none and stays sharp. Every vertex lands on the integer
 lattice, so the result welds **watertight**.
 
-**The planar merge** (Sep 7 2026, in two steps the same day): the scan
-fires per notch cell, but the geometry is emitted per **plane**. A **slope
-is one quad per block** — the wedge cells of one 45° plane, one orientation
-and one intercept, sit on a grid (t up the staircase, r along the ridge)
-that is greedy-merged on one color, so a windshield is two triangles. And
-the **gable caps fold into the walls** — a block's end caps are half-cells
-of the plane they lie on (no cap against solid, none where a wedge of the
-same orientation continues — a color change along the ridge leaves two
-blocks meeting inside the surface), and every plane's exposed faces and
-caps are traced together as one **region** polygon with every straight run
-one edge (`src/lib/regions.js`, above), so the wall beside the windshield
-has one straight diagonal edge and nothing pins a vertex on the slope.
-Emitted per cell, a windshield was a grid of unit quads, and every unit
-edge along the roof's rim pinned a vertex there that the T-junction repair
-fanned the roof around: the Car's 17×10 roof cost 20 triangles, three
-quarters of the raw mesh was wedge slopes, and the Car read **900**. The
-runs merged along the ridge alone read **408** — the roof two triangles
-again, but every slope still a stack of strips, since the caps' corners
-split its long diagonal edge straight back. Per plane it reads **244**, the
-same 236 wedge cells in 20 blocks, watertight. The repair stays as the
-safety net and reads 45° edges too: a region's edge and a slope's ridge
-still meet to different extents where a corner of another plane lands on
-them, and a wall's diagonal is split where the slope beside it changes
-color up its staircase, one block ending against the next.
+**The planar merge**: the scan fires per notch cell, but the geometry is
+emitted per **plane**. A **slope is one quad per block** — the wedge cells of
+one 45° plane, one orientation and one intercept, greedy-merged on one color.
+And the **gable caps fold into the walls**: a block's end caps are half-cells
+of the plane they lie on, and every plane's exposed faces and caps are traced
+together as one **region** polygon, so the wall beside a windshield has one
+straight diagonal edge and nothing pins a vertex on the slope. Per cell the
+Car read **900** triangles; per plane, **244** — the same 236 wedge cells in
+20 blocks, watertight. The T-junction repair stays as the safety net and reads
+45° edges too.
 
-Whether a wedge fires is a **strict same-material test on the two faces it would
-merge** — the corner's **riser** and **tread**. Same color on both ⇒ the corner
-ramps; different ⇒ it stays a crisp step. Nothing else is consulted, which hands
-the sprite author exact, local control over every wedge: to smooth a slope, paint
-both faces it joins the same color (so the top-view art over a windshield must
-match the glass down to its foot); to keep an edge sharp — a roof/window seam, a
-tyre/body join — paint them differently and it can never round. The wedge takes
-its color from that shared material — its whole surface samples that color's
-swatch in the skin. And since the skin (Sep 7 2026) the strictness is the
-triangle count's too: opening the gate to match the occupancy merge was
-measured on the Car and **loses**, 900 → 1092, more wedges being more gable
-caps and more split base faces — so the gate stays exactly as it is. See
-`src/lib/wedge-mesh.js`.
+Whether a wedge fires is a **strict same-material test on the two faces it
+would merge** — the corner's **riser** and **tread**. Same color on both ⇒ the
+corner ramps; different ⇒ it stays a crisp step. Nothing else is consulted,
+which hands the author exact, local control: to smooth a slope, paint both
+faces it joins the same color (so the top-view art over a windshield must
+match the glass down to its foot); to keep an edge sharp — a roof/window seam,
+a tyre/body join — paint them differently and it can never round. The
+strictness is the triangle count's too: opening the gate to match the
+occupancy merge was measured on the Car and **loses**, 900 → 1092, more wedges
+being more gable caps and more split base faces. See `lib/wedge-mesh.js`.
 
 ### Missing faces
 
-Not every face has to be drawn. **Mirror-fill is always on for all three axes:**
-a surface face with no view of its own takes its color from the mirrored
-opposite view, so a half-drawn sheet still colors every face — the built-in
-**Cube** ships only LEFT/FRONT/TOP and mirror-fills RIGHT/BACK/BOTTOM; the
-**Car** draws every face but RIGHT, which mirror-fills from LEFT. Mirroring is
-a _coloring_ step; an axis with no view at all (neither side) is simply
-unconstrained for carving — the shape fills to the bounding box there and warns.
+Not every face has to be drawn. **Mirror-fill is always on for all three
+axes:** a surface face with no view of its own takes its color from the
+mirrored opposite view, so a half-drawn sheet still colors every face — the
+built-in **Cube** ships only LEFT/FRONT/TOP, the **Car** draws every face but
+RIGHT. Mirroring is a _coloring_ step; an axis with no view at all is simply
+unconstrained for carving — the shape fills to the bounding box and warns.
 
 ### Coordinate conventions
 
@@ -1800,507 +970,154 @@ the top row. See `src/lib/views.js` for all six projection mappings.
 
 ## Architecture
 
-The whole grid pipeline is **pure typed-array code — no THREE, no DOM**,
-the app-state layer (`src/state/`) is pure JS, and the desktop's arithmetic
-(`shell/layout.js`) is a pure module — all of it Node-tested (`npm test`
-over `test/*.test.mjs`, about two hundred cases; `test/wedge-mesh.test.mjs`
-and `test/t-junction.test.mjs` load THREE), densest where a bug would be
-silent and expensive: the visual-hull carve and coloring (`pipeline`,
-`carve`, `colorize`, `ingest`), the wedge mesh's watertightness and its
-gate (`wedge-mesh`, `t-junction`), the region trace (`regions`), the
-skin's bake and its UV read (`skin`), the rasterizers (`rect`, `fill`,
-`select`, `brush`, `ants`), the document format (`png-chunks`), the
-document and library contracts (`doc`, `files`, `workspace`, `history`,
-`desktop-state`), and the layout rules (placement, cascade, the nine-slice
-pin and its fixed point). The state slices get a few behavior tests each,
-never the store's discipline per setter; the layout tests pin relationships
-between exported values, never a number against a literal; the shared
-fixtures live in `test/helpers.mjs`.
+The whole grid pipeline is **pure typed-array code — no THREE, no DOM**, the
+app-state layer (`src/state/`) is pure JS, and the desktop's arithmetic
+(`shell/layout.js`) is a pure module — all of it Node-tested (`npm test` over
+`test/*.test.mjs`, about two hundred cases), densest where a bug would be
+silent and expensive: the visual-hull carve and coloring, the wedge mesh's
+watertightness and its gate, the region trace, the skin's bake and its UV
+read, the rasterizers, the document format, the document and library
+contracts, and the layout rules. The state slices get a few behavior tests
+each, never the store's discipline per setter; the layout tests pin
+relationships between exported values, never a number against a literal.
 
 ### Testing
 
-The policy — what earns a test, what never does, and the decision to
-make for every enhancement — is [docs/TESTING.md](docs/TESTING.md); this
-section is its summary. Four layers, each doing the one thing it is
-cheapest at, and a rule for what earns a test — the trim that set them is
-recorded in [docs/test-trim-plan.md](docs/test-trim-plan.md):
-
-1. **Node unit tests** for the pure code above.
-2. **`tools/drive.mjs`**, an integration smoke of user journeys (about
-   eighty checks, a ceiling of a hundred): a check exists only when it
-   crosses a boundary a unit cannot — IndexedDB, trusted input, the real
-   canvas, the menu wiring, a reload — and names an outcome of the app's
-   own: a store value read through a control, a texel, a stored record, a
-   window opened, a handler having run.
-3. **Golden screenshots** (`tools/goldens.sh` over `capture.sh`,
-   `docs/goldens/`) for the look.
-4. **`docs/SMOKE-TEST.md`** for what none of the above can reach: chorded
-   and right-button drags, feel, the cursor, browser zoom, a dropped file.
+The policy — what earns a test, what never does, and the decision to make for
+every enhancement — is [docs/TESTING.md](docs/TESTING.md), and it is binding;
+this is its summary. Four layers, each doing the one thing it is cheapest at:
+**Node unit tests** for the pure code above; **`tools/drive.mjs`**, an
+integration smoke of user journeys, where a check exists only when it crosses
+a boundary a unit cannot — IndexedDB, trusted input, the real canvas, the menu
+wiring, a reload — and names an outcome of the app's own; **golden
+screenshots** (`tools/goldens.sh`) for the look; and **`docs/SMOKE-TEST.md`**
+for what none of the above can reach — chorded and right-button drags, feel,
+the cursor, browser zoom, a dropped file.
 
 The rules. **Never assert the kit**: no check reads a `[part=…]` rect to
 assert on it, counts `vf-*` elements, reads a `--vf-*` property, pins
-`resizable` / `header-height` / a size rect, or asserts a drag's delta or
-DOM order after a raise — locating a kit control through its part to drive
-it is fine. **The drive re-derives nothing**: it imports nothing from `src/`
-but the PNG chunk reader, the zip reader and the glb reader (to open the exports), and checks that the app applied its arithmetic
-(a resize lands where Arrange lands, read off the page). **One home per
-fact**: no constant pinned against a literal, no default parameter, no
-dev-only URL hook, no guard that a retired feature stays absent, no literal
-UI copy. **The store's discipline is tested once**, in `test/store.test.mjs`.
-**A precondition is not a check**: a helper that cannot find its target
-throws. **No check per feature by default**: a change ships with a test
-when it adds a risk the gates do not cover, and commit messages do not
-report check or test counts.
+`resizable` / `header-height` / a size rect, or asserts a drag's delta or DOM
+order after a raise — locating a kit control through its part to drive it is
+fine. **The drive re-derives nothing**: it imports nothing from `src/` but the
+PNG chunk, zip and glb readers, and checks that the app applied its
+arithmetic. **One home per fact**: no constant pinned against a literal, no
+default parameter, no dev-only URL hook, no guard that a retired feature stays
+absent, no literal UI copy. **The store's discipline is tested once**, in
+`test/store.test.mjs`. **A precondition is not a check**: a helper that cannot
+find its target throws. **No check per feature by default**: a change ships
+with a test when it adds a risk the gates do not cover, and commit messages do
+not report check or test counts.
 
 ```
-src/lib/
-  constants.js    default mirror (all-on) / world-size + DB16 pencil palette + named 168-color picker palette (pure)
-  color.js        shared color helpers: hexToRgb / rgbToHex, normalizeHex, rgbKey (24-bit dedup) (pure)
-  views.js        6 view defs + the face vocabulary (keys/normals/index/axis) all derive from FACE_NORMAL; projections, front-edge meta
-  atlas.js        slice a 3x2 sheet <-> face tiles: blitTile write-back, cellOf, validateSheet (pure)
-  ingest.js       sprite -> occupancy/color arrays (full tile, no crop), place, reorient
-  carve.js        dim reconciliation, visual-hull AND, surface extraction
-  colorize.js     depth-aware first-hit surface coloring + palette snap
-  faces.js        the face vocabulary's geometry: FACE_GEO (each face's tangent axes + normal axis),
-                  idxFor (tangent -> voxel index) and pointOf (tangent -> lattice point) (pure)
-  regions.js      coplanar REGIONS: a plane's exposed faces + the wedge blocks' gable-cap halves traced
-                  as boundary loops on the lattice, collinear runs merged (a wall beside a slope has ONE
-                  diagonal edge), outers and holes paired, a texel per cell — what the mesher triangulates (pure)
-  skin.js         the SKIN: the model's color as a texture — a chart per multi-color region (a texel per
-                  cell over its box, the rest flooded from the nearest piece), a swatch per color, a
-                  deterministic power-of-two shelf pack, bytes only (no canvas); uvOfLattice / swatchUV (pure)
-  ring.js         the 3D Sprite Atlas's geometry: the yaw ring, the lattice envelope + square frame,
-                  the camera pose (direction + true up), the sheet, the engine anchor (pure)
-  rect.js         editor rect tool: rounded-rectangle rasterization, per-row runs (pure)
-  fill.js         editor fill tool: contiguous flood + global color replace (pure)
-  select.js       editor selection tool: bounds helpers, the axis lock, lift / clear / composite —
-                  the base + float model with the transparency rule and the no-wrap clip (pure)
-  brush.js        editor pencil primitives: PENCIL_SHAPES (circle / square) + brushRows (the tip's
-                  texels per row — the disc or the box) + brushSpans (those rows clipped to the tile
-                  as system-px spans, the erase ring's input) / writeTexel / stampBrush / strokeLine
-                  (Bresenham) (pure)
-  ants.js         the marching ants' 1-bit raster: antsRuns (a frame's ring as whole-px black/white
-                  runs, the dash cycle + march + seam) and antsOutlineRuns (the same dashes around any
-                  row-convex shape's thin boundary — a circle tip's disc; the box its special case) (pure)
-  pipeline.js     ingest -> carve -> colorize  (pure; Node-testable)
-  t-junction.js   lattice-exact T-junction repair for the merged mesh, axis-aligned and 45° edges; a
-                  split carries every field of its source but the three vertices (pure)
-  mesh-util.js    the skin as a DataTexture (nearest, sRGB) + mesh finishing: the map material (THREE)
-  wedge-mesh.js   the voxel solid as region polygons (earcut, via THREE's ShapeUtils) + additive 45°
-                  wedges as slope blocks, painted by the skin (THE mesh, always on; THREE)
-  sprite-data.js  built-in defaults (as atlases): first-boot seeds + New-dialog templates, + grid->ImageData helper
-  png-chunks.js   PNG chunk surgery: parse + tEXt/iTXt read/replace, CRC32 — the document format (pure)
-  zip.js          a stored (method 0) zip writer + reader, CRC-32 — Export Sprite Atlas…'s container (pure)
-  png-encode.js   a PNG encoder from bytes (8-bit RGBA, stored deflate, Adler-32) — the skin into the
-                  glb without a canvas, so no privacy browser's farble can touch it (pure)
-  gltf.js         a glTF 2.0 binary writer for one textured mesh + its reader — Export 3D Model…'s
-                  file: the skin behind a NEAREST sampler, lit or KHR_materials_unlit (pure)
-  diag.js         geometry watertightness self-check (dev only; ?diag=1)
-src/state/        the app-state layer (pure JS, zero deps beyond lib/, Node-tested)
-  store.js            createStore(): get / patch / subscribe — values BY REFERENCE, silent no-op patches
-  store-controller.js the Lit bridges: StoreController (store change -> host.requestUpdate) and
-                      ActiveDocController (workspace + active-doc structural changes, re-wired
-                      across activation switches; opt-in `selection: true` follows the active
-                      context's selection store too — only the options strip asks)
-  doc.js              the canonical document (atlas + sliced views + tile geometry) with TWO channels:
-                      change (structural) and live (stroke-rate, rAF-coalesced blit-then-notify);
-                      owns applyTileEdit / drain / dropLive / loadAtlas / resizeTiles / replaceAllTiles
-                      / restoreTile / restoreAtlas (the undo paths). A FACTORY — one instance per
-                      open document (no singleton)
-  workspace.js        the OPEN documents: DocContexts (own doc + history + face + fileId/name/dirty
-                      + a per-context selection store: the canvas's marquee OUTLINE and the rect
-                      tool's drag box, for the strip's readouts — never through the workspace
-                      store, they move at pointer rate — + a per-context RING store, the 3D
-                      Sprite Atlas's settings, seeded at open from the document's chunk, a
-                      change dirtying the context, every save writing it),
-                      activeKey (the kit's vf-activate mirrored in), untitled naming, per-context
-                      dirty tracking, the stored flows (openStored/save/duplicate/rename/export/
-                      removeStored/emptyTrash — a context whose stored file is gone keeps its
-                      pixels and name, loses its identity and reads DIRTY), and followActive()
-                      — the follow-the-active-document primitive
-  session.js          editor session (app-level): tool, ink, per-tool options (the pencil's and the
-                      eraser's tip size AND tip shape, each tool's its own; circle every load), picker
-                      flag — one palette, one ink, however many documents are open
-  prefs.js            autoRotate (the one render toggle — the 3D View's controls strip writes it; OFF
-                      every load. The low-poly pass has no toggle: always on) + showRing (the 3D
-                      Sprite Atlas windoid; View → 3D Sprite Atlas and its close box write it, off by
-                      default)
-  ring-settings.js    the 3D Sprite Atlas's settings STORE (views / elevation / offset / size — the
-                      tile's edge in px — / paper; clamped setters; a seed through them) — a
-                      FACTORY, one per open document (ctx.ring) — + the document chunk's
-                      encode/parse (ringChunk / parseRingChunk, the four as JSON). Pure: no
-                      workspace import, so files.js can use it
-  ring.js             the app-level `ring`: a FAÇADE over the ACTIVE document's settings store
-                      (get / subscribe / the setters route to it; a switch notifies only when the
-                      reading moves; the desktop focused keeps the last served until it closes)
-                      + the SHEET CHANNEL (the rendered sheet, by reference, the doc's onLive
-                      shape) + ringMetaChunks (the export's text chunks) + texturePackerJson (the
-                      sheet's TexturePacker JSON)
-  build.js            dims / voxels / tris / warnings / error — written by the rebuilder (+ the loaders'
-                      errors); the tri count read by the 3D View's status line, warnings/error recorded only
-  files.js            the document LIBRARY: listing + availability + per-document storage ops
-                      (save/load/rename/remove/export, each taking an explicit doc + identity —
-                      the identity carrying the ring settings a save writes as their chunk, a
-                      load handing them back — and where a NEW record lands, its folder) + the
-                      FOLDERS: the catalog's tree (createFolder / renameFolder / moveDoc /
-                      moveFolder — a folder never into itself or a descendant — / removeFolder)
-                      and its pure selectors (childrenOf / isInside / folderPath /
-                      nextFolderName) + the TRASH: a folder with no record (TRASH — a synthetic
-                      row every listing leads with; a rename, a move, a removal and a folder
-                      made inside it refused) and emptyTrash (its whole subtree removed, the one
-                      destructive op) with isTrashed / descendantsOf — browser deps (storage,
-                      PNG codec, icon art) injected
-  shell.js            appActive + icon selection (the menus and the focus gating share one
-                      truth; the windoids are permanent — no flags) + the desktop pattern
-                      (the Desktop Patterns panel's Set; the one desktop setting that persists)
-  history.js          bounded undo/redo: tile-gesture + whole-atlas snapshot entries over the doc's
-                      restores. A FACTORY — one instance per open document (no singleton)
-  derive.js           pure selectors: editorViewModel(doc, face) -> { tile, mirrorBehind, wasDerived }
-src/storage/
-  db.js           the IndexedDB promise wrapper (version 2: the `docs` store — a record's `folder`
-                  the one field that is neither chunk nor cache — and the `folders` store) the
-                  files slice takes by injection
-src/scene/
-  stage.js        renderer, camera + orbit controls, lights, ground, framing, on-demand render loop, resize
-  rebuilder.js    the pipeline's ONLY consumer: follows the ACTIVE document (change+live channels,
-                  re-wired per activation) -> buildVoxels -> the wedge mesh (always) -> mesh swap
-                  (the geometry, the material AND its skin texture disposed) -> build stats;
-                  a window switch re-frames the camera (a new subject); hands every mesh (and
-                  null before a dispose) to the outside consumers — the 3D Sprite Atlas's
-                  renderer and the model export — through the onMesh seam
-  ring-renderer.js  the 3D Sprite Atlas's own THREE world on an offscreen canvas: a shared-geometry
-                  clone of the rebuilder's mesh, an orthographic camera posed per yaw (lib/ring.js),
-                  the light rig riding in the camera's frame, N frames rendered into ONE sheet canvas
-  ring.js         the follower around it (the renderer made lazily on the first render): the onMesh
-                  subject, a render per setting change or rebuild — at most one per frame, and only
-                  while the windoid is shown (hidden: dirty, the show renders) — published on the
-                  ring slice's sheet channel; Export's renderSheet()
-  model-export.js the 3D model export's subject: the rebuilder's mesh through the same onMesh seam,
-                  turned into a glb on demand — the mesh's own buffers, the skin's bytes as a PNG,
-                  the scale in voxels per meter — Export 3D Model…'s feed to lib/gltf.js
-src/shell/        the desktop's behavior modules (imperative wiring over the index.html skeleton)
-  layout.js       the window + icon arithmetic (pure, Node-tested): initialPlacement (the smart
-                  boot/open arrangement from the raster — the ONLY source of an application
-                  window's geometry, none of which persists; the atlas strip docked at the
-                  bottom, the doc box shortened only while it is shown) + cascadeFrom (the
-                  document windows' first-free-slot
-                  cascade) + folderBox / folderViewport / iconGridDefault / fieldExtent +
-                  FOLDER_STRIP / FOLDER_COUNT_LINE / FOLDER_COUNT_AT (the folder windows: the
-                  placement, the plane's viewport, the in-window icon lattice, the field's
-                  extent, the item-count header over the Finder's double rule — two kit
-                  rules) + TOOL_CELL / TOOLS_BOX (the Tools palette: the 22×19 icon
-                  cell — the tool strip's, the icon's own size — and the windoid box
-                  it derives, the one index.html authors and the drive pins) + spriteHeightFor (the fixed-size
-                  Sprite View windoid: picker-block width, atlas-ratio height) + RING_FIELDS
-                  (the 3D Sprite Atlas strip's DITL: the controls' box, rows, caption
-                  columns and field lefts in whole system px against the window header's
-                  corner — RING_STRIP, the header's height, and RING_MIN_WIDTH derive from
-                  it) + ringHeightFor / ringRowWidth / ringWidthFor (the windoid:
-                  a derived height — the chrome over one row of tile-size cells — the row's
-                  own width, and a seeded, user-owned width: the row floored at its strip,
-                  capped at the vacancy) + iconDefault
-                  (the raster-derived icon lattice) + trashDefault (the Trash's bottom-right
-                  corner) + pinOf/pinTo (the nine-slice pin across raster
-                  resizes — struts in the outer bands, springs in the middle — framed per tier:
-                  WINDOW_FRAME below the options strip with the rail-sized top/right bands,
-                  ICON_FRAME below the menu bar, uniform) + isPin (the shape test a stored
-                  folder-window pin passes before pinTo re-expresses it)
-  windows.js      the two window regimes: windoid visibility (appActive <-> hidden; non-closeable —
-                  but for the 3D Sprite Atlas: appActive AND prefs.showRing, its close box the
-                  uncheck, fitRing its height-follows-the-tile-size derivation — declared to
-                  the grow box as the kit's size rect, so it resizes on the horizontal axis
-                  alone; the 3D View's floor is declared the same way), and
-                  the document-window reconciler (template clone per context, the doc box
-                  cascaded — never a restored geometry, title sync, close-box routing); the vf-activate wire into
-                  shell.appActive + workspace.activeKey; boot clamp + the resize rule (every window
-                  re-pins by the nine-slice pin — the placement being a fixed point of it); arrange()
-                  (View → Arrange Windows: the placement re-run over every window) + arranged()
-                  (would arrange() change anything on screen? every visible window's live box
-                  against the target box its placement would write — the ⌘J item's state rule,
-                  so every placement here is a computed box before it is a write) + zoomActive()
-                  (⌘J's other half: the active document window through the zoom box's own
-                  toggle) + onLayout (the layout signal the item re-derives on); the
-                  Sprite View's fixed sizing (fitSprite — boot + doc switches/tile resizes);
-                  the PANEL adoption (addPanel/removePanel: a document-tier window that is
-                  not a document — the Desktop Patterns control panel — placed, arranged and
-                  re-pinned like every window, and mirroring as the Finder's turn when active)
-  menus.js        vf-menu-select -> workspace/file actions on the ACTIVE document; the two-role
-                  focus gating + checkmark sync; the ⌘J item's state rule (Arrange Windows —
-                  the value, arrange / zoom, read off windows.arranged(); the label fixed); the View menu's
-                  open-windows section (one item per open document window after a separator,
-                  reconciled off the workspace: the name, the active one checked, creation
-                  order; a pick activates its window, from the Finder role too); Desktop Patterns ->
-                  the panel (patterns.js);
-                  every dialog flow (About — the boot greeting too, its version + date
-                  lines stamped at wire-up from vite.config.js's define — / Settings / New
-                  Document (templates + tile size) / Open / name prompt / Properties /
-                  unsaved-changes / the Empty Trash alert (Sprite Machine → Empty Trash…: the
-                  count and the K, OK → workspace.emptyTrash; the item greyed while the Trash
-                  is empty, New Folder greyed with the Trash's window front) / storage notice
-                  / Export Sprite Atlas — the ring slice's
-                  settings as a live form, Export = the strip's sheet as «slug»-atlas.zip: the
-                  PNG with the ring chunk + its TexturePacker JSON); the quit cascade
-  icons.js        the icon layer: a RECONCILER over containers — the desktop's vf-icon-field and
-                  every open folder window's — one vf-icon per saved doc (generated front-tile
-                  art, `color`), per folder (the app's 1-bit folder art, `data-folder`) and
-                  for the TRASH (its two cans, empty / full off its contents; not editable,
-                  never filed, its default the corner; on every desktop, ?fresh too),
-                  open/rename wiring, open ghosts, placement (a saved position by item in its
-                  container's coordinates, else the container's first free lattice cell) + the
-                  desktop's boot clamp + its resize re-pin (below the menu bar), the session
-                  memory of a closed window's positions (positions() feeds desktop-state), the
-                  Finder wire (a press in the desktop's field deactivates; the selection feeds
-                  the shell slice for the Finder's File → Open, and is re-selected across a
-                  press on the app's chrome — menu bar / menu / dialog — which the kit's
-                  vf-icon would otherwise clear: kit ask #5's page-side bridge), and FILING —
-                  the kit's outline drag (vf-drag / vf-drop) hit-tested by the page: onto a
-                  folder icon, into a folder window, out to the desktop → files.moveDoc /
-                  moveFolder, the `target` highlight, the cycle refusal
-  folders.js      the folder windows — the Finder's: one vf-window per OPEN folder cloned from
-                  #tpl-folder-window (the item-count header over the Finder's double rule, a
-                  placed vf-icon-field sized to the
-                  folder's extent — the scroll range), adopted by windows.js as a PANEL
-                  (layout.js folderBox: the doc box's corner, cascaded), removed by its close
-                  box (existence IS visibility); open / close / isOpen / fields / folderOf /
-                  activeFolder (the Finder's front window) / fit / pins; its box persists as
-                  its nine-slice pin (the desktop state's, by item — remembered at a close,
-                  read live at a snapshot), the next open re-expressing it on its raster
-  desktop-state.js  icon layout (by item — doc:<id> / folder:<id> — in its container's own
-                  coordinates, merged over the map last written so a closed folder window's
-                  icons keep theirs) + the folder windows' PINS (`windows`, keyed like their
-                  icons — the Finder's furniture; layout.js isPin guards a read) + the open
-                  saved docs' edited faces (+ active) + the desktop pattern in one versioned
-                  localStorage key (v3; v1/v2 migrate, their window geometry dropped) — an
-                  application window's geometry never persists
-  url-state.js    the address-bar mirror: the ACTIVE saved document's name -> location.hash
-                  (#Cube, replaceState; cleared for untitled/none) so a reload restores it
-  clock.js        the menu bar clock: a kit vf-label at the bar's right end — the time on the
-                  minute, a press shows the date for a moment (injectable now(); ?now freezes it)
-  patterns.js     the desktop pattern: shell.desktopPattern -> vf-desktop's `pattern` (the boot
-                  restore validated through the kit's own parsePattern), and the Desktop
-                  Patterns control panel's lifecycle — ONE document-tier window cloned from
-                  #tpl-patterns-window, centered (layout.js centeredBox), adopted by windows.js
-                  as a panel, removed by its close box (existence IS visibility)
-src/
-  main.js         the composition root: parse params -> seed stores -> fit desktop + cursor -> shell wiring
-                  -> stage + rebuilder -> boot documents (test-path sample / ?file=<name> /
-                  the About box greet, after the one truly-virgin seeding) -> the ?patterns /
-                  ?about capture hooks
-  boot/params.js  URL-param parsing -> one typed boot object (pure, Node-tested)
-  loaders.js      every way a sheet enters (template-or-sample / file / blank at a chosen tile size):
-                  decode + validateSheet -> a FRESH workspace context | build.setError; a dropped
-                  PNG's Title/transforms chunks restore its identity; + seedDefaultDocs, the
-                  virgin-boot one-shot that saves the built-ins as ordinary stored documents
-  drop-target.js  whole-app drag & drop + overlay -> loaders -> the new window surfaces
-  shortcuts.js    document-level S/B/R/G/E/I -> session actions, gated on appActive (menu key
-                  equivalents are the kit's; Esc/Shift are gesture-scoped and live in the canvas)
-  components/     all Lit, standard SHADOW DOM (mostly `:host { display: contents }`; the one
-                  exception is sm-color-picker — light DOM, see its entry) — see "UI layer" below
-    sm-editor.js       CONNECTED container: a document window's body, one per open document — the
-                       artwork well over ITS DocContext (`ctx`, assigned by
-                       the reconciler pre-append); memoizes the per-face view model (face /
-                       views-identity / geometry), feeds canvas gesture commits to ITS history,
-                       tells its canvas whether it is the ACTIVE window (the selection's Esc gate)
-    sm-draw-canvas.js  leaf: the pixel-canvas subsystem — working buffer (+ImageData view, by reference),
-                       selection/pencil/rect/fill gestures (the selection's base + float + offset
-                       composited in place, its ants on their own layer), integer-scale layout,
-                       overlay layers, gesture-scoped keys, per-gesture undo capture (sm-commit)
-    draw-overlays.js   pure canvas painters for the hover footprint (the tip's disc or box, row by
-                       row) / rect drag preview / the marching ants — the selection's ring, and the
-                       same dashes around a footprint's OWN outline (a circle tip's disc as a disc):
-                       the erase treatment's (the eraser's footprint, a right-button stroke; a rect
-                       drag erasing rings its box) and the eyedropper's sample target
-    sm-face-picker.js, sm-tool-strip.js, sm-tool-options.js
-                       presentational leaves: props down, bubbling sm-* events up, no store imports
-    sm-options-bar.js, sm-tools-panel.js, sm-atlas-controls.js, sm-atlas-view.js,
-    sm-ring-controls.js, sm-ring-view.js, sm-stage-controls.js, sm-status-line.js,
-    sm-color-picker.js, sm-desktop-patterns.js
-                       connected chrome: the options strip (a kit vf-container band: current-ink
-                       swatch + options, no tool name; hidden while the desktop is focused;
-                       bounds from the active document) / the Tools palette body / the
-                       Sprite View's controls (sm-atlas-controls, in the window's HEADER
-                       slot: the face picker in a placed vf-container at the DITL's
-                       rectangle, SPRITE_PICKER_AT -> workspace.setFace on the ACTIVE key)
-                       and its body (sm-atlas-view: the clickable 3×2 face-tile vf-grid —
-                       tile picks fire on the press, the selected tile ringed in
-                       black ink — the cells live canvases following the active
-                       document) / the 3D Sprite Atlas's controls (sm-ring-controls, in
-                       the window's HEADER slot: the two-row settings strip as a DITL —
-                       the captions and fields placed at the top/left shell/layout.js's
-                       RING_FIELDS states against the header's corner -> the ring slice)
-                       and its body (sm-ring-view: the body's paper — a vf-container
-                       pattern filling the body's width, the tile tall, its pattern the
-                       slice's paper setting, white with no control today — holding a
-                       rules="none" vf-grid in flow, one bare vf-stack cell per view
-                       painted 1:1 from the sheet channel) / the 3D View's controls
-                       (sm-stage-controls, in the
-                       window's HEADER slot: the rotate checkbox — the one toggle, off
-                       every load — in a kit row stack -> prefs) / the windows' status
-                       readouts (tile = the window's edited face; build = the 3D View's
-                       triangle count; the Sprite View and the 3D Sprite Atlas carry none) /
-                       the app-level Colors dialog (in index.html's dialog set, rendered into its
-                       LIGHT DOM on purpose: the kit's page-drawn cursor stays above a modal only
-                       when it can observe the vf-dialog's `open` flip, and its observer sees the
-                       light DOM alone — a shadow-rooted dialog would open above the cursor) /
-                       the Desktop Patterns panel's body (the kit-patterned preview well over
-                       the 13×3 grid of every kit pattern over Set Desktop Pattern: a pending
-                       selection picked by click, committed through shell.setDesktopPattern)
-    ui-bits.js         the shared caption template helper and the `pattern` attribute's parse
-                       the two patterned-cell views share
-    base-styles.js     the shared border-box reset every component composes first (box-sizing
-                       doesn't inherit across shadow boundaries)
-  image-io.js     File/URL/bytes <-> ImageData codecs, a canvas -> PNG bytes, PNG downloads,
-                  generated icon art (browser)
-  assets/         the app's own raster art, every piece through the kit's vf-img at 1:1: tools/ (the
-                  tool strip's six 22×19 1-bit icons — no icon library), faces/ (the face picker's
-                  21×26 1-bit cubes + the selected dither, black ink), the 32×32 application icon
-                  (the About box), the 32×32 1-bit folder and the Trash's two cans (empty / full)
+src/lib/      the domain — pure, no THREE and no DOM but for the mesh: the pipeline
+              (ingest → carve → colorize), the mesher (regions, wedge-mesh, t-junction,
+              skin, mesh-util), the atlas's geometry (ring), the editor's rasterizers
+              (rect, fill, select, brush, ants), the file formats (png-chunks, zip,
+              png-encode, gltf), the vocabularies (views, faces, atlas, color, constants
+              — PALETTE_168 among them) and the built-in sprites
+src/state/    the app-state layer, pure JS and Node-tested: store + the Lit bridges; doc
+              (two channels) and history, FACTORIES one per open document; workspace (the
+              open documents as DocContexts, activeKey, the stored flows); files (the
+              library, the folder tree, the Trash); session, prefs, build, shell; and the
+              atlas's per-document settings behind an active-document façade (ring)
+src/storage/  the IndexedDB wrapper (v2: `docs`, whose `folder` is its one non-chunk
+              field, and `folders`), injected into the files slice
+src/scene/    stage (renderer, camera, lights, framing, on-demand loop); rebuilder, the
+              pipeline's ONLY consumer, handing every mesh out through the onMesh seam;
+              the atlas's offscreen world and its follower; the glb export's subject
+src/shell/    the desktop's behavior over the index.html skeleton: layout (ALL the window
+              and icon arithmetic, pure and Node-tested — the placement, the cascade, the
+              derived sizes and DITLs, pinOf / pinTo / isPin), windows (the two regimes,
+              the resize rule, arrange / arranged / zoomActive, the panel adoption), menus
+              (actions, the two-role gating, every dialog flow), icons (the reconciler,
+              the Finder wire, filing), folders, desktop-state, url-state, clock, patterns
+src/          main (the composition root), boot/params, loaders (+ seedDefaultDocs),
+              drop-target, shortcuts, image-io, and components/ — all Lit and shadow DOM
+              but for sm-color-picker: sm-editor over sm-draw-canvas and draw-overlays,
+              the dumb leaves, and the connected chrome
+src/assets/   the app's own raster art, every piece through vf-img at 1:1: the six 22×19
+              tool icons, the 21×26 face cubes and the selected dither, the 32×32
+              application icon, the folder, the Trash's two cans and its 12×12 mark
 ```
 
 ### UI layer: Lit + a hand-rolled store
 
-The chrome is `lit`, the library `vintage-frames` itself is built on (one deduped
-copy — `npm ls lit`), organized in **three layers with dependency arrows only
-pointing down**: presentation (`components/` + `scene/` + `shell/`) → app
-state (`state/`) → domain (`lib/`, with `storage/` a leaf the files slice
-takes by injection, so it stays Node-testable). The state mechanism is a
-~40-line observable store (`createStore`: get / patch / subscribe). The
-app-level slices are `workspace` (the open documents — see below),
-`session` (the editor's brush state), `prefs`, `build`, `files` (the
-document library), and `shell` (appActive + icon
-selection); `doc` (the canonical document) and `history`
-(undo/redo) are **factories, instantiated per open document** inside each
-workspace DocContext. Two Lit ReactiveControllers bridge them:
-`StoreController` (re-render on a slice change) and `ActiveDocController`
-(re-render on workspace changes AND the active document's structural
-changes, re-wired across activation switches via `followActive`).
-**Connected** components (`sm-editor` and the chrome) read slices and call
-named actions, and the `shell/` modules wire the desktop's skeleton
-(menus, windows, icons — index.html markup, behavior only) to the same
-slices; the editor **leaves** are dumb — props down, bubbling `sm-*` events
-up, no store imports — so store coupling stays visible and greppable. Every
-component is a **standard shadow-DOM Lit element**: its
-styles live with it as ``static styles = css`…` ``, scoped to its own root and
-composed over a shared `baseStyles` (`components/base-styles.js` — the
-border-box reset, which does not inherit across shadow boundaries). The one
-deliberate exception is `<sm-color-picker>`, which renders into its **light
-DOM**: the kit's page-drawn cursor keeps itself above a modal by re-promoting
-its top-layer popover when it observes a `vf-dialog`'s `open` attribute flip,
-and its MutationObserver watches the light DOM only — a shadow-rooted dialog
-opens above the cursor art. The same token discipline applies inside shadow
-roots that state a cursor of their own (the canvas's crosshair, the tool
-cells): `applyCursor()`'s `* { cursor: none }` blanket can't pierce a shadow
-root, so those declarations read `var(--vf-cursor, …)` first, exactly like
-the kit's own chrome. Hosts that
-are pure containers dissolve with `:host { display: contents }`, so the
-flattened box tree is exactly what the classed markup lays out;
-`<sm-tool-options>` and `<sm-options-bar>` carry real boxes (they ARE the
-options area and its strip). Leaf events are dispatched on the host element
-itself — the host lives in the parent's tree, so they reach the container
-without `composed`. `style.css` keeps only the page's share: the palette
-tokens (custom properties inherit into every shadow tree), the reset, the
-black ground behind the desktop bezel, the light-DOM Colors-dialog host's
-display, the 3D viewport's fill rules, and the
-drop overlay `drop-target.js` renders into the page. One consequence for
-tooling: `tools/capture.sh dom`
-serializes light DOM only — now the desktop skeleton (menus, windows,
-dialogs) plus `<title>`, but never the components' internals — so the
-byte-deterministic screenshots and the shadow-piercing `drive.mjs` remain
-the regression surface.
+The chrome is `lit`, the library `vintage-frames` itself is built on (one
+deduped copy), in **three layers with dependency arrows only pointing down**:
+presentation (`components/` + `scene/` + `shell/`) → app state (`state/`) →
+domain (`lib/`, with `storage/` a leaf the files slice takes by injection, so
+it stays Node-testable). The state mechanism is a ~40-line observable store.
+**Connected** components read slices and call named actions, and the `shell/`
+modules wire the desktop's skeleton to the same slices; the editor **leaves**
+are dumb — props down, bubbling `sm-*` events up, no store imports — so store
+coupling stays visible and greppable. Every component is a **standard
+shadow-DOM Lit element** over a shared `baseStyles`. The one deliberate
+exception is `<sm-color-picker>`, which renders into its **light DOM**: the
+kit's page-drawn cursor keeps itself above a modal by watching a
+`vf-dialog`'s `open` flip through a MutationObserver on the light DOM alone,
+so a shadow-rooted dialog would open above the cursor art. The same discipline
+applies inside shadow roots that state a cursor of their own:
+`applyCursor()`'s `* { cursor: none }` blanket can't pierce a shadow root, so
+those declarations read `var(--vf-cursor, …)` first. `style.css` keeps only
+the page's share — the palette tokens, the reset, the ground behind the bezel,
+the light-DOM dialog host, the 3D viewport's fill rules and the drop overlay.
 
 **The two-speed state system** is the correctness core. Store state is what
 templates read; everything the canvas hot paths touch is a plain `#private`
-field in `<sm-draw-canvas>` (the pixel buffer and its `ImageData` view,
-stroke/drag state, the on-screen scale) — so a pencil drag can never schedule a
-re-render at pointer-move rate. Each document's doc formalizes the split
-with **two channels**: `subscribe` (change — structural: load / resize /
-replace-all / undo restore, drives templates, view-model re-derivation,
-dirty tracking and menu sync) and `onLive` (stroke-rate, rAF-coalesced
-blit-then-notify, whose only subscribers are the mesh rebuilder and — same
-cost class, one blit per frame — the Full Sprite View, both following the
-ACTIVE document). A live stroke lands via `applyTileEdit`,
-which stores the canvas's working buffer **by reference** into `views[face]`
-_silently_ on the change channel — the onion-skin recomputes only on a
-face switch or structural change, never mid-stroke — and every
-canonical-atlas consumer (save, export, resize, replace-all, an undo
-snapshot) folds the pending stroke in first through the one `drain()` guard.
-Canvas backing stores are sized imperatively in `updated()`, never bound in a
-template (a bound `width` would clear the buffer mid-diff); user-editable
-`vf-*` values are controlled bindings with `live()`, so a re-render can't skip
-a re-sync after typing.
+field in `<sm-draw-canvas>`, so a pencil drag can never schedule a re-render
+at pointer-move rate. Each document's doc formalizes the split with **two
+channels**: `subscribe` (structural — load, resize, replace-all, undo restore,
+driving templates, dirty tracking and menu sync) and `onLive` (stroke-rate,
+rAF-coalesced, whose only subscribers are the mesh rebuilder and the Full
+Sprite View). A live stroke lands via `applyTileEdit`, which stores the
+working buffer **by reference** _silently_ on the change channel — the
+onion-skin recomputes only on a face switch or structural change, never
+mid-stroke — and every canonical-atlas consumer (save, export, resize,
+replace-all, an undo snapshot) folds the pending stroke in first through the
+one `drain()` guard. Canvas backing stores are sized imperatively in
+`updated()`, never bound in a template; user-editable `vf-*` values are
+controlled bindings with `live()`, so a re-render can't skip a re-sync after
+typing.
 
-**One element per document, for the document's lifetime:** each document
-window's `<sm-editor>` is created with its window (the reconciler assigns
-its DocContext before the append — via `document.importNode`, so the clone
-is upgradeable and the assignment lands before `connectedCallback` wires
-the doc subscription) and lives until the document closes. The desktop's
-raise-driven DOM re-orders disconnect/reconnect it without loss (the canvas
-subsystem rebuilds its observers on reconnect), and the brush state lives
-in the app-level session slice, so it couldn't die with a DOM node anyway.
-A face swap, tile resize, all-tiles replace or undo is just a store action;
-the editor re-derives its per-face view model (memoized on face /
-`views`-identity / tile geometry) and the canvas resets its working buffer
-only when the tile's IDENTITY actually changes.
+**One element per document, for the document's lifetime:** each window's
+`<sm-editor>` is created with it — the reconciler assigns its DocContext
+before the append, via `document.importNode`, so the assignment lands before
+`connectedCallback` wires the doc subscription — and lives until the document
+closes. The desktop's raise-driven DOM re-orders disconnect/reconnect it
+without loss, and the brush state lives in the app-level session slice. A face
+swap, tile resize, replace or undo is just a store action; the canvas resets
+its working buffer only when the tile's IDENTITY changes.
 
 ## Known limitations & next steps
 
 - **Concavity** — a visual hull is a convex-ish over-approximation along each
-  axis (e.g. the gap between wheels fills into a skirt). An opt-in per-column
+  axis (the gap between wheels fills into a skirt). An opt-in per-column
   **depth channel** would subtract single-axis notches; the color rule already
   handles depth.
-- **Low-poly scope** — wedges are **additive only**: a convex staircase (a hood
-  sloping down-and-out) still steps, and where two wedge ridges meet at a true
-  3-D corner it degrades to a step rather than a corner tile. Base faces **are**
-  merged (on occupancy, into coplanar regions — the color is the skin's, so
-  no boundary splits a plane), and the wedges into slope blocks; the
-  T-junctions that merging leaves where a region and a block meet to
-  different extents are stitched out by a lattice-exact repair pass
-  (`t-junction.js`, axis-aligned and 45° edges), so the result stays
-  watertight (a regression test asserts zero boundary edges).
-- **Perf** — hidden-face culling + the planar merge keep it to one draw
-  call and a handful of triangles — the mesh carries its color as one small
-  texture, the skin, whose size scales with the multi-color regions'
-  boxes and never with the grid, rebaked from bytes on every rebuild and
-  disposed with the mesh — and the render loop only redraws on change
-  (idle scenes don't repaint). The carve is a synchronous O(n³) walk, so the tile
-  stepper is capped at **64** (a 64³ grid still rebuilds live per stroke); to lift
-  that ceiling, move `buildVoxels` to a Web Worker (it's pure typed-array code,
-  trivially transferable — and `scene/rebuilder.js` is the pipeline's only
-  caller, so making it async is a local change). For a scene of _many_ objects,
-  batch identical ones with an object-level `InstancedMesh`.
+- **Low-poly scope** — wedges are **additive only**: a convex staircase still
+  steps, and where two ridges meet at a true 3-D corner it degrades to a step.
+  The T-junctions the merge leaves are stitched out by a lattice-exact repair
+  pass, so the result stays watertight (a regression test asserts zero
+  boundary edges).
+- **Perf** — culling + the planar merge keep it to one draw call and a handful
+  of triangles, the color one small texture rebaked per rebuild and disposed
+  with the mesh, and the render loop only redraws on change. The carve is a
+  synchronous O(n³) walk, so the tile stepper is capped at **64**; to lift
+  that, move `buildVoxels` to a Web Worker — it is pure typed-array code, and
+  `scene/rebuilder.js` is its only caller.
 - **Autosave** — a deliberate non-goal: explicit Save is the contract, with
-  the `beforeunload` guard (any dirty open document) as the net; untitled
-  windows don't survive a reload for the same reason.
-- **The registered move** — the selection tool's next step, and the one
-  that makes it a 3D tool: a move "on all faces" that keeps the atlas in
-  registration. A marquee on one face is a slab of voxels — a FRONT rect's
-  columns on TOP/BOTTOM, its rows on LEFT/RIGHT, its mirror on BACK — so a
-  horizontal move on FRONT shifts those columns on the top and bottom
-  faces (and the mirrored ones on BACK) by the same delta, a vertical move
-  those rows on the sides, everything else untouched; the per-face bounds
-  and deltas come from the views' image-axis table (`VIEW_IMAGE_AXES`, the
-  one the sheet resize registers by), the per-face edit is `select.js`'s lift / clear /
-  composite over each face's slice, and the undo is one whole-atlas
-  snapshot. Controlled by a session checkbox in the strip, the fill tool's
-  "on all faces" idiom. The single-face move is written so nothing about it
-  changes shape for this (see `#applyMove` in `sm-draw-canvas.js`).
-- **Export** — File → Export 3D Model… is live (see [Menu bar](#menu-bar)):
-  one glb, the skin embedded from bytes behind `NEAREST` samplers, which
-  the engines' default materials read as it lands — the reason the color
-  is a texture at all. Its follow-ups: the skin beside the model as a PNG
-  for an engine that wants it separately (a zip, the atlas export's
-  container), and a word for Unity users — its texture importer generates
-  mipmaps regardless of the sampler, and a mipmapped chart bleeds its
-  neighbours at distance, so mipmaps go off on the texture the way any
-  pixel-art texture is imported there. The `onMesh` seam the 3D Sprite
-  Atlas added hands every mesh to the export's subject beside the atlas's
-  renderer. File → Export Sprite Atlas… is live (see
-  [Windows](#windows)); its follow-ups: per-document settings in a
-  `sprite-machine:ring` chunk on the document itself (the transforms
-  chunk's idiom — the export chunk already has the JSON shape), a drop
-  shadow in the sprite (a `ShadowMaterial` ground, consistent across the
-  ring under the camera-relative key), elevation presets for isometric
-  engines (30 / 35.264 / 45 / 60), and per-frame padding for engines that
-  want it (the tile size is the user's already, so a power-of-two frame is
-  a typed number; the scrolling strip shipped — see [Windows](#windows)).
-  File → Download stays the source path (the document `.png` verbatim).
+  the `beforeunload` guard as the net; untitled windows don't survive a reload
+  for the same reason.
+- **The registered move** — the selection tool's next step, and the one that
+  makes it a 3D tool: a move "on all faces" that keeps the atlas in
+  registration, since a marquee on one face is a slab of voxels — a FRONT
+  rect's columns on TOP/BOTTOM, its rows on LEFT/RIGHT, its mirror on BACK.
+  Controlled by a session checkbox, the fill tool's "on all faces" idiom.
+- **Export follow-ups** — the skin beside the model as a PNG for an engine
+  that wants it separately, and a word for Unity users: its texture importer
+  generates mipmaps regardless of the sampler, and a mipmapped chart bleeds
+  its neighbours at distance, so mipmaps go off on the texture the way any
+  pixel-art texture is imported there. For the sprite atlas: a drop shadow
+  (consistent across the ring under the camera-relative key), elevation
+  presets for isometric engines, and per-frame padding. File → Download stays
+  the source path, the document `.png` verbatim.
