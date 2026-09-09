@@ -6,6 +6,7 @@
 
 import { VIEW_OPPOSITE, MIRROR_AXIS } from '../lib/views.js';
 import { flip } from '../lib/ingest.js';
+import { edgeHintFrame } from '../lib/edges.js';
 
 // Mirror a tile for display (an axis-flip in image space), so a mirror-derived
 // face shows the way we actually render it. A thin wrapper over the pipeline's
@@ -26,6 +27,12 @@ export function mirrorImage(img, axis) {
  *   - `mirrorBehind`: the opposite face's OWN art, mirrored, for the faded
  *     onion-skin — null when the opposite has no independent art (a derived
  *     opposite is just this face's own mirror; it would overlay identically).
+ *   - `edgeHints`: the EDGE HINT frame (lib/edges.js) — the four neighbouring
+ *     faces' seam lines, one texel deep around the tile, which the canvas
+ *     draws just outside its own edges. A stroke on this face can never move
+ *     one: its four neighbours are the four faces other than it and its
+ *     opposite, and that set is closed under VIEW_OPPOSITE — so this rides the
+ *     same memo as the onion-skin and recomputes only on a structural change.
  *
  * @param {{views: Record<string, {width:number,height:number,data:Uint8ClampedArray}|null>,
  *          tileW: number, tileH: number}} docState
@@ -43,5 +50,6 @@ export function editorViewModel(docState, face) {
     },
     wasDerived: existing == null,
     mirrorBehind: oppArt ? mirrorImage(oppArt, MIRROR_AXIS) : null,
+    edgeHints: edgeHintFrame(views, tileW, tileH, face),
   };
 }

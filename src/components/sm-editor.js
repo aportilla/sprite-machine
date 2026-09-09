@@ -177,6 +177,7 @@ export class SmEditor extends LitElement {
             .tileW=${d.tileW}
             .tileH=${d.tileH}
             .mirrorBehind=${vm.mirrorBehind}
+            .edgeHints=${vm.edgeHints}
             .tool=${s.tool}
             .ink=${s.ink}
             .pencilSize=${s.pencilSize}

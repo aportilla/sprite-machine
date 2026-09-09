@@ -21,10 +21,11 @@
 
 /** @typedef {{nx:number, ny:number, nz:number}} Dims */
 
-// Human-facing view names -> face normals. File-local: only its inverse
-// FACE_TO_VIEW is consumed outside this module (by colorize); nothing needs the
-// forward direction, and every pair is already implied by the face metadata below.
-const VIEW_TO_FACE = {
+// Human-facing view names -> face normals. Its inverse
+// FACE_TO_VIEW is consumed by colorize, VIEW_TO_FACE by the edge hints (which
+// need a view's own face to know which way it looks); every pair is already
+// implied by the face metadata below.
+export const VIEW_TO_FACE = {
   right: 'nx',
   left: 'px',
   top: 'py',

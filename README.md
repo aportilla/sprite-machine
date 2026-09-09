@@ -131,17 +131,44 @@ Sprite View tracks every stroke at frame rate, and the model rebuilds
 
 - **Canvas layout** — the canvas fills the well, its height CSS-driven (flex,
   no JS pin), drawn on the kit's **virtual system-pixel grid**: the texel size
-  is the largest whole count of system px that fits, so a texel is a whole
-  count of device px at any density or zoom. The layers ride a **placed
-  `vf-container`** whose box `#layout()` states in whole system px, centered
-  by arithmetic — no flex centering, no measured correction — so it lands on
-  the pixel lattice by construction. The canvas is **1-bit but for the art**:
+  is the largest whole count of system px that fits **the tile plus a texel of
+  edge hint on each side**, so a texel is a whole count of device px at any
+  density or zoom. The layers ride a **placed
+  `vf-container`** whose box `#layout()` states in whole system px, and the
+  hints' frame is a second one a texel bigger all round; the **outer** box is
+  what centers, by arithmetic — no flex centering, no measured correction — so
+  both land on the pixel lattice by construction. The canvas is **1-bit but
+  for the art**:
   its paper is the kit's **12% dither** (`gray-12`), declared as the
   container's `pattern` and never inherited, since a bare `vf-container`
   paints the desktop's own pattern, smeared (kit ask #6). The dither is the
   transparency indicator, so **white art** reads as a clear patch in the dots.
   Nothing is drawn over the art — no grid lines — and the sprite is the only
   color on the canvas.
+- **Edge hints** — the four neighbouring faces' art, a texel deep, just
+  outside the canvas's edges: editing FRONT, the **front-most painted pixel of
+  the side view** runs down the left and right edges and the TOP tile's nose
+  row lies across the top, so a roof line, a bumper or a wheel arch can be
+  lined up across faces by eye. Which face meets which edge, which of its lines
+  the strip reads and whether that line runs backwards are **derived, not
+  authored** — probed from the projection convention itself (`lib/edges.js`
+  off `VIEW_IMAGE_AXES`), and symmetric across the cube's twelve edges. Each
+  strip is a **first hit**: from the seam it walks **inward** to the first
+  painted texel, since sprites carry margins inside their tiles and the
+  outermost line is nearly always empty — the pipeline's own depth-aware
+  first-hit idiom. Registration is about the axis two faces **share**, so how
+  deep the evidence sits doesn't bear on it. A neighbour with no art of its own
+  contributes its **mirrored opposite**, what the model actually renders; the
+  four **corners stay empty**, a corner being a lattice edge no single face
+  owns. The strips sit on the **canvas's own texel lattice** — no gap, no
+  separator, since a hairline would put them half a texel out of register — on
+  the artwork well's **white**, so the dithered rectangle is still exactly the
+  drawable area. They are **full opacity**, unlike the onion-skin's fade: a
+  strip is outside the canvas and can't be mistaken for the art. Nothing
+  samples or paints there, and a stroke can never move one — a face's four
+  neighbours are the four faces other than it and its opposite, a set closed
+  under opposites, so the frame is change-channel state and costs the stroke
+  nothing.
 - **Tools** — a column of **22×19** cells: **selection `S`** first (MacPaint's
   palette led with it), then **pencil `B`**, **rect `R`**, **fill `G`**,
   **eraser `E`**, **eyedropper `I`**; the selected cell inverts. Each cell is
@@ -267,9 +294,11 @@ Sprite View tracks every stroke at frame rate, and the model rebuilds
   pipeline and still accepts an asymmetric pair (the `?tile=WxH` hook, which
   **warns** and shears) so the shear path stays testable.
 
-There is **no auto ground-rest**: an object sits at whatever Y you paint it,
-and to help you register a face against its neighbours the editor draws a
-**faded onion-skin** of the opposite face behind the canvas.
+There is **no auto ground-rest**: an object sits at whatever Y you paint it.
+Registration gets two aids, and they answer different questions: the **faded
+onion-skin** of the opposite face **behind** the canvas — where is the art on
+the other side of the object? — and the **edge hints** just **outside** it —
+what does the art wrap into when it leaves this edge?
 
 **Dev hooks** let the headless tools reach what they can't click; the full set
 is parsed in `src/boot/params.js`. Two carry rules of their own:
@@ -1023,7 +1052,8 @@ not report check or test counts.
 src/lib/      the domain — pure, no THREE and no DOM but for the mesh: the pipeline
               (ingest → carve → colorize), the mesher (regions, wedge-mesh, t-junction,
               skin, mesh-util), the atlas's geometry (ring), the editor's rasterizers
-              (rect, fill, select, brush, ants), the file formats (png-chunks, zip,
+              (rect, fill, select, brush, ants) and its edge hints (edges, probed off
+              views), the file formats (png-chunks, zip,
               png-encode, gltf), the vocabularies (views, faces, atlas, color, constants
               — PALETTE_168 among them) and the built-in sprites
 src/state/    the app-state layer, pure JS and Node-tested: store + the Lit bridges; doc

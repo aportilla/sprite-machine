@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // <sm-draw-canvas> — the pixel-canvas subsystem: the 4-layer stack (onion-skin
 // background, the editable pixel canvas, the cursor overlay, the selection's
-// marching-ants overlay), the working
+// marching-ants overlay) inside the EDGE HINT frame, the working
 // buffer, the selection/pencil/rect/fill/eraser/eyedropper gestures (the
 // pencil's tip is its size AND its shape — the disc inscribed in the N×N box,
 // or the box itself, lib/brush.js brushRows, one primitive under the stamp
@@ -71,6 +71,21 @@
 // look (an empty texel reads as dotted paper, a painted one covers it — WHITE
 // art included, a clear patch in the dots).
 //
+// THE EDGE HINTS (lib/edges.js) frame the canvas: one texel of each
+// NEIGHBOURING face's art, the line of its tile that lies against the lattice
+// edge the two faces share — editing FRONT, the RIGHT tile's front-most column
+// down the left edge, the TOP tile's front row across the top. They sit on the
+// canvas's OWN texel lattice, continuing its rows and columns with no gap and
+// no separator (a hairline between them would put the hint half a texel out of
+// register and the aid would lie), in their own placed container a texel
+// bigger on every side, on the artwork well's white — so the DITHERED
+// rectangle is still exactly the drawable area. The fit reserves the band, so
+// the art scales down to make room. They draw at full opacity, unlike the
+// onion-skin's fade: a strip is outside the canvas and can't be mistaken for
+// the art, and it is only useful if its colours read exactly. They are change-
+// channel state — a stroke on this face can never move one (see derive.js) —
+// and the frame takes no pointer events: nothing samples or paints there.
+//
 // The working buffer resets in willUpdate when the tile IDENTITY (or the tile
 // geometry) changes — identity is the caller's contract: the same reference
 // means "same art, don't reset". Any `tool` change cancels an in-flight
@@ -110,6 +125,7 @@ import {
   constrainAxis,
 } from '../lib/select.js';
 import { ANTS_PERIOD } from '../lib/ants.js';
+import { EDGE_HINT } from '../lib/edges.js';
 import {
   drawPencilPreview,
   drawFootprintAnts,
@@ -182,6 +198,33 @@ export class SmDrawCanvas extends LitElement {
        target and the canvases' positioning anchor, so all four layers ride
        it together. No rule block needed: the kit owns the container's
        layout entirely. */
+      /* The EDGE HINT frame's box: a second placed <vf-container>, one texel
+       bigger than the art on every side, sitting BEHIND the stack (which
+       covers its middle exactly). #layout() states its box in whole system
+       px like the stack's, from the same arithmetic, so the two meet on the
+       device-pixel lattice with no seam and the strips continue the canvas's
+       own rows and columns — the whole point of the aid. It declares
+       pattern="white" (a bare vf-container would inherit the desktop's ink —
+       kit ask #6): the frame band is the artwork well's own paper, so the
+       DITHERED rectangle stays exactly the drawable canvas and the strips
+       read as art laid just outside it. */
+      .editor-canvas-hints {
+        z-index: 0;
+      }
+      .editor-canvas-stack {
+        z-index: 1;
+      }
+      /* The strips themselves: NATIVE-res like the pixel canvas (one texel per
+       image px, CSS upscaling it crisp at a whole multiple), never a target. */
+      .editor-canvas-hint {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        pointer-events: none;
+      }
       /* All four layers fill the stack (backing stores managed in JS): a background
        (the faded onion-skin, system-px res), the transparent pixel canvas
        (native tile res), then the cursor + selection overlays (system-px
@@ -241,6 +284,10 @@ export class SmDrawCanvas extends LitElement {
     tileW: { type: Number },
     tileH: { type: Number },
     mirrorBehind: { attribute: false },
+    /** The EDGE HINT frame (lib/edges.js edgeHintFrame): the four neighbouring
+     *  faces' seam lines, one texel deep around the tile, drawn OUTSIDE the
+     *  canvas. Change-channel state — a stroke can never move it. */
+    edgeHints: { attribute: false },
     tool: {},
     ink: { attribute: false },
     pencilSize: { type: Number },
@@ -264,6 +311,7 @@ export class SmDrawCanvas extends LitElement {
     this.tileW = 0;
     this.tileH = 0;
     this.mirrorBehind = null;
+    this.edgeHints = null;
     this.tool = 'pencil';
     this.ink = null;
     this.pencilSize = 1;
@@ -340,6 +388,7 @@ export class SmDrawCanvas extends LitElement {
   #sysW = 0;
   #sysH = 0;
   #fitScale = 1;
+  #fitPad = 0; // the edge-hint band the fit reserved, in texels per side
   #laidOut = false;
   #resizeObs = null;
   #offScale = null; // onScaleChange release — set up per connect, like the observer
@@ -348,6 +397,10 @@ export class SmDrawCanvas extends LitElement {
   #wrap = createRef();
   /** @type {import('lit/directives/ref.js').Ref<import('vintage-frames').VfContainer>} */
   #stack = createRef();
+  /** @type {import('lit/directives/ref.js').Ref<import('vintage-frames').VfContainer>} */
+  #hints = createRef();
+  /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
+  #hintCanvas = createRef();
   /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
   #bg = createRef();
   /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
@@ -449,8 +502,13 @@ export class SmDrawCanvas extends LitElement {
     // Canvas backing stores + the ImageData that shares `#work` are paired: they
     // are reconstructed together, imperatively, never bound in the template (a
     // template-bound width/height would clear the backing store mid-diff).
+    // The edge hints come with the geometry (a resize, a face switch and a load
+    // all rebuild the frame), so paint them BEFORE the fit: #layout() reserves
+    // the band only when there is one.
+    if (changed.has('edgeHints')) this.#paintHints();
     if (geom) this.#applyGeometry();
     else if (changed.has('mirrorBehind')) this.#paintBg();
+    else if (changed.has('edgeHints')) this.#layout(); // the band appeared or went
 
     // The cursor overlay is canvas-drawn, so the state the template can't express
     // has to be re-stroked here.
@@ -567,6 +625,26 @@ export class SmDrawCanvas extends LitElement {
     }
   }
 
+  // The EDGE HINT strips, in the frame's own box outside the art: one blit of
+  // the (tileW + 2) x (tileH + 2) frame lib/edges.js built, at NATIVE
+  // resolution — CSS upscales it by the same whole texel count the art rides,
+  // so a hint texel is exactly the size of the canvas texel beside it. Painted
+  // from updated() alone: the frame is change-channel state, so this never
+  // runs at stroke rate.
+  #paintHints() {
+    const c = this.#hintCanvas.value;
+    if (!c) return;
+    const f = this.edgeHints;
+    if (!f) {
+      c.width = 0;
+      c.height = 0;
+      return;
+    }
+    c.width = f.width; // a resize clears it; the blit below is the whole picture
+    c.height = f.height;
+    c.getContext('2d').putImageData(new ImageData(f.data, f.width, f.height), 0, 0);
+  }
+
   #repaint() {
     if (this.#ctx && this.#imgData) this.#ctx.putImageData(this.#imgData, 0, 0);
   }
@@ -598,7 +676,8 @@ export class SmDrawCanvas extends LitElement {
   #layout() {
     const wrap = this.#wrap.value;
     const stack = this.#stack.value;
-    if (!wrap || !stack || !this.tileW || !this.tileH) return;
+    const hints = this.#hints.value;
+    if (!wrap || !stack || !hints || !this.tileW || !this.tileH) return;
     // Measure both axes from the client box (border-excluded), subtracting padding so
     // the 1px border isn't double-counted: an over-measure could round the texel
     // size one step too big and the canvas would clip under overflow:hidden.
@@ -613,10 +692,15 @@ export class SmDrawCanvas extends LitElement {
     const scale = effectiveScale(this);
     const availWSys = availW / scale;
     const availHSys = availH / scale;
-    const k = Math.max(
-      1,
-      Math.floor(Math.min(availWSys / this.tileW, availHSys / this.tileH)) || 1
-    );
+    // The EDGE HINT band is reserved BEFORE the fit: the strips are a texel of
+    // the neighbouring faces' art on this canvas's own lattice, so the space
+    // they take is texels, not chrome — the art scales down to make room. (The
+    // alternative, painting them into the well's fixed 12 px padding, would
+    // clip or overlap them at every texel size but one.)
+    const pad = this.edgeHints ? EDGE_HINT : 0;
+    const fitW = this.tileW + 2 * pad;
+    const fitH = this.tileH + 2 * pad;
+    const k = Math.max(1, Math.floor(Math.min(availWSys / fitW, availHSys / fitH)) || 1);
     const sysW = this.tileW * k;
     const sysH = this.tileH * k;
     // Center within the content box, in whole system px. VfPositioned anchors
@@ -624,16 +708,32 @@ export class SmDrawCanvas extends LitElement {
     // out of the resolved style rather than restated here) is part of the
     // offset. An oversized minimum-scale canvas centers negative and clips on
     // both sides under overflow:hidden, exactly as the flex centering did.
-    stack.left = Math.round(padL / scale + (availWSys - sysW) / 2);
-    stack.top = Math.round(padT / scale + (availHSys - sysH) / 2);
-    if (this.#laidOut && k === this.#texelSys && scale === this.#fitScale) return;
+    // The OUTER box (art plus the band) is what centers; the art follows it a
+    // whole texel in, so both boxes land on the lattice by construction and
+    // the strips continue the canvas's rows and columns exactly.
+    const outLeft = Math.round(padL / scale + (availWSys - fitW * k) / 2);
+    const outTop = Math.round(padT / scale + (availHSys - fitH * k) / 2);
+    hints.left = outLeft;
+    hints.top = outTop;
+    stack.left = outLeft + pad * k;
+    stack.top = outTop + pad * k;
+    if (
+      this.#laidOut &&
+      k === this.#texelSys &&
+      scale === this.#fitScale &&
+      pad === this.#fitPad
+    )
+      return;
     this.#laidOut = true;
     this.#texelSys = k;
     this.#fitScale = scale;
+    this.#fitPad = pad;
     this.#sysW = sysW;
     this.#sysH = sysH;
     stack.width = sysW;
     stack.height = sysH;
+    hints.width = fitW * k;
+    hints.height = fitH * k;
     // System-res backings: hairlines are 1 system px.
     this.#bg.value.width = this.#sysW;
     this.#bg.value.height = this.#sysH;
@@ -704,7 +804,12 @@ export class SmDrawCanvas extends LitElement {
   // The WELL (.editor-canvas-wrap) fills the draw box below the options bar
   // (CSS flex:1) — its height comes from the flex layout, not JS — so nothing
   // shifts when the tile size (and thus the drawn canvas) changes. Inside it,
-  // a kit <vf-container> holds the four aligned layers: #layout() states its
+  // two placed kit containers: the EDGE HINT frame's box behind (a texel
+  // bigger on every side, its own white paper, one native-res canvas), and the
+  // art stack over it. The stack keeps its own box, so the pointer math
+  // (#toTexel, off the pixel canvas's rect) and the four layers' inset: 0 are
+  // untouched by the frame — and the feature is one container away from
+  // reversible. Then, in the stack, the four aligned layers: #layout() states its
   // width/height/top/left in whole system px (the DITL rectangle — centered
   // by arithmetic, on the pixel lattice by construction), and the canvases
   // fill its box (inset: 0 against the container's own anchor, so all four
@@ -737,6 +842,9 @@ export class SmDrawCanvas extends LitElement {
   render() {
     return html`
       <div class="editor-canvas-wrap" ${ref(this.#wrap)}>
+        <vf-container class="editor-canvas-hints" pattern="white" ${ref(this.#hints)}>
+          <canvas class="editor-canvas-hint" ${ref(this.#hintCanvas)}></canvas>
+        </vf-container>
         <vf-container class="editor-canvas-stack" pattern=${PAPER} ${ref(this.#stack)}>
           <canvas class="editor-canvas-bg" ${ref(this.#bg)}></canvas>
           <canvas
