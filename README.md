@@ -358,12 +358,13 @@ the Undo/Redo enablement.
   listing, each filed row carrying its folder path and a trashed document no
   row at all; with an icon selected it relabels to a bare _Open_ and opens
   that icon at once, the ellipsis being System 7's promise of a dialog),
-  _Close_ (the active document, dirty-checked — or, in the Finder role, the
-  front folder window), _Save_ ⌘S (an untitled's first save prompts for a
-  name), _Duplicate_ ⌘D, _Rename…_, _Download_ ⇧⌘E (the document `.png`
-  verbatim — the downloaded atlas IS the source format, hence Download rather
-  than Export, and no ellipsis: it acts immediately), the two exports, and
-  _Properties…_ (name, atlas dims, the tile-size stepper).
+  _Close_ ⌃W (the active document, dirty-checked — or, in the Finder role,
+  the front folder window; Control, not ⌘, since the browser owns ⌘W — see
+  the key equivalents note below), _Save_ ⌘S (an untitled's first save
+  prompts for a name), _Duplicate_ ⌘D, _Rename…_, _Download_ ⇧⌘E (the
+  document `.png` verbatim — the downloaded atlas IS the source format, hence
+  Download rather than Export, and no ellipsis: it acts immediately), the two
+  exports, and _Properties…_ (name, atlas dims, the tile-size stepper).
 - **Export 3D Model…** writes the model as **one glTF 2.0 binary** from the
   app's own writer (`lib/gltf.js`; three's `GLTFExporter` encodes a texture
   through a canvas readback, which a privacy browser perturbs, so the skin
@@ -433,7 +434,11 @@ the Undo/Redo enablement.
   the application, and takes no focus.
 
 Key equivalents are the kit's own (Ctrl stands in for ⌘ off-Mac). ⌘N/⌘W stay
-unassigned on purpose — the browser owns them before the page sees them. A
+unassigned on purpose — the browser owns them before the page sees them.
+Close answers **⌃W** instead, the Control key alone (the kit's ⌃ never
+stands in for ⌘): it is the one W chord a Mac browser leaves to the page,
+⌥W typing ∑. The trade is off-Mac, where Ctrl+W is the browser's own Close
+Tab, reserved — the item shows the key there and never fires. A
 disabled item claims nothing, so with no document open ⌘J falls through to
 off-Mac browsers' own Downloads, exactly as a greyed Undo leaves ⌘Z to a
 focused field's native undo. The bare-letter tool keys live in

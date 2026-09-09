@@ -22,7 +22,8 @@
       <!-- `shortcuts` grants every item's `shortcut` attribute its live
            app-wide key equivalent (Ctrl stands in for ⌘ off-Mac). The two
            System 7 staples ⌘N/⌘W stay unassigned on purpose: the browser
-           owns them before the page ever sees them. -->
+           owns them before the page ever sees them. Close answers ⌃W
+           instead (see the item). -->
       <vf-menu-bar shortcuts>
         <vf-menu id="menu-app" label="Sprite Machine">
           <vf-menu-item value="about">About Sprite Machine…</vf-menu-item>
@@ -63,7 +64,13 @@
           <vf-menu-item value="new-folder">New Folder</vf-menu-item>
           <vf-menu-item value="open" shortcut="⌘O">Open…</vf-menu-item>
           <vf-separator></vf-separator>
-          <vf-menu-item value="close">Close</vf-menu-item>
+          <!-- Close's key is ⌃W — the Control key alone (the kit's ⌃ means
+               Control, never a ⌘ stand-in): ⌘W is the browser's before the
+               page sees it, and ⌥W types ∑ on a Mac, so Control is the one
+               W chord a Mac browser leaves to the page. Off-Mac Ctrl+W is
+               the browser's Close Tab, reserved — the item shows the key
+               and never fires there, an accepted trade (Sep 9 2026). -->
+          <vf-menu-item value="close" shortcut="⌃W">Close</vf-menu-item>
           <vf-menu-item value="save" shortcut="⌘S">Save</vf-menu-item>
           <vf-menu-item value="duplicate" shortcut="⌘D">Duplicate</vf-menu-item>
           <vf-menu-item value="rename">Rename…</vf-menu-item>
