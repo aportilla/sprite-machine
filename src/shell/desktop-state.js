@@ -18,8 +18,8 @@
 // first-boot seeding used to be gated on "no desktop-state blob exists" —
 // but this module writes a blob on its own schedule (a debounced snapshot
 // on any store change, a synchronous one on beforeunload), so a reload that
-// landed DURING the seeding's IndexedDB round-trips (a crash, Chrome's
-// one-time phantom reload under tools/drive.mjs) wrote a blob first, and the
+// landed DURING the seeding's IndexedDB round-trips (a crash, a reload
+// mid-boot) wrote a blob first, and the
 // next boot read "prior state", never seeded, and left a profile with no
 // Car and no Cube for good. Now the gate is `seeded`, which main.js sets —
 // through markSeeded(), written at once, not debounced — only after every
@@ -56,8 +56,8 @@
 // main.js) — they hand a saved doc its remembered edited face when
 // it IS opened. Writes are snapshot-on-exit plus a debounce on any store
 // change or desktop gesture — snapshotting is cheap and loses nothing that
-// matters. `?fresh=1` disables BOTH directions, so a capture neither reads
-// nor clobbers a real session's state. Older blobs migrate shallowly: icons
+// matters. `?fresh=1` disables BOTH directions, so a ?fresh boot neither
+// reads nor clobbers a real session's state. Older blobs migrate shallowly: icons
 // carry over (v1's `lastDocId` becomes the one docs entry), and the window
 // geometry v1/v2 persisted is simply dropped.
 // ---------------------------------------------------------------------------

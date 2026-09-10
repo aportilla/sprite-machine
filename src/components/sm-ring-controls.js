@@ -15,8 +15,8 @@
 // columns, 6 gaps, the kit's 74 × 25 number field. Nothing is measured and
 // no layout is styled: the header's height is RING_STRIP (the DITL's 62
 // over the rule), authored on the window in index.html as `header-height`
-// — the kit's grammar — and pinned to layout.js's number by the drive; and
-// that same arithmetic is the windoid's width floor (RING_MIN_WIDTH — the
+// — the kit's grammar — at the same number as layout.js's; and that same
+// arithmetic is the windoid's width floor (RING_MIN_WIDTH — the
 // controls' 258 plus the borders; a window can't be dragged narrower, so
 // the header never clips a field).
 //
@@ -25,8 +25,8 @@
 // it was built and retired the same day (2026-09-03, the user's call —
 // white is the one paper for now, and the choice is meant to be made for
 // the user one day from the sheet's own content, whether it has a lot of
-// white or black in it, rather than asked). The plumbing stays: the slice
-// holds the value, the body paints it, ?ring= can seed it for a capture.
+// white or black in it, rather than asked). The plumbing stays for that:
+// the slice holds the value and the body paints it.
 //
 // The host is `display: contents`: the items sit directly in the header,
 // their (0,0) its corner. The one stylesheet line beyond the captions'

@@ -3,19 +3,18 @@
 Read `README.md` first; it is the spec. The testing policy is
 `docs/TESTING.md`, and it is binding. The short form:
 
-- Tests cover what Sprite Machine implements, never what vintage-frames
-  implements or how it renders. A test that would fail because the kit
-  changed a pixel, a metric or a rule is not written here.
-- The default for an enhancement is **no new test**. Add one only for new
-  pure logic (a unit test on its rules) or for new browser-only wiring no
-  journey already crosses (one drive check, on the outcome). Never for
-  markup, constants, layout numbers, copy or a kit attribute.
-- The look is verified by eye, or by an existing golden re-blessed on
-  purpose in the shipping commit. Never by an assertion.
-- No one-off verification scripts. The standing tools are `npm test`,
-  `npm run lint`, `npm run typecheck`, `tools/drive.mjs`,
-  `tools/capture.sh` and `tools/goldens.sh`; beyond those, ask the user
-  to look.
+- Unit tests only, and only for pure logic: the engine's suite stays
+  dense (it is the published package), the app's covers its pure rules.
+  **No browser tests** — no driven journeys, no screenshot comparisons,
+  nothing that asserts markup, layout numbers, copy, constants or what
+  vintage-frames renders.
+- The default for a change is **no new test**. The look and the wiring
+  are verified by eye: say exactly where to look and ask the user.
+  `tools/capture.sh` takes a screenshot when one helps; it is never a
+  check.
+- The gates are `npm test`, `npm run lint`, `npm run typecheck` and
+  `npm run build` — Node only, no dev server — and CI runs them before
+  every Pages deploy. No one-off verification scripts.
 - Commit messages and comments never report test or check counts, and
   never claim a test pins something unless it does.
 - Never edit `~/MyProjects/vintage-frames` from here. A kit behavior that
@@ -26,7 +25,7 @@ Read `README.md` first; it is the spec. The testing policy is
   never reaches for the DOM; app code never reaches into `packages/core`
   except through its barrel. `npm test` runs both packages' suites.
 - Commit messages: a one-line subject, then one or two short paragraphs
-  (what, why, the decisions, tests, goldens), no counts, and the
+  (what, why, the decisions, tests), no counts, and the
   `Claude-Session:` trailer. Commit and push on the user's word only.
 
 ## Releasing
@@ -35,7 +34,7 @@ Two versions live here, and they are independent:
 
 - **The app** is the root `package.json`'s `version` — the About box shows
   it beside HEAD's commit date, and every push to `main` deploys it to
-  GitHub Pages (`.github/workflows/pages.yml`, no other step). Its tags
+  GitHub Pages (`.github/workflows/pages.yml`, the gates first). Its tags
   are `vX.Y.Z`.
 - **The engine** is `packages/core/package.json`'s `version` — what
   `npm install sprite-machine` resolves. Its tags are
@@ -50,10 +49,8 @@ change bumps the engine alone, and vice versa — and a session may end with
 both, one, or neither.
 
 **The routine**, in order. Every gate green first — `npm test`,
-`npm run lint`, `npm run typecheck`, `npm run build`, then
-`node tools/drive.mjs <port>` and `tools/goldens.sh check <port>` against a
-fresh dev server (`npm run dev -- --port 5175 --strictPort`) — on the very
-commit being released, the feature commits already made:
+`npm run lint`, `npm run typecheck`, `npm run build` — on the very commit
+being released, the feature commits already made:
 
 ```sh
 # 1. The app changed visibly → bump the root version (commit + tag v0.X.Y)

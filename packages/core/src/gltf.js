@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // A glTF 2.0 BINARY writer for one textured mesh — what File → Export 3D
-// Model… hands over — and its reader (the tests' and the drive's). Pure:
+// Model… hands over — and its reader (the tests'). Pure:
 // typed arrays and a PNG in, bytes out; no THREE (model.js reads the
 // arrays off the mesh). One node, one mesh, one primitive, one
 // material, one texture: the model and its skin (skin.js) sampled
@@ -218,7 +218,7 @@ export function glbFromModel(model) {
 
 /**
  * Read a glb back: its parsed JSON and its BIN chunk (a view into `bytes`).
- * The writer's mirror — tests and the drive read the export through it.
+ * The writer's mirror — the tests read the export through it.
  * Throws on anything but a version-2 glb with a JSON chunk first.
  * @param {Uint8Array} bytes
  * @returns {{json: any, bin: Uint8Array}}

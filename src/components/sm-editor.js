@@ -168,7 +168,6 @@ export class SmEditor extends LitElement {
     const d = this.ctx.doc.get();
     const s = session.get();
     const vm = this.#viewModel();
-    const hooks = this.ctx.hooks;
     return html`
       <div class="editor">
         <div class="editor-drawbox">
@@ -188,10 +187,6 @@ export class SmEditor extends LitElement {
             .fillContiguous=${s.fillContiguous}
             .fillAllFaces=${s.fillAllFaces}
             .active=${this.#isActive}
-            .previewCursor=${hooks?.previewCursor ?? false}
-            .previewRect=${hooks?.previewRect ?? null}
-            .fillOnMount=${hooks?.fillOnMount ?? null}
-            .selectOnMount=${hooks?.selectOnMount ?? null}
             @sm-live=${this.#onLive}
             @sm-commit=${this.#onCommit}
             @sm-selection=${(e) => workspace.setSelection(this.ctx.key, e.detail.bounds)}

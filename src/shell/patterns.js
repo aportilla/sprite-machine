@@ -106,7 +106,7 @@ export function initPatterns(desktop, windows, { saved = null } = {}) {
   }
 
   return {
-    /** Sprite Machine → Desktop Patterns (and the ?patterns=1 capture hook). */
+    /** Sprite Machine → Desktop Patterns. */
     open,
     /** The close box's path; also the HMR teardown's. */
     close,

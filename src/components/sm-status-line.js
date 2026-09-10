@@ -11,8 +11,7 @@
 //   - build: the 3D View's triangle count ("1,784 triangles", from the build
 //            slice — the Finder's "N items" idiom), empty until a build has
 //            landed; the count alone — no grid, no voxel count, no tooltip,
-//            and no build error or warning ever takes the line. The probe
-//            surface drive.mjs reads.
+//            and no build error or warning ever takes the line.
 // `:host { display: contents }` so the slotted element the window's slot
 // gate sees is this host, while the kit's status-bar styles lay out the
 // label inside.
@@ -57,7 +56,7 @@ export class SmStatusLine extends LitElement {
     }
     // kind === 'build': the last build's triangle count; nothing before a
     // model exists (no dims = no build). A fixed locale, so the grouping
-    // never moves with the machine (captures stay byte-identical).
+    // never moves with the machine.
     const b = build.get();
     return b.dims ? `${b.triangles.toLocaleString('en-US')} triangles` : '';
   }

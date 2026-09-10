@@ -64,7 +64,6 @@ import { files as filesSingleton, UNTITLED } from './files.js';
  *   fileId: string|null,
  *   name: string,
  *   dirty: boolean,
- *   hooks: object|null,
  *   selection: ReturnType<typeof createStore<{bounds: SelectionBounds|null, rect: SelectionBounds|null}>>,
  *   ring: ReturnType<typeof createRingSettings>,
  * }} DocContext
@@ -175,14 +174,14 @@ export function createWorkspace(deps = {}) {
      * leaves the newborn context clean. The window layer reconciles a
      * document window into existence from the store change.
      * `ring` seeds the context's 3D Sprite Atlas settings at birth (a stored
-     * document's chunk, a dropped PNG's, the ?ring boot hook's) — before the
-     * tracker wires, so the seed is no change: the context is born with them
-     * the way it is born with its pixels.
-     * @param {{name?: string, fileId?: string|null, face?: string, hooks?: object|null,
+     * document's chunk, a dropped PNG's) — before the tracker wires, so the
+     * seed is no change: the context is born with them the way it is born
+     * with its pixels.
+     * @param {{name?: string, fileId?: string|null, face?: string,
      *          ring?: Partial<import('./ring-settings.js').RingSettings>|null}} [init]
      * @returns {DocContext}
      */
-    open({ name, fileId = null, face = 'left', hooks = null, ring = null } = {}) {
+    open({ name, fileId = null, face = 'left', ring = null } = {}) {
       const doc = makeDoc();
       /** @type {DocContext} */
       const ctx = {
@@ -193,7 +192,6 @@ export function createWorkspace(deps = {}) {
         fileId,
         name: name ?? this.nextUntitledName(),
         dirty: false,
-        hooks,
         selection: createStore({
           bounds: /** @type {SelectionBounds|null} */ (null),
           rect: /** @type {SelectionBounds|null} */ (null),

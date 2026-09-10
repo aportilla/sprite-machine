@@ -3,8 +3,7 @@
 // slotted into the window's HEADER (`slot="header"` — vintage-frames 0.6.1:
 // a white band over a 1px rule between the title bar and the body, across
 // the whole window, a positioning anchor for what is placed in it;
-// `header-height` authored in index.html = SPRITE_STRIP, the drive pinning
-// the two): the FACE
+// `header-height` authored in index.html = SPRITE_STRIP): the FACE
 // PICKER — the six cube-view radios (sm-face-picker, a presentational leaf)
 // serving the ACTIVE document — in a placed vf-container at the picker
 // block's rectangle, SPRITE_PICKER_AT / SPRITE_PICKER in shell/layout.js

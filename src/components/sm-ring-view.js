@@ -13,10 +13,11 @@
 // gray the `dots` dither), white by default and, today, white always: no
 // control writes the setting (a radio column was built and retired the
 // same day; the paper is meant to be chosen FOR the user one day from the
-// sheet's content — see RING_PAPERS), only the ?ring= hook seeds it (the
-// Desktop Patterns panel's element: the kit paints its 1-bit paper at the
-// declared height and MEASURES the filled axis for the raster, its own
-// contract for an undeclared axis, re-rastering as the grow box moves),
+// sheet's content — see RING_PAPERS) and nothing else writes it either (the
+// container is the Desktop Patterns panel's element: the kit paints its
+// 1-bit paper at the declared height and MEASURES the filled axis for the
+// raster, its own contract for an undeclared axis, re-rastering as the
+// grow box moves),
 // the grid inside it with its surface token cleared so the paper shows
 // through, and each cell a `vf-stack` at the tile's declared size — the
 // kit's layout box, which paints nothing by contract — holding a canvas

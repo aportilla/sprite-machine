@@ -20,7 +20,7 @@ export const DEFAULT_ATLAS_LAYOUT = [
 // and the carve/colorize pass is a synchronous O(n³) walk on the main thread. The
 // ceiling is 64 (a 64³ = 262 k-voxel grid still rebuilds live per stroke); larger
 // tiles (a 256³ = 16.7 M-voxel carve) froze the tab for seconds. clampTile pins
-// both the stepper and the ?tile dev hook into this range.
+// the app's tile fields into this range.
 export const TILE_MIN = 1;
 export const TILE_MAX = 64;
 export const clampTile = (n) =>
@@ -290,7 +290,7 @@ export function splitLow(oldSize, newSize) {
  *   'origin' (default) — keep the origin line fixed, grow/shrink only at the far edge.
  *     A square resize is fully registration-safe AND keeps the object ground-rested
  *     (y=0 pinned) at its exact lattice coords. Used by the pipeline; the primitive's
- *     stable default (also what the byte-identical-pin test locks).
+ *     stable default.
  *   'center' — split the change around the art on ALL axes (see splitLow) so it stays
  *     centered as the tile grows/shrinks. Still registration-safe for a square resize
  *     (the whole solid just TRANSLATES by the per-axis pad), but it no longer pins y=0,

@@ -23,8 +23,7 @@
 // own, so the mirror can't disagree with the kit. It therefore boots false
 // (nothing has activated yet — a dialog-greeted boot stays desktop-focused,
 // no windoids without a document window) and flips true the moment any
-// document window opens: the kit activates a newly slotted window, hidden
-// ones included, which is what keeps ?hide=document captures' windoids up.
+// document window opens: the kit activates a newly slotted window.
 // ---------------------------------------------------------------------------
 
 import { createStore } from './store.js';

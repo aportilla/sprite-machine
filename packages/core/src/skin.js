@@ -20,7 +20,7 @@
 // cross a color, plus the strip — a fraction of "every exposed face" — and
 // its size is bounded by the multi-color regions' boxes, never by the grid.
 //
-// Packing is a shelf packer, deterministic (the goldens depend on it): the
+// Packing is a shelf packer, deterministic: the
 // padded charts sorted by height then width, descending, laid left to right
 // on shelves, the swatches after them. The width starts at the smallest
 // power of two holding the widest padded chart (16 at least) and doubles

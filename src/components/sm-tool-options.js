@@ -41,8 +41,7 @@
 //
 // This element IS the options area (`:host` carries the box — it fills the
 // desktop's options strip beside the current-ink swatch); its shadow root
-// holds the bare controls, exactly the surface drive.mjs probes (the LAST
-// vf-label is the readout it reads).
+// holds the bare controls.
 // ---------------------------------------------------------------------------
 
 import 'vintage-frames';

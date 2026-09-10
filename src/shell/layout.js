@@ -160,8 +160,8 @@ const DOC_MIN = 220; // the doc box's floor on a raster too small for the room
 // the 12px dot bar + the top and bottom borders (119 + 14 = 133 tall).
 // index.html AUTHORS the box as the windoid's width / height (the kit's
 // grammar — the one box initialPlacement takes as INPUT, windows.js reading
-// the markup's), so tools/drive.mjs pins the markup against TOOLS_BOX the
-// way it pins every header's height, and the two can't drift.
+// the markup's) at the same numbers as TOOLS_BOX, as it authors every
+// header's height: change one, change the other.
 export const TOOL_CELL = { width: 22, height: 19 };
 const TOOL_COUNT = 6;
 const TOOLS_CHROME = { w: 2, h: 12 + 2 };
@@ -177,8 +177,7 @@ export const TOOLS_BOX = {
 // is placed in it; `header-height` counts its rule, as every kit bar does).
 // index.html AUTHORS each height as `header-height` — the kit's grammar,
 // the way it authors the Tools palette's box — and these are the same
-// numbers as the arithmetic they enter; tools/drive.mjs pins the markup
-// against them so the two can't drift.
+// numbers as the arithmetic they enter: change one, change the other.
 //
 // The 3D View's: the kit's 20px checkbox row (rotate — the one toggle, a
 // row stack in sm-stage-controls) centered in the 23 over the rule — 24.
@@ -220,8 +219,8 @@ export const SPRITE_PICKER_AT = {
   top: SPRITE_PICKER_PAD,
 };
 // A square tile's height : width — the ratio the sizing rule defaults to
-// before a document is open (a live document's real tile wins; only the
-// ?tile=WxH shear hook produces a non-square one).
+// before a document is open (a live document's real tile wins — a dropped
+// sheet can bring a non-square one).
 export const TILE_RATIO = 1;
 
 /** The Sprite View windoid's derived height for a window width and a tile
@@ -283,9 +282,8 @@ export const ICON_CELL = 64;
 //   next caption), a 6px gap, the field, an 8px inset — 8 + 40 + 6 + 74 +
 //   6 + 36 + 6 + 74 + 8 = 258.
 // A caption wider than its column overflows rather than reflowing (the
-// kit's rule: the number is the column), so drive.mjs checks every item
-// against the live glyphs — inside its column, inside the controls' box at
-// the header's corner.
+// kit's rule: the number is the column), so a renamed caption or a new
+// display font means re-measuring the columns above.
 // (A third column once held the body's paper as three radios — white /
 // black / gray, the kit's 20px toggle rows in a gap-0 stack, 57 wide, the
 // box 321 — built and retired on 2026-09-03 at the user's call: white is
@@ -317,7 +315,7 @@ export const RING_FIELDS = {
   ],
 };
 // The strip: the controls over the header's 1px rule — the window's
-// `header-height`, authored in index.html (the drive pins it to this).
+// `header-height`, authored in index.html at this same number.
 export const RING_STRIP = RING_FIELDS.box.height + 1;
 export const RING_CHROME = { w: 2, h: 12 + 2 + RING_STRIP + 15 };
 // The windoid's width FLOOR (the grow box's declared min-width, and the
@@ -755,8 +753,8 @@ export const BAND = 100;
  *  boundary is no place to park one), the RIGHT band is the rail column
  *  plus its inset gutter (so the rail's LEFT edges are struts, with the
  *  inset as slack). The square-tile sprite height is the constant here —
- *  the ?tile=WxH shear hook can push the stage's top past the band, where
- *  it springs (dev-only, accepted). Every placed windoid is then all
+ *  a dropped non-square sheet can push the stage's top past the band,
+ *  where it springs (rare, accepted). Every placed windoid is then all
  *  struts; see the header.
  *  @type {Frame} */
 export const WINDOW_FRAME = {

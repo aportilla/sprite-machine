@@ -70,8 +70,8 @@
 // holds it, so a banded selection cannot carry it into a folder or a
 // window, while a drop of it on the bare desktop is the kit's own move.
 // It is furniture: on the desktop with or without a library, under ?fresh
-// too (the listing is never read there, so a capture stays deterministic
-// with the one icon in its corner).
+// too (the listing is never read there, so the desktop shows the one icon
+// in its corner whatever the machine has stored).
 // ---------------------------------------------------------------------------
 
 import { snapSys, systemPxQuantum } from 'vintage-frames';
@@ -350,7 +350,7 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
   // label, the art and the open ghost are re-read every pass. Under
   // ?fresh=1 the listing is never read (main.js), so the slice holds the
   // Trash's row alone and the desktop shows the one icon, in its corner —
-  // deterministic on a machine with saved docs, as a capture needs.
+  // the same on a machine with saved docs.
   /** The Trash's can: plain while it holds nothing, bulging otherwise. */
   const trashArt = (st) => {
     const c = childrenOf(st, TRASH);

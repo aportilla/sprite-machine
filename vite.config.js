@@ -6,11 +6,10 @@ import { defineConfig } from 'vite';
 // The About box's two BUILD facts (src/shell/menus.js writes them into the
 // dialog; src/env.d.ts declares them for tsc): the version is package.json's,
 // and the date is HEAD's commit date — the date of the code that is running,
-// so every build of one commit says the same thing (capture.sh's byte
-// determinism holds across runs) — formatted HERE, in Node, as System 7's own
-// short form ("Aug 24, 2026"), so the page ships a plain string that no
-// runtime locale or timezone can move. Without git (a tarball build) the date
-// falls back to today's. Read once per server start / build.
+// so every build of one commit says the same thing — formatted HERE, in Node,
+// as System 7's own short form ("Aug 24, 2026"), so the page ships a plain
+// string that no runtime locale or timezone can move. Without git (a tarball
+// build) the date falls back to today's. Read once per server start / build.
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 const MONTHS = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');

@@ -228,9 +228,8 @@
            what is placed in it; `header-height` counts its rule and is
            AUTHORED here, the kit's grammar — the same number as
            shell/layout.js's arithmetic (STAGE_STRIP, SPRITE_STRIP,
-           RING_STRIP), which tools/drive.mjs pins the markup against so
-           the two can't drift). The body below it runs to the
-           frame: a vf-window body carries no inset of its own
+           RING_STRIP): change one, change the other). The body below it
+           runs to the frame: a vf-window body carries no inset of its own
            (vintage-frames 0.6.0 — an inset is the content's, stated with a
            vf-stack pad; the `flush` attribute the windows used to set is
            retired). -->
@@ -295,12 +294,12 @@
            setting is the tile's edge in px, 2–255, the model's envelope
            fit to it), butted — no rules between — on ONE sheet of kit
            paper running across the whole body: white — the ring slice's
-           `paper` setting, which nothing in the UI writes today (white /
-           black / gray are the values it admits, each a kit pattern by
-           name in state/ring.js, gray the `dots` dither; a control for it
-           was built and retired, the choice being meant for the app to
-           make from the sheet's content one day; ?ring= can seed it for a
-           capture); the grid draws no rules and a cell paints nothing, so
+           `paper` setting, which nothing writes today (white / black /
+           gray are the values it admits, each a kit pattern by name in
+           state/ring.js, gray the `dots` dither; a control for it was
+           built and retired, the choice being meant for the app to make
+           from the sheet's content one day); the grid draws no rules and
+           a cell paints nothing, so
            a frame's transparent margin reads as the unbroken paper, which
            runs on past the last tile (sm-ring-view.js), under a two-row
            controls strip (views / elev / from / size — the same settings
@@ -329,8 +328,8 @@
            over a 1px rule between the title bar and the body, outside the
            scroll area, so the controls hold while the row scrolls under
            them; `header-height` authored below = RING_STRIP, the DITL's 62
-           over the rule in shell/layout.js, which the drive pins it
-           against), its four captions and fields placed at the DITL's
+           over the rule in shell/layout.js), its four captions and fields
+           placed at the DITL's
            rectangles against the header's corner (sm-ring-controls.js).
            The body is the row alone
            (sm-ring-view.js): the paper — a vf-container pattern filling
@@ -363,8 +362,8 @@
            each cell exactly one tool icon (6×19 + 5 rules = 119 tall, 22
            wide), sits flush against the windoid's own frame (the
            desk-accessory composition), + the chrome (1px borders, 12px
-           bar) = 24 × 133 — TOOLS_BOX in shell/layout.js, the arithmetic
-           tools/drive.mjs pins this markup against. -->
+           bar) = 24 × 133 — TOOLS_BOX in shell/layout.js, the same
+           arithmetic: change one, change the other. -->
       <vf-window
         id="win-tools"
         variant="utility"

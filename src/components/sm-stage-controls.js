@@ -2,8 +2,8 @@
 // <sm-stage-controls> — the 3D View windoid's controls strip, slotted into
 // the window's HEADER (`slot="header"` — vintage-frames 0.6.1: a white band
 // over a 1px rule between the title bar and the body, across the whole
-// window; `header-height` authored in index.html = STAGE_STRIP, the drive
-// pinning the two): ONE render toggle as a checkbox — 'rotate' (the loop's
+// window; `header-height` authored in index.html = STAGE_STRIP): ONE render
+// toggle as a checkbox — 'rotate' (the loop's
 // auto-spin, OFF every load: the model sits still until asked) — in a kit
 // row stack, 8px in from the header's sides, centered on the header's 23
 // rows by the stack's own whole-pixel centering (`fill-height`, a row's

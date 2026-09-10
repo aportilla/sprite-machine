@@ -33,6 +33,12 @@ jobs:
 
       - run: npm ci
 
+      # The gates, all Node — a failing test, format check or typecheck (and
+      # the build below) stops the run here, so a broken push never deploys.
+      - run: npm test
+      - run: npm run lint
+      - run: npm run typecheck
+
       # Enables Pages on the repo, with Actions as the source, the first time
       # this runs — no Settings click. The base path it reports is not needed:
       # vite.config.js builds with `base: './'`, every emitted URL relative, so

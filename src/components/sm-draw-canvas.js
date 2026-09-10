@@ -90,21 +90,6 @@
 // geometry) changes — identity is the caller's contract: the same reference
 // means "same art, don't reset". Any `tool` change cancels an in-flight
 // gesture (strictly more robust than the old key-only cancel).
-//
-// One-shot dev-hook props (plain fields, consumed on the first update; the
-// capture tool can't hover/drag/click):
-//   - previewCursor: draw the pencil footprint at the tile center (at the
-//     session's size and shape — ?cursor=<N>[,<shape>] seeds both).
-//   - previewRect {x0,y0,x1,y1,square}: draw the rect tool's live drag preview
-//     (modeled as an active drag with no captured pointer, so ESC still
-//     demonstrates cancel).
-//   - fillOnMount {x,y}: perform a fill click at (x,y). Applied LOCALLY (this
-//     tile) even with "on all faces" on — a local fill avoids a re-mount
-//     mid-mount.
-//   - selectOnMount {x0,y0,x1,y1,dx,dy}: select that box, and with a nonzero
-//     offset lift + float it there (the pixels reach the doc like a mount
-//     fill — no gesture bracket, no undo entry). The ants draw at phase 0 and
-//     never tick under the hook, so a capture stays byte-deterministic.
 // ---------------------------------------------------------------------------
 
 import { css, LitElement, html } from 'lit';
@@ -322,12 +307,6 @@ export class SmDrawCanvas extends LitElement {
     this.fillContiguous = true;
     this.fillAllFaces = false;
     this.active = false;
-
-    // Dev hooks (plain: consumed once on the first update, never re-read).
-    this.previewCursor = false;
-    this.previewRect = null;
-    this.fillOnMount = null;
-    this.selectOnMount = null;
   }
 
   // --- plain fields: the pixel buffer, gesture state, on-screen geometry -----
@@ -372,11 +351,8 @@ export class SmDrawCanvas extends LitElement {
   #selNotified = null; // the outline last reported through sm-selection (dedupes emits)
   // The ants: the selection's own overlay layer, the erase previews' ring on
   // the cursor layer, and ONE ticker that runs while either is up (#syncAnts).
-  // `#antsStatic` (the ?select hook) pins phase 0 with no
-  // timer, so a capture with a selection in frame stays byte-deterministic.
   #antsPhase = 0;
   #antsTimer = null;
-  #antsStatic = false;
 
   // Live on-screen geometry, re-derived by #layout(), in the kit's SYSTEM px
   // (the vintage-frames virtual pixel grid): `#texelSys` is the whole-system-px
@@ -412,8 +388,6 @@ export class SmDrawCanvas extends LitElement {
   #ctx = null;
   #cursorCtx = null;
   #antsCtx = null;
-
-  #drawHooksDone = false; // the one-shot canvas dev hooks ran (first update)
 
   // --- lifecycle -------------------------------------------------------------
   connectedCallback() {
@@ -522,14 +496,6 @@ export class SmDrawCanvas extends LitElement {
       changed.has('ink') // the pencil's and the rect drag's previews are painted in the ink
     ) {
       this.#redrawCursorLayer();
-    }
-
-    // One-shot dev hooks fire on the first update WITH REAL GEOMETRY — the
-    // element can mount before the first sheet arrives (tileW 0), and the
-    // hooks must not be consumed against an empty canvas.
-    if (!this.#drawHooksDone && this.tileW > 0 && this.tileH > 0) {
-      this.#drawHooksDone = true;
-      this.#applyDrawHooks();
     }
   }
 
@@ -666,8 +632,7 @@ export class SmDrawCanvas extends LitElement {
   // lengths — on the device-pixel grid by construction, per the kit's
   // SIZING.md. The flex centering + measured snap this replaces produced
   // fractional origins by design and then had to cancel them per resize
-  // event, which is where the down-right ratchet lived (drive.mjs's "cannot
-  // ratchet" pin holds the door shut).
+  // event, which is where the down-right ratchet lived.
   //
   // The well's height is CSS-driven (it fills the flex draw box), so this
   // only MEASURES the wrap — it never sets a size on it. Idempotent: a re-run
@@ -744,60 +709,6 @@ export class SmDrawCanvas extends LitElement {
     this.#paintBg(); // the backing resize cleared it — the onion-skin at the new scale
     this.#redrawCursorLayer(); // re-stroke the footprint / rect preview at the new scale
     this.#drawAnts(); // the backing resize cleared the ants — re-stroke them at the new scale
-  }
-
-  // --- one-shot dev hooks (canvas halves; the state halves are boot actions) --
-  #applyDrawHooks() {
-    const clampX = (v) => Math.max(0, Math.min(this.tileW - 1, v | 0));
-    const clampY = (v) => Math.max(0, Math.min(this.tileH - 1, v | 0));
-    if (this.previewCursor) {
-      // No pointer to hover in a headless shot — stamp the footprint at the center.
-      this.#drawCursor({ px: this.tileW >> 1, py: this.tileH >> 1 });
-    }
-    if (this.previewRect) {
-      this.#rectStart = {
-        px: clampX(this.previewRect.x0),
-        py: clampY(this.previewRect.y0),
-      };
-      this.#rectEnd = {
-        px: clampX(this.previewRect.x1),
-        py: clampY(this.previewRect.y1),
-      };
-      this.#shiftLock = !!this.previewRect.square; // ?rect=...,sq demos the Shift lock
-      this.#rectDragging = true;
-      this.#drawRectPreview();
-    }
-    if (this.fillOnMount) {
-      this.#applyLocalFill(
-        { px: clampX(this.fillOnMount.x), py: clampY(this.fillOnMount.y) },
-        false
-      );
-    }
-    if (this.selectOnMount) {
-      // A selection with no owning pointer (like ?rect's phantom drag): the
-      // ants stand at phase 0 for the capture, and a real press inside takes
-      // over normally (#selDrag stays null). With an offset, lift and float
-      // it there — the pixels reach the doc like a mount fill, no gesture
-      // bracket, no undo entry.
-      const h = this.selectOnMount;
-      this.#antsStatic = true;
-      this.#sel = normalizeBounds(
-        { px: clampX(h.x0), py: clampY(h.y0) },
-        { px: clampX(h.x1), py: clampY(h.y1) }
-      );
-      this.#selOffset = { dx: 0, dy: 0 };
-      if (h.dx || h.dy) {
-        this.#liftSelection();
-        this.#selOffset = { dx: h.dx | 0, dy: h.dy | 0 };
-        if (this.#selFloat.opaque > 0) {
-          this.#compositeSelection();
-          this.#commitPixels();
-        }
-      }
-      this.#startAnts(); // a no-op under #antsStatic — the once-drawn phase 0
-      this.#drawAnts();
-      this.#notifySelection();
-    }
   }
 
   // --- template --------------------------------------------------------------
@@ -1577,11 +1488,11 @@ export class SmDrawCanvas extends LitElement {
   // layer's: an erase preview, the eyedropper's target (idle costs nothing);
   // each tick advances the phase and re-strokes whichever ring is showing:
   // the selection's on its layer, the cursor layer's through its own redraw.
-  // Under the OS's reduce-motion preference, or the ?select hook's static
-  // flag, the ants draw once at phase 0 and stand still.
+  // Under the OS's reduce-motion preference the ants draw once at phase 0
+  // and stand still.
   #startAnts() {
     if (this.#antsTimer != null) return;
-    if (this.#antsStatic || prefersReducedMotion()) return;
+    if (prefersReducedMotion()) return;
     this.#antsTimer = setInterval(() => {
       this.#antsPhase = (this.#antsPhase + 1) % ANTS_PERIOD;
       if (this.#sel) this.#drawAnts();

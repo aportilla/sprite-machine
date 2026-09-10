@@ -87,8 +87,7 @@
 // kit adds its own null when the last document window leaves. The mirrors
 // initialize by READING the kit's truth (desktop.activeWindow — null on a
 // fresh boot, so a dialog-greeted boot is desktop-focused), never from a
-// constant; opening any document window activates through the kit (hidden
-// windows included — ?hide=document captures keep their windoids that way).
+// constant; opening any document window activates through the kit.
 //
 // Close boxes never hide windows directly: the permanent windoids have no
 // close box at all, the 3D Sprite Atlas's is its toggle's uncheck (onClose
@@ -227,14 +226,8 @@ export function clampedBox(desktop, win, g) {
 
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
- * @param {{hide?: string[]}} [opts]
- *   hide: window ids to hide at boot (?hide= dev hook — 'document' hides the
- *   document windows, which stay ACTIVE, so the utility windows survive for
- *   captures that need them alone; a windoid id keeps that windoid out of
- *   frame for the whole session — the only way to hide one, there being no
- *   runtime toggle).
  */
-export function initWindows(desktop, { hide = [] } = {}) {
+export function initWindows(desktop) {
   /** @type {(() => void)[]} */
   const unsubs = [];
 
@@ -271,8 +264,8 @@ export function initWindows(desktop, { hide = [] } = {}) {
   // in the markup): its width is the atlas grid block's (SPRITE_WIDTH) and
   // its height is DERIVED so the 3×2 face-tile grid exactly fills the body
   // below the picker strip — no margins. The ratio is the ACTIVE document's
-  // own TILE (square for every square-tile sheet — it only differs under
-  // the ?tile=WxH shear hook), defaulting to square before a document is
+  // own TILE (square for every square-tile sheet — it differs only for a
+  // dropped non-square one), defaulting to square before a document is
   // open.
   const spriteRatio = () => {
     const s = workspace.active()?.doc.get();
@@ -322,8 +315,8 @@ export function initWindows(desktop, { hide = [] } = {}) {
   /** The rect, restated whenever the height derivation moves. (The
    *  window's header height — the controls strip, RING_STRIP — is authored
    *  in the markup as `header-height`, the kit's grammar; the chrome
-   *  arithmetic ringHeightFor counts the same 63, and the drive pins the
-   *  two against each other.) */
+   *  arithmetic ringHeightFor counts the same 63 — change one, change the
+   *  other.) */
   const declareRingRect = (h) => {
     byId.ring.minWidth = RING_MIN_WIDTH;
     byId.ring.minHeight = h;
@@ -442,7 +435,7 @@ export function initWindows(desktop, { hide = [] } = {}) {
   // height bound moves with the tile size. (Every windoid's header height
   // — its controls strip's band — is authored in the markup as
   // `header-height`, the kit's grammar; layout.js keeps the same numbers
-  // for the chrome arithmetic, and the drive pins the two.)
+  // for the chrome arithmetic.)
   byId.stage.minWidth = STAGE_MIN_WIDTH;
   byId.stage.minHeight = STAGE_MIN_HEIGHT;
   placeUtility();
@@ -484,20 +477,16 @@ export function initWindows(desktop, { hide = [] } = {}) {
     })
   );
 
-  const hiddenAtBoot = new Set(hide.filter((id) => id !== 'document'));
-  const hideDocs = hide.includes('document');
-
   // --- utility visibility: appActive -> hidden ---------------------------------
   // A windoid belongs to the application, so it is on screen exactly while
-  // the app is active (?hide= keeps one out of frame for captures); the 3D
-  // Sprite Atlas needs its own toggle on as well, and a show (the flag
-  // flipping it onto the screen) raises it to the front of the windoid
-  // band — see the header.
+  // the app is active; the 3D Sprite Atlas needs its own toggle on as well,
+  // and a show (the flag flipping it onto the screen) raises it to the front
+  // of the windoid band — see the header.
   let ringWasShown = false;
   const syncUtility = () => {
     const { appActive } = shell.get();
     for (const id of WINDOW_IDS) {
-      const shown = appActive && !hiddenAtBoot.has(id) && (id !== 'ring' || ringShown());
+      const shown = appActive && (id !== 'ring' || ringShown());
       byId[id].hidden = !shown;
     }
     const ringNow = !byId.ring.hidden;
@@ -560,7 +549,6 @@ export function initWindows(desktop, { hide = [] } = {}) {
     /** @type {any} */ (editor).ctx = ctx;
     const status = win.querySelector('sm-status-line');
     /** @type {any} */ (status).ctx = ctx;
-    if (hideDocs) win.hidden = true;
     desktop.append(win); // upgrades + slots in; the kit activates the newcomer
     clampWindow(desktop, win);
     byKey.set(ctx.key, { win, editor });
@@ -719,22 +707,16 @@ export function initWindows(desktop, { hide = [] } = {}) {
     byId,
     /** Injected by menus.js: the dirty-checking close flow, per context key. */
     onDocumentClose: null,
-    /** Un-hide a document window and make it the active one (which also
-     *  reactivates the application — bringToFront fires vf-activate). */
+    /** Make a document window the active one (which also reactivates the
+     *  application — bringToFront fires vf-activate). */
     activateContext(key) {
       const rec = byKey.get(key);
       if (!rec) return;
-      rec.win.hidden = false;
       desktop.bringToFront(rec.win);
     },
     /** The window element a context lives in, or null. */
     winFor(key) {
       return byKey.get(key)?.win ?? null;
-    },
-    /** The editor element a context lives in (the boot dev hooks land on the
-     *  boot document's), or null. */
-    editorFor(key) {
-      return byKey.get(key)?.editor ?? null;
     },
     /** View → Arrange Windows: the boot placement, re-run on the CURRENT
      *  raster over every window — the windoids back to the rail at their
@@ -763,7 +745,7 @@ export function initWindows(desktop, { hide = [] } = {}) {
      *  the very targets arrange() writes (windoidBox / docBox / panelBox,
      *  the clamp included), so the test and the writes can't disagree.
      *  Deliberately loose in four places. HIDDEN windows don't count (the
-     *  Finder role's windoids, a ?hide= capture's) — the test is what the
+     *  Finder role's windoids) — the test is what the
      *  user sees, so a hidden strip re-fit behind the Export dialog never
      *  makes the item "Arrange" over a screen that looks arranged. Nor
      *  does the 3D Sprite Atlas strip's WIDTH: content, the user's (a

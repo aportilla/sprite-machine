@@ -32,12 +32,12 @@ export const RING_DEFAULTS = Object.freeze({
  *  — a 1-bit surface shows gray as a dither, and dots is the paper the
  *  atlas wore before there was a setting. A VIEWING setting: the frames
  *  render over a transparent clear, so the export carries no paper and
- *  neither chunk writes it. The default is white — and today NOTHING in
- *  the UI writes it (a radio column in the strip was built and retired on
+ *  neither chunk writes it. The default is white — and today NOTHING
+ *  writes it (a radio column in the strip was built and retired on
  *  2026-09-03; the user's intent is to pick the paper FOR the user one
  *  day, from the sheet's own content — a sprite with a lot of white in
- *  it reads better on black, and the reverse — rather than ask); only
- *  the ?ring= capture hook seeds it. The plumbing is kept for that. */
+ *  it reads better on black, and the reverse — rather than ask). The
+ *  plumbing is kept for that pick. */
 export const RING_PAPERS = { white: 'white', black: 'black', gray: 'dots' };
 /** The view count's ceiling: the strip scrolls past what fits its window,
  *  but a 255-px tile at sixteen views is already a 4080-px sheet, and past

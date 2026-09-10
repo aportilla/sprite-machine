@@ -148,9 +148,9 @@ function effectiveTile(views, name) {
 }
 
 // One strip into the frame's RGBA: per texel along the seam, the FIRST PAINTED
-// texel walking in from it. Reads defensively — a sheared sheet (the ?tile=WxH
-// hook, which already warns) can put a tileH-long edge against a tileW-long
-// line, and a texel with no line to read is simply left transparent.
+// texel walking in from it. Reads defensively — a sheared sheet (a dropped
+// non-square one, which already warns) can put a tileH-long edge against a
+// tileW-long line, and a texel with no line to read is simply left transparent.
 function writeStrip(out, frameW, tileW, tileH, edge, seam, views) {
   const src = effectiveTile(views, seam.view);
   if (!src) return;

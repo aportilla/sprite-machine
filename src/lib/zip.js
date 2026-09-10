@@ -142,8 +142,8 @@ export function zipStore(entries, opts = {}) {
 /**
  * Read a stored ZIP back: every entry in directory order, with the CRC the
  * header claims for it (a reader checks it against `crc32(bytes)`). The
- * writer's mirror — tests and the drive read the export through it. Throws
- * on anything but a stored, single-part archive.
+ * writer's mirror — the tests read the export through it. Throws on
+ * anything but a stored, single-part archive.
  * @param {Uint8Array} zip
  * @returns {(ZipEntry & {crc: number})[]}
  */

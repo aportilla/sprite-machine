@@ -66,10 +66,9 @@ reap_orphans
 DIR="$(mktemp -d "$ROOT/run.XXXXXX")"
 trap 'reap_run "$DIR"' EXIT INT TERM
 
-# CAPTURE_VTB overrides the virtual-time budget: async work that races the dump
-# (e.g. ?diag=1's dynamic import writing document.title) gets more scheduler
-# turns under a bigger budget. The default stays 4000 — shots are pinned to it
-# (a different budget can change the dumped frame).
+# CAPTURE_VTB overrides the virtual-time budget (default 4000): async work that
+# races the dump (e.g. ?diag=1's dynamic import writing document.title) gets
+# more scheduler turns under a bigger budget.
 COMMON=(--headless=new --disable-gpu --use-gl=angle --use-angle=swiftshader
   --hide-scrollbars --window-size=1000,850 --virtual-time-budget="${CAPTURE_VTB:-4000}"
   --force-device-scale-factor="${CAPTURE_DSF:-1}"
@@ -81,8 +80,8 @@ case "$MODE" in
     OUT="${3:?missing out.png}"
     mkdir -p "$(dirname "$OUT")"
     # A stale file at the target would satisfy the "did the shot land?" wait
-    # below at once and get Chrome killed before it wrote — every re-shoot
-    # onto an existing path (goldens.sh update) silently kept the old file.
+    # below at once and get Chrome killed before it wrote — a re-shoot onto
+    # an existing path would silently keep the old file.
     rm -f "$OUT"
     ARGS+=(--screenshot="$OUT")
     ;;

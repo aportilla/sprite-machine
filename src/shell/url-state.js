@@ -14,7 +14,7 @@
 // at the next boot (?file wins over the fragment in boot/params.js). The
 // other search params (?sample and friends, the dev hooks) pass through
 // untouched — an explicit ?sample outranks ?file/#fragment at boot anyway,
-// which keeps drive.mjs's mid-run headless reloads on their test path.
+// so a reload of a ?sample page reopens the sample.
 // ---------------------------------------------------------------------------
 
 import { workspace } from '../state/workspace.js';

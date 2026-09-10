@@ -1086,7 +1086,6 @@ export function initMenus(desktop, windows, panels) {
       closeContext,
       saveThen,
       showAbout,
-      showExportModel: showModelDialog,
     },
     dispose() {
       for (const fn of teardown) fn();

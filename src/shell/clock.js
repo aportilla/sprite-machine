@@ -16,9 +16,8 @@
 // is `target === desktop`). The label's line box is pinned to the bar's 20px
 // (style.css) so its em sits on the same rows as the menu titles.
 //
-// `now` is injectable (the files slice's `d.now` discipline): the ?now=<when>
-// boot param freezes it so tools/capture.sh shots with the bar in frame stay
-// byte-deterministic. This module reads no store.
+// `now` is injectable (the files slice's `d.now` discipline). This module
+// reads no store.
 // ---------------------------------------------------------------------------
 
 /** How long a press holds the date before the time returns. */
@@ -51,7 +50,7 @@ export function formatDate(d) {
  *
  * @param {HTMLElement} label  the vf-label the clock writes into
  * @param {{now?: () => number, holdMs?: number}} [opts]  `now` — epoch ms,
- *   injectable (frozen by ?now); `holdMs` — the date's dwell after a press
+ *   injectable; `holdMs` — the date's dwell after a press
  * @returns {{ dispose: () => void }}
  */
 export function initClock(label, { now = Date.now, holdMs = DATE_HOLD_MS } = {}) {

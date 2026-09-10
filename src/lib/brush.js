@@ -19,7 +19,7 @@
 // brushSpans states the tip's clipped system-px rows for lib/ants.js
 // antsOutlineRuns to walk, so a circle tip's ants ring a disc. The
 // footprint's BOUNDS stay the box for either shape (brushBounds: the clamp's
-// and the ?cursor hook's word).
+// word).
 // ---------------------------------------------------------------------------
 
 /** The tip shapes — the pencil's and the eraser's popups' two options, in
@@ -83,8 +83,7 @@ export function brushRows(cx, cy, size, shape, emit) {
  * to the w×h tile (a row off the tile is dropped, a span past its edge cut
  * at it — so a ring at the tile's edge closes along the edge), then scaled by
  * `scale` system px per texel (each texel row becomes `scale` identical px
- * rows). Empty for a tip wholly off the tile. Pure, so the drive can hold it
- * as an oracle.
+ * rows). Empty for a tip wholly off the tile. Pure.
  * @param {number} cx @param {number} cy @param {number} size
  * @param {string} shape  one of PENCIL_SHAPES
  * @param {number} w @param {number} h  the tile, in texels

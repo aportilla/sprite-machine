@@ -9,7 +9,7 @@ geometry, not faked by a shader.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # unit + integration suites (node --test)
+npm test           # both packages' unit suites (node --test)
 npm run typecheck  # tsc checkJs over src/ (JSDoc types)
 npm run lint       # prettier --check .   (npm run format to fix)
 npm run build      # static bundle in dist/
@@ -28,30 +28,18 @@ to the engine and to its consumer land in one commit, and
 deploys to **GitHub Pages** on every push to `main`
 (`.github/workflows/pages.yml`): <https://aportilla.github.io/sprite-machine/>.
 
-Three headless-Chrome tools verify what Node can't, all against a running dev
-server:
+The gates are Node-only — `npm test`, `npm run lint`, `npm run typecheck`,
+`npm run build` — and the Pages workflow runs all four before it deploys, so
+a broken push never ships. There are **no browser tests**: the look and the
+wiring are checked by eye. One headless-Chrome helper shoots a running dev
+server when a picture helps, never as a pass/fail check:
 
 ```bash
 tools/capture.sh shot 'http://localhost:5173/?sample=car' /tmp/shot.png
 tools/capture.sh dom  'http://localhost:5173/?diag=1'   # light-DOM shell + title
-tools/goldens.sh check                                  # the look, against docs/goldens/
-node tools/drive.mjs                                    # the user journeys, on trusted input
 ```
 
-`capture.sh` shows what the app **looks** like, and its shots are
-byte-deterministic — fixed window size, DSF 1, a virtual time budget, a fresh
-profile per run, the model at rest, `?now=` whenever the clock is in frame —
-so `cmp` between two runs is a real regression check. `goldens.sh` holds eight
-such shots under `docs/goldens/`: every "does it look right" question lives
-there as pixels, and a golden changes only in a commit that changed the look
-on purpose. `drive.mjs` covers what no screenshot can — about ninety checks
-over thirty journeys, driving the desktop over the DevTools Protocol with real
-trusted input, probing through shadow roots, exiting non-zero on any failure.
-Its waits are on **the app's own readiness contract**, never a pause:
-`main.js` marks the root `data-sm-boot="ready"` once the boot chain has
-landed, and every wait after an input is on the outcome the next check reads.
-The residue is a manual checklist, `docs/SMOKE-TEST.md`. What gets a test is
-[Testing](#testing).
+What gets a test is [Testing](#testing).
 
 The app is a **System 7 virtual desktop**, drawn end to end with the
 [`vintage-frames`](https://github.com/aportilla/vintage-frames) web component
@@ -304,8 +292,7 @@ Sprite View tracks every stroke at frame rate, and the model rebuilds
   Square is the **only registering shape**: a 3×2 atlas shares its depth axis
   between the side tile's width and the top tile's height. The pure
   `resizeAtlas` (the engine's `atlas.js`) still **defaults to origin-anchored** for the
-  pipeline and still accepts an asymmetric pair (the `?tile=WxH` hook, which
-  **warns** and shears) so the shear path stays testable.
+  pipeline and still accepts an asymmetric pair, which **warns** and shears.
 
 There is **no auto ground-rest**: an object sits at whatever Y you paint it.
 Registration gets two aids, and they answer different questions: the **faded
@@ -313,16 +300,13 @@ onion-skin** of the opposite face **behind** the canvas — where is the art on
 the other side of the object? — and the **edge hints** just **outside** it —
 what does the art wrap into when it leaves this edge?
 
-**Dev hooks** let the headless tools reach what they can't click; the full set
-is parsed in `src/boot/params.js`. Two carry rules of their own:
-`?sample=<index|name>` opens a built-in as an untitled from in-memory data,
-skipping the seeding and the `?file`/dialog boot alike (the deterministic path
-`drive.mjs` drives), and **`?fresh=1`** boots with **storage ignored** — no
-state restore, no `?file`, no saved-doc icons (the bare desktop with the Trash
-alone in its corner), no seeding, no About greet, no state writes. The rest
-place a window, a face, a resize or a tool's gesture on screen at mount, the
-selection's ants standing at **phase 0** so a shot stays byte-identical and a
-mount fill or float writing no undo entry.
+**Dev hooks**, parsed in `src/boot/params.js`: `?sample=<index|name>` opens a
+built-in as an untitled from in-memory data, skipping the seeding and the
+`?file`/dialog boot alike, with `?edit=<face>` choosing its face;
+**`?fresh=1`** boots with **storage ignored** — no state restore, no `?file`,
+no saved-doc icons (the bare desktop with the Trash alone in its corner), no
+seeding, no About greet, no state writes; and `?flat=1`, `?diag=1` and
+`?cam=<preset>` are the mesh and camera debug flags.
 
 ---
 
@@ -806,8 +790,8 @@ a folder made inside it.
 - **The library looks past the Trash**: `?file=` resolves no trashed
   document (the Finder's Trash was invisible to Standard File) — the way to
   one is its icon in the Trash's window.
-  `?fresh=1` shows the Trash and nothing else; it is furniture, so the goldens
-  carry it in their corner. Not yet: Put Away ⌘Y (the record does not remember
+  `?fresh=1` shows the Trash and nothing else, since it is furniture. Not
+  yet: Put Away ⌘Y (the record does not remember
   where a trashed item came from) and the "in use" alert.
 
 ### The About box
@@ -840,7 +824,7 @@ so a value typed into Tile Size… and Returned is committed and OK'd in one
 stroke. The version and
 the date are **build facts, never markup** — `vite.config.js` defines them
 from package.json's `version` and HEAD's commit date, so every build of one
-commit says the same thing and a capture stays byte-identical — and
+commit says the same thing — and
 `shell/menus.js` writes them into the box's two empty spans at wire-up.
 Bumping `version` is the whole release ritual.
 
@@ -1044,36 +1028,20 @@ both packages' `test/*.test.mjs`), densest where a bug would be
 silent and expensive: the visual-hull carve and coloring, the wedge mesh's
 watertightness and its gate, the region trace, the skin's bake and its UV
 read, the rasterizers, the document format, the document and library
-contracts, and the layout rules. The state slices get a few behavior tests
-each, never the store's discipline per setter; the layout tests pin
-relationships between exported values, never a number against a literal.
+contracts, and the resize rule. The state slices get a few behavior tests
+each, never the store's discipline per setter; the layout tests cover the
+resize rule and the cascade's slots, never where a window goes.
 
 ### Testing
 
-The policy — what earns a test, what never does, and the decision to make for
-every enhancement — is [docs/TESTING.md](docs/TESTING.md), and it is binding;
-this is its summary. Four layers, each doing the one thing it is cheapest at:
-**Node unit tests** for the pure code above; **`tools/drive.mjs`**, an
-integration smoke of user journeys, where a check exists only when it crosses
-a boundary a unit cannot — IndexedDB, trusted input, the real canvas, the menu
-wiring, a reload — and names an outcome of the app's own; **golden
-screenshots** (`tools/goldens.sh`) for the look; and **`docs/SMOKE-TEST.md`**
-for what none of the above can reach — chorded and right-button drags, feel,
-the cursor, browser zoom, a dropped file.
-
-The rules. **Never assert the kit**: no check reads a `[part=…]` rect to
-assert on it, counts `vf-*` elements, reads a `--vf-*` property, pins
-`resizable` / `header-height` / a size rect, or asserts a drag's delta or DOM
-order after a raise — locating a kit control through its part to drive it is
-fine. **The drive re-derives nothing**: it imports nothing from `src/` but the
-PNG chunk, zip and glb readers, and checks that the app applied its
-arithmetic. **One home per fact**: no constant pinned against a literal, no
-default parameter, no dev-only URL hook, no guard that a retired feature stays
-absent, no literal UI copy. **The store's discipline is tested once**, in
-`test/store.test.mjs`. **A precondition is not a check**: a helper that cannot
-find its target throws. **No check per feature by default**: a change ships
-with a test when it adds a risk the gates do not cover, and commit messages do
-not report check or test counts.
+The policy is [docs/TESTING.md](docs/TESTING.md), and it is binding: **unit
+tests only, and only for pure logic** — the engine's suite dense, since it is
+the published package, and the app's covering its pure rules — and **no
+browser tests**: no driven journeys, no screenshot comparisons, nothing that
+asserts markup, layout numbers, copy or what vintage-frames renders. The look
+and the wiring are verified by eye. The gates — test, lint, typecheck, build —
+run in seconds with no browser, and CI runs them before every deploy. The
+default for a change is no new test.
 
 ```
 packages/core/  THE ENGINE, published as `sprite-machine` — pure, no DOM, THREE only

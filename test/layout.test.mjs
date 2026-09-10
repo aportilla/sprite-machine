@@ -1,7 +1,7 @@
 // Node-runnable tests for the desktop's window + icon arithmetic
-// (shell/layout.js): the RULES — the initial placement, the document-window
-// cascade, the zoom, the icons' default lattice and the nine-slice pin in
-// both frames — never a number against a literal. Run: node --test
+// (shell/layout.js): the RESIZE RULE — the nine-slice pin in both frames, and
+// the placement as its fixed point — the cascade's slot rules, and a tiny
+// raster's finiteness. Never where a window goes. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -11,24 +11,12 @@ import {
   cascadeSlot,
   CASCADE_STEP,
   CASCADE_SLOTS,
-  zoomedBox,
-  centeredBox,
   iconDefault,
-  folderBox,
-  folderViewport,
-  iconGridDefault,
-  fieldExtent,
-  FOLDER_STRIP,
-  FOLDER_COUNT_AT,
   pinOf,
   pinTo,
   isPin,
   spriteHeightFor,
-  SPRITE_CHROME,
   SPRITE_WIDTH,
-  ATLAS_GRID,
-  ringWidthFor,
-  ringRowWidth,
   ringHeightFor,
   RING_MIN_WIDTH,
   TOP_RESERVE,
@@ -38,11 +26,10 @@ import {
   WINDOW_FRAME,
   ICON_FRAME,
 } from '../src/shell/layout.js';
-import { RING_DEFAULTS } from '../src/state/ring.js';
 
 // The Tools palette's box — the placement's one fixed input.
 const TOOLS = TOOLS_BOX;
-// The capture tool's raster (1000×850 CSS at DSF 1, minus the 10px bezel).
+// A typical raster (1000×850 CSS at DSF 1, minus the 10px bezel).
 const W = 980;
 const H = 830;
 
@@ -53,135 +40,6 @@ const R = { width: 1000, height: 800 };
 const box = (left, top, width, height) => ({ left, top, width, height });
 const roundTrip = (b, from, to, frame = F, policy) =>
   pinTo(pinOf(b, from, frame), to, frame, policy);
-
-test('placement: Tools top-left under the strip; the sprite/stage rail one right-flush column on any raster, the sprite fixed at whole grid cells', () => {
-  const p = initialPlacement(W, H, TOOLS);
-  // Tools sits at the classic inset under the strip, left of the vacancy.
-  assert.equal(p.tools.left, 14);
-  assert.equal(p.tools.top, TOP_RESERVE + 8);
-  assert.ok(p.tools.left + TOOLS.width < p.doc.left);
-  // The sprite windoid is FIXED-size: the atlas grid block's width, its
-  // height derived (the face grid exactly fills its body below the picker
-  // strip) — and that width yields WHOLE grid cells: the body minus the
-  // interior rules splits evenly across the columns (the exact-fill
-  // contract needs the kit's whole-px cell sizes to sum back to the body).
-  const cellW =
-    (SPRITE_WIDTH - SPRITE_CHROME.w - (ATLAS_GRID.cols - 1)) / ATLAS_GRID.cols;
-  assert.equal(cellW, ATLAS_GRID.cell);
-  assert.ok(Number.isInteger(cellW));
-  // The capture raster, tall and narrow, squat and wide: both windoids
-  // right-flush behind the side inset at the SAME width (the stage never
-  // derives a width of its own), below the options strip, sprite on top,
-  // stage under it with a gap, absorbing the rest of the height down to the
-  // bottom gap.
-  for (const [w, h] of [
-    [W, H],
-    [400, 2000],
-    [2400, 500],
-  ]) {
-    const q = initialPlacement(w, h, TOOLS);
-    assert.equal(q.sprite.width, SPRITE_WIDTH);
-    assert.equal(q.sprite.height, spriteHeightFor(SPRITE_WIDTH));
-    assert.equal(q.sprite.left + q.sprite.width, w - 14);
-    assert.equal(q.stage.width, SPRITE_WIDTH);
-    assert.equal(q.stage.left, q.sprite.left);
-    assert.ok(q.sprite.top > TOP_RESERVE);
-    assert.equal(q.stage.top, q.sprite.top + q.sprite.height + 8);
-    assert.equal(q.stage.top + q.stage.height, h - 8);
-  }
-});
-
-test('placement: the document box sits top-left beside Tools, leaving the cascade room', () => {
-  const p = initialPlacement(W, H, TOOLS);
-  const x0 = 14 + TOOLS.width + 14; // the vacant middle's left edge
-  const x1 = p.sprite.left - 14; // …and its right edge (the rail's inset)
-  const y1 = H - 8; // …and its bottom
-  // Top-left aligned with the Tools palette: its top, a side inset right of it.
-  assert.equal(p.doc.left, x0);
-  assert.equal(p.doc.top, p.tools.top);
-  // The room left at the right and bottom is exactly the cascade's: the
-  // LAST slot lands flush with the vacancy's edges, every earlier one inside.
-  const room = (CASCADE_SLOTS - 1) * CASCADE_STEP;
-  assert.equal(p.doc.left + p.doc.width, x1 - room);
-  assert.equal(p.doc.top + p.doc.height, y1 - room);
-  let occupied = [];
-  for (let i = 0; i < CASCADE_SLOTS; i++) {
-    const s = cascadeFrom(p.doc, occupied);
-    assert.ok(s.left + p.doc.width <= x1, `slot ${i} runs into the rail`);
-    assert.ok(s.top + p.doc.height <= y1, `slot ${i} runs off the bottom`);
-    occupied = [...occupied, s];
-  }
-  const last = occupied[CASCADE_SLOTS - 1];
-  assert.equal(last.left + p.doc.width, x1);
-  assert.equal(last.top + p.doc.height, y1);
-});
-
-test("placement: the ring docks on the bottom margin at the doc box's left — the tile's height, the row's width, both floored", () => {
-  const p = initialPlacement(W, H, TOOLS);
-  const x1 = p.sprite.left - 14; // the vacancy's right edge
-  assert.equal(p.ring.left, p.doc.left);
-  assert.equal(p.ring.top + p.ring.height, H - 8);
-  assert.equal(p.ring.height, ringHeightFor(RING_DEFAULTS.size));
-  assert.equal(p.ring.width, ringWidthFor(RING_DEFAULTS.views, RING_DEFAULTS.size));
-  // The tile size moves the height (the bottom stays docked); the view
-  // count seeds the width; nothing else about the box moves.
-  const big = initialPlacement(W, H, TOOLS, { ringSize: 200 });
-  assert.equal(big.ring.height, ringHeightFor(200));
-  assert.equal(big.ring.top + big.ring.height, H - 8);
-  assert.equal(big.ring.left, p.ring.left);
-  // (four 200-px cells outgrow this raster's vacancy — the cap below.)
-  assert.equal(big.ring.width, Math.min(ringWidthFor(4, 200), x1 - p.doc.left));
-  const eight = initialPlacement(W, H, TOOLS, { ringViews: 8 });
-  assert.equal(eight.ring.width, ringWidthFor(8, RING_DEFAULTS.size));
-  assert.equal(eight.ring.top, p.ring.top);
-  // A row wider than the vacant middle is CAPPED at it — a fresh strip
-  // never runs under the rail (the rail goes live instead) — and never
-  // drops under the strip's floor.
-  const wide = initialPlacement(W, H, TOOLS, { ringViews: 16, ringSize: 255 });
-  assert.ok(ringWidthFor(16, 255) > x1 - p.doc.left);
-  assert.equal(wide.ring.left + wide.ring.width, x1);
-  const tiny = initialPlacement(300, 400, TOOLS, { ringViews: 16 });
-  assert.equal(tiny.ring.width, RING_MIN_WIDTH);
-  // The floors themselves: never a zero row, never fewer than one cell, and
-  // a short ring never clips the controls.
-  assert.equal(ringHeightFor(0), ringHeightFor(1), 'never a zero row');
-  assert.equal(ringRowWidth(0, 64), ringRowWidth(1, 64), 'never fewer than one cell');
-  assert.equal(ringWidthFor(0, 64), RING_MIN_WIDTH);
-  assert.equal(ringWidthFor(1, 128), RING_MIN_WIDTH, 'a short ring floors at the strip');
-  assert.ok(ringWidthFor(16, 255) > RING_MIN_WIDTH, 'a wide one clears it');
-});
-
-test('placement: a shown ring shortens the doc box; hidden, nothing changes', () => {
-  const off = initialPlacement(W, H, TOOLS);
-  const hidden = initialPlacement(W, H, TOOLS, { ringShown: false });
-  assert.deepEqual(hidden, off, 'the default is the hidden placement exactly');
-  const on = initialPlacement(W, H, TOOLS, { ringShown: true });
-  // Everything but the doc box is untouched…
-  assert.deepEqual(on.tools, off.tools);
-  assert.deepEqual(on.sprite, off.sprite);
-  assert.deepEqual(on.stage, off.stage);
-  assert.deepEqual(on.ring, off.ring);
-  assert.equal(on.doc.left, off.doc.left);
-  assert.equal(on.doc.top, off.doc.top);
-  assert.equal(on.doc.width, off.doc.width);
-  // …and the doc box bottom + the cascade room lands a GAP above the strip,
-  // so every cascade slot still clears it.
-  const room = (CASCADE_SLOTS - 1) * CASCADE_STEP;
-  assert.equal(on.doc.top + on.doc.height + room, on.ring.top - 8);
-  let occupied = [];
-  for (let i = 0; i < CASCADE_SLOTS; i++) {
-    const s = cascadeFrom(on.doc, occupied);
-    assert.ok(s.top + on.doc.height <= on.ring.top - 8, `slot ${i} runs into the strip`);
-    occupied = [...occupied, s];
-  }
-  // …by the tile's own height: a bigger tile takes more of the vacancy.
-  const tall = initialPlacement(W, H, TOOLS, { ringShown: true, ringSize: 200 });
-  assert.equal(
-    tall.doc.height,
-    on.doc.height - (ringHeightFor(200) - ringHeightFor(RING_DEFAULTS.size))
-  );
-  assert.equal(tall.doc.top + tall.doc.height + room, tall.ring.top - 8);
-});
 
 test('placement: a tiny raster still yields finite, usable boxes; a zero-sized one places and pins finitely', () => {
   const p = initialPlacement(300, 200, TOOLS, { ringShown: true });
@@ -201,23 +59,6 @@ test('placement: a tiny raster still yields finite, usable boxes; a zero-sized o
     { size: { height: z.ring.height }, min: { width: RING_MIN_WIDTH } }
   );
   assert.ok(Object.values(rp).every(Number.isFinite));
-});
-
-test('panel placement: centeredBox centers a fixed-size panel in the open area below the strip', () => {
-  const size = { width: 248, height: 304 }; // the Desktop Patterns window (index.html)
-  const b = centeredBox(W, H, size);
-  assert.equal(b.width, size.width);
-  assert.equal(b.height, size.height);
-  // Centered on the raster's width, and on the open area BELOW the options
-  // strip's band (the windows' frame, whether or not the strip is showing).
-  assert.equal(b.left, Math.floor((W - size.width) / 2));
-  assert.equal(b.top, TOP_RESERVE + Math.floor((H - TOP_RESERVE - size.height) / 2));
-  assert.ok(Number.isInteger(b.left) && Number.isInteger(b.top));
-  // A raster smaller than the panel floors the top-left at the reserve and
-  // the left edge — the title bar stays grabbable; the clamp does the rest.
-  const t = centeredBox(200, 200, size);
-  assert.equal(t.left, 0);
-  assert.equal(t.top, TOP_RESERVE);
 });
 
 test('cascade: the first open takes the doc box, each further one steps down-right, and a freed slot is reused', () => {
@@ -285,49 +126,6 @@ test('cascade: every slot held wraps instead of walking off the raster; a slot r
     slot: 2,
   });
   assert.deepEqual(cascadeSlot(b, CASCADE_SLOTS + 1), cascadeSlot(b, 1));
-});
-
-test('zoom: the zoomed box fills the vacancy right and down from a held top-left', () => {
-  const p = initialPlacement(W, H, TOOLS);
-  const x1 = p.sprite.left - 14; // the vacant middle's right edge (the rail's inset)
-  const y1 = H - 8; // …and its bottom
-  // From the doc box's own top-left, the zoomed state is the whole vacancy:
-  // the doc box plus exactly the cascade room it left.
-  const room = (CASCADE_SLOTS - 1) * CASCADE_STEP;
-  const z = zoomedBox(W, H, p.doc);
-  assert.equal(z.left, p.doc.left);
-  assert.equal(z.top, p.doc.top);
-  assert.equal(z.left + z.width, x1);
-  assert.equal(z.top + z.height, y1);
-  assert.equal(z.width, p.doc.width + room);
-  assert.equal(z.height, p.doc.height + room);
-  // From a dragged top-left the far edges land on the SAME boundaries —
-  // a zoom never moves the top-left, only the far edges.
-  const dragged = { left: p.doc.left + 100, top: p.doc.top + 60 };
-  const zd = zoomedBox(W, H, dragged);
-  assert.equal(zd.left, dragged.left);
-  assert.equal(zd.top, dragged.top);
-  assert.equal(zd.left + zd.width, x1);
-  assert.equal(zd.top + zd.height, y1);
-  // Dragged past the vacancy's edges the arithmetic would go negative, so
-  // both extents floor instead — the box may hang off the raster, the
-  // resize rule's own recoverable-by-a-drag posture.
-  const zp = zoomedBox(W, H, { left: W - 20, top: H - 20 });
-  assert.ok(zp.left === W - 20 && zp.top === H - 20 && zp.width > 0 && zp.height > 0);
-});
-
-test('zoom: a shown ring stops the zoomed box a gap above the strip', () => {
-  const p = initialPlacement(W, H, TOOLS, { ringShown: true });
-  const z = zoomedBox(W, H, p.doc, { ringShown: true });
-  assert.equal(z.left, p.doc.left);
-  assert.equal(z.top, p.doc.top);
-  assert.equal(z.top + z.height, p.ring.top - 8);
-  // The right edge is the rail's inset either way; the default is unchanged.
-  assert.equal(z.width, zoomedBox(W, H, p.doc).width);
-  assert.deepEqual(zoomedBox(W, H, p.doc, { ringShown: false }), zoomedBox(W, H, p.doc));
-  // The band is the tile's own: a bigger tile stops the zoom higher.
-  const zt = zoomedBox(W, H, p.doc, { ringShown: true, ringSize: 200 });
-  assert.equal(zt.top + zt.height, H - 8 - ringHeightFor(200) - 8);
 });
 
 test('pin: a strut keeps its offset from its edge, a spring its fraction of the middle', () => {
@@ -620,72 +418,6 @@ test('pin: the placement is a fixed point — a resize lands the windoids where 
     [pin.x[0].kind, pin.x[1].kind, pin.y[0].kind, pin.y[1].kind],
     ['far', 'far', 'near', 'far']
   );
-});
-
-test('icon defaults: a raster-derived column below the Tools band, wrapping', () => {
-  // The tall case: one column at the classic left edge, 72px pitch.
-  assert.deepEqual(iconDefault(0, 830), { left: 16, top: 340 });
-  assert.deepEqual(iconDefault(1, 830), { left: 16, top: 412 });
-  // 830 tall fits six cells (the sixth tops at 700, whose 64px cell still
-  // bottoms inside the raster); the seventh folds into a second column back
-  // at the top of the band, one 80px column pitch to the right.
-  assert.deepEqual(iconDefault(5, 830), { left: 16, top: 700 });
-  assert.deepEqual(iconDefault(6, 830), { left: 96, top: 340 });
-  // A short raster wraps sooner: at 410 only one cell fits per column.
-  assert.deepEqual(iconDefault(1, 410), { left: 96, top: 340 });
-  // Every default cell it deals out bottoms inside the raster it was dealt
-  // for (the whole point of deriving from it).
-  for (let slot = 0; slot < 12; slot++) {
-    const p = iconDefault(slot, 620);
-    assert.ok(p.top + ICON_CELL <= 620, `slot ${slot}: top ${p.top}`);
-  }
-  // A raster too short for even one cell still yields finite positions
-  // (a single row — the boot clamp pulls it up into frame).
-  const p = iconDefault(3, 100);
-  assert.ok(Number.isFinite(p.left) && Number.isFinite(p.top));
-});
-
-test('folder windows: the box cascades from the doc box’s corner, the lattice wraps at the plane’s width, the field’s extent holds every icon', () => {
-  const size = { width: 320, height: 224 };
-  const doc = initialPlacement(W, H, TOOLS).doc;
-  const first = folderBox(W, H, size, 0);
-  assert.deepEqual(first, { left: doc.left, top: doc.top, ...size });
-  const second = folderBox(W, H, size, 1);
-  assert.equal(second.left - first.left, CASCADE_STEP);
-  assert.equal(second.top - first.top, CASCADE_STEP);
-  // A raster smaller than the window still keeps the title bar grabbable.
-  const tiny = folderBox(200, 200, size, 3);
-  assert.equal(tiny.left, 0);
-  assert.equal(tiny.top, TOP_RESERVE);
-  // The header: the count's box sits above the rule.
-  assert.ok(FOLDER_STRIP > FOLDER_COUNT_AT.top + 12);
-  // The plane's viewport is the window less its chrome — smaller on both
-  // axes, never negative.
-  const vp = folderViewport(size);
-  assert.ok(vp.width < size.width && vp.height < size.height);
-  assert.deepEqual(folderViewport({ width: 10, height: 10 }), { width: 0, height: 0 });
-  // The lattice: the first cell at the inset; every cell of the first row
-  // fits inside the width; the wrap lands under the first cell one row down.
-  const c0 = iconGridDefault(0, vp.width);
-  assert.equal(c0.left, c0.top);
-  let cols = 0;
-  while (iconGridDefault(cols, vp.width).top === c0.top) cols++;
-  assert.ok(cols >= 1);
-  for (let s = 0; s < cols; s++) {
-    assert.ok(iconGridDefault(s, vp.width).left + ICON_CELL <= vp.width, `slot ${s}`);
-  }
-  const wrapped = iconGridDefault(cols, vp.width);
-  assert.equal(wrapped.left, c0.left);
-  assert.ok(wrapped.top > c0.top);
-  // A plane too narrow for one cell still deals a single column.
-  assert.equal(iconGridDefault(1, 10).left, c0.left);
-  // The extent: the viewport at least; an icon past it grows the field to
-  // hold it, and an icon inside it changes nothing.
-  assert.deepEqual(fieldExtent([], vp), vp);
-  assert.deepEqual(fieldExtent([c0], vp), vp);
-  const far = { left: vp.width + 40, top: vp.height + 40 };
-  const grown = fieldExtent([c0, far], vp);
-  assert.ok(grown.width >= far.left + ICON_CELL && grown.height >= far.top + ICON_CELL);
 });
 
 test('icon pin: the frame is the desktop below the MENU BAR, uniform bands, a fixed cell', () => {

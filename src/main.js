@@ -11,9 +11,6 @@ import './style.css';
 import 'vintage-frames';
 import { applyCursor, onScaleChange } from 'vintage-frames';
 import { SAMPLES } from './lib/sprite-data.js';
-import { PALETTE_168 } from './lib/palette.js';
-import { session } from './state/session.js';
-import { prefs } from './state/prefs.js';
 import { files, isTrashed } from './state/files.js';
 import { workspace } from './state/workspace.js';
 import { parseBootParams } from './boot/params.js';
@@ -52,54 +49,15 @@ import './components/sm-ring-view.js'; // registers <sm-ring-view>
 import './components/sm-status-line.js'; // registers <sm-status-line>
 import './components/sm-stage-controls.js'; // registers <sm-stage-controls>
 
-// --- boot params → store seeds ---------------------------------------------
-// Applied BEFORE any subscriber exists, so seeding can't fire phantom
-// rebuilds — and the components mount with the seeded state already in place.
-// The dev hooks' state halves are ordinary store actions; the canvas-paint
-// halves ride into the BOOT context as `hooks` (consumed by the boot
-// document's <sm-draw-canvas> on its first update). See boot/params.js.
+// --- boot params ------------------------------------------------------------
+// The URL's boot request (?file / #fragment) and the dev hooks: ?sample,
+// ?edit and ?fresh put a known document on screen from a clean profile, and
+// ?flat / ?diag / ?cam are the mesh and camera debug flags. See
+// boot/params.js.
 const boot = parseBootParams(location.search, {
   sampleNames: SAMPLES.map((s) => s.name),
   hash: location.hash,
 });
-// ?ring=<views>[,<elevation>[,<offset>[,<size>[,<paper>]]]]: the 3D Sprite
-// Atlas windoid shown (it boots hidden). The settings are the DOCUMENT's
-// (state/ring-settings.js), so the seed rides into the boot sample's
-// context at its open (bootDocuments below — the settings store's own
-// clamps apply); a ?file boot keeps the stored document's own chunk.
-if (boot.ring) prefs.setShowRing(true);
-// The on-mount hook order, preserved: pencil size (and its tip shape, when
-// ?cursor names one), then pick (so ?palette
-// reflects it and ?fill fills with it), then the dialog, then rect, then
-// fill, then select (the last tool seed wins the session's one tool).
-// The size/radius seeds are clamped for real against the tile geometry when
-// the editor first mounts (it re-clamps on any tile-geometry change).
-if (boot.cursor != null) session.setPencilSize(boot.cursor, Number.MAX_SAFE_INTEGER);
-if (boot.cursorShape) session.setPencilShape(boot.cursorShape);
-if (boot.pick != null) session.pickColor(PALETTE_168[boot.pick].rgb);
-if (boot.palette) session.openPicker();
-if (boot.rect) {
-  session.setTool('rect');
-  if (boot.rect.r) session.setCornerRadius(boot.rect.r, Number.MAX_SAFE_INTEGER);
-}
-if (boot.fill) {
-  session.setTool('fill');
-  session.setFillContiguous(boot.fill.contiguous);
-  session.setFillAllFaces(boot.fill.allFaces);
-}
-if (boot.select) session.setTool('select');
-// The boot context's one-shot canvas hooks (?cursor / ?rect / ?fill /
-// ?select paint halves) — created here, carried on the context so no
-// assignment can race the editor's first update.
-const bootHooks =
-  boot.cursor != null || boot.rect || boot.fill || boot.select
-    ? {
-        previewCursor: boot.cursor != null,
-        previewRect: boot.rect,
-        fillOnMount: boot.fill,
-        selectOnMount: boot.select,
-      }
-    : null;
 
 // --- the desktop raster + cursor -------------------------------------------
 // The page owns the viewport: measure it, let fitWithin() derive the largest
@@ -148,7 +106,7 @@ const dstate = createDesktopState(boot.fresh);
 // fresh from the live raster at every boot and every open (shell/windows.js
 // header); a folder window's remembered pin arrives through folders.js
 // below.
-const windows = initWindows(desktop, { hide: boot.hide });
+const windows = initWindows(desktop);
 // The desktop pattern: the last session's choice restored onto the desktop
 // (nothing under ?fresh — the dither), written before the desktop's first
 // render; and the Desktop Patterns control panel's owner (its menu item
@@ -182,11 +140,8 @@ menus = initMenus(desktop, windows, {
   folders,
   icons,
 });
-// The menu bar clock (shell/clock.js); ?now freezes it for captures.
-const clock = initClock(
-  /** @type {HTMLElement} */ (document.getElementById('clock')),
-  boot.now != null ? { now: () => /** @type {number} */ (boot.now) } : {}
-);
+// The menu bar clock (shell/clock.js).
+const clock = initClock(/** @type {HTMLElement} */ (document.getElementById('clock')));
 // Wired only now — nothing between the boot fit and here can fire a resize
 // (this top level runs synchronously to completion before any event task).
 repinDesktop = (before) => {
@@ -199,7 +154,7 @@ const stopPersist = dstate.start({
 });
 // The address bar mirrors the active SAVED document (#<name>, replaceState),
 // so a plain reload restores what's on screen; ?fresh leaves even the URL
-// untouched (a capture boot writes nothing anywhere).
+// untouched (a clean-slate boot writes nothing anywhere).
 const stopUrlState = boot.fresh ? () => {} : initUrlState();
 
 // --- scene ------------------------------------------------------------------
@@ -270,10 +225,10 @@ if (hot) {
 // — or click anywhere outside it — and the bare desktop is yours (File →
 // New… ⌃N, or a document's icon).
 // Three boots, in precedence order:
-//   1. TEST (?fresh or an explicit ?sample): the named sample opens as an
+//   1. DEV (?fresh or an explicit ?sample): the named sample opens as an
 //      untitled from in-memory data, storage untouched beyond a background
 //      listing refresh — these paths must not wait on an IndexedDB
-//      round-trip (which can stall the whole boot under the capture tool's
+//      round-trip (which can stall the whole boot under capture.sh's
 //      virtual-time budget), and must never seed. No dialog.
 //   2. UNSEEDED (storage works and the desktop state carries no record of
 //      the seeding — shell/desktop-state.js's `seeded` flag: a brand-new
@@ -297,38 +252,12 @@ if (hot) {
 //      needing none) all fall back to the About box. A prior session's
 //      open windows are deliberately NOT reopened — the URL, not
 //      localStorage, says what a load shows (the icons still restore).
-// Then the post-boot hooks: ?patterns=1 opens the Desktop Patterns panel
-// over whatever booted (a capture hook — the capture tool can't pull a
-// menu; the panel lands on top, the newest window), and ?about=1 the About
-// box (the plain boot's own greet, but that boot's seeding stalls under the
-// capture tool's virtual-time budget — this reaches the box under ?fresh).
-/** Work the boot leaves running (the test path's listing refresh) that the
- *  READY mark below still waits for. */
-let bootBackground = Promise.resolve();
-
 async function bootDocuments() {
-  // ?edit seeds the sample path's context face AT open — a post-open setFace
-  // would race the one-shot mount hooks (the mount fill commits against
-  // ctx.face, so a late switch files the old face's buffer under the new
-  // face). The stored path carries no mount hooks, so setFace after is safe.
-  const openBootSample = async () => {
-    const ctx = await loadSample(SAMPLES[boot.sampleIndex], {
-      face: boot.edit ?? undefined,
-      hooks: bootHooks,
-      ring: boot.ring,
-    });
-    // Dev hooks that need the loaded sheet: ?tile / ?tile=WxH resizes the
-    // fresh sheet once (the capture tool can't click the stepper); the
-    // editor re-derives at the new size.
-    if (ctx && boot.tile) ctx.doc.resizeTiles(boot.tile.w, boot.tile.h);
-  };
-
   if (boot.fresh || boot.sampleExplicit) {
     // The listing refresh runs in the background — the document must not
-    // wait on it — but the boot is not READY (below) until it has landed:
-    // the icons it renders are part of the desktop a driver reads.
-    if (!boot.fresh) bootBackground = files.refresh();
-    await openBootSample();
+    // wait on it. ?edit seeds the sample's face at open.
+    if (!boot.fresh) files.refresh().catch(() => {});
+    await loadSample(SAMPLES[boot.sampleIndex], { face: boot.edit ?? undefined });
     return;
   }
 
@@ -353,8 +282,7 @@ async function bootDocuments() {
     if (match) {
       const res = await workspace.openStored(match.id).catch(() => null);
       if (res) {
-        // ?edit beats the remembered face; either way the pick lands after
-        // the open (the stored path has no mount hooks to race).
+        // ?edit beats the remembered face.
         const face =
           boot.edit ??
           dstate.saved?.docs?.find((d) => d.fileId === match.id)?.face ??
@@ -368,17 +296,4 @@ async function bootDocuments() {
   menus.actions.showAbout();
 }
 
-// THE READINESS CONTRACT: `data-sm-boot="ready"` lands on the root element
-// once the whole boot chain has — the boot document open or the About box up,
-// the seeding stored and recorded, the post-boot hooks applied, the library
-// listing landed (so every desktop icon is rendered). A driver waits on this
-// attribute, never on a visual proxy plus a pause (tools/drive.mjs); a reload
-// yields a document without it until that document's own boot completes.
-(async () => {
-  await bootDocuments();
-  if (boot.patterns) patterns.open();
-  if (boot.about) menus.actions.showAbout();
-  if (boot.exportModel) menus.actions.showExportModel();
-  await bootBackground.catch(() => {});
-  document.documentElement.dataset.smBoot = 'ready';
-})();
+bootDocuments();

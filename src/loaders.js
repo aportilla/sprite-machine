@@ -32,42 +32,30 @@ import { RING_CHUNK_KEY, parseRingChunk } from './state/ring-settings.js';
 
 // Validate + open a decoded sheet as a fresh context. The single trunk under
 // the loaders below. Returns the new context, or null (with the error
-// recorded on the build slice) on a malformed sheet. `face` seeds the context's starting face AT
-// open (the ?edit boot hook): a post-open setFace would race the one-shot
-// mount hooks — the canvas's mount fill commits its working buffer against
-// ctx.face, so a face switched between the editor's first render and that
-// commit would file the OLD face's buffer under the NEW face.
-// `ring` seeds the context's 3D Sprite Atlas settings the same way (a
-// document's own chunk, or the ?ring boot hook's): at open, before any
+// recorded on the build slice) on a malformed sheet. `face` seeds the
+// context's starting face at open (the ?edit boot hook), and `ring` its 3D
+// Sprite Atlas settings (a document's own chunk): at open, before any
 // tracker or follower, so the seed is the document's birth state, not a
 // change that dirties it.
 /** @param {ImageData} imageData
  *  @param {{transforms?: Record<string, object>, name?: string, face?: string,
- *           hooks?: object|null,
  *           ring?: Partial<import('./state/ring-settings.js').RingSettings>|null}} [opts] */
-export function openSheet(
-  imageData,
-  { transforms = {}, name, face, hooks = null, ring = null } = {}
-) {
+export function openSheet(imageData, { transforms = {}, name, face, ring = null } = {}) {
   const bad = validateSheet(imageData);
   if (bad) {
     build.setError(bad);
     return null;
   }
-  const ctx = workspace.open({ name, face, hooks, ring });
+  const ctx = workspace.open({ name, face, ring });
   ctx.doc.loadAtlas(imageData, transforms);
   return ctx;
 }
 
 /** @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}} sample
- *  @param {{name?: string, face?: string, hooks?: object|null,
- *           ring?: Partial<import('./state/ring-settings.js').RingSettings>|null}} [opts]
- *    the copy's name (the New dialog's; the sample's own by default),
- *    boot-only editor dev hooks, and the ?ring hook's settings seed */
-export async function loadSample(
-  sample,
-  { name = sample.name, face, hooks = null, ring = null } = {}
-) {
+ *  @param {{name?: string, face?: string}} [opts]
+ *    the copy's name (the New dialog's; the sample's own by default) and its
+ *    starting face (the ?edit boot hook) */
+export async function loadSample(sample, { name = sample.name, face } = {}) {
   let image;
   try {
     image = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
@@ -86,8 +74,6 @@ export async function loadSample(
     transforms: { ...(sample.transforms || {}) },
     name,
     face,
-    hooks,
-    ring,
   });
 }
 
