@@ -147,9 +147,9 @@ dropped file). Run against `npm run dev` in a normal browser,
       closes. Save prompt Cancel on an untitled: nothing saved, still
       untitled.
 - [ ] **Rename, both ways**: File → Rename… and an in-place icon rename
-      (select the icon, Return) land the same name everywhere — the icon,
-      the window title, the Open dialog — including a window that is open
-      while its icon is renamed.
+      (select the icon, Return) land the same name everywhere — the icon and
+      the window title — including a window that is open while its icon is
+      renamed.
 - [ ] **Per-window selections and the readout**: two documents with a
       selection each — switching windows leaves both up, ants marching in
       the inactive one; the strip's readout follows the active window; Esc

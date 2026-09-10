@@ -480,7 +480,6 @@ const PROBE = `(() => {${DEEP}
     // Enabled states for the focus-gated menu grammar (the Finder role).
     menuEnabled: {
       newDoc: !__q('vf-menu-item[value="new"]').disabled,
-      open: !__q('vf-menu-item[value="open"]').disabled,
       save: !__q('vf-menu-item[value="save"]').disabled,
       close: !__q('vf-menu-item[value="close"]').disabled,
       pickColor: !__q('vf-menu-item[value="pick-color"]').disabled,
@@ -1803,7 +1802,6 @@ async function s22_twoRoles() {
       !deactivated.windows.stage &&
       deactivated.optionsStrip === false &&
       deactivated.menuEnabled.newDoc === true &&
-      deactivated.menuEnabled.open === true &&
       deactivated.menuEnabled.save === false &&
       deactivated.menuEnabled.close === false &&
       deactivated.menuEnabled.pickColor === false &&
@@ -1817,9 +1815,11 @@ async function s22_twoRoles() {
       toolAfterR: s.drawTool,
     })
   );
-  // Selecting a desktop icon is working in the Finder: File → Open acts on
-  // the selection (a bare Open, no dialog), opens it, and the activation
-  // clears the selection. (The seeded Car's key is a random id — by label.)
+  // Selecting a desktop icon is working in the Finder, and its
+  // double-click is the way into a stored document (the Open item and its
+  // listing retired Sep 9 2026 — the desktop is the browser): the open
+  // reactivates the application, and the activation clears the selection.
+  // (The seeded Car's key is a random id — by label.)
   const carIcon = await evaluate(`(() => {${DEEP}
     const i = __qa('vf-icon[data-key]').find((el) => el.label === 'Car');
     const r = i.getBoundingClientRect();
@@ -1827,11 +1827,11 @@ async function s22_twoRoles() {
   })()`);
   await click(carIcon.x, carIcon.y);
   await until(async () => (await selectedIcons()).join(',') === 'Car');
-  await pickMenu('#menu-file', 'open');
+  await dblclick(carIcon.x, carIcon.y);
   s = await settle((p) => p.docActive && p.docWindows === 2);
   const selected = await selectedIcons();
   check(
-    'selecting a desktop icon aims File → Open at it: the pick opens it, reactivates the application, and clears the selection',
+    'a selected desktop icon double-clicked opens its document, reactivates the application, and clears the selection',
     s.docActive === true &&
       s.docWindows === 2 &&
       s.windows.tools &&
@@ -1841,25 +1841,10 @@ async function s22_twoRoles() {
       selected.length === 0,
     JSON.stringify({ docActive: s.docActive, docWindows: s.docWindows, selected })
   );
-  // With the desktop focused and NOTHING selected, Open… is the Finder's
-  // browse: the listing dialog; Cancel leaves the desktop focused.
+  // Back to the Finder, then a document window's title bar brings the
+  // application forward again.
   await click(BARE.x, BARE.y);
   await settle((p) => p.docActive === false);
-  await pickMenu('#menu-file', 'open');
-  const openDlgUp = () => evaluate(`document.querySelector('#dlg-open').open`);
-  const listingUp = await until(openDlgUp);
-  const cancel = await centreOf('#btn-open-cancel');
-  await click(cancel.x, cancel.y);
-  await until(async () => !(await openDlgUp()));
-  s = await probe();
-  check(
-    'with nothing selected, File → Open… from the Finder raises the listing dialog; Cancel leaves the desktop focused',
-    listingUp &&
-      (await openDlgUp()) === false &&
-      s.docActive === false &&
-      s.docWindows === 2,
-    JSON.stringify({ listingUp, docActive: s.docActive, docs: s.docWindows })
-  );
   const bar = await docBarPoint();
   await click(bar.x, bar.y);
   s = await settle((p) => p.docActive === true);
@@ -3049,8 +3034,8 @@ async function s30_folders() {
   await metrics(780, 640);
   // The round trip: a reload restores the folder, the filing and the icon's
   // position inside the folder (IndexedDB for the catalog, the desktop
-  // state for the position), and the Open listing carries the Car's row —
-  // and reopens the window where the re-pin had carried it.
+  // state for the position) — and reopens the window where the re-pin had
+  // carried it.
   await send('Page.navigate', { url: SEED_URL });
   await waitForGreet();
   await dismissGreet();
@@ -3065,25 +3050,13 @@ async function s30_folders() {
     JSON.stringify({ carried, restored })
   );
   const after = f.windows[0]?.icons.find((i) => i.label === 'Car');
-  const bare2 = await bareSpot();
-  await click(bare2.x, bare2.y);
-  await pickMenu('#menu-file', 'open');
-  const openDlgUp = () => evaluate(`document.querySelector('#dlg-open').open`);
-  await until(openDlgUp);
-  const listed = await evaluate(
-    `[...document.querySelectorAll('#open-list vf-list-item')].some((i) => i.value === '${before?.key}')`
-  );
-  const cancel = await centreOf('#btn-open-cancel');
-  await click(cancel.x, cancel.y);
-  await until(async () => !(await openDlgUp()));
   check(
-    'a reload restores the folder, the filing and the Car’s position inside it; File → Open lists the Car’s row',
+    'a reload restores the folder, the filing and the Car’s position inside it',
     f.desktop.every((i) => i.label !== 'Car') &&
       !!after &&
       after.left === before.left &&
-      after.top === before.top &&
-      listed,
-    JSON.stringify({ before, after, listed, desktop: f.desktop })
+      after.top === before.top,
+    JSON.stringify({ before, after, desktop: f.desktop })
   );
   await send('Emulation.clearDeviceMetricsOverride');
 }
@@ -3121,8 +3094,8 @@ async function s31_trash() {
   await until(async () => (await folderProbe()).windows[0]?.count === 0);
   // The round trip: a reload lists the library from IndexedDB, and the
   // seeding's record keeps the built-ins from coming back — the Cube is
-  // gone from the desktop, from the Trash's window and from the Open
-  // listing.
+  // gone from the desktop and from the Trash's window (the icons ARE the
+  // listing's readout: a surviving record would draw one).
   await send('Page.navigate', { url: SEED_URL });
   await waitForGreet();
   await dismissGreet();
@@ -3130,25 +3103,13 @@ async function s31_trash() {
   await dblclick(trashAgain.x, trashAgain.y);
   await until(async () => (await folderProbe()).windows.length === 1);
   const f = await folderProbe();
-  const bare = await bareSpot();
-  await click(bare.x, bare.y);
-  await pickMenu('#menu-file', 'open');
-  const openDlgUp = () => evaluate(`document.querySelector('#dlg-open').open`);
-  await until(openDlgUp);
-  const listed = await evaluate(
-    `[...document.querySelectorAll('#open-list vf-list-item')].map((i) => i.value)`
-  );
-  const cancel = await centreOf('#btn-open-cancel');
-  await click(cancel.x, cancel.y);
-  await until(async () => !(await openDlgUp()));
   check(
-    'the Cube dragged onto the Trash and the Trash emptied: after a reload the Cube is gone from the desktop, from the Trash’s window and from the Open listing, and the seeding does not bring it back',
+    'the Cube dragged onto the Trash and the Trash emptied: after a reload the Cube is gone from the desktop and from the Trash’s window, and the seeding does not bring it back',
     !!cubeKey &&
       f.desktop.every((i) => i.label !== 'Cube') &&
       f.windows[0].icons.length === 0 &&
-      f.windows[0].count === 0 &&
-      !listed.includes(cubeKey),
-    JSON.stringify({ cubeKey, desktop: f.desktop, window: f.windows[0], listed })
+      f.windows[0].count === 0,
+    JSON.stringify({ cubeKey, desktop: f.desktop, window: f.windows[0] })
   );
 }
 

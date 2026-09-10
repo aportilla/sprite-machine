@@ -3,8 +3,8 @@
 // actions, checkmark + enabled sync, the View menu's open-windows section
 // (one item per open document window, reconciled off the workspace — the
 // active one checked, a pick bringing its window forward), and every dialog
-// flow (About, Open, the
-// shared name prompt, Tile Size, the unsaved-changes alert, the
+// flow (About, New, the shared name prompt, Tile Size, the
+// unsaved-changes alert, the
 // storage-unavailable notice, the Export 3D Model… dialog — a scale in
 // voxels per meter, a lit / unlit popup and two readouts over an Export
 // that writes the model as one glb, «slug».glb, its skin embedded from
@@ -20,14 +20,19 @@
 // index.html, the aesthetics in the kit.
 //
 // MULTI-DOCUMENT GRAMMAR: File actions target the ACTIVE workspace context;
-// New… / Open / a drop always open a NEW window (opening never discards
-// anything — the dirty check moved entirely to the close paths); opening an
-// already-open stored doc activates its existing window. Quit walks every
-// open document, one unsaved-changes alert per dirty one. File → New… raises
-// the New dialog (a name, and an empty atlas at a chosen tile size or a
-// built-in template as a fresh copy); the built-ins are otherwise
-// ordinary stored documents (seeded at the first-ever boot — loaders.js),
-// so the Open listing and the desktop icons know nothing special about them.
+// New… / an icon's open / a drop always open a NEW window (opening never
+// discards anything — the dirty check moved entirely to the close paths);
+// opening an already-open stored doc activates its existing window. Quit
+// walks every open document, one unsaved-changes alert per dirty one.
+// File → New… ⌃N raises the New dialog (a name, and an empty atlas at a
+// chosen tile size or a built-in template as a fresh copy) and is the ONE
+// New — the document's, in either role. A STORED document opens from its
+// icon alone (a double-click; there is no Open item and no listing dialog —
+// retired Sep 9 2026, the desktop being the file browser): openDoc below is
+// that path, handed to the icon layer through the returned `actions`. The
+// built-ins are otherwise ordinary stored documents (seeded at the
+// first-ever boot — loaders.js), so the desktop icons know nothing special
+// about them.
 //
 // The DIRTY CHECK has one funnel: `confirmDiscard(ctx, next)` — run `next`
 // now if that document is clean, else raise the "Save changes before
@@ -56,7 +61,6 @@ import {
 } from '../state/ring.js';
 import {
   files,
-  folderPath,
   childrenOf,
   descendantsOf,
   isTrashed,
@@ -116,7 +120,6 @@ export function initMenus(desktop, windows, panels) {
   // --- dialogs ----------------------------------------------------------------
   const dlgAbout = $('#dlg-about');
   const dlgNew = $('#dlg-new');
-  const dlgOpen = $('#dlg-open');
   const dlgName = $('#dlg-name');
   const dlgTile = $('#dlg-tile');
   const dlgUnsaved = $('#dlg-unsaved');
@@ -413,29 +416,6 @@ export function initMenus(desktop, windows, panels) {
     });
   };
 
-  // Finder grammar for Open: with the desktop focused — or a folder window,
-  // the Finder's, front — and an icon selected, the item reads "Open" and
-  // acts on the selection (the sync below relabels it; with nothing
-  // selected it stays "Open…", the listing dialog). Two key shapes: a
-  // document's opens its window, a folder's its Finder window.
-  const finderSelection = () => {
-    const s = shell.get();
-    return !s.appActive && s.iconSelection.length > 0;
-  };
-  const openSelection = () => {
-    for (const key of shell.get().iconSelection) {
-      if (key.startsWith('doc:')) openDoc(key.slice('doc:'.length));
-      else if (key.startsWith('folder:')) folders.open(key.slice('folder:'.length));
-    }
-  };
-
-  const listItem = (value, text) => {
-    const item = document.createElement('vf-list-item');
-    item.value = value;
-    item.textContent = text;
-    return item;
-  };
-
   // --- the New dialog ---------------------------------------------------------
   // Classic Photoshop's New box (Sep 9 2026): a Name over the Settings group —
   // the template popup and the tile size — with OK over Cancel at the
@@ -530,40 +510,6 @@ export function initMenus(desktop, windows, panels) {
   on(newTile, 'vf-change', syncNewForm);
   on(btnNewOk, 'click', createFromNewDialog);
   on($('#btn-new-cancel'), 'click', () => dlgNew.close());
-
-  // --- the Open dialog --------------------------------------------------------
-  // Stored documents only — the built-ins are ordinary rows here once seeded,
-  // and a template belongs to File → New…, not Open. A filed document's row
-  // carries its folder PATH ahead of its name ("Vehicles ▸ Car — …", nested
-  // folders joined the same way); folders themselves are not rows — the
-  // dialog opens documents, a folder opens from its icon. The Trash is not
-  // in the library: a trashed document has no row (the Finder's Trash
-  // folder was invisible to Standard File) — its icon in the Trash's
-  // window is the way to it.
-  const openList = $('#open-list');
-  function showOpenDialog() {
-    const rows = [];
-    const st = files.get();
-    for (const r of st.list) {
-      if (isTrashed(st, r.folder)) continue;
-      const when = new Date(r.modifiedAt).toLocaleDateString();
-      const path = folderPath(st, r.folder)
-        .map((n) => `${n} ▸ `)
-        .join('');
-      rows.push(listItem(`doc:${r.id}`, `${path}${r.name} — ${r.w}×${r.h}px, ${when}`));
-    }
-    openList.replaceChildren(...rows);
-    dlgOpen.show();
-  }
-  function actOnOpenPick() {
-    const v = openList.value;
-    if (!v) return;
-    dlgOpen.close();
-    openDoc(v.slice('doc:'.length));
-  }
-  on($('#btn-open-ok'), 'click', actOnOpenPick);
-  on($('#btn-open-cancel'), 'click', () => dlgOpen.close());
-  on(openList, 'dblclick', actOnOpenPick);
 
   // --- the Tile Size dialog ---------------------------------------------------
   // Edit → Tile Size…: the ACTIVE document's square tile size behind the
@@ -772,14 +718,6 @@ export function initMenus(desktop, windows, panels) {
           .catch((err) => build.setError(`New Folder failed: ${err.message}`));
         break;
       }
-      case 'open':
-        // Two grammars, one item: the Finder's "Open" (act on the selected
-        // icons) with the desktop focused and a selection; otherwise "Open…",
-        // the listing dialog — the application's, or the Finder's browse
-        // when nothing on the desktop is selected.
-        if (finderSelection()) openSelection();
-        else showOpenDialog();
-        break;
       case 'close': {
         // The active document (dirty-checked), or — the Finder's Close —
         // the front folder window.
@@ -925,18 +863,16 @@ export function initMenus(desktop, windows, panels) {
   // --- focus gating ------------------------------------------------------------
   // Two roles share one menu bar (the single-application affordance): with
   // the desktop focused, every document-scoped item greys out. About /
-  // Desktop Patterns / Quit / New / New Folder / Open stay — they're
-  // app-level; the ⌘J item (Arrange Windows — its value the arrange / zoom)
-  // keeps its own gate below (an open document window, and the windows'
-  // state); the View menu's open-windows items (syncWindows below) are
-  // live in both roles — a pick there is what brings the application back
-  // — and Open wears the Finder grammar above: its label follows the
-  // selection ("Open" on a selected icon, "Open…" for the listing dialog
-  // otherwise), never greyed. One item reads the FINDER'S front window
-  // beside the role: Close is live with a document window OR a folder
-  // window active (the Finder's Close closed its front window), re-read on
-  // every change of the desktop's active window (vf-activate: a folder
-  // window taking or losing active moves neither role flag). A
+  // Desktop Patterns / Quit / New / New Folder stay — they're app-level
+  // (New… ⌃N opens a document from either role); the ⌘J item (Arrange
+  // Windows — its value the arrange / zoom) keeps its own gate below (an
+  // open document window, and the windows' state); the View menu's
+  // open-windows items (syncWindows below) are live in both roles — a pick
+  // there is what brings the application back. One item reads the FINDER'S
+  // front window beside the role: Close is live with a document window OR a
+  // folder window active (the Finder's Close closed its front window),
+  // re-read on every change of the desktop's active window (vf-activate: a
+  // folder window taking or losing active moves neither role flag). A
   // second reads it beside the listing: New Folder greys while the Finder's
   // front window is the Trash's, or a trashed folder's (System 7's own — a
   // folder is not made in the Trash; the slice refuses regardless).
@@ -961,7 +897,6 @@ export function initMenus(desktop, windows, panels) {
     'tool-eyedropper',
   ];
   const docItems = DOC_SCOPED.map((v) => $(`vf-menu-item[value="${v}"]`));
-  const itemOpen = $('vf-menu-item[value="open"]');
   const itemClose = $('vf-menu-item[value="close"]');
   const itemNewFolder = $('vf-menu-item[value="new-folder"]');
   const syncGate = () => {
@@ -969,11 +904,6 @@ export function initMenus(desktop, windows, panels) {
     for (const item of docItems) item.disabled = !s.appActive;
     itemClose.disabled = !(s.appActive || folders.activeFolder() != null);
     itemNewFolder.disabled = isTrashed(files.get(), folders.activeFolder());
-    // The ellipsis is the System 7 promise of a dialog: "Open" acts at once
-    // on the selection, "Open…" asks (the listing) — so the label is the
-    // grammar's own readout. The item is the markup's default-slot text.
-    const label = finderSelection() ? 'Open' : 'Open…';
-    if (itemOpen.textContent !== label) itemOpen.textContent = label;
   };
   teardown.push(
     shell.subscribe(syncGate),

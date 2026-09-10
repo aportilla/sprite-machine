@@ -22,8 +22,8 @@
       <!-- `shortcuts` grants every item's `shortcut` attribute its live
            app-wide key equivalent (Ctrl stands in for ⌘ off-Mac). The two
            System 7 staples ⌘N/⌘W stay unassigned on purpose: the browser
-           owns them before the page ever sees them. Close answers ⌃W
-           instead (see the item). -->
+           owns them before the page ever sees them. New and Close answer
+           ⌃N and ⌃W instead, the Control key alone (see the items). -->
       <vf-menu-bar shortcuts>
         <vf-menu id="menu-app" label="Sprite Machine">
           <vf-menu-item value="about">About Sprite Machine…</vf-menu-item>
@@ -49,16 +49,23 @@
           <vf-menu-item value="quit">Quit</vf-menu-item>
         </vf-menu>
         <vf-menu id="menu-file" label="File">
-          <vf-menu-item value="new">New…</vf-menu-item>
+          <!-- New…'s key is ⌃N — the Control key alone (the kit's ⌃ means
+               Control, never a ⌘ stand-in), ⌘N being the browser's New
+               Window before the page ever sees it. ONE New, and it always
+               opens a DOCUMENT — in either role, never the folder below
+               (System 7 gave the Finder's ⌘N to New Folder; this machine's
+               New is the application's). Off-Mac Ctrl+N is the browser's
+               New Window, reserved — the item shows the key and never
+               fires there, the same trade Close makes with ⌃W. -->
+          <vf-menu-item value="new" shortcut="⌃N">New…</vf-menu-item>
           <!-- New Folder (shell/menus.js → the files slice's createFolder):
                a FINDER command — it brings the Finder forward and makes
                "untitled folder" in the active folder window, else on the
                desktop, its name selected for typing (the icon's rename
-               box). No key equivalent: System 7's ⌘N is the browser's, and
-               ⇧⌘N opens an incognito window. App-level like New…, live in
-               both roles. -->
+               box). No key equivalent: ⌃N is New…'s — the DOCUMENT
+               command — and System 7's own ⌘N (with ⇧⌘N) is the browser's.
+               App-level like New…, live in both roles. -->
           <vf-menu-item value="new-folder">New Folder</vf-menu-item>
-          <vf-menu-item value="open" shortcut="⌘O">Open…</vf-menu-item>
           <vf-separator></vf-separator>
           <!-- Close's key is ⌃W — the Control key alone (the kit's ⌃ means
                Control, never a ⌘ stand-in): ⌘W is the browser's before the
@@ -515,20 +522,6 @@
             <vf-button id="btn-new-cancel">Cancel</vf-button>
           </vf-button-group>
         </vf-stack>
-      </vf-dialog>
-
-      <!-- The Open listing: the System 7 file-picker posture — the plain
-           dBoxProc frame (no bar, no title, no close box, immovable; Escape
-           reads as Cancel), the document list over the Open / Cancel row.
-           `label` names it for assistive tech (`heading` would draw a
-           body-top title on a plain frame). 312 = the barred 330 less the
-           18px title bar, so the content area is unchanged. -->
-      <vf-dialog id="dlg-open" frame="plain" label="Open" width="360" height="312">
-        <vf-stack width="312" gap="10">
-          <vf-list id="open-list" fill-width aria-label="Documents"></vf-list>
-        </vf-stack>
-        <vf-button id="btn-open-cancel" slot="buttons">Cancel</vf-button>
-        <vf-button id="btn-open-ok" slot="buttons" variant="default">Open</vf-button>
       </vf-dialog>
 
       <!-- One name-prompt dialog, two uses (first save / rename): the

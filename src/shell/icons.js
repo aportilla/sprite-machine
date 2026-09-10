@@ -136,46 +136,33 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
   // normal activateContext path.
   on(desktopField, 'pointerdown', () => desktop.clearActive());
 
-  // Selection feeds the shell slice (File → Open's Finder grammar reads it).
-  // Read the PROPERTY, not the attribute — vf-select fires before Lit's
-  // reflection lands. vf-select bubbles and composes from every container,
-  // and every selection change fires it on each icon whose state moved, so
-  // re-reading the whole layer per event stays exact under shift-clicks,
-  // rubber bands and outside-click clears alike. One selection per screen:
-  // the kit clears on any press outside an icon, across containers.
-  const readSelection = () =>
-    shell.setIconSelection(
-      allIcons()
-        .filter((icon) => icon.selected)
-        .map(keyOf)
-    );
-  on(desktop, 'vf-select', readSelection);
-
+  // The selection is the ICONS' own — the kit holds it, one per screen (it
+  // clears on any press outside an icon, across containers), and nothing
+  // mirrors it into a store: File → Open's Finder grammar was the one
+  // reader, and it retired with the item (Sep 9 2026). What the highlight
+  // names now is the next DRAG or rename.
+  //
   // Opening moves focus INTO the application, and the ACTIVATION clears the
-  // Finder selection: the moment a document window takes active (an icon
-  // double-click's vf-open, the Finder's bare Open / ⌘O, File → New… — any
-  // path that lands appActive), the highlight has nothing left to name — it
-  // says what the next Finder action acts on, and the application is forward
+  // selection: the moment a document window takes active (an icon
+  // double-click's vf-open, File → New… — any path that lands appActive),
+  // the highlight has nothing left to name and the application is forward
   // now. Driven off the shell mirror rather than the open paths themselves,
   // so every way a window comes forward converges here. Clearing is a plain
   // property write (the kit's documented programmatic route; false detaches
-  // the icon's own outside listener), and the kit fires vf-select only for
-  // its own gestures — so the slice re-reads by hand.
+  // the icon's own outside listener).
   const onAppActive = () => {
     if (!shell.get().appActive) return;
     const lit = allIcons().filter((icon) => icon.selected);
     if (!lit.length) return;
     for (const icon of lit) icon.selected = false;
-    readSelection();
   };
   teardown.push(shell.subscribe(onAppActive));
 
   // A press on the APPLICATION'S CHROME keeps the Finder selection. The
   // kit's vf-icon clears itself on ANY outside pointerdown — the menu bar
-  // included (still so on 0.7.0) — so a pointer-driven File → Open would
-  // lose its selection on the way to the menu and grey out as the panel
-  // dropped (kit ask #5, APP-IA-PLAN.md §3.1; ⌘O was the only working
-  // path). System 7's Finder kept the selection while a menu was pulled:
+  // included (still so on 0.7.0) — so pulling a menu down over a selected
+  // icon would drop its highlight (kit ask #5, APP-IA-PLAN.md §3.1).
+  // System 7's Finder kept the selection while a menu was pulled:
   // the menu bar, a dropped menu and a modal dialog are the application's
   // surfaces, not the desktop's, so a press on them says nothing about
   // what's selected. The page bridges it with two capture listeners AROUND
@@ -184,11 +171,10 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
   // same-target listeners fire in registration order) — snapshots the icons
   // the press is about to clear; one on the desktop (later in the same
   // dispatch — the icons' have run by then, the chrome is slotted in the
-  // desktop) re-selects them, so the selection and the Open gate are back
-  // before the menu bar's own handler even drops the panel. Setting
-  // `selected` is the kit's documented programmatic route; it re-arms the
-  // icon's outside listener. Remove this bridge once the kit exempts its
-  // own chrome.
+  // desktop) re-selects them, so the highlight is back before the menu bar's
+  // own handler even drops the panel. Setting `selected` is the kit's
+  // documented programmatic route; it re-arms the icon's outside listener.
+  // Remove this bridge once the kit exempts its own chrome.
   const CHROME = 'vf-menu-bar, vf-menu, vf-dialog';
   /** @type {any[]} the icons a chrome press is clearing mid-dispatch */
   let held = [];
@@ -209,7 +195,6 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
       if (!held.length) return;
       for (const icon of held) icon.selected = true;
       held = [];
-      readSelection();
     },
     true
   );
@@ -408,9 +393,6 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
       // The field's extent follows what it holds (the plane's scroll range).
       if (folder != null) folders.fit(folder);
     }
-    // A reconcile can remove a selected icon (an item filed away, a window
-    // gone) — re-read so the shell's selection never names a vanished key.
-    readSelection();
   }
   // The listing drives which icons exist and where; the workspace drives
   // the open ghosts (windows opening and closing move them); the folder
@@ -608,8 +590,7 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
       return out;
     },
     /** Select an item's icon and open its rename box — New Folder's
-     *  name-selected-for-typing (the kit's public routes; setSelected
-     *  fires vf-select, so the Finder's Open gate reads it). */
+     *  name-selected-for-typing (the kit's public routes). */
     startRename(key) {
       const icon = iconByKey(key);
       if (!icon) return;
@@ -623,7 +604,6 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
       // listeners instead of stacking stale ones (the folder windows' go
       // with their windows — folders.dispose).
       desktopField.replaceChildren();
-      shell.setIconSelection([]);
     },
   };
 }

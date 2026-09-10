@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
 // `shell` slice — the desktop chrome's shared state: whether the APPLICATION
-// is active (vs. the desktop — "the Finder"), the desktop-icon selection,
-// and the DESKTOP PATTERN (System 7's General Controls / 7.5's Desktop
-// Patterns setting — what the Desktop Patterns panel's Set writes, what
-// shell/patterns.js paints onto the desktop and desktop-state.js persists).
+// is active (vs. the desktop — "the Finder") and the DESKTOP PATTERN
+// (System 7's General Controls / 7.5's Desktop Patterns setting — what the
+// Desktop Patterns panel's Set writes, what shell/patterns.js paints onto
+// the desktop and desktop-state.js persists).
 // Store-driven so the menu checkmarks + enabled states and the windows'
 // `hidden` attributes read one truth (a menu pick and a desktop click are
 // the same action). Document windows live elsewhere entirely: one exists per
@@ -47,13 +47,10 @@ export function createShell() {
     // activeKey's null and the kit's empty boot; the operative seed is read
     // off desktop.activeWindow at wire-up (shell/windows.js).
     appActive: false,
-    /** @type {string[]} selected icon keys ("doc:<id>", "folder:<id>") — in
-     *  any container: the desktop's field or an open folder window's */
-    iconSelection: [],
     /** @type {string} the desktop pattern — a kit library name (`gray-50`,
      *  `bricks`, …) or sixteen hex digits: exactly what vf-desktop's
      *  `pattern` takes. Restored from desktop-state at boot (a persisted
-     *  setting, unlike the two above), else the dither. */
+     *  setting, unlike the flag above), else the dither. */
     desktopPattern: DEFAULT_DESKTOP_PATTERN,
   });
   return {
@@ -67,13 +64,6 @@ export function createShell() {
     setAppActive(v) {
       if (store.get().appActive === !!v) return;
       store.patch({ appActive: !!v });
-    },
-
-    /** @param {string[]} keys  The icon layer reports every selection change. */
-    setIconSelection(keys) {
-      const prev = store.get().iconSelection;
-      if (prev.length === keys.length && prev.every((k, i) => k === keys[i])) return;
-      store.patch({ iconSelection: [...keys] });
     },
 
     /** @param {string} v  A kit pattern name or sixteen hex digits — the

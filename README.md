@@ -347,20 +347,19 @@ active window?**
   slotted light DOM, so only the page knows which presses mean "the Finder".
   Every document window goes plain, the windoids **hide**, the options strip
   hides with them, the bare-letter tool keys go inert, and the menus drop to
-  the **Finder grammar** — About / Desktop Patterns / Quit / New… / Open stay
-  enabled,
-  and Open reads the selection (see [Menu bar](#menu-bar)). The selection
-  **survives the trip to the menu bar**, since a press on the application's
-  chrome is no press on the desktop; the kit's `vf-icon` would clear on it, so
-  `shell/icons.js` re-selects across that press — a page-side bridge until the
-  kit exempts its own chrome (kit ask #5). Everything document-scoped greys
-  out, and a disabled item's key equivalent never fires (the kit's contract),
-  so ⌘S/⌘Z/⌘K gate with their menus.
+  the **Finder grammar** — About / Desktop Patterns / Quit / Empty Trash… /
+  New… / New Folder stay enabled (see [Menu bar](#menu-bar)). The icon
+  selection **survives the trip to the menu bar**, since a press on the
+  application's chrome is no press on the desktop; the kit's `vf-icon` would
+  clear on it, so `shell/icons.js` re-selects across that press — a page-side
+  bridge until the kit exempts its own chrome (kit ask #5). Everything
+  document-scoped greys out, and a disabled item's key equivalent never fires
+  (the kit's contract), so ⌘S/⌘Z/⌘K gate with their menus.
 - **Clicking any document window — or opening one — reactivates**: the
   windoids come back exactly where they were, aimed at the newly active
-  document, and the activation **clears the Finder selection** (double-click,
-  bare Open and ⌘O alike): the highlight names what the next Finder action
-  acts on, and the application is forward now.
+  document, and the activation **clears the Finder selection** (an icon's
+  double-click and File → New… alike): the highlight names what the next
+  Finder action acts on, and the application is forward now.
 - **Panels are the Finder's windows.** `appActive` is "a **document** window
   is the desktop's active window", not "any window is", so a panel holding
   active mirrors as the desktop-focused state exactly like none: opening the
@@ -374,10 +373,10 @@ active window?**
 
 ### Documents are windows
 
-**One document = one window.** File → New…, the Open flow and a dropped PNG
-each open a **new** window (staggered System 7 style); nothing ever loads over
-an open document — the unsaved-changes question lives entirely on the close
-paths. Opening an already-open stored document just activates its window.
+**One document = one window.** File → New…, a document icon's double-click
+and a dropped PNG each open a **new** window (staggered System 7 style);
+nothing ever loads over an open document — the unsaved-changes question lives
+entirely on the close paths. Opening an already-open stored document just activates its window.
 Untitled names count up. Each window carries its own editor, edited face and
 bounded undo history; the tool and ink stay app-level (one palette, one ink).
 The windoids and the Edit menu always serve the **active** document, so
@@ -393,21 +392,21 @@ the Undo/Redo enablement.
   every open document in turn, one unsaved-changes alert per dirty one with
   its window brought forward as it's asked about, Cancel anywhere aborting the
   rest). All four are live in both roles.
-- **File** — _New…_ (classic Photoshop's New box: a **Name** across the
+- **File** — _New…_ ⌃N (classic Photoshop's New box: a **Name** across the
   top, seeded with the next untitled name and following the template popup
   until typed in, over the **Settings** group — the template, Empty Document or
   a built-in, and the square tile size, live for Empty only since a
   template's art has a native size — with OK over Cancel at the right, OK
   greyed while the name is blank; the document opens unsaved under that
-  name, so its first Save prompts with it), _New Folder_ (a **Finder
+  name, so its first Save prompts with it — and there is **one New**: it
+  always makes a **document**, from either role, never the folder below.
+  Its key is Control's, ⌃N, on Close's reasoning: the browser owns ⌘N. And
+  where System 7 could spend its ⌘N on the Finder's New Folder, this
+  machine spends its New on the document), _New Folder_ (a **Finder
   command**: it brings the Finder forward, as a desktop click would, and makes
   _untitled folder_ in the front folder window else on the desktop, its name
-  selected for typing; no key equivalent, System 7's ⌘N being the browser's;
-  greyed while the Finder's front window is the Trash's), _Open…_ ⌘O (**two
-  grammars, one item, the label its readout**: _Open…_ raises the saved-docs
-  listing, each filed row carrying its folder path and a trashed document no
-  row at all; with an icon selected it relabels to a bare _Open_ and opens
-  that icon at once, the ellipsis being System 7's promise of a dialog),
+  selected for typing; no key equivalent; greyed while the Finder's front
+  window is the Trash's),
   _Close_ ⌃W (the active document, dirty-checked — or, in the Finder role,
   the front folder window; Control, not ⌘, since the browser owns ⌘W — see
   the key equivalents note below), _Save_ ⌘S (an untitled's first save
@@ -488,11 +487,12 @@ the Undo/Redo enablement.
 
 Key equivalents are the kit's own (Ctrl stands in for ⌘ off-Mac). ⌘N/⌘W stay
 unassigned on purpose — the browser owns them before the page sees them.
-Close answers **⌃W** instead, the Control key alone (the kit's ⌃ never
-stands in for ⌘): it is the one W chord a Mac browser leaves to the page,
-⌥W typing ∑. The trade is off-Mac, where Ctrl+W is the browser's own Close
-Tab, reserved — the item shows the key there and never fires. A
-disabled item claims nothing, so with no document open ⌘J falls through to
+New and Close answer **⌃N** and **⌃W** instead, the Control key alone (the
+kit's ⌃ never stands in for ⌘): ⌃W is the one W chord a Mac browser leaves
+to the page, ⌥W typing ∑, and ⌃N is N's. The trade is off-Mac, where Ctrl+W
+and Ctrl+N are the browser's own Close Tab and New Window, reserved — the
+items show the keys there and never fire. A disabled item claims nothing, so
+with no document open ⌘J falls through to
 off-Mac browsers' own Downloads, exactly as a greyed Undo leaves ⌘Z to a
 focused field's native undo. The bare-letter tool keys live in
 `src/shortcuts.js`; the kit deliberately never matches an unmodified printable
@@ -801,9 +801,9 @@ a folder made inside it.
   holds pixels, not a lock). Emptying with one inside **reverts its window to
   an unsaved document, dirty**: the pixels and the name stay, the stored
   identity goes, and the URL mirror clears with it.
-- **The library looks past the Trash**: the Open dialog lists no trashed
-  document and `?file=` resolves none (the Finder's Trash was invisible to
-  Standard File) — the way to one is its icon in the Trash's window.
+- **The library looks past the Trash**: `?file=` resolves no trashed
+  document (the Finder's Trash was invisible to Standard File) — the way to
+  one is its icon in the Trash's window.
   `?fresh=1` shows the Trash and nothing else; it is furniture, so the goldens
   carry it in their corner. Not yet: Put Away ⌘Y (the record does not remember
   where a trashed item came from) and the "in use" alert.
@@ -873,13 +873,15 @@ boot** through the same save path as ⌘S and are ordinary mutable documents
 from then on; the seeding runs while the profile carries **no record of having
 seeded** — the `seeded` flag, written only after the last built-in is stored,
 so an interrupted boot seeds again next time, skipping what is already stored
-by name. Double-click opens (into the existing window if one is open,
+by name. **Double-click opens** — the only way into a stored document, the
+desktop being the file browser (into the existing window if one is open,
 deselecting the icon as the application takes focus); selecting an icon
-deactivates the application and aims File → Open at the selection; every open
-doc's icon wears the kit's `open` ghost. Icon art is generated **from the
-document itself**: the FRONT tile, **trimmed to its content's bounding box**,
-drawn into 32×32 → data URI, regenerated on every save, declared `color` so
-selection darkens instead of inverting.
+deactivates the application, and the highlight names what the next Finder
+action — a drag, a rename — acts on; every open doc's icon wears the kit's
+`open` ghost. Icon art is generated **from the document itself**: the FRONT
+tile, **trimmed to its content's bounding box**, drawn into 32×32 → data URI,
+regenerated on every save, declared `color` so selection darkens instead of
+inverting.
 
 Icon **placement is the windows' regime in the icons' own frame** — the whole
 desktop below the **menu bar**, since icons are the Finder's furniture and the
