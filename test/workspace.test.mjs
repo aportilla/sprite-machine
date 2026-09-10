@@ -236,7 +236,7 @@ test('the ring settings are the context’s: a change dirties it, a save writes 
   assert.equal(openLoaded(ws).ring.get().views, 4, 'another context has its own');
 });
 
-test('duplicate stores "«name» copy" and leaves the context untouched', async () => {
+test('duplicate stores "«name» copy", counts a repeat the Mac’s way, and leaves the context untouched', async () => {
   const { ws, storage } = makeWorld();
   const ctx = openLoaded(ws);
   await ws.save(ctx.key, 'Ship');
@@ -244,6 +244,8 @@ test('duplicate stores "«name» copy" and leaves the context untouched', async 
   assert.equal(copyId, 'id-2');
   assert.equal(ctx.fileId, 'id-1', 'the original context keeps its identity');
   assert.equal(storage.map.get('id-2').name, 'Ship copy');
+  const again = await ws.duplicate(ctx.key);
+  assert.equal(storage.map.get(again).name, 'Ship copy 2', 'never a second "Ship copy"');
 });
 
 test('rename: untitled takes the display name; saved rewrites the store and every open context follows', async () => {

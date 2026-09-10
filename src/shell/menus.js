@@ -45,6 +45,27 @@
 // Because those fire app-wide, every action guards on "no modal open" — a
 // pointer can't reach a menu under a modal, so the guard only ever blocks
 // re-entrant shortcuts (⌘S inside the save prompt).
+//
+// COPY / PASTE / SELECT ALL (Sep 10 2026, docs/clipboard-plan.md) are the
+// Edit menu's FINDER-ROLE commands, over the icons: Copy takes the selected
+// icons (the icon layer's selection()) into the clipboard slice as catalog
+// references and hands the SYSTEM clipboard what it can carry — the names
+// as text, and for exactly one document its stored PNG; Paste reads the
+// system clipboard at the pick and lets state/clipboard.js's pasteSource
+// decide: the slice's items (copied here — files.copyDoc / copyFolder into
+// the Finder's front container, the pasted icons selected), or a picture
+// copied elsewhere — validated against the document format's shape
+// (lib/sheet-shape.js) and stored as a new document (its rename box open,
+// New Folder's idiom), or refused with the paste alert. A second route,
+// the document's `paste` event, carries the browser's own Edit → Paste (no
+// keydown — the claimed ⌘V never fires it) and is the ONLY route a copied
+// FILE takes (clipboardData.files). The gate is syncGate's: the Finder
+// role, the selection / the front container, and NO TEXT CONTROL FOCUSED —
+// read off focusin / focusout's composed path, since the kit's key
+// equivalents check disabled and the match but never where the stroke
+// landed, and an enabled Copy would claim ⌘C typed into an icon's rename
+// box. Every system clipboard failure is silent (the in-app copy stands;
+// an unreadable paste falls back to the slice).
 // ---------------------------------------------------------------------------
 
 import { session } from '../state/session.js';
@@ -64,6 +85,7 @@ import {
   childrenOf,
   descendantsOf,
   isTrashed,
+  nextDocName,
   TRASH,
   UNTITLED,
   docFilename,
@@ -73,12 +95,21 @@ import {
   slugOf,
 } from '../state/files.js';
 import { workspace, followActive } from '../state/workspace.js';
+import { clipboard, pasteSource } from '../state/clipboard.js';
+import { createDoc } from '../state/doc.js';
+import { createRingSettings } from '../state/ring-settings.js';
 import { TILE_MIN, TILE_MAX, clampTile, setTextChunks } from 'sprite-machine';
 import { SAMPLES } from '../lib/sprite-data.js';
 import { ringFrame, ringSheet, ringAnchor, ringYaws } from '../lib/ring.js';
+import { sheetShape } from '../lib/sheet-shape.js';
 import { zipStore } from '../lib/zip.js';
-import { loadSample, loadBlank } from '../loaders.js';
-import { downloadPngBytes, downloadBlob, canvasToPngBytes } from '../image-io.js';
+import { loadSample, loadBlank, readSheetMeta } from '../loaders.js';
+import {
+  downloadPngBytes,
+  downloadBlob,
+  canvasToPngBytes,
+  bytesToImageData,
+} from '../image-io.js';
 
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
@@ -124,6 +155,7 @@ export function initMenus(desktop, windows, panels) {
   const dlgTile = $('#dlg-tile');
   const dlgUnsaved = $('#dlg-unsaved');
   const dlgEmptyTrash = $('#dlg-empty-trash');
+  const dlgPaste = $('#dlg-paste');
   const dlgStorage = $('#dlg-storage');
   const dlgExportModel = $('#dlg-export-model');
   const dlgExportAtlas = $('#dlg-export-atlas');
@@ -353,6 +385,179 @@ export function initMenus(desktop, windows, panels) {
       .emptyTrash()
       .catch((err) => build.setError(`Empty Trash failed: ${err.message}`));
   });
+
+  // --- Copy / Paste / Select All: the Finder's clipboard ----------------------
+  // The paste alert (header): a picture off the system clipboard that is
+  // not a sprite sheet — the rule, and the picture's own dimensions; an
+  // image that will not decode at all gets the rule alone. Nothing lands.
+  const pasteMsg = $('#paste-msg');
+  on($('#btn-paste-ok'), 'click', () => dlgPaste.close());
+  /** @param {{width: number, height: number}|null} image */
+  function showPasteAlert(image) {
+    const rule =
+      `The clipboard image isn’t a sprite sheet: a sheet is a 3 × 2 atlas of ` +
+      `square tiles, from ${3 * TILE_MIN} × ${2 * TILE_MIN} to ` +
+      `${3 * TILE_MAX} × ${2 * TILE_MAX} pixels.`;
+    pasteMsg.textContent = image
+      ? `${rule} This image is ${image.width} × ${image.height}.`
+      : rule;
+    dlgPaste.show();
+  }
+
+  /** The item keys' two prefixes are the icon layer's (shell/icons.js). */
+  const refOf = (key) =>
+    key.startsWith('folder:')
+      ? { kind: /** @type {const} */ ('folder'), id: key.slice('folder:'.length) }
+      : { kind: /** @type {const} */ ('doc'), id: key.slice('doc:'.length) };
+
+  // Copy: the selected icons — the Trash never among them (selection()
+  // leaves it out) — into the slice as references, and the system
+  // clipboard handed one item with two representations: the names, one per
+  // line (what the Mac's Finder gives a text editor; the token pasteSource
+  // matches), and, for exactly one document, its STORED bytes as image/png
+  // (the file on disk — an open window's unsaved strokes do not travel;
+  // Duplicate is the window's copy). The selection stays lit. The system
+  // write is silent on failure (no secure context, an old browser, Safari
+  // past the gesture): the in-app copy has already happened.
+  function copySelection() {
+    const keys = icons.selection();
+    if (!keys.length) return;
+    const st = files.get();
+    const items = keys.map(refOf);
+    const text = items
+      .map((it) =>
+        it.kind === 'folder'
+          ? st.folders.find((f) => f.id === it.id)?.name
+          : st.list.find((r) => r.id === it.id)?.name
+      )
+      .filter((n) => n != null)
+      .join('\n');
+    clipboard.set(items, text);
+    writeSystemClipboard(items, text).catch(() => {});
+  }
+  async function writeSystemClipboard(items, text) {
+    if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') return;
+    /** @type {Record<string, Blob>} */
+    const parts = { 'text/plain': new Blob([text], { type: 'text/plain' }) };
+    if (items.length === 1 && items[0].kind === 'doc') {
+      const png = await files.bytesOf(items[0].id);
+      if (png) parts['image/png'] = new Blob([png], { type: 'image/png' });
+    }
+    await navigator.clipboard.write([new ClipboardItem(parts)]);
+  }
+
+  // Paste: ONE read of the system clipboard per pick (its text and its
+  // PNG, each null when absent; null altogether when it cannot be read —
+  // no secure context, a denied or dismissed permission, Safari outside
+  // the gesture — and then the slice's items are trusted as they stand),
+  // then pasteSource decides. The target is the Finder's front container
+  // at the pick — the front folder window, else the desktop (New Folder's
+  // rule) — refused for the Trash or a folder inside it (the item is greyed
+  // there too, syncGate below). Storage unavailable raises the Save notice.
+  async function readSystemClipboard() {
+    if (!navigator.clipboard?.read) return null;
+    try {
+      const items = await navigator.clipboard.read();
+      let text = null;
+      let image = null;
+      for (const item of items) {
+        if (text == null && item.types.includes('text/plain')) {
+          text = await (await item.getType('text/plain')).text();
+        }
+        if (image == null && item.types.includes('image/png')) {
+          image = await item.getType('image/png');
+        }
+      }
+      return { text, image };
+    } catch {
+      return null;
+    }
+  }
+  async function paste() {
+    if (!files.get().available) {
+      dlgStorage.show();
+      return;
+    }
+    const target = folders.activeFolder();
+    if (isTrashed(files.get(), target)) return;
+    await dispatchPaste(await readSystemClipboard(), target);
+  }
+  /** @param {{text: string|null, image: Blob|null}|null} system
+   *  @param {string|null} target */
+  async function dispatchPaste(system, target) {
+    try {
+      switch (pasteSource(clipboard.get(), system)) {
+        case 'items':
+          await pasteItems(target);
+          break;
+        case 'image':
+          await pasteImage(/** @type {Blob} */ (system?.image), target);
+          break;
+        // 'none': a ⌘V with nothing to paste does nothing, silently.
+      }
+    } catch (err) {
+      build.setError(`Paste failed: ${err.message}`);
+    }
+  }
+  // The slice's items, in its order, each copied into the target by its
+  // kind — a reference whose record is gone (emptied from the Trash since)
+  // skips silently. The listing's refresh renders each new icon in the
+  // target's root at the container's next free cell (the icon layer's
+  // fallback — nothing here places anything), and then the pasted icons
+  // are the selection.
+  async function pasteItems(target) {
+    /** @type {string[]} */
+    const keys = [];
+    for (const it of clipboard.get().items) {
+      const made =
+        it.kind === 'folder'
+          ? await files.copyFolder(it.id, { parent: target })
+          : await files.copyDoc(it.id, { folder: target });
+      if (made) keys.push(`${it.kind}:${made.id}`);
+    }
+    if (keys.length) icons.select(keys);
+  }
+  // A picture the app did not write: VALIDATED before anything is written
+  // — it decodes, and its shape is the document format's (a 3×2 atlas of
+  // square tiles within the tile range; lib/sheet-shape.js, stricter than
+  // the drop on purpose — a paste is "file this", and the catalog takes
+  // documents) — else the alert. Accepted, it is stored through the
+  // seeding's own path (a doc, loadAtlas, files.save), so the bytes are
+  // normalized to the document format whatever the source PNG was; its
+  // chunks are read first exactly as a dropped file's are (a surviving
+  // Title names it, the transforms reorient it, the ring settings seed
+  // its chunk — else the defaults, written fresh). No Title: "untitled",
+  // counted over the container's documents, and the icon lands selected
+  // with its rename box open — New Folder's idiom for an arrival that
+  // needs a name. No window opens: a paste is "file this", a drop is
+  // "open this".
+  async function pasteImage(blob, target) {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let image;
+    try {
+      image = await bytesToImageData(bytes);
+    } catch {
+      showPasteAlert(null);
+      return;
+    }
+    if (!sheetShape(image.width, image.height).tile) {
+      showPasteAlert(image);
+      return;
+    }
+    const { title, transforms, ring } = readSheetMeta(bytes);
+    const doc = createDoc();
+    doc.loadAtlas(image, transforms);
+    const res = await files.save(doc, {
+      fileId: null,
+      name: title ?? nextDocName(files.get(), target),
+      folder: target,
+      ring: createRingSettings(ring).get(),
+    });
+    if (!res) return;
+    const key = `doc:${res.id}`;
+    icons.select([key]);
+    if (title == null) icons.startRename(key);
+  }
 
   // --- save / open flows ------------------------------------------------------
   // Save a context, then run `next`. An untitled doc prompts for its name
@@ -788,6 +993,21 @@ export function initMenus(desktop, windows, panels) {
       case 'redo':
         workspace.active()?.history.redo();
         break;
+      case 'copy':
+        // The Finder's Copy (header; the gate below says when): the
+        // selected icons to the clipboard.
+        copySelection();
+        break;
+      case 'paste':
+        // The Finder's Paste: whatever the clipboard holds, into the front
+        // container — decided at the pick.
+        paste();
+        break;
+      case 'select-all':
+        // The Finder's Select All: every icon in the front window's field,
+        // else the desktop's.
+        icons.selectAll(folders.activeFolder());
+        break;
       case 'pick-color':
         session.openPicker();
         break;
@@ -795,6 +1015,46 @@ export function initMenus(desktop, windows, panels) {
         showTileDialog();
         break;
     }
+  });
+
+  // The browser's own Edit → Paste (its menu bar; no keydown, so the kit's
+  // claim never sees it) lands as a `paste` event — and it is the ONE route
+  // that carries a copied FILE (a .png copied in the Mac's Finder arrives as
+  // clipboardData.files, which clipboard.read() never exposes). The same
+  // gate as the item (disabled: the application role, a focused field —
+  // whose own paste this must not eat — or the Trash front), the same
+  // dispatch. clipboardData is readable only during the event, so the read
+  // is synchronous and the work follows.
+  on(document, 'paste', (e) => {
+    if (itemPaste.disabled || modalOpen()) return;
+    const dt = /** @type {ClipboardEvent} */ (e).clipboardData;
+    if (!dt) return;
+    const text = dt.getData('text/plain') || null;
+    /** @type {Blob|null} */
+    let image = null;
+    for (const f of dt.files) {
+      if (f.type === 'image/png') {
+        image = f;
+        break;
+      }
+    }
+    if (!image) {
+      for (const it of dt.items) {
+        if (it.kind === 'file' && it.type === 'image/png') {
+          image = it.getAsFile();
+          break;
+        }
+      }
+    }
+    if (text == null && image == null) return;
+    e.preventDefault();
+    if (!files.get().available) {
+      dlgStorage.show();
+      return;
+    }
+    const target = folders.activeFolder();
+    if (isTrashed(files.get(), target)) return;
+    dispatchPaste({ text, image }, target);
   });
 
   on($('#menu-tools'), 'vf-menu-select', (e) => {
@@ -880,6 +1140,24 @@ export function initMenus(desktop, windows, panels) {
   // Disabling an item also parks its key equivalent (the kit never fires a
   // disabled item's shortcut), so ⌘S/⌘K gate with their menus; the
   // bare-letter tool keys get the same guard in src/shortcuts.js.
+  //
+  // The three FINDER-ROLE items (header) read the other way — live while
+  // a document window is NOT active — and two more things: Copy needs a
+  // selected icon that is not the Trash (the icon layer's selection(),
+  // re-read on its onSelectionChange: the kit's vf-select, the activation's
+  // clear, the chrome bridge's re-select); Paste needs a front container
+  // that accepts one (not the Trash, not inside it — New Folder's reading),
+  // and NOT "and the clipboard holds something": the system clipboard
+  // cannot be read without a pick, so Paste is live whenever the Finder can
+  // take one and a ⌘V with nothing to paste does nothing. All three grey
+  // while a TEXT CONTROL has focus — an icon's rename box, the New box's
+  // Name, a stepper — read off focusin / focusout's COMPOSED path (the
+  // kit's fields host their <input> in shadow DOM, so the innermost target
+  // is what says it: src/shortcuts.js's idiom for the tool keys), since the
+  // kit's key equivalents never look at where the stroke landed and an
+  // enabled Copy would claim the field's ⌘C. Greyed, the items claim
+  // nothing and the field keeps its keys — the same mechanism that hands
+  // ⌘Z to a field when Undo is grey.
   const DOC_SCOPED = [
     'save',
     'duplicate',
@@ -900,18 +1178,41 @@ export function initMenus(desktop, windows, panels) {
   const docItems = DOC_SCOPED.map((v) => $(`vf-menu-item[value="${v}"]`));
   const itemClose = $('vf-menu-item[value="close"]');
   const itemNewFolder = $('vf-menu-item[value="new-folder"]');
+  const itemCopy = $('vf-menu-item[value="copy"]');
+  const itemPaste = $('vf-menu-item[value="paste"]');
+  const itemSelectAll = $('vf-menu-item[value="select-all"]');
+  /** Whether the innermost focused element is a text control. */
+  let textFocused = false;
   const syncGate = () => {
     const s = shell.get();
+    const st = files.get();
+    const front = folders.activeFolder();
     for (const item of docItems) item.disabled = !s.appActive;
-    itemClose.disabled = !(s.appActive || folders.activeFolder() != null);
-    itemNewFolder.disabled = isTrashed(files.get(), folders.activeFolder());
+    itemClose.disabled = !(s.appActive || front != null);
+    itemNewFolder.disabled = isTrashed(st, front);
+    const finder = !s.appActive && !textFocused;
+    itemCopy.disabled = !finder || icons.selection().length === 0;
+    itemPaste.disabled = !finder || isTrashed(st, front);
+    itemSelectAll.disabled = !finder;
   };
   teardown.push(
     shell.subscribe(syncGate),
     folders.onChange(syncGate),
-    files.subscribe(syncGate)
+    files.subscribe(syncGate),
+    icons.onSelectionChange(syncGate)
   );
   on(desktop, 'vf-activate', syncGate);
+  on(document, 'focusin', (e) => {
+    const t = e.composedPath()[0];
+    const tag = t instanceof Element ? t.tagName : '';
+    textFocused = tag === 'INPUT' || tag === 'TEXTAREA';
+    syncGate();
+  });
+  on(document, 'focusout', () => {
+    // The next focusin says where focus went; between the two, nowhere.
+    textFocused = false;
+    syncGate();
+  });
   syncGate();
 
   // Empty Trash… is live exactly while the Trash holds something — the

@@ -21,6 +21,8 @@ import {
   descendantsOf,
   folderPath,
   nextFolderName,
+  nextDocName,
+  copyName,
 } from '../src/state/files.js';
 import { readTextChunks } from 'sprite-machine';
 import { fakeScheduler, memStorage, encodeAtlas, decodeAtlas } from './helpers.mjs';
@@ -353,6 +355,159 @@ test('the Trash is listed without a record, refuses a rename, a move, a removal 
     childrenOf(st, TRASH).docs.length + childrenOf(st, TRASH).folders.length,
     0
   );
+});
+
+// --- copies (Copy / Paste, Duplicate) -------------------------------------------
+
+test('copyName: the name as is in an empty container, "copy" beside the original, "copy 2" beside those — counted from the base', async () => {
+  const { files, doc } = makeWorld();
+  await files.refresh();
+  const f = await files.createFolder({ name: 'Vehicles' });
+  await files.save(doc, { name: 'Car' });
+  let st = files.get();
+  assert.equal(copyName(st, f.id, 'Car'), 'Car', 'nothing in the folder holds it');
+  assert.equal(copyName(st, null, 'Car'), 'Car copy', 'beside the original');
+  await files.save(doc, { name: 'Car copy' });
+  st = files.get();
+  assert.equal(copyName(st, null, 'Car'), 'Car copy 2');
+  assert.equal(
+    copyName(st, null, 'Car copy'),
+    'Car copy 2',
+    'a copy of a copy counts the base'
+  );
+  await files.save(doc, { name: 'Car copy 2' });
+  assert.equal(copyName(files.get(), null, 'Car copy 2'), 'Car copy 3');
+  // Folders count over the container's folders, never its documents.
+  assert.equal(copyName(files.get(), null, 'Car', 'folder'), 'Car');
+  assert.equal(copyName(files.get(), null, 'Vehicles', 'folder'), 'Vehicles copy');
+});
+
+test('nextDocName counts over the container’s documents alone', async () => {
+  const { files, doc } = makeWorld();
+  await files.refresh();
+  const f = await files.createFolder({ name: 'F' });
+  assert.equal(nextDocName(files.get(), null), 'untitled');
+  await files.save(doc, { name: 'untitled' });
+  await files.save(doc, { name: 'untitled 2' });
+  assert.equal(nextDocName(files.get(), null), 'untitled 3');
+  assert.equal(nextDocName(files.get(), f.id), 'untitled', 'a folder counts its own');
+});
+
+test('copyDoc makes a new record with new id and times, the Title and Creation Time rewritten, the pixels the same, in the asked folder; the original stands', async () => {
+  const { files, storage, doc, frames } = makeWorld();
+  await files.refresh();
+  stroke(doc);
+  frames.frame();
+  const orig = await files.save(doc, {
+    name: 'Car',
+    ring: { views: 8, elevation: 30, offset: 0, size: 64, paper: 'white' },
+  });
+  const f = await files.createFolder({ name: 'F' });
+  const before = storage.map.get(orig.id);
+
+  const copy = await files.copyDoc(orig.id, { folder: f.id });
+  assert.equal(copy.name, 'Car', 'as is: nothing in F holds it');
+  assert.notEqual(copy.id, orig.id);
+  const rec = storage.map.get(copy.id);
+  assert.equal(rec.folder, f.id);
+  assert.ok(rec.createdAt > before.createdAt, 'a copy is a new file');
+  assert.equal(rec.createdAt, rec.modifiedAt);
+  assert.equal(rec.icon, before.icon, 'the icon cache carries over');
+  assert.equal(rec.w, before.w);
+  const meta = readTextChunks(rec.png);
+  assert.equal(meta.Title, 'Car');
+  assert.notEqual(meta['Creation Time'], readTextChunks(before.png)['Creation Time']);
+  assert.equal(
+    meta['sprite-machine:ring'],
+    readTextChunks(before.png)['sprite-machine:ring'],
+    'the other chunks travel'
+  );
+  const img = await decodeAtlas(rec.png);
+  assert.equal(img.data[(0 * 6 + 2) * 4 + 3], 255, 'the pixels are the same');
+  assert.deepEqual(storage.map.get(orig.id), before, 'the original is untouched');
+
+  const beside = await files.copyDoc(orig.id, { folder: null });
+  assert.equal(beside.name, 'Car copy', 'beside the original');
+  assert.equal(readTextChunks(storage.map.get(beside.id).png).Title, 'Car copy');
+  assert.equal(await files.copyDoc('nope', {}), null, 'a source that is gone');
+});
+
+test('copyFolder copies a folder with a nested folder and documents at both levels, ids remapped, nesting kept, names inside unchanged; a folder into itself lands a copy inside it', async () => {
+  const { files, storage, doc } = makeWorld();
+  await files.refresh();
+  const a = await files.createFolder({ name: 'A' });
+  const b = await files.createFolder({ name: 'B', parent: a.id });
+  const top = await files.save(doc, { name: 'Top', folder: a.id });
+  const deep = await files.save(doc, { name: 'Deep', folder: b.id });
+  const dest = await files.createFolder({ name: 'Dest' });
+
+  const copy = await files.copyFolder(a.id, { parent: dest.id });
+  assert.equal(copy.name, 'A');
+  assert.notEqual(copy.id, a.id);
+  let st = files.get();
+  const kids = childrenOf(st, copy.id);
+  assert.deepEqual(
+    kids.folders.map((f) => f.name),
+    ['B']
+  );
+  assert.deepEqual(
+    kids.docs.map((r) => r.name),
+    ['Top']
+  );
+  const b2 = kids.folders[0];
+  assert.notEqual(b2.id, b.id, 'remapped');
+  assert.deepEqual(
+    childrenOf(st, b2.id).docs.map((r) => r.name),
+    ['Deep']
+  );
+  assert.notEqual(kids.docs[0].id, top.id);
+  assert.equal(storage.map.size, 4, 'two new documents');
+  assert.equal(storage.folders.size, 5, 'two new folders');
+  assert.deepEqual(
+    childrenOf(st, a.id).docs.map((r) => r.id),
+    [top.id],
+    'the original tree stands'
+  );
+  assert.deepEqual(
+    childrenOf(st, b.id).docs.map((r) => r.id),
+    [deep.id]
+  );
+
+  // Into itself: the snapshot precedes the writes, so one copy lands inside.
+  const inner = await files.copyFolder(a.id, { parent: a.id });
+  st = files.get();
+  assert.equal(inner.name, 'A', 'A holds no folder named A');
+  assert.equal(folderPath(st, inner.id).join('/'), 'A/A');
+  assert.deepEqual(
+    childrenOf(st, inner.id).folders.map((f) => f.name),
+    ['B']
+  );
+  assert.equal(descendantsOf(st, inner.id).docs.length, 2);
+  const again = await files.copyFolder(a.id, { parent: null });
+  assert.equal(again.name, 'A copy', 'beside the original');
+  assert.equal(await files.copyFolder('nope', {}), null);
+});
+
+test('copies refuse the Trash: as a source, and as a target or inside it', async () => {
+  const { files, doc } = makeWorld();
+  await files.refresh();
+  const { id } = await files.save(doc, { name: 'Car' });
+  const f = await files.createFolder({ name: 'F' });
+  await files.moveFolder(f.id, TRASH);
+  assert.equal(await files.copyFolder(TRASH, { parent: null }), null);
+  assert.equal(await files.copyDoc(id, { folder: TRASH }), null);
+  assert.equal(await files.copyDoc(id, { folder: f.id }), null, 'inside the Trash');
+  assert.equal(await files.copyFolder(f.id, { parent: TRASH }), null);
+  const out = await files.copyFolder(f.id, { parent: null });
+  assert.equal(out.name, 'F', 'a trashed item copies OUT fine');
+  assert.equal(files.get().list.length, 1, 'nothing else was written');
+});
+
+test('bytesOf hands back the stored bytes, null for a missing id', async () => {
+  const { files, storage, doc } = makeWorld();
+  const { id } = await files.save(doc, { name: 'Car' });
+  assert.deepEqual(await files.bytesOf(id), storage.map.get(id).png);
+  assert.equal(await files.bytesOf('nope'), null);
 });
 
 // --- export ------------------------------------------------------------------

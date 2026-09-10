@@ -45,6 +45,20 @@
 // here. isTrashed tells the library's listing (the Open dialog, ?file) to
 // look past it: the Finder's Trash folder was invisible to Standard File.
 //
+// A COPY IS A NEW FILE (Sep 10 2026, docs/clipboard-plan.md): copyDoc
+// clones a stored document's bytes under a new id with fresh times and a
+// fresh Title / Creation Time spliced in — the chunk wins over the record on
+// any disagreement, so the chunk must say so — with no decode and no
+// re-encode, the bytes being the document; copyFolder clones a folder with
+// its whole subtree, the ids remapped and the nesting kept, from a snapshot
+// taken before anything is written (so a folder pasted into itself is
+// well-defined: a copy of it lands inside it, the Mac's own). Only the
+// top-level pasted item is ever renamed, by copyName — the name as is where
+// nothing in the container holds it, «name» copy beside the original, «name»
+// copy 2, 3, … while those are taken (the Mac's counting; Duplicate ⌘D
+// counts the same way). Both refuse a trashed target (a paste into the Trash
+// is a delete by copy), and the Trash itself is never copied.
+//
 // WHAT THIS SLICE DOES NOT KNOW (the multi-document split): which documents
 // are open, which is active, their dirty state, or their identity — that is
 // the workspace's (state/workspace.js). Every per-document operation here
@@ -231,6 +245,45 @@ export function nextFolderName(state, parent) {
   for (let n = 2; ; n++) {
     const name = `${UNTITLED_FOLDER} ${n}`;
     if (!used.has(name)) return name;
+  }
+}
+
+/**
+ * The next free document name in a container: "untitled", "untitled 2", …
+ * over the document names already there — nextFolderName's twin, for a
+ * pasted picture that arrives with no name of its own (the workspace's
+ * nextUntitledName counts over the OPEN windows instead).
+ * @param {FilesState} state @param {string|null} folder
+ */
+export function nextDocName(state, folder) {
+  const used = new Set(childrenOf(state, folder).docs.map((r) => r.name));
+  if (!used.has(UNTITLED)) return UNTITLED;
+  for (let n = 2; ; n++) {
+    const name = `${UNTITLED} ${n}`;
+    if (!used.has(name)) return name;
+  }
+}
+
+/**
+ * The name a copy takes landing in `folder`: `name` AS IS when nothing there
+ * holds it; else the Mac's counting from the name's base (a trailing
+ * " copy" or " copy N" stripped) — «base» copy, then «base» copy 2, 3, …
+ * while those are taken too. Over the container's documents (`kind`
+ * 'doc') or its folders ('folder'). Duplicate passes "«name» copy" and
+ * lands "«name» copy" the first time, "«name» copy 2" the next.
+ * @param {FilesState} state @param {string|null} folder @param {string} name
+ * @param {'doc'|'folder'} [kind]
+ */
+export function copyName(state, folder, name, kind = 'doc') {
+  const kids = childrenOf(state, folder);
+  const used = new Set((kind === 'folder' ? kids.folders : kids.docs).map((x) => x.name));
+  if (!used.has(name)) return name;
+  const base = name.replace(/ copy( \d+)?$/, '');
+  const first = `${base} copy`;
+  if (!used.has(first)) return first;
+  for (let n = 2; ; n++) {
+    const next = `${base} copy ${n}`;
+    if (!used.has(next)) return next;
   }
 }
 
@@ -423,6 +476,112 @@ export function createFiles(deps = null) {
         ring: parseRingChunk(meta[RING_CHUNK_KEY]),
         name: meta.Title ?? rec.name ?? UNTITLED,
       };
+    },
+
+    /** A stored document's bytes — the file on disk, chunks and all (what
+     *  Copy hands the system clipboard as its PNG). Null when the id is
+     *  gone or storage is out of reach. @param {string} id
+     *  @returns {Promise<Uint8Array|null>} */
+    async bytesOf(id) {
+      if (!d?.storage) return null;
+      const rec = await d.storage.get(id).catch(() => null);
+      return rec?.png ?? null;
+    },
+
+    /**
+     * Copy a stored document into a container (`folder` null: the desktop)
+     * as a NEW file: a new id, fresh times, the icon cache and the dims
+     * carried over, the bytes cloned with a fresh Title and Creation Time
+     * spliced in — no decode, no re-encode. Named as given, else by
+     * copyName over the target's documents. Resolves `{id, name}`, or null:
+     * the source is gone, or the target is the Trash or inside it.
+     * @param {string} id @param {{folder?: string|null, name?: string}} [into]
+     */
+    async copyDoc(id, { folder = null, name } = {}) {
+      const state = store.get();
+      const target = containerOf(state, folder);
+      if (isTrashed(state, target)) return null;
+      const rec = await d.storage.get(id);
+      if (!rec) return null;
+      const finalName = name ?? copyName(state, target, rec.name, 'doc');
+      const nid = newId();
+      const t = now();
+      const png = setTextChunks(rec.png, {
+        Title: finalName,
+        'Creation Time': new Date(t).toISOString(),
+      });
+      await d.storage.put({
+        ...rec,
+        id: nid,
+        png,
+        name: finalName,
+        createdAt: t,
+        modifiedAt: t,
+        folder: target,
+      });
+      await this.refresh();
+      return { id: nid, name: finalName };
+    },
+
+    /**
+     * Copy a folder WITH ITS SUBTREE into a container (`parent` null: the
+     * desktop): the folder records top-down with old ids mapped to new, then
+     * every document under it into its new parent, each with a fresh id and
+     * times and its name unchanged — only the top-level copy is named (as
+     * given, else by copyName over the target's folders). The subtree is a
+     * SNAPSHOT taken before anything is written, so a folder copied into
+     * itself lands one copy inside it and stops. Resolves `{id, name}`, or
+     * null: the Trash as the source (never copied), a source that is gone,
+     * or a trashed target.
+     * @param {string} id @param {{parent?: string|null, name?: string}} [into]
+     */
+    async copyFolder(id, { parent = null, name } = {}) {
+      const state = store.get();
+      const rec = folderRec(id);
+      if (!rec || id === TRASH) return null;
+      const target = containerOf(state, parent);
+      if (isTrashed(state, target)) return null;
+      const { docs, folders: dirs } = descendantsOf(state, id);
+      const finalName = name ?? copyName(state, target, rec.name, 'folder');
+      /** @type {Map<string, string>} old folder id -> its copy's id */
+      const map = new Map();
+      const putFolder = async (old, folderName, into) => {
+        const nid = newId();
+        const t = now();
+        map.set(old, nid);
+        await d.storage.putFolder({
+          id: nid,
+          name: folderName,
+          parent: into,
+          createdAt: t,
+          modifiedAt: t,
+        });
+        return nid;
+      };
+      const rootId = await putFolder(id, finalName, target);
+      // Parents before their children (descendantsOf's order), so every
+      // parent is mapped before a child asks for it.
+      for (const f of dirs) {
+        await putFolder(f.id, f.name, map.get(containerOf(state, f.parent)) ?? rootId);
+      }
+      for (const r of docs) {
+        const full = await d.storage.get(r.id);
+        if (!full) continue;
+        const t = now();
+        await d.storage.put({
+          ...full,
+          id: newId(),
+          png: setTextChunks(full.png, {
+            Title: full.name,
+            'Creation Time': new Date(t).toISOString(),
+          }),
+          createdAt: t,
+          modifiedAt: t,
+          folder: map.get(containerOf(state, r.folder)) ?? rootId,
+        });
+      }
+      await this.refresh();
+      return { id: rootId, name: finalName };
     },
 
     /** Rename a stored doc BY ID: the Title chunk is rewritten in place (a

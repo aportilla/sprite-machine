@@ -810,7 +810,13 @@ eye on the dev server are the verification.
   for this; the comment beside it carries this design.
 - **Edit → Cut ⌘X / Copy ⌘C / Paste ⌘V / Clear (Backspace) / Select All ⌘A.**
   MacPaint's whole reason for selections. The float IS the clipboard datum
-  (`liftRect`'s tile). The gating plumbing NOW EXISTS (added with the
+  (`liftRect`'s tile). **The items exist** (2026-09-10,
+  [clipboard-plan.md](clipboard-plan.md)): Copy, Paste and Select All are in
+  the Edit menu as the Finder's commands over files and folders, live in
+  the Finder role and **greyed in the application role**, waiting for this
+  pixel clipboard — the same labels read the forward role's command, one
+  Edit menu; Cut and Clear are not yet in the markup. The gating plumbing
+  NOW EXISTS (added with the
   strip's readout, 2026-08-28): the canvas emits `sm-selection
 {bounds|null}` on every real outline change (deduped, never per ants
   tick), `sm-editor` mirrors it through `workspace.setSelection` onto the

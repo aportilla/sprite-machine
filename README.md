@@ -427,9 +427,17 @@ the Undo/Redo enablement.
   whenever a model exists, the windoid shown or not.
 - **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (the ACTIVE document's history; disabled
   until it has something, which hands the key back to a focused field's native
-  undo), _Pick Color…_ ⌘K, and _Tile Size…_ (the active
+  undo), then, after a rule, _Copy_ ⌘C / _Paste_ ⌘V / _Select All_ ⌘A — the
+  **Finder-role** commands over the icons (see [Copy and Paste](#folders)):
+  live while a document window is _not_ the desktop's active window, greyed
+  in the application role, where the same labels wait for the selection
+  tool's pixel clipboard — one Edit menu, the forward role's command under
+  one label, System 7's own model — and greyed too while any text field has
+  focus, so an icon's rename box or a dialog's field keeps its native ⌘C /
+  ⌘V / ⌘A. Then, after a rule, _Pick Color…_ ⌘K and _Tile Size…_ (the active
   document's square tile size behind a modal that commits on OK alone — the
-  one property that is an edit; see [Drawing editor](#drawing-editor)).
+  one property that is an edit; see [Drawing editor](#drawing-editor)). No
+  Cut and no Clear: the Finder had no Cut of files.
   **Tools** lists the six sticky
   modes with the active one checkmarked — the same session truth the tool
   strip and the S/B/R/G/E/I keys write, so a pick from any of the three moves
@@ -737,11 +745,69 @@ items`, plain ink, off the model) over the Finder's **double rule** — black,
   Under a drag the folder icon under the pointer wears `target`, never for a
   folder over itself or a descendant, where the drop is refused. Nothing about
   the gesture is drawn, measured or clamped by the page.
-- **Duplicate** lands the copy beside the original, in its folder; a first
+- **Copy and Paste** (the plan is
+  [docs/clipboard-plan.md](docs/clipboard-plan.md)) is Mac OS X's Finder
+  grammar, deliberately — System 7 copied no file with ⌘C/⌘V — over one
+  Clipboard, **the system's**: what Paste does is decided at the pick by
+  reading it, never by remembering what the app last copied. **Copy** takes
+  the selected icons — documents and folders, in any container, the Trash
+  never among them, a trashed item fine — as references into the catalog on
+  an in-app clipboard slice (`state/clipboard.js`, session-only), and hands
+  the system clipboard what it can carry: the copied **names as text**, one
+  per line (what the Mac's Finder pastes into a text editor, and the token
+  the paste matches), plus, for exactly one document, its **stored PNG** —
+  the file on disk, so another application pastes the sheet; an open
+  window's unsaved strokes don't travel (Duplicate is the window's copy).
+  The selection stays lit. **Paste** lands in the Finder's front folder
+  window, else on the desktop, each copy at the container's next free cell
+  and the pasted icons selected; **refused for the Trash** or a folder
+  inside it (a paste into the Trash is a delete by copy). When the system
+  clipboard's text is the text the app wrote, the slice's items paste from
+  the store — chunks and subtrees intact, since the system clipboard
+  sanitizes a PNG (Chrome decodes and re-encodes it, so no text chunk
+  survives the trip) and can't carry a folder at all: a document copies as
+  a **new file** (new id, fresh times, a fresh `Title` and `Creation Time`
+  spliced into the bytes, no decode), a folder **with its whole subtree**
+  from a snapshot taken before anything is written, so a folder pasted into
+  itself lands one copy inside it. Only the top-level pasted item is ever
+  renamed: the name **as is** where nothing in the container holds it,
+  _«name» copy_ beside the original, _«name» copy 2_, _3_, … while those are
+  taken — the Mac's counting, and **Duplicate ⌘D counts the same way** (a
+  second Duplicate of the Car is _Car copy 2_). A reference whose record
+  has since been emptied from the Trash simply skips. Nothing here is
+  undoable — the Trash is the Finder's undo. **Select All** ⌘A selects
+  every icon in the front window's field, else the desktop's.
+- **A picture pasted from outside becomes a file** — pixels copied in an
+  image editor, a browser's Copy Image, a screenshot: an `image/png` on the
+  system clipboard the app did not write is **validated before anything is
+  written** against the document format's shape (`lib/sheet-shape.js`: a
+  3×2 atlas of square tiles, `W = 3·t`, `H = 2·t`, `t` from 1 to 64 —
+  stricter than the drop on purpose, a paste being "file this" rather than
+  "open this"), then stored as a **new document in the front container**
+  through the seeding's own save path, its bytes normalized to the document
+  format and its chunks read first as a dropped file's are (a surviving
+  `Title` names it; else it is _untitled_, counted over the container's
+  documents, and lands selected with its **rename box open** — New Folder's
+  idiom). No window opens. Anything else raises the **paste alert** — the
+  rule and the image's own dimensions — and nothing lands. Two routes, one
+  path: ⌘V and the menu pick read the clipboard through the Async Clipboard
+  API (Chrome asks once, _see text and images copied to the clipboard_;
+  Safari and Firefox show a Paste button for content copied elsewhere); the
+  browser's own Edit → Paste from its menu bar arrives as a `paste` event
+  with no keydown, and is the **only route that carries a copied file** —
+  a `.png` copied in the Mac's Finder reaches the page as
+  `clipboardData.files`, which the API's `read()` never exposes, so a
+  copied _file_ pressed in with ⌘V does not arrive; the drop is the way for
+  files. Every system clipboard failure is **silent**: no secure context,
+  a denied permission or Safari past the gesture leaves the in-app copy
+  standing, and a paste that can't read the system clipboard pastes the
+  slice's items as they stand; a ⌘V with nothing to paste does nothing.
+- **Duplicate** lands the copy beside the original, in its folder, named by
+  the paste's counting; a first
   **Save** lands on the desktop, as does a dropped PNG's. `?file=` resolves by
   name across every folder but the Trash. **Not yet**: no small-icon view, no
-  zoom box, no Clean Up, no Put Away, and the Finder's two alerts (a name too
-  long, a folder into itself) are silent refusals.
+  zoom box, no Clean Up, no Put Away, no Cut, and the Finder's two alerts (a
+  name too long, a folder into itself) are silent refusals.
 
 ### The Trash
 
@@ -836,11 +902,16 @@ standard PNG text chunks (the engine's `png-chunks.js`): `Title`, `Creation Time
 `sprite-machine:ring`, the **3D Sprite Atlas's settings** (always written,
 since a setting's default is the writing version's choice rather than an
 identity). The pixels alone are already a complete document — tile size
-derives from the dimensions — so **Save, Download and drop-import converge on
-a single format**: Download writes the saved bytes verbatim, dropping any
-downloaded PNG back restores it losslessly, and any foreign 3×2 sheet is a
-legal, if anonymous, document at the default ring. A chunk-stripping optimizer
-costs the name, the timestamps and the ring settings only.
+derives from the dimensions — so **Save, Download, drop-import and a pasted
+picture converge on a single format**: Download writes the saved bytes
+verbatim, dropping any downloaded PNG back restores it losslessly, and any
+foreign 3×2 sheet is a legal, if anonymous, document at the default ring. A
+chunk-stripping optimizer costs the name, the timestamps and the ring
+settings only — and the system clipboard is one: a PNG copied out through
+Edit → Copy and pasted back in arrives chunkless (the browser re-encodes it),
+so it lands as _untitled_ at the default ring, while a copy and paste **within
+the app** rides the catalog and keeps everything (see
+[Folders](#folders)).
 
 Storage is IndexedDB (`storage/db.js`, version 2: a `docs` store — the PNG
 bytes plus rebuildable listing caches, where the chunk wins on any
@@ -1056,14 +1127,17 @@ packages/core/  THE ENGINE, published as `sprite-machine` — pure, no DOM, THRE
                 bin/ the CLI
 src/lib/      the editor's domain — pure, no THREE and no DOM: the atlas's ring geometry
               (ring), the rasterizers (rect, fill, select, brush, ants), the edge hints
-              (edges, probed off the engine's views), the zip writer, the color helpers
+              (edges, probed off the engine's views), the document format's shape rule
+              (sheet-shape — what a paste validates), the zip writer, the color helpers
               and the two palettes (palette — PALETTE_168 among them), and the
               built-in sprites
 src/state/    the app-state layer, pure JS and Node-tested: store + the Lit bridges; doc
               (two channels) and history, FACTORIES one per open document; workspace (the
               open documents as DocContexts, activeKey, the stored flows); files (the
-              library, the folder tree, the Trash); session, prefs, build, shell; and the
-              atlas's per-document settings behind an active-document façade (ring)
+              library, the folder tree, the Trash, the copies); clipboard (the in-app
+              half of Copy / Paste: catalog references keyed to what the system
+              clipboard was handed, and pasteSource); session, prefs, build, shell; and
+              the atlas's per-document settings behind an active-document façade (ring)
 src/storage/  the IndexedDB wrapper (v2: `docs`, whose `folder` is its one non-chunk
               field, and `folders`), injected into the files slice
 src/scene/    stage (renderer, camera, lights, framing, on-demand loop); rebuilder, the

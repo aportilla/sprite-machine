@@ -53,7 +53,7 @@ import { createStore } from './store.js';
 import { createDoc } from './doc.js';
 import { createHistory } from './history.js';
 import { createRingSettings } from './ring-settings.js';
-import { files as filesSingleton, UNTITLED } from './files.js';
+import { files as filesSingleton, UNTITLED, copyName } from './files.js';
 
 /**
  * @typedef {{
@@ -318,17 +318,21 @@ export function createWorkspace(deps = {}) {
 
     /** Save a copy as "«name» copy" (the context itself is untouched) —
      *  beside the original, in its folder (the Finder's Duplicate); an
-     *  untitled's copy lands on the desktop. Resolves the copy's stored id
-     *  — the caller opens it in a new window. */
+     *  untitled's copy lands on the desktop. The name counts the Mac's way
+     *  (files.js copyName): a second Duplicate of the Car is "Car copy 2",
+     *  never a second "Car copy". Resolves the copy's stored id — the
+     *  caller opens it in a new window. */
     async duplicate(key) {
       const ctx = byKey(key);
       if (!ctx) return null;
-      const orig = ctx.fileId ? files.get().list.find((r) => r.id === ctx.fileId) : null;
+      const st = files.get();
+      const orig = ctx.fileId ? st.list.find((r) => r.id === ctx.fileId) : null;
+      const folder = orig?.folder ?? null;
       const res = await files.save(ctx.doc, {
         fileId: null,
-        name: `${ctx.name} copy`,
+        name: copyName(st, folder, `${ctx.name} copy`, 'doc'),
         ring: ctx.ring.get(),
-        folder: orig?.folder ?? null,
+        folder,
       });
       return res ? res.id : null;
     },

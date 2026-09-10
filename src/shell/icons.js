@@ -72,6 +72,18 @@
 // It is furniture: on the desktop with or without a library, under ?fresh
 // too (the listing is never read there, so the desktop shows the one icon
 // in its corner whatever the machine has stored).
+//
+// THE SELECTION, READ AND WRITTEN (Sep 10 2026, docs/clipboard-plan.md):
+// Edit → Copy reads it (selection(): the selected icons' keys, the Trash
+// left out, in the listing's order — folders, then documents) and Paste and
+// Select All write it (select(keys) / selectAll(folder): the kit's public
+// setSelected, so `vf-select` reports each change). onSelectionChange is
+// the menus' one signal for the Copy gate: the kit's vf-select (bubbling,
+// composed — a press, the rubber band, a setSelected), plus the two writes
+// the kit never announces — the activation's clear below, and the chrome
+// bridge's re-select, which lands AFTER the vf-select the kit fired for its
+// own deselect, so a gate reading that event alone would grey Copy exactly
+// while the Edit menu is pulled down over a selected icon.
 // ---------------------------------------------------------------------------
 
 import { snapSys, systemPxQuantum } from 'vintage-frames';
@@ -124,6 +136,14 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
   const keyOf = (icon) => /** @type {string} */ (icon.dataset.key);
   const posOf = (icon) => ({ left: icon.left ?? 0, top: icon.top ?? 0 });
 
+  // --- the selection's signal (header) --------------------------------------------
+  /** @type {Set<() => void>} */
+  const selectionListeners = new Set();
+  const notifySelection = () => {
+    for (const fn of selectionListeners) fn();
+  };
+  on(desktop, 'vf-select', notifySelection);
+
   // --- the Finder wire ---------------------------------------------------------
   // A press in the desktop's field — the bare dither or an icon on it — is
   // a press on the Finder. The page owns every "this press means the
@@ -155,6 +175,7 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
     const lit = allIcons().filter((icon) => icon.selected);
     if (!lit.length) return;
     for (const icon of lit) icon.selected = false;
+    notifySelection();
   };
   teardown.push(shell.subscribe(onAppActive));
 
@@ -195,6 +216,7 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
       if (!held.length) return;
       for (const icon of held) icon.selected = true;
       held = [];
+      notifySelection();
     },
     true
   );
@@ -597,8 +619,55 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
       icon.setSelected(true);
       icon.startEditing();
     },
+    /** The selected icons' keys — every container, the Trash left out (it
+     *  is furniture, never copied) — in the listing's order: folders, then
+     *  documents. What Edit → Copy takes.
+     *  @returns {string[]} */
+    selection() {
+      const lit = new Set(
+        allIcons()
+          .filter((icon) => icon.selected && icon.dataset.folder !== TRASH)
+          .map(keyOf)
+      );
+      const st = files.get();
+      return [
+        ...st.folders.map((f) => `${FOLDER}${f.id}`),
+        ...st.list.map((r) => `${DOC}${r.id}`),
+      ].filter((key) => lit.has(key));
+    },
+    /** Make these keys the selection — each selected, every other icon
+     *  cleared — through the kit's public route, so `vf-select` reports
+     *  it: the Finder's reading of a paste (the pasted icons lit).
+     *  @param {string[]} keys */
+    select(keys) {
+      const want = new Set(keys);
+      for (const icon of allIcons()) icon.setSelected(want.has(keyOf(icon)));
+      notifySelection();
+    },
+    /** Select every icon in a container's field — the Finder's Select All
+     *  over its front window (`folder` null: the desktop, the Trash's icon
+     *  included — it selects like any icon; Copy and a filing skip it).
+     *  @param {string|null} folder */
+    selectAll(folder) {
+      const root =
+        folder == null
+          ? desktopField
+          : (folders.fields().find(([id]) => id === folder)?.[1] ?? null);
+      if (!root) return;
+      this.select(iconsIn(root).map(keyOf));
+    },
+    /** The selection changed — a press, the band, a paste's select, the
+     *  activation's clear, the chrome bridge's re-select. Returns the
+     *  unsubscribe. @param {() => void} fn */
+    onSelectionChange(fn) {
+      selectionListeners.add(fn);
+      return () => {
+        selectionListeners.delete(fn);
+      };
+    },
     dispose() {
       for (const fn of teardown) fn();
+      selectionListeners.clear();
       highlight(null);
       // Remove the rendered icons so an HMR re-init rebuilds them with fresh
       // listeners instead of stacking stale ones (the folder windows' go

@@ -97,8 +97,36 @@
           <vf-menu-item value="undo" shortcut="⌘Z" disabled>Undo</vf-menu-item>
           <vf-menu-item value="redo" shortcut="⇧⌘Z" disabled>Redo</vf-menu-item>
           <vf-separator></vf-separator>
-          <vf-menu-item value="pick-color" shortcut="⌘K">Pick Color…</vf-menu-item>
+          <!-- Copy / Paste / Select All (shell/menus.js, docs/clipboard-plan.md):
+               System 7's Edit order, and FINDER-ROLE commands — over the
+               selected icons (documents and folders, in any container) and
+               the Finder's front container (the front folder window, else
+               the desktop). Live while a document window is NOT the
+               desktop's active window; greyed in the application role, where
+               the same two labels wait for the selection tool's pixel
+               clipboard (docs/selection-tool-plan.md) — one Edit menu, the
+               forward role's command under one label. Greyed too while a
+               text control has focus (an icon's rename box, a dialog's
+               field), so the field keeps its native ⌘C/⌘V/⌘A: a disabled
+               item claims no key (the kit's contract — a greyed Undo's ⌘Z,
+               likewise). Copy needs a selected icon that is not the Trash;
+               Paste needs a front container that is not the Trash or inside
+               it. What Paste pastes is decided at the pick, off a read of
+               the SYSTEM clipboard: the app's own copy (files and folders
+               from the catalog, chunks and subtrees intact), or a PNG copied
+               elsewhere — a new document if it is a sprite sheet, the alert
+               below (#dlg-paste) if not. No Cut, no Clear: the Finder had no
+               Cut of files. Boot `disabled` to match the Finder role with
+               nothing selected, like Undo/Redo. ⌘C, ⌘V and ⌘A reach the page
+               (the browser takes none before a keydown; Ctrl stands in
+               off-Mac). -->
+          <vf-menu-item value="copy" shortcut="⌘C" disabled>Copy</vf-menu-item>
+          <vf-menu-item value="paste" shortcut="⌘V" disabled>Paste</vf-menu-item>
+          <vf-menu-item value="select-all" shortcut="⌘A" disabled
+            >Select All</vf-menu-item
+          >
           <vf-separator></vf-separator>
+          <vf-menu-item value="pick-color" shortcut="⌘K">Pick Color…</vf-menu-item>
           <!-- Tile Size…: the active document's square tile size, behind a
                modal that commits on OK alone (#dlg-tile below). The one
                property that is an EDIT — a retile is an undoable change to
@@ -672,6 +700,30 @@
         <vf-button-group origin="bottom right" left="334" top="124">
           <vf-button id="btn-empty-trash-cancel">Cancel</vf-button>
           <vf-button id="btn-empty-trash-ok" variant="default">OK</vf-button>
+        </vf-button-group>
+      </vf-dialog>
+
+      <!-- The paste alert (shell/menus.js, docs/clipboard-plan.md §2.5): a
+           picture pasted from outside that is NOT a sprite sheet — a 3×2
+           atlas of square tiles, 1–64 px a tile — raises this and nothing
+           lands. The Empty Trash box's anatomy: the plain dBoxProc frame,
+           the message in the display face across the top (written at show:
+           the rule and the picture's own dimensions; an image that will not
+           decode gets the first sentence alone), one OK group placed by its
+           bottom-right corner 16 in from the body's, OK the default (Return;
+           Escape reads the same — one button). No caution icon yet, with the
+           Empty Trash box (the trash plan's open item). 360 wide is a 350
+           body, the corner at 334; 150 high a 140 body, the corner at 124. -->
+      <vf-dialog id="dlg-paste" frame="plain" label="Paste" width="360" height="150">
+        <vf-paragraph
+          face="display"
+          id="paste-msg"
+          width="320"
+          left="19"
+          top="16"
+        ></vf-paragraph>
+        <vf-button-group origin="bottom right" left="334" top="124">
+          <vf-button id="btn-paste-ok" variant="default">OK</vf-button>
         </vf-button-group>
       </vf-dialog>
 

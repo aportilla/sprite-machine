@@ -77,6 +77,37 @@ export async function loadSample(sample, { name = sample.name, face } = {}) {
   });
 }
 
+/**
+ * The document chunks a PNG's bytes carry — the `Title`, the per-view
+ * `sprite-machine:transforms`, the `sprite-machine:ring` settings — read
+ * BEST-EFFORT: a non-PNG, a torn chunk list or a garbled transforms chunk
+ * costs only what it garbles (a name, the transforms), never the pixels.
+ * The drop's reading (loadFile) and the paste's (shell/menus.js, a PNG off
+ * the system clipboard — very likely chunkless, the browser having
+ * re-encoded it) share it.
+ * @param {Uint8Array} bytes
+ * @returns {{title: string|null, transforms: Record<string, object>,
+ *   ring: Partial<import('./state/ring-settings.js').RingSettings>|null}}
+ */
+export function readSheetMeta(bytes) {
+  let title = null;
+  let transforms = {};
+  let ring = null;
+  if (isPng(bytes)) {
+    try {
+      const meta = readTextChunks(bytes);
+      title = meta.Title ?? null;
+      if (meta['sprite-machine:transforms']) {
+        transforms = JSON.parse(meta['sprite-machine:transforms']);
+      }
+      ring = parseRingChunk(meta[RING_CHUNK_KEY]);
+    } catch {
+      transforms = {};
+    }
+  }
+  return { title, transforms, ring };
+}
+
 // Decode a dropped/picked file, surfacing failures instead of swallowing them
 // as an unhandled promise rejection (bad/corrupt images just no-op otherwise).
 // Returns the opened context (null on failure), so the drop target can
@@ -85,22 +116,7 @@ export async function loadSample(sample, { name = sample.name, face } = {}) {
 export async function loadFile(f) {
   try {
     const bytes = new Uint8Array(await f.arrayBuffer());
-    let title = null;
-    let transforms = {};
-    let ring = null;
-    if (isPng(bytes)) {
-      // Chunk metadata is best-effort: a torn chunk list only costs the name.
-      try {
-        const meta = readTextChunks(bytes);
-        title = meta.Title ?? null;
-        if (meta['sprite-machine:transforms']) {
-          transforms = JSON.parse(meta['sprite-machine:transforms']);
-        }
-        ring = parseRingChunk(meta[RING_CHUNK_KEY]);
-      } catch {
-        transforms = {};
-      }
-    }
+    const { title, transforms, ring } = readSheetMeta(bytes);
     return openSheet(await bytesToImageData(bytes), {
       transforms,
       name: title ?? f.name.replace(/\.[^.]+$/, ''),
