@@ -899,19 +899,17 @@ export function initMenus(desktop, windows, panels) {
         // A FINDER command (the files slice's createFolder): "untitled
         // folder" — counted up per container — in the active folder window,
         // else on the desktop, its name selected for typing (the icon's
-        // rename box, through the icon layer). The Finder comes forward
-        // first: with a document window active, the desktop's turn — the
-        // windoids hide, the way a desktop press does; a folder window
-        // front keeps its turn. Storage unavailable raises the notice, like
-        // Save. With the Trash's window front the item is greyed (syncGate
-        // below) and the slice refuses regardless — a folder is not made
-        // in the Trash.
+        // rename box, through the icon layer). Finder role only: the item
+        // is greyed while a document window is active (syncGate below), so
+        // the Finder is already forward here. Storage unavailable raises
+        // the notice, like Save. With the Trash's window front the item is
+        // greyed too and the slice refuses regardless — a folder is not
+        // made in the Trash.
         if (!files.get().available) {
           dlgStorage.show();
           break;
         }
         const parent = folders.activeFolder();
-        if (shell.get().appActive) desktop.clearActive();
         files
           .createFolder({ parent })
           .then((made) => {
@@ -1123,8 +1121,8 @@ export function initMenus(desktop, windows, panels) {
   // --- focus gating ------------------------------------------------------------
   // Two roles share one menu bar (the single-application affordance): with
   // the desktop focused, every document-scoped item greys out. About /
-  // Desktop Patterns / New / New Folder stay — they're app-level
-  // (New… ⌃N opens a document from either role); Quit keeps its own gate
+  // Desktop Patterns / New stay — they're app-level (New… ⌃N opens a
+  // document from either role); Quit keeps its own gate
   // below (an open document window, whichever role); the ⌘J item (Arrange
   // Windows — its value the arrange / zoom) keeps its own gate below (an
   // open document window, and the windows' state); the View menu's
@@ -1133,16 +1131,18 @@ export function initMenus(desktop, windows, panels) {
   // front window beside the role: Close is live with a document window OR a
   // folder window active (the Finder's Close closed its front window),
   // re-read on every change of the desktop's active window (vf-activate: a
-  // folder window taking or losing active moves neither role flag). A
-  // second reads it beside the listing: New Folder greys while the Finder's
-  // front window is the Trash's, or a trashed folder's (System 7's own — a
-  // folder is not made in the Trash; the slice refuses regardless).
+  // folder window taking or losing active moves neither role flag).
   // Disabling an item also parks its key equivalent (the kit never fires a
   // disabled item's shortcut), so ⌘S/⌘K gate with their menus; the
   // bare-letter tool keys get the same guard in src/shortcuts.js.
   //
-  // The three FINDER-ROLE items (header) read the other way — live while
-  // a document window is NOT active — and two more things: Copy needs a
+  // The FINDER-ROLE items read the other way — live while a document
+  // window is NOT active. New Folder greys with a document active, and
+  // also while the Finder's front window is the Trash's, or a trashed
+  // folder's (System 7's own — a folder is not made in the Trash; the
+  // slice refuses regardless); it has no key equivalent, so a text
+  // control's focus leaves it alone. The three in the Edit menu (header)
+  // read two more things: Copy needs a
   // selected icon that is not the Trash (the icon layer's selection(),
   // re-read on its onSelectionChange: the kit's vf-select, the activation's
   // clear, the chrome bridge's re-select); Paste needs a front container
@@ -1189,7 +1189,7 @@ export function initMenus(desktop, windows, panels) {
     const front = folders.activeFolder();
     for (const item of docItems) item.disabled = !s.appActive;
     itemClose.disabled = !(s.appActive || front != null);
-    itemNewFolder.disabled = isTrashed(st, front);
+    itemNewFolder.disabled = s.appActive || isTrashed(st, front);
     const finder = !s.appActive && !textFocused;
     itemCopy.disabled = !finder || icons.selection().length === 0;
     itemPaste.disabled = !finder || isTrashed(st, front);

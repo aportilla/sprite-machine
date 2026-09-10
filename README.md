@@ -385,10 +385,10 @@ the Undo/Redo enablement.
   Its key is Control's, ⌃N, on Close's reasoning: the browser owns ⌘N. And
   where System 7 could spend its ⌘N on the Finder's New Folder, this
   machine spends its New on the document), _New Folder_ (a **Finder
-  command**: it brings the Finder forward, as a desktop click would, and makes
-  _untitled folder_ in the front folder window else on the desktop, its name
-  selected for typing; no key equivalent; greyed while the Finder's front
-  window is the Trash's),
+  command**, live in the Finder role only — greyed while a document window
+  is active, like Copy and Paste: it makes _untitled folder_ in the front
+  folder window else on the desktop, its name selected for typing; no key
+  equivalent; greyed too while the Finder's front window is the Trash's),
   _Close_ ⌃W (the active document, dirty-checked — or, in the Finder role,
   the front folder window; Control, not ⌘, since the browser owns ⌘W — see
   the key equivalents note below), _Save_ ⌘S (an untitled's first save
