@@ -772,7 +772,8 @@ async function pickMenu(menuSel, itemValue) {
   await sleep(650);
 }
 
-// File → New… then Create at its default (Empty Document, 40px tiles).
+// File → New… then OK at its defaults (the next untitled name, Empty
+// Document, 40px tiles).
 async function newBlankDoc() {
   const before = (await probe()).docWindows;
   await pickMenu('#menu-file', 'new');
@@ -899,7 +900,7 @@ async function s1_virginBoot() {
   );
   const greet = await probe();
   check(
-    '…and parks at the About box in the Finder role: no document window, no New Document dialog, windoids hidden, strip blank',
+    '…and parks at the About box in the Finder role: no document window, no New dialog, windoids hidden, strip blank',
     seed.aboutOpen === true &&
       seed.newDialogOpen === false &&
       seed.docWindows === 0 &&
@@ -979,7 +980,7 @@ async function s4_firstWindowActivates() {
     created = await probe();
   }
   check(
-    'File → New… → Create opens the first window and ACTIVATES the application: windoids and strip up',
+    'File → New… → OK opens the first window and ACTIVATES the application: windoids and strip up',
     created.docWindows === 1 &&
       created.docActive === true &&
       created.windows.tools &&
@@ -2610,58 +2611,69 @@ async function s25_multipleDocuments() {
 }
 
 async function s26_newDocumentDialog() {
-  section('S26 the New Document dialog');
+  section('S26 the New dialog');
   await freshPage();
   await pickMenu('#menu-file', 'new');
   const newForm = () =>
     evaluate(`(() => {${DEEP}
       return {
         open: !!__q('#dlg-new').open,
+        name: String(__q('#new-name').value),
         tile: String(__q('#new-tile').value),
         tileDisabled: !!__q('#new-tile').disabled,
       };
     })()`);
-  // Rows are found by TEXT: vf-list-item's `value` is a property (only
-  // `selected` reflects), so an attribute selector can't reach it.
-  const newRowCentre = (text) =>
-    evaluate(`(() => {${DEEP}
-      const i = [...__q('#new-list').querySelectorAll('vf-list-item')]
+  // The template popup (the kit's vf-select), driven like the tip-shape
+  // one: a quick click drops the list, a second click picks. Options are
+  // found by TEXT — a template's name is the document's, data not copy.
+  const pickTemplate = async (text) => {
+    const pill = await centreOf('#new-template');
+    await click(pill.x, pill.y);
+    await sleep(250);
+    const opt = await evaluate(`(() => {${DEEP}
+      const o = [...__q('#new-template').querySelectorAll('vf-option')]
         .find((r) => r.textContent.trim() === '${text}');
-      const r = i.getBoundingClientRect();
+      const r = o.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     })()`);
+    await click(opt.x, opt.y);
+    await sleep(300);
+  };
   await until(async () => (await newForm()).open);
   const empty0 = await newForm();
-  const cubeRow = await newRowCentre('Cube');
-  await click(cubeRow.x, cubeRow.y);
+  await pickTemplate('Cube');
   await until(async () => (await newForm()).tileDisabled);
   const cube = await newForm();
-  const emptyRow = await newRowCentre('Empty Document');
-  await click(emptyRow.x, emptyRow.y);
+  await pickTemplate('Empty Document');
   await until(async () => !(await newForm()).tileDisabled);
   const empty = await newForm();
   check(
-    "a template row locks the tile field at the template's native size; Empty Document re-enables it",
+    "a template pick locks the tile field at the template's native size and the untouched name follows it; Empty Document hands both back",
     empty0.open &&
       !empty0.tileDisabled &&
       cube.tileDisabled &&
       cube.tile !== empty0.tile &&
-      !empty.tileDisabled,
+      cube.name !== empty0.name &&
+      !empty.tileDisabled &&
+      empty.name === empty0.name &&
+      empty.tile === empty0.tile,
     JSON.stringify({ empty0, cube, empty })
   );
-  // Type a custom size, then Create: clicking the button blurs the field,
-  // which commits the typed value before the click lands.
+  // Type a name (Tab keeps the box up), then a custom size, then OK:
+  // clicking the button blurs the field, which commits the typed value
+  // before the click lands.
+  await typeInto('#new-name', 'Test New', 'Tab');
   await evaluate(
     `(() => {${DEEP} const f = __q('#new-tile'); f.value = '';
       f.shadowRoot.querySelector('input').focus(); })()`
   );
   await typeText('12');
-  const createBtn = await centreOf('#btn-new-ok');
-  await click(createBtn.x, createBtn.y);
+  const okBtn = await centreOf('#btn-new-ok');
+  await click(okBtn.x, okBtn.y);
   let s = await settle((p) => p.docWindows === 2 && p.tileW === 12);
   check(
-    'Create opens a fresh untitled at the typed tile size',
-    s.heading === 'untitled' &&
+    'OK opens a fresh unsaved document under the typed name at the typed tile size',
+    s.heading === 'Test New' &&
       s.docWindows === 2 &&
       s.tileW === 12 &&
       s.anyModalOpen === false,
@@ -2669,11 +2681,13 @@ async function s26_newDocumentDialog() {
   );
   await pickMenu('#menu-file', 'new');
   await until(async () => (await newForm()).open);
-  const carRow = await newRowCentre('Car');
-  await dblclick(carRow.x, carRow.y);
+  await pickTemplate('Car');
+  await until(async () => (await newForm()).tileDisabled);
+  const okBtn2 = await centreOf('#btn-new-ok');
+  await click(okBtn2.x, okBtn2.y);
   s = await settle((p) => p.docWindows === 3 && p.tris > 100);
   check(
-    'double-clicking a template opens a fresh untitled copy of it',
+    'a template opens as a fresh copy wearing its name',
     s.heading === 'Car' && s.docWindows === 3 && s.tris > 100,
     JSON.stringify({ heading: s.heading, docWindows: s.docWindows, tris: s.tris })
   );
@@ -2867,7 +2881,7 @@ async function s28_browserResize() {
   const afterCreate = await layoutSnap();
   const s = await settle((p) => p.menuEnabled.arrangeValue === 'zoom', 2000);
   check(
-    'a resize behind the About box: Create lands every window where Arrange would (the ⌘J item reads the zoom state)',
+    'a resize behind the About box: OK in the New dialog lands every window where Arrange would (the ⌘J item reads the zoom state)',
     made?.docWindows === 1 &&
       afterCreate.wins.length === 4 &&
       s.menuEnabled.arrange === true &&

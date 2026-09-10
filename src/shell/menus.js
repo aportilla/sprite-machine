@@ -24,8 +24,8 @@
 // anything — the dirty check moved entirely to the close paths); opening an
 // already-open stored doc activates its existing window. Quit walks every
 // open document, one unsaved-changes alert per dirty one. File → New… raises
-// the New Document dialog (an empty atlas at a chosen tile size, or a
-// built-in template as a fresh untitled copy); the built-ins are otherwise
+// the New dialog (a name, and an empty atlas at a chosen tile size or a
+// built-in template as a fresh copy); the built-ins are otherwise
 // ordinary stored documents (seeded at the first-ever boot — loaders.js),
 // so the Open listing and the desktop icons know nothing special about them.
 //
@@ -436,63 +436,99 @@ export function initMenus(desktop, windows, panels) {
     return item;
   };
 
-  // --- the New Document dialog -------------------------------------------------
-  // Templates: Empty Document (an all-transparent atlas at a chosen tile
-  // size) or a built-in sample as a fresh untitled copy. The tile-size field
-  // is live for Empty Document only — a template's art has a NATIVE tile
-  // size, and a retile crops/pads rather than scales, so a template shows
-  // its own size disabled. Everything created here is an untitled window;
-  // explicit Save is what puts it in the library.
-  const newList = $('#new-list');
+  // --- the New dialog ---------------------------------------------------------
+  // Classic Photoshop's New box (Sep 9 2026): a Name over the Settings group —
+  // the template popup and the tile size — with OK over Cancel at the
+  // right. The NAME seeds with the next untitled name and FOLLOWS the
+  // template while untouched (Cube → "Cube", back to Empty → "untitled"),
+  // so a template copy still opens wearing its name; once typed in it is
+  // the user's and a template pick leaves it alone. The document opens
+  // UNSAVED under it — a first Save prompts with the name (saveThen), and
+  // explicit Save is still what puts it in the library. The TEMPLATES:
+  // Empty Document (an all-transparent atlas at the chosen tile size) or a
+  // built-in sample as a fresh copy. The tile field is live for Empty only —
+  // a template's art has a NATIVE tile size, and a retile crops/pads rather
+  // than scales, so a template shows its own size disabled. OK is greyed
+  // while the name is blank (the Save As prompt's rule); Return anywhere
+  // is OK by the dialog grammar. The retired list-box version (a template
+  // list over a tile field and an atlas-size readout, Create / Cancel in
+  // the footer) captured no name.
+  const newName = $('#new-name');
+  const newTemplate = $('#new-template');
   const newTile = $('#new-tile');
-  const newDims = $('#new-dims');
+  const btnNewOk = $('#btn-new-ok');
   newTile.min = TILE_MIN;
   newTile.max = TILE_MAX;
   const BLANK_TILE = 40; // the classic default (a 120×80 atlas)
-  // The Empty Document size, remembered across template flips WITHIN one
-  // dialog visit (a template shows its own size in the shared field), reset
-  // per open.
+  const BLANK = 'blank';
+  // The popup's options, built once: the samples are static. `value` goes
+  // on as an attribute so the option is addressable by it.
+  const option = (value, text) => {
+    const o = document.createElement('vf-option');
+    o.setAttribute('value', value);
+    o.textContent = text;
+    return o;
+  };
+  newTemplate.replaceChildren(
+    option(BLANK, 'Empty Document'),
+    ...SAMPLES.map((s, i) => option(`sample:${i}`, s.name))
+  );
+  /** The picked template's sample, or null for Empty Document. */
+  const pickedSample = () => {
+    const v = String(newTemplate.value);
+    return v === BLANK ? null : SAMPLES[+v.slice('sample:'.length)];
+  };
+  const typedName = () => String(newName.value ?? '').trim();
+  // Per visit: the Empty Document size, remembered across template flips
+  // (a template shows its own size in the shared field), and whether the
+  // name is still the dialog's own — following the template — or typed.
   let blankTile = BLANK_TILE;
+  let nameAuto = true;
 
   const syncNewForm = () => {
-    const v = newList.value;
-    if (v !== 'blank') {
+    const sample = pickedSample();
+    if (sample) {
       newTile.disabled = true;
-      newTile.value = String(SAMPLES[+v.slice('sample:'.length)].tile);
+      newTile.value = String(sample.tile);
     } else {
       if (newTile.disabled) newTile.value = String(blankTile); // back from a template
       newTile.disabled = false;
       blankTile = clampTile(+newTile.value || BLANK_TILE);
     }
-    const t = clampTile(+newTile.value || BLANK_TILE);
-    newDims.textContent = `atlas ${t * 3} × ${t * 2} px`;
+    btnNewOk.disabled = typedName() === '';
   };
   function showNewDialog() {
-    const rows = [listItem('blank', 'Empty Document')];
-    SAMPLES.forEach((s, i) => rows.push(listItem(`sample:${i}`, s.name)));
-    newList.replaceChildren(...rows);
-    // Reset per open (predictable over remembered): Empty at the default.
-    newList.value = 'blank';
+    // Reset per open (predictable over remembered): Empty at the default,
+    // the next untitled name, the name following the template.
+    newTemplate.value = BLANK;
     newTile.disabled = false;
     newTile.value = String(BLANK_TILE);
     blankTile = BLANK_TILE;
+    nameAuto = true;
+    newName.value = workspace.nextUntitledName();
     syncNewForm();
     dlgNew.show();
   }
   async function createFromNewDialog() {
-    const v = newList.value;
-    if (!v) return;
+    const name = typedName();
+    if (!name) return;
+    const sample = pickedSample();
     dlgNew.close();
-    const ctx =
-      v === 'blank'
-        ? loadBlank(clampTile(+newTile.value || BLANK_TILE))
-        : await loadSample(SAMPLES[+v.slice('sample:'.length)]);
+    const ctx = sample
+      ? await loadSample(sample, { name })
+      : loadBlank(clampTile(+newTile.value || BLANK_TILE), name);
     if (ctx) windows.activateContext(ctx.key);
   }
-  on(newList, 'vf-change', syncNewForm);
-  on(newList, 'dblclick', createFromNewDialog);
+  on(newTemplate, 'vf-change', () => {
+    if (nameAuto) newName.value = pickedSample()?.name ?? workspace.nextUntitledName();
+    syncNewForm();
+  });
+  on(newName, 'vf-input', () => {
+    nameAuto = false;
+    syncNewForm();
+  });
   on(newTile, 'vf-change', syncNewForm);
-  on($('#btn-new-ok'), 'click', createFromNewDialog);
+  on(btnNewOk, 'click', createFromNewDialog);
   on($('#btn-new-cancel'), 'click', () => dlgNew.close());
 
   // --- the Open dialog --------------------------------------------------------

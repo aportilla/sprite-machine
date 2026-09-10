@@ -393,9 +393,13 @@ the Undo/Redo enablement.
   every open document in turn, one unsaved-changes alert per dirty one with
   its window brought forward as it's asked about, Cancel anywhere aborting the
   rest). All four are live in both roles.
-- **File** — _New…_ (an Empty Document at a chosen square tile size — the
-  field is live for Empty only, a template's art having a native size — or a
-  built-in template as a fresh untitled copy), _New Folder_ (a **Finder
+- **File** — _New…_ (classic Photoshop's New box: a **Name** across the
+  top, seeded with the next untitled name and following the template popup
+  until typed in, over the **Settings** group — the template, Empty Document or
+  a built-in, and the square tile size, live for Empty only since a
+  template's art has a native size — with OK over Cancel at the right, OK
+  greyed while the name is blank; the document opens unsaved under that
+  name, so its first Save prompts with it), _New Folder_ (a **Finder
   command**: it brings the Finder forward, as a desktop click would, and makes
   _untitled folder_ in the front folder window else on the desktop, its name
   selected for typing; no key equivalent, System 7's ⌘N being the browser's;

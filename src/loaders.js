@@ -60,10 +60,14 @@ export function openSheet(
 }
 
 /** @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}} sample
- *  @param {{face?: string, hooks?: object|null,
+ *  @param {{name?: string, face?: string, hooks?: object|null,
  *           ring?: Partial<import('./state/ring-settings.js').RingSettings>|null}} [opts]
+ *    the copy's name (the New dialog's; the sample's own by default),
  *    boot-only editor dev hooks, and the ?ring hook's settings seed */
-export async function loadSample(sample, { face, hooks = null, ring = null } = {}) {
+export async function loadSample(
+  sample,
+  { name = sample.name, face, hooks = null, ring = null } = {}
+) {
   let image;
   try {
     image = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
@@ -76,10 +80,11 @@ export async function loadSample(sample, { face, hooks = null, ring = null } = {
     build.setError(`Sample "${sample.name}" is unusable: ${bad}`);
     return null;
   }
-  // A sample opens as a fresh untitled copy wearing the sample's name.
+  // A sample opens as a fresh unsaved copy wearing the sample's name, or
+  // the one the New dialog gave it.
   return openSheet(image, {
     transforms: { ...(sample.transforms || {}) },
-    name: sample.name,
+    name,
     face,
     hooks,
     ring,
@@ -122,12 +127,14 @@ export async function loadFile(f) {
 }
 
 // A fresh 3x2 sheet of empty (transparent) square tiles to draw from
-// scratch — every face reads empty until you paint it. The name counts up
-// over the open untitleds ("untitled", "untitled 2", …). `tile` is the
-// square tile size the New… dialog chose (clamped to the stepper's range).
-export const loadBlank = (tile = 40) => {
+// scratch — every face reads empty until you paint it. `tile` is the
+// square tile size the New… dialog chose (clamped to the stepper's range)
+// and `name` the name it captured; with none, the name counts up over the
+// open untitleds ("untitled", "untitled 2", …).
+/** @param {number} [tile]  @param {string} [name] */
+export const loadBlank = (tile = 40, name) => {
   const t = clampTile(tile);
-  return openSheet(new ImageData(t * 3, t * 2));
+  return openSheet(new ImageData(t * 3, t * 2), { name });
 };
 
 /**

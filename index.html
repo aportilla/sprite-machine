@@ -461,27 +461,60 @@
         <vf-button id="btn-about-ok" slot="buttons" variant="default">OK</vf-button>
       </vf-dialog>
 
-      <!-- The New Document dialog: a template list (Empty Document + the
-           built-ins, rows built by shell/menus.js from SAMPLES) over the
-           tile-size field. The field is live for Empty Document only — a
-           template's art has a native tile size, and a retile crops/pads
-           rather than scales, so templates show theirs disabled. The dims
-           label reads the resulting 3×2 atlas size. -->
-      <vf-dialog id="dlg-new" heading="New Document" width="360" height="200">
-        <vf-stack width="312" gap="10">
-          <vf-list id="new-list" fill-width aria-label="Templates"></vf-list>
-          <vf-stack fill-width direction="row" gap="8" place="start">
-            <vf-stack pad="4 0 0">
-              <vf-label width="80" for="new-tile">Tile size:</vf-label>
+      <!-- The New dialog (File → New…): classic Photoshop's New box — the
+           Name field across the top, a group box of what the document is
+           made of under it, OK over Cancel as a vertical group at the
+           right (the Save As box's corner, not the footer slot). The name
+           seeds with the next untitled name and follows the template popup
+           until typed in (shell/menus.js), so a copy of the Car still opens
+           as "Car"; the document opens UNSAVED under whatever it says, and
+           its first Save prompts with it. OK is greyed while the name is
+           blank, the Save As prompt's rule; Return anywhere is OK by the
+           dialog grammar. The group: the template popup (Empty Document +
+           the built-ins, options built once from SAMPLES) over the square
+           tile size, live for Empty Document only — a template's art has a
+           native tile size, and a retile crops/pads rather than scales, so
+           a template shows its own size disabled. No atlas readout: the
+           tile edge is the one number. Each row is a plain row stack, its
+           caption centred on the control by the stack's row default.
+           Arithmetic, for the eye: 20 (bar + band) + 16 pad + [the 22 name
+           row + 12 + the group: 8 legend room + 1 + 14 + an 18 popup row +
+           12 + a 25 field row + 10 + 1 = 89] + 16 + 5 = 180, taken as 184;
+           across, 5 + 16 + 288 (an 80 caption, 8, a 200 field) + 16 + the
+           button column + 16 + 5. -->
+      <vf-dialog id="dlg-new" heading="New" width="436" height="184">
+        <vf-stack direction="row" gap="16" place="start">
+          <vf-stack gap="12">
+            <vf-stack direction="row" gap="8">
+              <vf-label width="80" for="new-name">Name:</vf-label>
+              <vf-text-field
+                id="new-name"
+                style="--vf-field-width: 200px"
+              ></vf-text-field>
             </vf-stack>
-            <vf-number-field id="new-tile" min="1" max="64" step="1"></vf-number-field>
-            <vf-stack pad="4 0 0">
-              <vf-label id="new-dims"></vf-label>
-            </vf-stack>
+            <vf-fieldset legend="Settings" fill-width>
+              <vf-stack gap="12">
+                <vf-stack direction="row" gap="8">
+                  <vf-label width="80" for="new-template">Template:</vf-label>
+                  <vf-select id="new-template"></vf-select>
+                </vf-stack>
+                <vf-stack direction="row" gap="8">
+                  <vf-label width="80" for="new-tile">Tile size:</vf-label>
+                  <vf-number-field
+                    id="new-tile"
+                    min="1"
+                    max="64"
+                    step="1"
+                  ></vf-number-field>
+                </vf-stack>
+              </vf-stack>
+            </vf-fieldset>
           </vf-stack>
+          <vf-button-group vertical style="--vf-button-group-gap: 7px">
+            <vf-button id="btn-new-ok" variant="default">OK</vf-button>
+            <vf-button id="btn-new-cancel">Cancel</vf-button>
+          </vf-button-group>
         </vf-stack>
-        <vf-button id="btn-new-cancel" slot="buttons">Cancel</vf-button>
-        <vf-button id="btn-new-ok" slot="buttons" variant="default">Create</vf-button>
       </vf-dialog>
 
       <!-- The Open listing: the System 7 file-picker posture — the plain
