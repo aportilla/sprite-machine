@@ -27,6 +27,7 @@
       <vf-menu-bar shortcuts>
         <vf-menu id="menu-app" label="Sprite Machine">
           <vf-menu-item value="about">About Sprite Machine…</vf-menu-item>
+          <vf-separator></vf-separator>
           <!-- The Desktop Patterns control panel (shell/patterns.js): a
                window, not a dialog, so no ellipsis — the Apple menu's
                Control Panels listed it bare. App-level like About, live in
@@ -45,8 +46,6 @@
                listing), which on a virgin profile is this `disabled`. No
                key equivalent, as System 7 gave it none. -->
           <vf-menu-item value="empty-trash" disabled>Empty Trash…</vf-menu-item>
-          <vf-separator></vf-separator>
-          <vf-menu-item value="quit">Quit</vf-menu-item>
         </vf-menu>
         <vf-menu id="menu-file" label="File">
           <!-- New…'s key is ⌃N — the Control key alone (the kit's ⌃ means
@@ -85,6 +84,14 @@
           <vf-menu-item value="download" shortcut="⇧⌘E">Download</vf-menu-item>
           <vf-menu-item value="export-model">Export 3D Model…</vf-menu-item>
           <vf-menu-item value="export-atlas">Export Sprite Atlas…</vf-menu-item>
+          <vf-separator></vf-separator>
+          <!-- Quit (shell/menus.js): the System 7 cascade over the open
+               documents, so live exactly while a document window is open —
+               in either role, a document behind the Finder still counting —
+               and boots `disabled` to match the empty workspace, like
+               Undo/Redo. Its key is ⌃Q on Close's reasoning: ⌘Q is the
+               browser's before the page sees it. -->
+          <vf-menu-item value="quit" shortcut="⌃Q" disabled>Quit</vf-menu-item>
         </vf-menu>
         <vf-menu id="menu-edit" label="Edit">
           <vf-menu-item value="undo" shortcut="⌘Z" disabled>Undo</vf-menu-item>

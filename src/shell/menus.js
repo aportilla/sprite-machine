@@ -678,9 +678,6 @@ export function initMenus(desktop, windows, panels) {
         // moves. Greyed while the Trash is empty (syncTrash below).
         showEmptyTrash();
         break;
-      case 'quit':
-        quit();
-        break;
     }
   });
 
@@ -776,6 +773,9 @@ export function initMenus(desktop, windows, panels) {
       case 'export-atlas':
         showRingDialog();
         break;
+      case 'quit':
+        quit();
+        break;
     }
   });
 
@@ -863,8 +863,9 @@ export function initMenus(desktop, windows, panels) {
   // --- focus gating ------------------------------------------------------------
   // Two roles share one menu bar (the single-application affordance): with
   // the desktop focused, every document-scoped item greys out. About /
-  // Desktop Patterns / Quit / New / New Folder stay — they're app-level
-  // (New… ⌃N opens a document from either role); the ⌘J item (Arrange
+  // Desktop Patterns / New / New Folder stay — they're app-level
+  // (New… ⌃N opens a document from either role); Quit keeps its own gate
+  // below (an open document window, whichever role); the ⌘J item (Arrange
   // Windows — its value the arrange / zoom) keeps its own gate below (an
   // open document window, and the windows' state); the View menu's
   // open-windows items (syncWindows below) are live in both roles — a pick
@@ -923,6 +924,16 @@ export function initMenus(desktop, windows, panels) {
   };
   teardown.push(files.subscribe(syncTrash));
   syncTrash();
+
+  // Quit is live exactly while a document window is open — the cascade
+  // walks the open documents, so with none there is nothing to quit — in
+  // both roles alike: a document window behind the Finder still counts.
+  const itemQuit = $('vf-menu-item[value="quit"]');
+  const syncQuit = () => {
+    itemQuit.disabled = workspace.get().contexts.length === 0;
+  };
+  teardown.push(workspace.subscribe(syncQuit));
+  syncQuit();
 
   // --- Arrange Windows: one item, ⌘J, a STATE rule -------------------------------
   // The View menu's ⌘J item carries two commands, and which one is a

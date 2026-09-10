@@ -138,7 +138,7 @@ dropped file). Run against `npm run dev` in a normal browser,
 ## Documents and state
 
 - [ ] **The quit cascade with three documents**: one clean and two dirty —
-      Sprite Machine → Quit walks each dirty window forward with its own
+      File → Quit walks each dirty window forward with its own
       Yes / No / Cancel; Cancel mid-walk keeps the remaining windows; a
       completed quit leaves the bare desktop, and the next open restores
       the windoid arrangement.

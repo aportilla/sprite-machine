@@ -347,8 +347,8 @@ active window?**
   slotted light DOM, so only the page knows which presses mean "the Finder".
   Every document window goes plain, the windoids **hide**, the options strip
   hides with them, the bare-letter tool keys go inert, and the menus drop to
-  the **Finder grammar** — About / Desktop Patterns / Quit / Empty Trash… /
-  New… / New Folder stay enabled (see [Menu bar](#menu-bar)). The icon
+  the **Finder grammar** — About / Desktop Patterns / Empty Trash… / New… /
+  New Folder / Quit stay enabled (see [Menu bar](#menu-bar)). The icon
   selection **survives the trip to the menu bar**, since a press on the
   application's chrome is no press on the desktop; the kit's `vf-icon` would
   clear on it, so `shell/icons.js` re-selects across that press — a page-side
@@ -387,11 +387,9 @@ the Undo/Redo enablement.
 ### Menu bar
 
 - **Sprite Machine** — _About…_ (also the boot greeting), _Desktop
-  Patterns_ (a window, not a dialog, so no ellipsis), _Empty Trash…_ (greyed
-  while the Trash is empty, no key equivalent), _Quit_ (the System 7 cascade:
-  every open document in turn, one unsaved-changes alert per dirty one with
-  its window brought forward as it's asked about, Cancel anywhere aborting the
-  rest). All four are live in both roles.
+  Patterns_ (a window, not a dialog, so no ellipsis) and _Empty Trash…_
+  (greyed while the Trash is empty, no key equivalent). All three are live in
+  both roles.
 - **File** — _New…_ ⌃N (classic Photoshop's New box: a **Name** across the
   top, seeded with the next untitled name and following the template popup
   until typed in, over the **Settings** group — the template, Empty Document or
@@ -412,8 +410,11 @@ the Undo/Redo enablement.
   the key equivalents note below), _Save_ ⌘S (an untitled's first save
   prompts for a name), _Duplicate_ ⌘D, _Rename…_, _Download_ ⇧⌘E (the
   document `.png` verbatim — the downloaded atlas IS the source format, hence
-  Download rather than Export, and no ellipsis: it acts immediately), and the
-  two exports.
+  Download rather than Export, and no ellipsis: it acts immediately), the two
+  exports, and _Quit_ ⌃Q (the System 7 cascade: every open document in turn,
+  one unsaved-changes alert per dirty one with its window brought forward as
+  it's asked about, Cancel anywhere aborting the rest; live in both roles,
+  greyed with no document window open, since there is nothing to quit).
 - **Export 3D Model…** writes the model as **one glTF 2.0 binary** from the
   engine's own writer (`gltf.js`, through its `modelToGlb` — the headless
   path and the menu are one function; three's `GLTFExporter` encodes a texture
@@ -485,11 +486,12 @@ the Undo/Redo enablement.
   chrome, not a menu: a press keeps the Finder selection, never deactivates
   the application, and takes no focus.
 
-Key equivalents are the kit's own (Ctrl stands in for ⌘ off-Mac). ⌘N/⌘W stay
-unassigned on purpose — the browser owns them before the page sees them.
-New and Close answer **⌃N** and **⌃W** instead, the Control key alone (the
-kit's ⌃ never stands in for ⌘): ⌃W is the one W chord a Mac browser leaves
-to the page, ⌥W typing ∑, and ⌃N is N's. The trade is off-Mac, where Ctrl+W
+Key equivalents are the kit's own (Ctrl stands in for ⌘ off-Mac). ⌘N/⌘W/⌘Q
+stay unassigned on purpose — the browser owns them before the page sees
+them. New, Close and Quit answer **⌃N**, **⌃W** and **⌃Q** instead, the
+Control key alone (the kit's ⌃ never stands in for ⌘): ⌃W is the one W
+chord a Mac browser leaves to the page, ⌥W typing ∑, and ⌃N is N's. The
+trade is off-Mac, where Ctrl+W
 and Ctrl+N are the browser's own Close Tab and New Window, reserved — the
 items show the keys there and never fire. A disabled item claims nothing, so
 with no document open ⌘J falls through to

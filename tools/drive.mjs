@@ -2566,7 +2566,7 @@ async function s25_multipleDocuments() {
   const q2 = await at(2, 2);
   await click(q2.x, q2.y);
   await painted(2, 2);
-  await pickMenu('#menu-app', 'quit');
+  await pickMenu('#menu-file', 'quit');
   const alert1 = await settle((q) => q.anyModalOpen);
   const cancelBtn = await centreOf('#btn-unsaved-cancel');
   await click(cancelBtn.x, cancelBtn.y);
@@ -2576,7 +2576,7 @@ async function s25_multipleDocuments() {
     alert1.anyModalOpen === true && s.docWindows === 2 && s.anyModalOpen === false,
     JSON.stringify({ alert: alert1.anyModalOpen, docWindows: s.docWindows })
   );
-  await pickMenu('#menu-app', 'quit');
+  await pickMenu('#menu-file', 'quit');
   await settle((q) => q.anyModalOpen);
   const dont2 = await centreOf('#btn-unsaved-dont');
   await click(dont2.x, dont2.y);
