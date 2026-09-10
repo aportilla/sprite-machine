@@ -139,17 +139,20 @@ export class SmColorPicker extends LitElement {
         <!-- The stated width (the grid's own box: 21 collapsed 13px cells + the
              closing border) is what lets the form row's fill-width field
              resolve — unstated, the stack sizes to content and overflows the
-             dialog's clipped content region, shearing off the field's right
-             border. The dialog's box is sized to hold it: the kit's modal
-             frame (vintage-frames ≥ 0.5.0, the dBoxProc double frame) takes
-             5px per side and the title bar 20px from the top, and the body
-             pads 16px — so content width = width − 42, and 317 leaves the
-             274px stack its 1px of slack (309 fit the 0.4.0 1px frame; under
-             the double frame it clipped the grid and raised the kit's scroll
-             rail). The bottom pad keeps the preview swatch's hard shadow and
-             the field's focus rule (both painted OUTSIDE their boxes) inside
-             that same clip — the row is the region's last line. -->
-        <vf-stack width="274" gap="10" pad="0 0 4">
+             dialog's clipped body, shearing off the field's right border.
+             The dialog's box is sized to hold it: the kit's modal frame (the
+             dBoxProc double frame) takes 5px per side and the title bar 20px
+             from the top, and the body — the frame's inner edge, with no
+             inset of its own since vintage-frames 0.8.0 — is the placement
+             anchor, so the stack is placed 16 in from its corner (the inset
+             the body used to carry) and the buttons are a group placed by
+             its bottom-right corner (origin) 16 in from the body's: 317
+             wide is a 307 body, the corner at 291; 273 high a 248 body, the
+             corner at 232. The bottom pad keeps the preview swatch's hard
+             shadow and the field's focus rule (both painted OUTSIDE their
+             boxes) inside the body's clip — the row is the stack's last
+             line. -->
+        <vf-stack width="274" gap="10" pad="0 0 4" left="16" top="16">
           <vf-grid
             class="editor-picker-grid"
             columns="21"
@@ -217,20 +220,18 @@ export class SmColorPicker extends LitElement {
             ></vf-text-field>
           </vf-stack>
         </vf-stack>
-        <vf-button
-          class="picker-cancel"
-          slot="buttons"
-          @click=${() => session.closePicker()}
-          >Cancel</vf-button
-        >
-        <vf-button
-          class="picker-ok"
-          slot="buttons"
-          variant="default"
-          ?disabled=${!valid}
-          @click=${() => this.#commit()}
-          >OK</vf-button
-        >
+        <vf-button-group origin="bottom right" left="291" top="232">
+          <vf-button class="picker-cancel" @click=${() => session.closePicker()}
+            >Cancel</vf-button
+          >
+          <vf-button
+            class="picker-ok"
+            variant="default"
+            ?disabled=${!valid}
+            @click=${() => this.#commit()}
+            >OK</vf-button
+          >
+        </vf-button-group>
       </vf-dialog>
     `;
   }

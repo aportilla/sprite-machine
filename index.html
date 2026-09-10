@@ -426,13 +426,18 @@
            it) — and OK bottom right. The version and date lines are BUILD
            facts, so the markup boots them empty and shell/menus.js fills
            them (package.json's version, HEAD's commit date — vite.config.js
-           `define`); the markup never carries a stale number. Arithmetic:
-           the plain frame's body begins 5px inside every edge and pads 16
-           (the kit), so 464 wide is a 416 content measure, and 198 high is
-           5 + 16 + [40 header (a 16px display line over two 12px body
-           lines, beside the 32px icon) + 8 + two 2-line paragraphs at 12px
-           body lines with 16 between (64)] + the 44 footer (16 above the
-           ringed 28px default button) + 16 + 5. -->
+           `define`); the markup never carries a stale number. The dialog's
+           anatomy (vintage-frames 0.8.0): the body is the frame's inner
+           edge — 5px inside every edge of the plain frame, no inset of its
+           own — and the placement anchor, so the copy is a stack placed 16
+           in from its corner (the DITL's inset, the content's to state) and
+           the buttons are a group placed by its bottom-right corner
+           (`origin`) 16 in from the body's. Arithmetic: 464 wide is a 454
+           body, the group's corner at 438; 198 high is a 188 body, the
+           corner at 172 — 16 + [40 header (a 16px display line over two
+           12px body lines, beside the 32px icon) + 8 + two 2-line paragraphs
+           at 12px body lines with 16 between (64)] + 16 + the ringed 28px
+           default button + 16. -->
       <vf-dialog
         id="dlg-about"
         frame="plain"
@@ -441,7 +446,7 @@
         width="464"
         height="198"
       >
-        <vf-stack width="416" gap="8">
+        <vf-stack width="416" gap="8" left="16" top="16">
           <vf-stack direction="row" gap="8" place="start">
             <vf-img width="32" height="32">
               <img src="src/assets/sprite-machine-icon.png" alt="" />
@@ -471,13 +476,17 @@
             </vf-paragraph>
           </vf-stack>
         </vf-stack>
-        <vf-button id="btn-about-ok" slot="buttons" variant="default">OK</vf-button>
+        <vf-button-group origin="bottom right" left="438" top="172">
+          <vf-button id="btn-about-ok" variant="default">OK</vf-button>
+        </vf-button-group>
       </vf-dialog>
 
       <!-- The New dialog (File → New…): classic Photoshop's New box — the
            Name field across the top, a group box of what the document is
            made of under it, OK over Cancel as a vertical group at the
-           right (the Save As box's corner, not the footer slot). The name
+           right (the Save As box's corner: placed by its own top-right
+           corner, `origin`, 16 in from the body's, so it stays flush
+           however wide its labels measure). The name
            seeds with the next untitled name and follows the template popup
            until typed in (shell/menus.js), so a copy of the Car still opens
            as "Car"; the document opens UNSAVED under whatever it says, and
@@ -489,45 +498,49 @@
            native tile size, and a retile crops/pads rather than scales, so
            a template shows its own size disabled. No atlas readout: the
            tile edge is the one number. Each row is a plain row stack, its
-           caption centred on the control by the stack's row default.
-           Arithmetic, for the eye: 20 (bar + band) + 16 pad + [the 22 name
-           row + 12 + the group: 8 legend room + 1 + 14 + an 18 popup row +
-           12 + a 25 field row + 10 + 1 = 89] + 16 + 5 = 180, taken as 184;
-           across, 5 + 16 + 288 (an 80 caption, 8, a 200 field) + 16 + the
-           button column + 16 + 5. -->
+           caption centred on the control by the stack's row default. The
+           body (the frame's inner edge, 20 below the top under the bar and
+           5 inside the other edges — no inset of its own) is the anchor:
+           the form is placed 16 in from its corner. Arithmetic, for the
+           eye: 184 high is a 159 body — 16 + [the 22 name row + 12 + the
+           group: 8 legend room + 1 + 14 + an 18 popup row + 12 + a 25 field
+           row + 10 + 1 = 89] + slack; 436 wide is a 426 body — 16 + 288
+           (an 80 caption, 8, a 200 field) + the button column's room, its
+           corner at 410 (16 in). -->
       <vf-dialog id="dlg-new" heading="New" width="436" height="184">
-        <vf-stack direction="row" gap="16" place="start">
-          <vf-stack gap="12">
-            <vf-stack direction="row" gap="8">
-              <vf-label width="80" for="new-name">Name:</vf-label>
-              <vf-text-field
-                id="new-name"
-                style="--vf-field-width: 200px"
-              ></vf-text-field>
-            </vf-stack>
-            <vf-fieldset legend="Settings" fill-width>
-              <vf-stack gap="12">
-                <vf-stack direction="row" gap="8">
-                  <vf-label width="80" for="new-template">Template:</vf-label>
-                  <vf-select id="new-template"></vf-select>
-                </vf-stack>
-                <vf-stack direction="row" gap="8">
-                  <vf-label width="80" for="new-tile">Tile size:</vf-label>
-                  <vf-number-field
-                    id="new-tile"
-                    min="1"
-                    max="64"
-                    step="1"
-                  ></vf-number-field>
-                </vf-stack>
-              </vf-stack>
-            </vf-fieldset>
+        <vf-stack gap="12" left="16" top="16">
+          <vf-stack direction="row" gap="8">
+            <vf-label width="80" for="new-name">Name:</vf-label>
+            <vf-text-field id="new-name" style="--vf-field-width: 200px"></vf-text-field>
           </vf-stack>
-          <vf-button-group vertical style="--vf-button-group-gap: 7px">
-            <vf-button id="btn-new-ok" variant="default">OK</vf-button>
-            <vf-button id="btn-new-cancel">Cancel</vf-button>
-          </vf-button-group>
+          <vf-fieldset legend="Settings" fill-width>
+            <vf-stack gap="12">
+              <vf-stack direction="row" gap="8">
+                <vf-label width="80" for="new-template">Template:</vf-label>
+                <vf-select id="new-template"></vf-select>
+              </vf-stack>
+              <vf-stack direction="row" gap="8">
+                <vf-label width="80" for="new-tile">Tile size:</vf-label>
+                <vf-number-field
+                  id="new-tile"
+                  min="1"
+                  max="64"
+                  step="1"
+                ></vf-number-field>
+              </vf-stack>
+            </vf-stack>
+          </vf-fieldset>
         </vf-stack>
+        <vf-button-group
+          vertical
+          origin="top right"
+          left="410"
+          top="16"
+          style="--vf-button-group-gap: 7px"
+        >
+          <vf-button id="btn-new-ok" variant="default">OK</vf-button>
+          <vf-button id="btn-new-cancel">Cancel</vf-button>
+        </vf-button-group>
       </vf-dialog>
 
       <!-- One name-prompt dialog, two uses (first save / rename): the
@@ -535,22 +548,32 @@
            no volume list, no format radios), on the same plain dBoxProc
            frame as the Save-changes box: the caption over the field at the
            left, Save (the default) over Cancel as a vertical group at the
-           right; Save stays DISABLED until the field holds a name
-           (shell/menus.js keeps it in step with the text, and swaps the
-           caption, the accessible label and the default button's text per
-           use). Escape reads as Cancel; no bar, no close box. -->
+           right — placed by its own top-right corner (`origin`) 16 in from
+           the body's, whatever the button's word measures; Save stays
+           DISABLED until the field holds a name (shell/menus.js keeps it in
+           step with the text, and swaps the caption, the accessible label
+           and the default button's text per use). Escape reads as Cancel;
+           no bar, no close box. Placed from the body's corner (the frame's
+           inner edge, 5 in), the DITL's 16 inset stated on each item: 340
+           wide is a 330 body, the group's corner at 314. -->
       <vf-dialog id="dlg-name" frame="plain" label="Save" width="340" height="96">
-        <vf-label id="name-caption" for="name-field" left="0" top="0"
+        <vf-label id="name-caption" for="name-field" left="16" top="16"
           >Save document as:</vf-label
         >
         <vf-text-field
           id="name-field"
           value=""
-          left="0"
-          top="22"
+          left="16"
+          top="38"
           style="--vf-field-width: 200px"
         ></vf-text-field>
-        <vf-button-group vertical left="216" top="0" style="--vf-button-group-gap: 7px">
+        <vf-button-group
+          vertical
+          origin="top right"
+          left="314"
+          top="16"
+          style="--vf-button-group-gap: 7px"
+        >
           <vf-button id="btn-name-ok" variant="default" disabled>Save</vf-button>
           <vf-button id="btn-name-cancel">Cancel</vf-button>
         </vf-button-group>
@@ -561,12 +584,15 @@
            the active document at show and READ AT OK (shell/menus.js), so
            a step or a typed value moves nothing behind the modal; Return is
            OK by the kit's dialog grammar, Escape reads as Cancel. The
-           retired Properties… retiled live on every change. Arithmetic:
-           20 (bar + band) + 16 pad + one 25px row + the 44 footer + 16 + 5
-           = 126, taken in the way the export dialogs' heights were, for
-           the eye. -->
+           retired Properties… retiled live on every change. The form is
+           placed 16 in from the body's corner and the buttons are a group
+           placed by its bottom-right corner (`origin`) 16 in from the
+           body's — the footer every form dialog here shares. Arithmetic:
+           130 high is a 105 body (20 under the bar, 5 above the bottom),
+           the corner at 89 — 16 + one 25px row + slack + the ringed 28px
+           group + 16; 340 wide is a 330 body, the corner at 314. -->
       <vf-dialog id="dlg-tile" heading="Tile Size" width="340" height="130">
-        <vf-stack width="292" gap="12">
+        <vf-stack width="292" gap="12" left="16" top="16">
           <vf-stack fill-width direction="row" gap="8" place="start">
             <vf-stack pad="4 0 0">
               <vf-label width="80" for="tile-size">Tile size:</vf-label>
@@ -574,8 +600,10 @@
             <vf-number-field id="tile-size" min="1" max="64" step="1"></vf-number-field>
           </vf-stack>
         </vf-stack>
-        <vf-button id="btn-tile-cancel" slot="buttons">Cancel</vf-button>
-        <vf-button id="btn-tile-ok" slot="buttons" variant="default">OK</vf-button>
+        <vf-button-group origin="bottom right" left="314" top="89">
+          <vf-button id="btn-tile-cancel">Cancel</vf-button>
+          <vf-button id="btn-tile-ok" variant="default">OK</vf-button>
+        </vf-button-group>
       </vf-dialog>
 
       <!-- The unsaved-changes alert: the classic "Save changes before
@@ -586,7 +614,9 @@
            Escape reads as Cancel), the question wrapping across the top,
            Yes (the default) over No as a vertical button group at the left,
            Cancel alone at the bottom right. Every item placed by top/left
-           in the content area; the ids are the wiring (shell/menus.js). -->
+           from the body's corner — the frame's inner edge, 5 in, since
+           vintage-frames 0.8.0 (the numbers are the kit's own, traced from
+           the capture); the ids are the wiring (shell/menus.js). -->
       <vf-dialog
         id="dlg-unsaved"
         frame="plain"
@@ -598,14 +628,14 @@
           face="display"
           id="unsaved-msg"
           width="240"
-          left="3"
-          top="0"
+          left="19"
+          top="16"
         ></vf-paragraph>
-        <vf-button-group vertical left="1" top="54" style="--vf-button-group-gap: 7px">
+        <vf-button-group vertical left="17" top="70" style="--vf-button-group-gap: 7px">
           <vf-button id="btn-unsaved-save" variant="default">Yes</vf-button>
           <vf-button id="btn-unsaved-dont">No</vf-button>
         </vf-button-group>
-        <vf-button id="btn-unsaved-cancel" left="186" top="85">Cancel</vf-button>
+        <vf-button id="btn-unsaved-cancel" left="202" top="101">Cancel</vf-button>
       </vf-dialog>
 
       <!-- The Empty Trash alert (shell/menus.js): the Finder's — "The Trash
@@ -618,28 +648,36 @@
            default (Return; Escape reads as Cancel). No caution icon yet:
            the kit ships no alert, its recipe is a row stack with a 32×32
            vf-img at the left, and the unsaved box carries none either —
-           the day the user draws one, both take it. Placed by top/left in
-           the content area; the numbers are for the eye. -->
+           the day the user draws one, both take it. The question is placed
+           from the body's corner at the unsaved box's inset; the buttons
+           are one group (equal widths, faces on a line) placed by its
+           bottom-right corner (`origin`) 16 in from the body's — 360 wide
+           is a 350 body, the corner at 334; 150 high a 140 body, the
+           corner at 124 — so however the words measure, nothing runs
+           under the frame. -->
       <vf-dialog
         id="dlg-empty-trash"
         frame="plain"
         label="Empty Trash"
-        width="340"
+        width="360"
         height="150"
       >
         <vf-paragraph
           face="display"
           id="empty-trash-msg"
           width="320"
-          left="3"
-          top="0"
+          left="19"
+          top="16"
         ></vf-paragraph>
-        <vf-button id="btn-empty-trash-cancel" left="170" top="95">Cancel</vf-button>
-        <vf-button id="btn-empty-trash-ok" variant="default" left="246" top="95"
-          >OK</vf-button
-        >
+        <vf-button-group origin="bottom right" left="334" top="124">
+          <vf-button id="btn-empty-trash-cancel">Cancel</vf-button>
+          <vf-button id="btn-empty-trash-ok" variant="default">OK</vf-button>
+        </vf-button-group>
       </vf-dialog>
 
+      <!-- The copy placed 16 in from the body's corner, OK a group placed by
+           its bottom-right corner 16 in from the body's: 380 wide is a 370
+           body, the corner at 354; 170 high a 145 body, the corner at 129. -->
       <vf-dialog
         id="dlg-storage"
         heading="Storage Unavailable"
@@ -647,14 +685,16 @@
         width="380"
         height="170"
       >
-        <vf-stack width="332" gap="10">
+        <vf-stack width="332" gap="10" left="16" top="16">
           <vf-paragraph>
             Documents can’t be saved in this browser session (storage is unavailable — a
             private window, perhaps). Everything else works; use File → Download to keep
             your work as a .png.
           </vf-paragraph>
         </vf-stack>
-        <vf-button id="btn-storage-ok" slot="buttons" variant="default">OK</vf-button>
+        <vf-button-group origin="bottom right" left="354" top="129">
+          <vf-button id="btn-storage-ok" variant="default">OK</vf-button>
+        </vf-button-group>
       </vf-dialog>
 
       <!-- The export configurators. Unlike Download (the document .png
@@ -669,13 +709,15 @@
            and two readouts, the model (its triangles and skin) and its
            extent in meters at the scale typed, live. The fields are the
            dialog's own for the session (ten and lit every load); Export is
-           enabled whenever a model exists, like the atlas's. Arithmetic:
-           20 (bar + band) + 16 pad + four 25px rows with 12 between (136)
-           + the 44 footer + 16 + 5 = 237, rounded up to 264 the way the
-           atlas dialog's five rows land on 300 (the kit's own footer
-           measure). -->
+           enabled whenever a model exists, like the atlas's. The form is
+           placed 16 in from the body's corner, the buttons a group placed
+           by its bottom-right corner (`origin`) 16 in from the body's: 360
+           wide is a 350 body, the corner at 334; 220 high is a 195 body
+           (20 under the bar, 5 above the bottom), the corner at 179 — the
+           rows from 16 down, the ringed 28px group up from there, for the
+           eye. -->
       <vf-dialog id="dlg-export-model" heading="Export 3D Model" width="360" height="220">
-        <vf-stack width="312" gap="12">
+        <vf-stack width="312" gap="12" left="16" top="16">
           <vf-stack fill-width direction="row" gap="8" place="start">
             <vf-stack pad="4 0 0">
               <vf-label width="80" for="model-scale">Scale:</vf-label>
@@ -717,10 +759,12 @@
             </vf-stack>
           </vf-stack>
         </vf-stack>
-        <vf-button id="btn-export-model-cancel" slot="buttons">Cancel</vf-button>
-        <vf-button id="btn-export-model-ok" slot="buttons" variant="default" disabled>
-          Export
-        </vf-button>
+        <vf-button-group origin="bottom right" left="334" top="179">
+          <vf-button id="btn-export-model-cancel">Cancel</vf-button>
+          <vf-button id="btn-export-model-ok" variant="default" disabled
+            >Export</vf-button
+          >
+        </vf-button-group>
       </vf-dialog>
 
       <!-- Export Sprite Atlas: the 3D Sprite Atlas windoid's settings as a
@@ -736,18 +780,19 @@
            exactly the pixels the strip shows (the same rendered sheet) as
            «slug»-atlas.zip — the sheet PNG with a sprite-machine:ring text
            chunk beside its TexturePacker JSON; it's enabled whenever a
-           model exists. Arithmetic: 20 (bar + band) + 16
-           pad + five 25px rows (the kit's stepper-tall number field sets
-           the pitch; the readout row matches) with 12 between (173) + the
-           44 footer + 16 + 5 = 274, rounded up to the 300 the kit's own
-           footer measure lands on (the parked 3-row form was 230). -->
+           model exists. The form is placed 16 in from the body's corner
+           (the kit's stepper-tall number field sets the row pitch; the
+           readout row matches), the buttons a group placed by its
+           bottom-right corner (`origin`) 16 in from the body's: 360 wide
+           is a 350 body, the corner at 334; 266 high is a 241 body, the
+           corner at 225. -->
       <vf-dialog
         id="dlg-export-atlas"
         heading="Export Sprite Atlas"
         width="360"
         height="266"
       >
-        <vf-stack width="312" gap="12">
+        <vf-stack width="312" gap="12" left="16" top="16">
           <vf-stack fill-width direction="row" gap="8" place="start">
             <vf-stack pad="4 0 0">
               <vf-label width="80" for="atlas-views">Views:</vf-label>
@@ -803,10 +848,12 @@
             </vf-stack>
           </vf-stack>
         </vf-stack>
-        <vf-button id="btn-export-atlas-cancel" slot="buttons">Cancel</vf-button>
-        <vf-button id="btn-export-atlas-ok" slot="buttons" variant="default" disabled>
-          Export
-        </vf-button>
+        <vf-button-group origin="bottom right" left="334" top="225">
+          <vf-button id="btn-export-atlas-cancel">Cancel</vf-button>
+          <vf-button id="btn-export-atlas-ok" variant="default" disabled
+            >Export</vf-button
+          >
+        </vf-button-group>
       </vf-dialog>
 
       <!-- The Colors dialog (the 168-color picker): connected chrome driven by
