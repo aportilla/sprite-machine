@@ -51,7 +51,9 @@ the toggleable **3D Sprite Atlas** (the model rendered orthographically from a
 ring of angles, the rotation set an engine consumes, and what File → Export
 Sprite Atlas… saves). Documents live as **files on the desktop**, saved in the
 browser and reopened by double-clicking their icons, with **folders** to file
-them in and the **Trash** to delete them by. Clicking the desktop is
+them in and the **Trash** to delete them by — beside the **read-me text
+files** the app ships, opened into TeachText's window (see
+[Text files](#text-files)). Clicking the desktop is
 "switching to the Finder": the application deactivates, its windoids hide, and
 the menus fall back to the desktop's grammar. See
 [The desktop](#the-desktop).
@@ -61,7 +63,10 @@ saved files. They are created once and never come back: the profile records
 the seeding (a `seeded` flag written only once every built-in is stored), and
 that record, not the mere presence of state, suppresses it — so a first boot
 cut short by a reload finishes seeding on the next one, nothing doubled, while
-deleting or emptying later never resurrects them.
+deleting or emptying later never resurrects them. The **built-in text files**
+(`src/texts/`, the Read Me) seed the same way on a record of their own,
+`seededTexts`, since they arrived after every profile's first record was
+written: a profile from before them gets them on its next boot, once.
 
 Every load **boots to the About box** (see [The About box](#the-about-box)).
 OK it, or click outside it, and the bare desktop is yours — unless the URL
@@ -390,7 +395,8 @@ the Undo/Redo enablement.
   folder window else on the desktop, its name selected for typing; no key
   equivalent; greyed too while the Finder's front window is the Trash's),
   _Close_ ⌃W (the active document, dirty-checked — or, in the Finder role,
-  the front folder window; Control, not ⌘, since the browser owns ⌘W — see
+  the front folder window, else the front text window; Control, not ⌘,
+  since the browser owns ⌘W — see
   the key equivalents note below), _Save_ ⌘S (an untitled's first save
   prompts for a name), _Duplicate_ ⌘D, _Rename…_, _Download_ ⇧⌘E (the
   document `.png` verbatim — the downloaded atlas IS the source format, hence
@@ -496,7 +502,8 @@ double-firing them.
 ### Windows
 
 Two tiers, two regimes — plus the **panel windows** on demand, document tier
-but not documents: the Desktop Patterns control panel and the folder windows.
+but not documents: the Desktop Patterns control panel, the folder windows and
+the text windows.
 
 - **Document windows**: one per open document, cloned from a template by the
   reconciler in `shell/windows.js` — created on open (the doc box, cascaded
@@ -750,8 +757,8 @@ items`, plain ink, off the model) over the Finder's **double rule** — black,
   grammar, deliberately — System 7 copied no file with ⌘C/⌘V — over one
   Clipboard, **the system's**: what Paste does is decided at the pick by
   reading it, never by remembering what the app last copied. **Copy** takes
-  the selected icons — documents and folders, in any container, the Trash
-  never among them, a trashed item fine — as references into the catalog on
+  the selected icons — documents, folders and text files, in any container,
+  the Trash never among them, a trashed item fine — as references into the catalog on
   an in-app clipboard slice (`state/clipboard.js`, session-only), and hands
   the system clipboard what it can carry: the copied **names as text**, one
   per line (what the Mac's Finder pastes into a text editor, and the token
@@ -860,6 +867,61 @@ a folder made inside it.
   yet: Put Away ⌘Y (the record does not remember
   where a trashed item came from) and the "in use" alert.
 
+### Text files
+
+The how-to documentation lives on the desktop as **text files** — System 7's
+read-me documents, each wearing TeachText's **newspaper icon** (the user's
+32×32 1-bit art, `src/assets/text-file.png`, so the kit's selection
+inversion and open ghost are exact) — and opens into **TeachText's window**.
+A first pass, deliberately: **plain text, display only**.
+
+- **A text file is its text**, the way a document is its PNG: a record of
+  its own in IndexedDB's third store (`texts`: id, name, the text,
+  timestamps, `folder`), the third kind of catalog item beside documents and
+  folders. It files exactly as a document does — the same `folder` field,
+  so the drag moves it into a folder or the Trash, a folder copies and
+  lifts it with the rest, Empty Trash… counts it (its K is the text's
+  bytes) and removes it — and its icon is `selectable movable editable`:
+  Return renames it in place, and any open window retitles along. Copy and
+  Paste carry it as a reference like a document (a copy is a new file,
+  named by the same counting); its name alone reaches the system clipboard.
+  No `?file=` for it, no Duplicate, no Download: the application's File
+  menu serves documents.
+- **The built-ins ship with the app**: `src/texts/` holds each read-me as
+  a `.txt`, imported whole, and `TEXTS` lists them with the names their
+  icons wear. They seed like Car and Cube — ordinary stored files from then
+  on, renamed, filed or trashed for good — on their own `seededTexts`
+  record, so an existing profile gets them on its next boot. To add one,
+  drop a `.txt` in and list it. Not yet: a revision to a file already
+  seeded reaches no existing profile (a versioned re-seed), a dropped or
+  pasted `.txt` (only PNGs arrive today), and any editing.
+- **The window** (`shell/texts.js`, cloned from `#tpl-text-window`) is the
+  classic read-me's: a document-tier window — striped bar, close box,
+  `movable resizable scrollbars="vertical"`, the kit's rail on the frame's
+  right edge with the grow box in its corner cell — TeachText wrapped its
+  text to the window's width and scrolled it up and down only. The body is
+  the file's text in **one kit paragraph on the body face** (Geneva, the
+  reading face), verbatim: the page's one text-flow rule keeps the file's
+  line breaks and blank lines and wraps its long lines at the window, a
+  word longer than the window breaking rather than widening the plane; the
+  inset is a stack's pad, 4 over and under and 6 each side, for the eye.
+  The mouse selects and copies the text as prose; there is no insertion
+  point. The open **loads the text first** (an IndexedDB read, so the open
+  is async like a document's) and the window appears with its content; a
+  second open brings the existing window forward; the listing drives its
+  title, and a file emptied from the Trash closes it.
+- **It is another application's window.** Opening a read-me on System 7
+  switched you to TeachText, and Sprite Machine's palettes hid: here the
+  window is a **panel** (`windows.addPanel`), so holding the desktop's
+  active state reads as the Finder role — the windoids hide, the strip
+  goes, the document-scoped items grey, and File → Close ⌃W closes it;
+  closing hands active back to the topmost document window. It is placed
+  fresh at every open — the folder window's cascade from the doc box's
+  corner, stepped per text window already open — re-placed by Arrange
+  Windows and re-pinned by a browser resize like every window, and
+  **nothing about it persists**: not its box, not its scroll, not that it
+  was open. No zoom box yet, with the folder windows.
+
 ### The About box
 
 **Sprite Machine → About…** — and every load the URL gives no document to
@@ -913,12 +975,15 @@ so it lands as _untitled_ at the default ring, while a copy and paste **within
 the app** rides the catalog and keeps everything (see
 [Folders](#folders)).
 
-Storage is IndexedDB (`storage/db.js`, version 2: a `docs` store — the PNG
-bytes plus rebuildable listing caches, where the chunk wins on any
-disagreement, plus the one field that is neither chunk nor cache, `folder` —
-and a `folders` store), driven by the `files` slice: the pure LIBRARY layer,
-listing, availability, the folder tree and its selectors, and the per-document
-storage operations, each taking an explicit doc + identity. Which documents
+Storage is IndexedDB (`storage/db.js`: a `docs` store — the PNG bytes plus
+rebuildable listing caches, where the chunk wins on any disagreement, plus
+the one field that is neither chunk nor cache, `folder` — a `folders` store,
+and a `texts` store for the read-me files; the schema is that list of
+stores, not a version number — a profile opens at whatever version it holds,
+and a store it lacks is added by reopening one version up), driven by the
+`files` slice: the pure LIBRARY layer, listing, availability, the folder tree
+and its selectors, and the per-document storage operations, each taking an
+explicit doc + identity, with the text files' beside them. Which documents
 are open, and their dirty state, is the workspace's. Explicit Save is the
 contract, with a `beforeunload` guard over ANY dirty open document as the
 safety net. Where IndexedDB is broken (private windows), Save raises an
@@ -928,8 +993,8 @@ explanatory dialog and everything else still works.
 
 Every saved doc gets a `vf-icon` (`selectable movable editable` — Return
 renames in place, converging on the same action as File → Rename…, so any open
-window retitles along), and so does every folder and the **Trash**, the one
-icon that is no saved item. The built-ins are **seeded at the first-ever
+window retitles along), and so does every folder, every text file and the
+**Trash**, the one icon that is no saved item. The built-ins are **seeded at the first-ever
 boot** through the same save path as ⌘S and are ordinary mutable documents
 from then on; the seeding runs while the profile carries **no record of having
 seeded** — the `seeded` flag, written only after the last built-in is stored,
@@ -1131,15 +1196,19 @@ src/lib/      the editor's domain — pure, no THREE and no DOM: the atlas's rin
               (sheet-shape — what a paste validates), the zip writer, the color helpers
               and the two palettes (palette — PALETTE_168 among them), and the
               built-in sprites
+src/texts/    the built-in TEXT FILES — the read-me documents, one .txt each, imported
+              whole (?raw) and listed by the index with the names their icons wear;
+              seeded once per profile like the samples
 src/state/    the app-state layer, pure JS and Node-tested: store + the Lit bridges; doc
               (two channels) and history, FACTORIES one per open document; workspace (the
               open documents as DocContexts, activeKey, the stored flows); files (the
-              library, the folder tree, the Trash, the copies); clipboard (the in-app
+              library, the folder tree, the Trash, the text files, the copies); clipboard (the in-app
               half of Copy / Paste: catalog references keyed to what the system
               clipboard was handed, and pasteSource); session, prefs, build, shell; and
               the atlas's per-document settings behind an active-document façade (ring)
-src/storage/  the IndexedDB wrapper (v2: `docs`, whose `folder` is its one non-chunk
-              field, and `folders`), injected into the files slice
+src/storage/  the IndexedDB wrapper (`docs`, whose `folder` is its one non-chunk field,
+              `folders`, and `texts` — a missing store is added one version up),
+              injected into the files slice
 src/scene/    stage (renderer, camera, lights, framing, on-demand loop); rebuilder, the
               pipeline's ONLY consumer, handing every mesh out through the onMesh seam;
               the atlas's offscreen world and its follower; the glb export's subject
@@ -1148,14 +1217,16 @@ src/shell/    the desktop's behavior over the index.html skeleton: layout (ALL t
               derived sizes and DITLs, pinOf / pinTo / isPin), windows (the two regimes,
               the resize rule, arrange / arranged / zoomActive, the panel adoption), menus
               (actions, the two-role gating, every dialog flow), icons (the reconciler,
-              the Finder wire, filing), folders, desktop-state, url-state, clock, patterns
+              the Finder wire, filing), folders, texts (TeachText's windows),
+              desktop-state, url-state, clock, patterns
 src/          main (the composition root), boot/params, loaders (+ seedDefaultDocs),
               drop-target, shortcuts, image-io, and components/ — all Lit and shadow DOM
               but for sm-color-picker: sm-editor over sm-draw-canvas and draw-overlays,
               the dumb leaves, and the connected chrome
 src/assets/   the app's own raster art, every piece through vf-img at 1:1: the six 22×19
               tool icons, the 21×26 face cubes and the selected dither, the 32×32
-              application icon, the folder, the Trash's two cans and its 12×12 mark
+              application icon, the folder, the text file's newspaper, the Trash's two
+              cans and its 12×12 mark
 ```
 
 ### UI layer: Lit + a hand-rolled store

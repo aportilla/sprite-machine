@@ -4,6 +4,12 @@ declare module '*.png' {
   export default src;
 }
 
+// The built-in text files (src/texts/), each imported whole as a string.
+declare module '*.txt?raw' {
+  const text: string;
+  export default text;
+}
+
 // The About box's build facts, replaced at build time by vite.config.js's
 // `define` (package.json's version; HEAD's commit date as "Aug 24, 2026").
 declare const __APP_VERSION__: string;

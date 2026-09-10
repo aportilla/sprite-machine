@@ -17,9 +17,11 @@
 // (and PNGs with no chunks) fall back to the file's own name and the
 // defaults.
 //
-// One loader writes instead of opening: `seedDefaultDocs` saves the built-in
-// samples into the library as ordinary stored documents — a truly-virgin-boot
-// one-shot (see its doc comment).
+// Two loaders write instead of opening: `seedDefaultDocs` saves the
+// built-in samples into the library as ordinary stored documents — a
+// truly-virgin-boot one-shot (see its doc comment) — and `seedDefaultTexts`
+// stores the built-in text files (src/texts/) the same way, on their own
+// record.
 // ---------------------------------------------------------------------------
 
 import { validateSheet, clampTile, isPng, readTextChunks } from 'sprite-machine';
@@ -173,4 +175,27 @@ export async function seedDefaultDocs(samples, existing = new Set()) {
     await new Promise((r) => setTimeout(r, 2));
   }
   return firstId;
+}
+
+/**
+ * Seed the library with the built-in TEXT FILES — one ordinary stored text
+ * file per entry (files.createText, on the desktop), seedDefaultDocs's
+ * terms exactly: run while the profile carries no record of having seeded
+ * them (main.js, the desktop state's `seededTexts` flag), `existing` — the
+ * text file names already stored — skipping the ones that did land, so an
+ * interrupted seeding completes and nothing doubles; from then on they are
+ * normal files, and renamed, filed or trashed they never come back.
+ * @param {{name: string, text: string}[]} texts
+ * @param {Set<string>} [existing]  text file names already stored
+ */
+export async function seedDefaultTexts(texts, existing = new Set()) {
+  for (const t of texts) {
+    if (existing.has(t.name)) continue;
+    try {
+      await files.createText({ name: t.name, text: t.text });
+    } catch {
+      // A failed seed costs only that text file.
+    }
+    await new Promise((r) => setTimeout(r, 2)); // the listing's sort key, as above
+  }
 }

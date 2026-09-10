@@ -80,7 +80,7 @@
 
 import { VfWindow } from 'vintage-frames';
 import trashMarkUrl from '../assets/trash-indicator.png';
-import { files, childrenOf, isTrashed } from '../state/files.js';
+import { files, itemCount, isTrashed } from '../state/files.js';
 import {
   folderBox,
   folderViewport,
@@ -157,8 +157,7 @@ export function initFolders(desktop, windows, { savedPin = () => null } = {}) {
     const win = wins.get(id);
     if (!win) return;
     const st = files.get();
-    const c = childrenOf(st, id);
-    const n = c.docs.length + c.folders.length;
+    const n = itemCount(st, id); // documents, folders and text files alike
     const label = countOf(win);
     const text = `${n} item${n === 1 ? '' : 's'}`;
     if (label && label.textContent !== text) label.textContent = text;

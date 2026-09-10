@@ -661,8 +661,9 @@ const FOLDER_CHROME = { w: 2 + 15, h: 1 + 18 + FOLDER_STRIP + 15 + 1 };
 const GRID_INSET = 16;
 
 /**
- * A folder window's placement: `size` (the window's authored box) at the
- * doc box's top-left stepped down-right by the cascade for `n` folder
+ * A folder window's placement — and a text window's (shell/texts.js, the
+ * same cascade over its own count): `size` (the window's authored box) at
+ * the doc box's top-left stepped down-right by the cascade for `n` such
  * windows already open, floored at the raster's corner and the reserve
  * (windows.js's clamp does the rest).
  *

@@ -73,6 +73,18 @@
 // too (the listing is never read there, so the desktop shows the one icon
 // in its corner whatever the machine has stored).
 //
+// THE TEXT FILES (Sep 10 2026) are the fourth kind, rendered from the files
+// slice's `texts` like the documents — the read-me documents, each wearing
+// the user's 32×32 1-bit newspaper art (src/assets/text-file.png, TeachText's
+// read-only document icon, three values like the folder's, so the kit's
+// selection inversion and open ghost are exact), `selectable movable
+// editable` (a rename is the Finder's, landing on files.renameText), no
+// `color` and no `data-folder` (nothing files INTO a text). A double-click
+// opens its window (shell/texts.js), whose being open is the icon's ghost;
+// the drag files it exactly as a document (files.moveText), the Trash
+// counts it, and its key is `text:<id>`, its position persisting like any
+// item's.
+//
 // THE SELECTION, READ AND WRITTEN (Sep 10 2026, docs/clipboard-plan.md):
 // Edit → Copy reads it (selection(): the selected icons' keys, the Trash
 // left out, in the listing's order — folders, then documents) and Paste and
@@ -90,9 +102,10 @@ import { snapSys, systemPxQuantum } from 'vintage-frames';
 import folderArtUrl from '../assets/folder.png';
 import trashArtUrl from '../assets/trash.png';
 import trashFullArtUrl from '../assets/trash-full.png';
+import textArtUrl from '../assets/text-file.png';
 import { genericDocIconDataUri } from '../image-io.js';
 import { build } from '../state/build.js';
-import { files, childrenOf, isInside, TRASH } from '../state/files.js';
+import { files, childrenOf, isInside, itemCount, TRASH } from '../state/files.js';
 import { shell } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
 import {
@@ -109,14 +122,16 @@ import {
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
 const DOC = 'doc:';
 const FOLDER = 'folder:';
+const TEXT = 'text:';
 
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
  * @param {{ actions: {openDoc(id: string): void},
  *           folders: ReturnType<typeof import('./folders.js').initFolders>,
+ *           texts: ReturnType<typeof import('./texts.js').initTexts>,
  *           savedPos?: (key: string) => {left:number, top:number}|null }} opts
  */
-export function initIcons(desktop, { actions, folders, savedPos = () => null }) {
+export function initIcons(desktop, { actions, folders, texts, savedPos = () => null }) {
   const desktopField = /** @type {any} */ (desktop.querySelector('#desktop-icons'));
   /** @type {(() => void)[]} */
   const teardown = [];
@@ -307,7 +322,7 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
     if (img.getAttribute('src') !== src) img.src = src;
   }
 
-  /** @param {'doc'|'folder'|'trash'} kind */
+  /** @param {'doc'|'folder'|'trash'|'text'} kind */
   function makeIcon(key, label, root, folder, kind) {
     const icon = /** @type {any} */ (document.createElement('vf-icon'));
     icon.dataset.key = key;
@@ -318,9 +333,10 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
     icon.editable = kind !== 'trash'; // the Trash keeps its name
     if (kind === 'doc') {
       icon.color = true; // generated color art: selection darkens, not inverts
-    } else {
+    } else if (kind !== 'text') {
       // The drop's marker (the kit's recipe): what a drag files into — a
-      // folder's, and the Trash's the same way.
+      // folder's, and the Trash's the same way. A text file is 1-bit art
+      // like a folder's, and nothing files into it.
       icon.dataset.folder = key.slice(FOLDER.length);
     }
     root.append(icon); // appended first: the snap below reads the live scale
@@ -362,29 +378,35 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
       });
     });
   }
+  function wireText(icon, id) {
+    icon.addEventListener('vf-open', () => texts.open(id));
+    icon.addEventListener('vf-change', (e) => {
+      const detail = /** @type {CustomEvent} */ (e).detail;
+      files.renameText(id, detail.label).catch(() => {
+        icon.label = detail.previous;
+      });
+    });
+  }
 
   // --- the reconciler ------------------------------------------------------------
   // Every ROOT — the desktop's field for the container null, plus one field
   // per open folder window — holds exactly the icons of the items whose
-  // container it is (the folders first, then the documents, each in listing
-  // order): an item that moved away is removed here and re-created in its
-  // new root if that root is on screen (its landing under `pending`); the
-  // label, the art and the open ghost are re-read every pass. Under
-  // ?fresh=1 the listing is never read (main.js), so the slice holds the
-  // Trash's row alone and the desktop shows the one icon, in its corner —
-  // the same on a machine with saved docs.
+  // container it is (the folders first, then the documents, then the text
+  // files, each in listing order): an item that moved away is removed here
+  // and re-created in its new root if that root is on screen (its landing
+  // under `pending`); the label, the art and the open ghost are re-read
+  // every pass. Under ?fresh=1 the listing is never read (main.js), so the
+  // slice holds the Trash's row alone and the desktop shows the one icon,
+  // in its corner — the same on a machine with saved docs.
   /** The Trash's can: plain while it holds nothing, bulging otherwise. */
-  const trashArt = (st) => {
-    const c = childrenOf(st, TRASH);
-    return c.docs.length || c.folders.length ? trashFullArtUrl : trashArtUrl;
-  };
+  const trashArt = (st) => (itemCount(st, TRASH) ? trashFullArtUrl : trashArtUrl);
   function sync() {
     const st = files.get();
     /** @type {[string|null, any][]} */
     const roots = [[null, desktopField], ...folders.fields()];
     for (const [folder, root] of roots) {
       const kids = childrenOf(st, folder);
-      /** @type {Map<string, {kind: 'doc'|'folder'|'trash', rec: any}>} */
+      /** @type {Map<string, {kind: 'doc'|'folder'|'trash'|'text', rec: any}>} */
       const wanted = new Map();
       for (const f of kids.folders)
         wanted.set(`${FOLDER}${f.id}`, {
@@ -392,6 +414,7 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
           rec: f,
         });
       for (const r of kids.docs) wanted.set(`${DOC}${r.id}`, { kind: 'doc', rec: r });
+      for (const t of kids.texts) wanted.set(`${TEXT}${t.id}`, { kind: 'text', rec: t });
       for (const icon of iconsIn(root)) if (!wanted.has(keyOf(icon))) icon.remove();
       for (const [key, { kind, rec }] of wanted) {
         let icon = /** @type {any} */ (
@@ -400,6 +423,7 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
         if (!icon) {
           icon = makeIcon(key, rec.name, root, folder, kind);
           if (kind === 'doc') wireDoc(icon, rec.id);
+          else if (kind === 'text') wireText(icon, rec.id);
           else wireFolder(icon, rec.id);
         }
         if (icon.label !== rec.name) icon.label = rec.name;
@@ -407,6 +431,9 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
           setArt(icon, rec.icon ?? genericDocIconDataUri());
           // The kit's `open` ghost marks every stored doc with a window open.
           icon.open = !!workspace.byFileId(rec.id);
+        } else if (kind === 'text') {
+          setArt(icon, textArtUrl);
+          icon.open = texts.isOpen(rec.id);
         } else {
           setArt(icon, kind === 'trash' ? trashArt(st) : folderArtUrl);
           icon.open = folders.isOpen(rec.id);
@@ -416,10 +443,15 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
       if (folder != null) folders.fit(folder);
     }
   }
-  // The listing drives which icons exist and where; the workspace drives
-  // the open ghosts (windows opening and closing move them); the folder
-  // windows are the roots.
-  teardown.push(files.subscribe(sync), workspace.subscribe(sync), folders.onChange(sync));
+  // The listing drives which icons exist and where; the workspace and the
+  // text windows drive the open ghosts (windows opening and closing move
+  // them); the folder windows are the roots.
+  teardown.push(
+    files.subscribe(sync),
+    workspace.subscribe(sync),
+    folders.onChange(sync),
+    texts.onChange(sync)
+  );
   sync();
 
   // --- filing: the drag ----------------------------------------------------------
@@ -487,7 +519,9 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
         const key = keyOf(icon);
         const moved = key.startsWith(FOLDER)
           ? await files.moveFolder(key.slice(FOLDER.length), folder)
-          : await files.moveDoc(key.slice(DOC.length), folder);
+          : key.startsWith(TEXT)
+            ? await files.moveText(key.slice(TEXT.length), folder)
+            : await files.moveDoc(key.slice(DOC.length), folder);
         if (!moved) pending.delete(key);
       }
     } catch (err) {
@@ -621,7 +655,7 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
     },
     /** The selected icons' keys — every container, the Trash left out (it
      *  is furniture, never copied) — in the listing's order: folders, then
-     *  documents. What Edit → Copy takes.
+     *  documents, then text files. What Edit → Copy takes.
      *  @returns {string[]} */
     selection() {
       const lit = new Set(
@@ -633,6 +667,7 @@ export function initIcons(desktop, { actions, folders, savedPos = () => null }) 
       return [
         ...st.folders.map((f) => `${FOLDER}${f.id}`),
         ...st.list.map((r) => `${DOC}${r.id}`),
+        ...st.texts.map((t) => `${TEXT}${t.id}`),
       ].filter((key) => lit.has(key));
     },
     /** Make these keys the selection — each selected, every other icon

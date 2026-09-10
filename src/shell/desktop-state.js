@@ -28,7 +28,12 @@
 // stored, by name, so nothing doubles), and deleting or emptying later still
 // never resurrects them (the flag stays true). A blob from before the flag
 // reads as seeded (migrate — under the old rule its very existence had
-// already decided that), as do v1 / v2 blobs.
+// already decided that), as do v1 / v2 blobs. The built-in TEXT FILES (Sep
+// 10 2026, src/texts/) keep a record of their own, `seededTexts`, on the
+// same terms — written only after the last one is stored — because they
+// arrived after the documents' flag was already true on every profile: a
+// blob without it reads unseeded, so an existing profile gets the read-me
+// files on its next boot, once.
 //
 // AN APPLICATION WINDOW'S GEOMETRY IS NOT HERE — not the windoids', not the
 // document windows'. A browser is resized and reopened on another monitor
@@ -84,7 +89,15 @@ function docEntry(d) {
  * @param {any} parsed
  */
 export function migrateDesktopState(parsed) {
-  if (parsed?.v === VERSION) return { ...parsed, seeded: parsed.seeded !== false };
+  if (parsed?.v === VERSION) {
+    return {
+      ...parsed,
+      seeded: parsed.seeded !== false,
+      // The text files' record is younger than the flag: only a stated
+      // true counts, so a blob from before them seeds them once.
+      seededTexts: parsed.seededTexts === true,
+    };
+  }
   if (parsed?.v === 2) {
     return {
       v: VERSION,
@@ -92,6 +105,7 @@ export function migrateDesktopState(parsed) {
       activeFileId: parsed.activeFileId ?? null,
       icons: parsed.icons ?? {},
       seeded: true,
+      seededTexts: false,
     };
   }
   if (parsed?.v === 1) {
@@ -101,6 +115,7 @@ export function migrateDesktopState(parsed) {
       activeFileId: parsed.lastDocId ?? null,
       icons: parsed.icons ?? {},
       seeded: true,
+      seededTexts: false,
     };
   }
   return null;
@@ -121,6 +136,8 @@ export function createDesktopState(fresh) {
   // whose first boot was interrupted; true once main.js marks it — or on a
   // blob from before the flag.
   let seeded = saved?.seeded === true;
+  // The text files' record (header), on the same terms.
+  let seededTexts = saved?.seededTexts === true;
   /** The synchronous writer, once start() has wired one. */
   let writeNow = () => {};
 
@@ -135,6 +152,15 @@ export function createDesktopState(fresh) {
      *  the record and does not seed again. */
     markSeeded() {
       seeded = true;
+      writeNow();
+    },
+
+    /** Has this profile stored the built-in text files (src/texts/)? */
+    seededTexts: () => seededTexts,
+
+    /** Record that it has — markSeeded's terms. */
+    markSeededTexts() {
+      seededTexts = true;
       writeNow();
     },
 
@@ -216,6 +242,7 @@ export function createDesktopState(fresh) {
           windows,
           pattern: shell.get().desktopPattern,
           seeded,
+          seededTexts,
         };
       }
 

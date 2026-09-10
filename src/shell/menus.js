@@ -82,7 +82,7 @@ import {
 } from '../state/ring.js';
 import {
   files,
-  childrenOf,
+  itemCount,
   descendantsOf,
   isTrashed,
   nextDocName,
@@ -119,16 +119,18 @@ import {
  *   ring: ReturnType<typeof import('../scene/ring.js').initRing>,
  *   model: ReturnType<typeof import('../scene/model-export.js').initModelExport>,
  *   folders: ReturnType<typeof import('./folders.js').initFolders>,
+ *   texts: ReturnType<typeof import('./texts.js').initTexts>,
  *   icons: ReturnType<typeof import('./icons.js').initIcons>,
  * }} panels
- *   The panel windows a menu item opens (the Desktop Patterns control panel,
- *   the folder windows — the Finder's), the 3D Sprite Atlas's renderer
- *   follower (Export Sprite Atlas… renders through it), the 3D model
- *   export's subject (Export 3D Model… writes its glb through it), and the
- *   icon layer (New Folder's rename box).
+ *   The panel windows a menu item opens or closes (the Desktop Patterns
+ *   control panel, the folder windows — the Finder's — and the text
+ *   windows, TeachText's), the 3D Sprite Atlas's renderer follower (Export
+ *   Sprite Atlas… renders through it), the 3D model export's subject
+ *   (Export 3D Model… writes its glb through it), and the icon layer (New
+ *   Folder's rename box).
  */
 export function initMenus(desktop, windows, panels) {
-  const { folders, icons } = panels;
+  const { folders, texts, icons } = panels;
   const $ = (sel) => {
     const el = desktop.querySelector(sel);
     if (!el) throw new Error(`shell/menus: missing element ${sel}`);
@@ -357,21 +359,23 @@ export function initMenus(desktop, windows, panels) {
 
   // The Empty Trash alert (Sprite Machine → Empty Trash…): the Finder's
   // question, written at show — N is everything the emptying removes (the
-  // Trash's whole subtree, documents and folders), the K the trashed
-  // documents' stored bytes summed and rounded up to whole K, the listing
-  // row's `size` — over Cancel and a default OK. OK empties through the
-  // workspace (files.emptyTrash, then every open context holding a removed
-  // document reverts, dirty); the listing's refresh does the rest — the
-  // icons in the Trash's window go, its count reads 0 items, the can
-  // flattens, a trashed folder's open window closes, the item greys. A
-  // failure lands on the build slice like every file op's.
+  // Trash's whole subtree: documents, folders and text files), the K the
+  // trashed documents' stored bytes and the trashed texts' summed and
+  // rounded up to whole K, the listing rows' `size` — over Cancel and a
+  // default OK. OK empties through the workspace (files.emptyTrash, then
+  // every open context holding a removed document reverts, dirty); the
+  // listing's refresh does the rest — the icons in the Trash's window go,
+  // its count reads 0 items, the can flattens, a trashed folder's open
+  // window closes, a trashed text's too, the item greys. A failure lands
+  // on the build slice like every file op's.
   const emptyTrashMsg = $('#empty-trash-msg');
   function showEmptyTrash() {
     const st = files.get();
-    const { docs, folders: dirs } = descendantsOf(st, TRASH);
-    const n = docs.length + dirs.length;
+    const { docs, folders: dirs, texts: txts } = descendantsOf(st, TRASH);
+    const n = docs.length + dirs.length + txts.length;
     if (!n) return;
-    const k = Math.ceil(docs.reduce((sum, r) => sum + (r.size ?? 0), 0) / 1024);
+    const bytes = [...docs, ...txts].reduce((sum, r) => sum + (r.size ?? 0), 0);
+    const k = Math.ceil(bytes / 1024);
     emptyTrashMsg.textContent =
       n === 1
         ? `The Trash contains 1 item, which uses ${k}K of disk space. Are you sure you want to permanently remove it?`
@@ -404,11 +408,22 @@ export function initMenus(desktop, windows, panels) {
     dlgPaste.show();
   }
 
-  /** The item keys' two prefixes are the icon layer's (shell/icons.js). */
-  const refOf = (key) =>
-    key.startsWith('folder:')
-      ? { kind: /** @type {const} */ ('folder'), id: key.slice('folder:'.length) }
-      : { kind: /** @type {const} */ ('doc'), id: key.slice('doc:'.length) };
+  /** The item keys' three prefixes are the icon layer's (shell/icons.js).
+   *  @returns {import('../state/clipboard.js').ClipboardItemRef} */
+  const refOf = (key) => {
+    const at = key.indexOf(':');
+    return {
+      kind: /** @type {'doc'|'folder'|'text'} */ (key.slice(0, at)),
+      id: key.slice(at + 1),
+    };
+  };
+  /** An item's name off the listing, by kind. */
+  const nameOf = (st, it) =>
+    it.kind === 'folder'
+      ? st.folders.find((f) => f.id === it.id)?.name
+      : it.kind === 'text'
+        ? st.texts.find((t) => t.id === it.id)?.name
+        : st.list.find((r) => r.id === it.id)?.name;
 
   // Copy: the selected icons — the Trash never among them (selection()
   // leaves it out) — into the slice as references, and the system
@@ -416,20 +431,18 @@ export function initMenus(desktop, windows, panels) {
   // line (what the Mac's Finder gives a text editor; the token pasteSource
   // matches), and, for exactly one document, its STORED bytes as image/png
   // (the file on disk — an open window's unsaved strokes do not travel;
-  // Duplicate is the window's copy). The selection stays lit. The system
-  // write is silent on failure (no secure context, an old browser, Safari
-  // past the gesture): the in-app copy has already happened.
+  // Duplicate is the window's copy). A text file copies as its name alone
+  // (its text rides the in-app slice, never the system clipboard — the
+  // name IS the token). The selection stays lit. The system write is
+  // silent on failure (no secure context, an old browser, Safari past the
+  // gesture): the in-app copy has already happened.
   function copySelection() {
     const keys = icons.selection();
     if (!keys.length) return;
     const st = files.get();
     const items = keys.map(refOf);
     const text = items
-      .map((it) =>
-        it.kind === 'folder'
-          ? st.folders.find((f) => f.id === it.id)?.name
-          : st.list.find((r) => r.id === it.id)?.name
-      )
+      .map((it) => nameOf(st, it))
       .filter((n) => n != null)
       .join('\n');
     clipboard.set(items, text);
@@ -512,7 +525,9 @@ export function initMenus(desktop, windows, panels) {
       const made =
         it.kind === 'folder'
           ? await files.copyFolder(it.id, { parent: target })
-          : await files.copyDoc(it.id, { folder: target });
+          : it.kind === 'text'
+            ? await files.copyText(it.id, { folder: target })
+            : await files.copyDoc(it.id, { folder: target });
       if (made) keys.push(`${it.kind}:${made.id}`);
     }
     if (keys.length) icons.select(keys);
@@ -920,12 +935,15 @@ export function initMenus(desktop, windows, panels) {
       }
       case 'close': {
         // The active document (dirty-checked), or — the Finder's Close —
-        // the front folder window.
+        // the front folder window, or — TeachText's — the front text
+        // window.
         const ctx = active();
         if (ctx) closeContext(ctx);
         else {
           const f = folders.activeFolder();
+          const t = texts.activeText();
           if (f != null) folders.close(f);
+          else if (t != null) texts.close(t);
         }
         break;
       }
@@ -1129,9 +1147,10 @@ export function initMenus(desktop, windows, panels) {
   // open-windows items (syncWindows below) are live in both roles — a pick
   // there is what brings the application back. One item reads the FINDER'S
   // front window beside the role: Close is live with a document window OR a
-  // folder window active (the Finder's Close closed its front window),
-  // re-read on every change of the desktop's active window (vf-activate: a
-  // folder window taking or losing active moves neither role flag).
+  // folder window OR a text window active (the Finder's Close closed its
+  // front window; TeachText's, its read-me), re-read on every change of the
+  // desktop's active window (vf-activate: a panel window taking or losing
+  // active moves neither role flag).
   // Disabling an item also parks its key equivalent (the kit never fires a
   // disabled item's shortcut), so ⌘S/⌘K gate with their menus; the
   // bare-letter tool keys get the same guard in src/shortcuts.js.
@@ -1188,7 +1207,7 @@ export function initMenus(desktop, windows, panels) {
     const st = files.get();
     const front = folders.activeFolder();
     for (const item of docItems) item.disabled = !s.appActive;
-    itemClose.disabled = !(s.appActive || front != null);
+    itemClose.disabled = !(s.appActive || front != null || texts.activeText() != null);
     itemNewFolder.disabled = s.appActive || isTrashed(st, front);
     const finder = !s.appActive && !textFocused;
     itemCopy.disabled = !finder || icons.selection().length === 0;
@@ -1198,6 +1217,7 @@ export function initMenus(desktop, windows, panels) {
   teardown.push(
     shell.subscribe(syncGate),
     folders.onChange(syncGate),
+    texts.onChange(syncGate),
     files.subscribe(syncGate),
     icons.onSelectionChange(syncGate)
   );
@@ -1220,8 +1240,7 @@ export function initMenus(desktop, windows, panels) {
   // out all refresh it).
   const itemEmptyTrash = $('vf-menu-item[value="empty-trash"]');
   const syncTrash = () => {
-    const c = childrenOf(files.get(), TRASH);
-    itemEmptyTrash.disabled = !c.docs.length && !c.folders.length;
+    itemEmptyTrash.disabled = itemCount(files.get(), TRASH) === 0;
   };
   teardown.push(files.subscribe(syncTrash));
   syncTrash();

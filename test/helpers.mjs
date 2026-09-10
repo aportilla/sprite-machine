@@ -26,13 +26,15 @@ export function fakeScheduler() {
   };
 }
 
-/** An in-memory stand-in for storage/db.js — the same async surface over two Maps (the docs as `map`, the folders as `folders`), exposed for the assertions. */
+/** An in-memory stand-in for storage/db.js — the same async surface over three Maps (the docs as `map`, the folders as `folders`, the text files as `texts`), exposed for the assertions. */
 export function memStorage() {
   const map = new Map();
   const folders = new Map();
+  const texts = new Map();
   return {
     map,
     folders,
+    texts,
     list: async () => [...map.values()],
     get: async (id) => map.get(id),
     put: async (r) => map.set(r.id, r),
@@ -40,6 +42,10 @@ export function memStorage() {
     listFolders: async () => [...folders.values()],
     putFolder: async (r) => folders.set(r.id, r),
     removeFolder: async (id) => folders.delete(id),
+    listTexts: async () => [...texts.values()],
+    getText: async (id) => texts.get(id),
+    putText: async (r) => texts.set(r.id, r),
+    removeText: async (id) => texts.delete(id),
   };
 }
 

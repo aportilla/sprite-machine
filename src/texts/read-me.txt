@@ -1,0 +1,28 @@
+Sprite Machine Read Me
+
+Sprite Machine turns pixel-art face sprites into a real, rotatable 3D model. You draw the faces of an object the way a draughtsman draws a plan — the front, a side, the top — and the machine carves a voxel solid that every face agrees on, with the chunky look baked into the geometry.
+
+THE SHEET
+
+A document is one sprite sheet: six square tiles in a 3 × 2 grid.
+
+    LEFT     FRONT    TOP
+    RIGHT    BACK     BOTTOM
+
+Every tile is a slice of the same lattice, so a pixel's place in its tile is its place in the object. A FRONT pixel becomes solid only where the side view covers its row and the top view covers its column, which is why the faces must be drawn in register. Empty tiles are fine: a face with no art of its own is filled from its opposite.
+
+DRAWING
+
+Double-click a document to open it, or choose File → New… (⌃N). The Tools palette holds the selection, pencil, rectangle, fill, eraser and eyedropper; the strip under the menu bar holds the live tool's options, and the current ink is the swatch at its left — click it, or choose Edit → Pick Color… (⌘K), for the Colors dialog.
+
+The Full Sprite View shows the whole sheet; click a tile, or a cube in its header, to switch the face you are editing. The 3D View rebuilds as you draw. The faded art behind the canvas is the opposite face, and the strips just outside its edges are the neighbouring faces' nearest lines — line your pixels up against them.
+
+Edit → Tile Size… retiles the sheet to any square size from 1 to 64.
+
+SAVING AND FILING
+
+Documents are saved in the browser (File → Save, ⌘S) and live as icons on the desktop. Drag them into folders, rename them from their icons, and drag them to the Trash to delete them; Empty Trash… in the Sprite Machine menu is what removes them for good. File → Download saves the sheet as a .png, which is the document itself: drop it back onto the desktop to open it again.
+
+EXPORTING
+
+File → Export 3D Model… writes the model as one glTF binary (.glb) with its texture inside, for Unity, Godot, Unreal, three.js or any glTF viewer. File → Export Sprite Atlas… renders the model from a ring of angles into a sprite sheet with a TexturePacker JSON beside it, for a 2D engine; View → 3D Sprite Atlas shows the ring and its settings.

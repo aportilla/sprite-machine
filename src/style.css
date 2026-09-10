@@ -78,6 +78,19 @@ body {
   outline-offset: calc(var(--vf-scale, 1) * 1px);
 }
 
+/* A text window's body (index.html #tpl-text-window, shell/texts.js): the
+   file's text in one kit paragraph, kept VERBATIM — its line breaks and
+   blank lines stand, its long lines wrap at the window's width, and a word
+   longer than the window breaks rather than widening the scroll plane
+   sideways (TextEdit broke a long word at the edge). Text flow, not
+   aesthetics: the face, the line and the ink are the kit's; this states
+   only how the file's own characters lay out. `white-space` inherits
+   through the paragraph's shadow tree to the slotted text. */
+.text-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* The Colors dialog's host — the one LIGHT-DOM component (its vf-dialog must
    sit where the kit cursor's observer can see it open): no box of its own. */
 sm-color-picker {

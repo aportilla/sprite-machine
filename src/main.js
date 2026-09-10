@@ -11,6 +11,7 @@ import './style.css';
 import 'vintage-frames';
 import { applyCursor, onScaleChange } from 'vintage-frames';
 import { SAMPLES } from './lib/sprite-data.js';
+import { TEXTS } from './texts/index.js';
 import { files, isTrashed } from './state/files.js';
 import { workspace } from './state/workspace.js';
 import { parseBootParams } from './boot/params.js';
@@ -19,7 +20,7 @@ import { initRebuilder } from './scene/rebuilder.js';
 import { createRingRenderer } from './scene/ring-renderer.js';
 import { initRing } from './scene/ring.js';
 import { initModelExport } from './scene/model-export.js';
-import { loadSample, seedDefaultDocs } from './loaders.js';
+import { loadSample, seedDefaultDocs, seedDefaultTexts } from './loaders.js';
 import { initDropTarget } from './drop-target.js';
 import { initShortcuts } from './shortcuts.js';
 import { createStorageIfAvailable } from './storage/db.js';
@@ -33,6 +34,7 @@ import { initWindows } from './shell/windows.js';
 import { initMenus } from './shell/menus.js';
 import { initIcons } from './shell/icons.js';
 import { initFolders } from './shell/folders.js';
+import { initTexts } from './shell/texts.js';
 import { initClock } from './shell/clock.js';
 import { initPatterns } from './shell/patterns.js';
 import { createDesktopState } from './shell/desktop-state.js';
@@ -121,16 +123,20 @@ const ringFollow = initRing(createRingRenderer);
 const modelExport = initModelExport();
 // The folder windows (shell/folders.js — the Finder's windows, panels of
 // the window layer, each reopening at the pin the desktop state remembers
-// for it), then the icon layer over them (its roots are the desktop's field
-// and every open folder's), then the menus over both. The icon layer's open
+// for it) and the text windows (shell/texts.js — TeachText's, panels placed
+// fresh at every open), then the icon layer over them (its roots are the
+// desktop's field and every open folder's; a text icon's open is the text
+// window's), then the menus over all three. The icon layer's document open
 // action is the menus' (dirty-checked), bound late: the menus need the
 // layer for New Folder's rename box.
 const folders = initFolders(desktop, windows, { savedPin: dstate.windowPin });
+const texts = initTexts(desktop, windows);
 /** @type {ReturnType<typeof initMenus>} */
 let menus;
 const icons = initIcons(desktop, {
   actions: { openDoc: (id) => menus.actions.openDoc(id) },
   folders,
+  texts,
   savedPos: dstate.iconPos,
 });
 menus = initMenus(desktop, windows, {
@@ -138,6 +144,7 @@ menus = initMenus(desktop, windows, {
   ring: ringFollow,
   model: modelExport,
   folders,
+  texts,
   icons,
 });
 // The menu bar clock (shell/clock.js).
@@ -206,6 +213,7 @@ if (hot) {
     windows.dispose();
     menus.dispose();
     icons.dispose();
+    texts.dispose();
     folders.dispose();
     clock.dispose();
     patterns.dispose();
@@ -242,7 +250,10 @@ if (hot) {
 //      desktop-state blob exists", was written by the persist layer's own
 //      schedule mid-boot and poisoned exactly that way). From then on they're
 //      normal files the user may edit, rename or delete; then resolve like
-//      any other boot — ?file can name a just-seeded default.
+//      any other boot — ?file can name a just-seeded default. The built-in
+//      TEXT FILES (src/texts/ — the read-me documents) seed the same way on
+//      their own record, `seededTexts`, so a profile from before them gets
+//      them on its next boot, once.
 //   3. RESOLVE THE URL: a ?file naming a stored doc (case-insensitive; the
 //      most recently modified wins a name collision) opens it — on its
 //      remembered edited face, its window placed fresh from the live raster
@@ -265,6 +276,10 @@ async function bootDocuments() {
   if (files.get().available && !dstate.seeded()) {
     await seedDefaultDocs(SAMPLES, new Set(files.get().list.map((r) => r.name)));
     dstate.markSeeded();
+  }
+  if (files.get().available && !dstate.seededTexts()) {
+    await seedDefaultTexts(TEXTS, new Set(files.get().texts.map((t) => t.name)));
+    dstate.markSeededTexts();
   }
 
   if (boot.file && files.get().available) {

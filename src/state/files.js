@@ -59,6 +59,20 @@
 // counts the same way). Both refuse a trashed target (a paste into the Trash
 // is a delete by copy), and the Trash itself is never copied.
 //
+// A TEXT FILE IS ITS TEXT (Sep 10 2026): the third kind of catalog item —
+// the read-me documents on the desktop, plain text shown in a TeachText
+// window (shell/texts.js) — a record of its own in storage's third store,
+// `{id, name, text, createdAt, modifiedAt, folder}`, listed here as `texts`
+// (a TextRow: the record less its text, plus `size`, the text's UTF-8 byte
+// length, the Empty Trash alert's K). It files like a document — the same
+// `folder` field, so containerOf / childrenOf / descendantsOf / isTrashed
+// read it with nothing new — and takes the same catalog operations by its
+// own names (createText / textOf / renameText / moveText / copyText /
+// removeText); a folder's copy and lift and the Trash's emptying carry
+// texts along with documents. Nothing here reads the text but textOf:
+// the window loads it at open, and no window edits it (a first pass —
+// display only).
+//
 // WHAT THIS SLICE DOES NOT KNOW (the multi-document split): which documents
 // are open, which is active, their dirty state, or their identity — that is
 // the workspace's (state/workspace.js). Every per-document operation here
@@ -125,7 +139,12 @@ export const modelFilename = (name) => `${slugOf(name)}.glb`;
  *   off the record's bytes (the Empty Trash alert's "which use 12K").
  * @typedef {{id: string, name: string, parent: string|null,
  *   createdAt: number, modifiedAt: number}} FolderRow
- * @typedef {{available: boolean, list: DocRow[], folders: FolderRow[]}} FilesState
+ * @typedef {{id: string, name: string, createdAt: number, modifiedAt: number,
+ *   folder: string|null, size: number}} TextRow
+ *   size: the text's UTF-8 byte length — a listing cache (the Empty Trash
+ *   alert's K); the text itself stays in the record (textOf reads it).
+ * @typedef {{available: boolean, list: DocRow[], folders: FolderRow[],
+ *   texts: TextRow[]}} FilesState
  */
 
 // --- the pure selectors ----------------------------------------------------------
@@ -142,18 +161,27 @@ export function containerOf(state, folder) {
 }
 
 /**
- * A container's children — the documents and the folders whose container
- * is `folder` (null: the desktop's), each in listing order.
+ * A container's children — the documents, the folders and the text files
+ * whose container is `folder` (null: the desktop's), each in listing order.
  * @param {FilesState} state
  * @param {string|null} folder
- * @returns {{docs: DocRow[], folders: FolderRow[]}}
+ * @returns {{docs: DocRow[], folders: FolderRow[], texts: TextRow[]}}
  */
 export function childrenOf(state, folder) {
   const target = containerOf(state, folder);
   return {
     docs: state.list.filter((r) => containerOf(state, r.folder) === target),
     folders: state.folders.filter((f) => containerOf(state, f.parent) === target),
+    texts: state.texts.filter((t) => containerOf(state, t.folder) === target),
   };
+}
+
+/** How many items a container holds — its documents, folders and text
+ *  files together (a folder window's count line, the Trash's fullness).
+ *  @param {FilesState} state @param {string|null} folder */
+export function itemCount(state, folder) {
+  const c = childrenOf(state, folder);
+  return c.docs.length + c.folders.length + c.texts.length;
 }
 
 /**
@@ -205,23 +233,26 @@ export function isTrashed(state, folder) {
 }
 
 /**
- * A container's whole subtree — every document and every folder under it,
- * however deep, each in listing order, parents before their children (an
- * emptying removes them all; the alert counts them). A chain that loops
- * — a corrupt catalog — is walked once.
+ * A container's whole subtree — every document, folder and text file under
+ * it, however deep, each in listing order, parents before their children
+ * (an emptying removes them all; the alert counts them). A chain that
+ * loops — a corrupt catalog — is walked once.
  * @param {FilesState} state
  * @param {string|null} folder
- * @returns {{docs: DocRow[], folders: FolderRow[]}}
+ * @returns {{docs: DocRow[], folders: FolderRow[], texts: TextRow[]}}
  */
 export function descendantsOf(state, folder) {
   /** @type {DocRow[]} */
   const docs = [];
   /** @type {FolderRow[]} */
   const folders = [];
+  /** @type {TextRow[]} */
+  const texts = [];
   const seen = new Set();
   const walk = (id) => {
     const kids = childrenOf(state, id);
     docs.push(...kids.docs);
+    texts.push(...kids.texts);
     for (const f of kids.folders) {
       if (seen.has(f.id)) continue;
       seen.add(f.id);
@@ -230,7 +261,7 @@ export function descendantsOf(state, folder) {
     }
   };
   walk(containerOf(state, folder));
-  return { docs, folders };
+  return { docs, folders, texts };
 }
 
 /**
@@ -269,14 +300,17 @@ export function nextDocName(state, folder) {
  * holds it; else the Mac's counting from the name's base (a trailing
  * " copy" or " copy N" stripped) — «base» copy, then «base» copy 2, 3, …
  * while those are taken too. Over the container's documents (`kind`
- * 'doc') or its folders ('folder'). Duplicate passes "«name» copy" and
- * lands "«name» copy" the first time, "«name» copy 2" the next.
+ * 'doc'), its folders ('folder') or its text files ('text'). Duplicate
+ * passes "«name» copy" and lands "«name» copy" the first time, "«name»
+ * copy 2" the next.
  * @param {FilesState} state @param {string|null} folder @param {string} name
- * @param {'doc'|'folder'} [kind]
+ * @param {'doc'|'folder'|'text'} [kind]
  */
 export function copyName(state, folder, name, kind = 'doc') {
   const kids = childrenOf(state, folder);
-  const used = new Set((kind === 'folder' ? kids.folders : kids.docs).map((x) => x.name));
+  const rows =
+    kind === 'folder' ? kids.folders : kind === 'text' ? kids.texts : kids.docs;
+  const used = new Set(rows.map((x) => x.name));
   if (!used.has(name)) return name;
   const base = name.replace(/ copy( \d+)?$/, '');
   const first = `${base} copy`;
@@ -292,7 +326,9 @@ export function copyName(state, folder, name, kind = 'doc') {
  *   storage: {list(): Promise<any[]>, get(id: string): Promise<any>,
  *             put(r: any): Promise<any>, remove(id: string): Promise<any>,
  *             listFolders?(): Promise<any[]>, putFolder?(r: any): Promise<any>,
- *             removeFolder?(id: string): Promise<any>}|null,
+ *             removeFolder?(id: string): Promise<any>,
+ *             listTexts?(): Promise<any[]>, getText?(id: string): Promise<any>,
+ *             putText?(r: any): Promise<any>, removeText?(id: string): Promise<any>}|null,
  *   encodeAtlas: (img: object) => Promise<Uint8Array>,
  *   decodeAtlas: (bytes: Uint8Array) => Promise<object>,
  *   makeIcon?: (docState: object) => Promise<string|null>,
@@ -310,6 +346,7 @@ export function createFiles(deps = null) {
       // The Trash is furniture: on the desktop before any listing, and
       // whether or not there is one (header).
       folders: [TRASH_ROW],
+      texts: [],
     })
   );
 
@@ -318,6 +355,10 @@ export function createFiles(deps = null) {
   const now = () => (d?.now ?? Date.now)();
   const newId = () => (d?.newId ? d.newId() : crypto.randomUUID());
   const byCreation = (a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1);
+  /** A text's byte length — the listing row's `size`. */
+  const textSize = (text) => new TextEncoder().encode(String(text ?? '')).byteLength;
+  /** The listing reset every failure path shares. */
+  const NOTHING = () => ({ available: false, list: [], folders: [TRASH_ROW], texts: [] });
 
   // The metadata chunks a save writes. `createdAt` persists across saves via
   // the record (first save stamps it); transforms only when non-identity;
@@ -357,18 +398,19 @@ export function createFiles(deps = null) {
       d = realDeps;
     },
 
-    /** Re-read the listing — the documents AND the folders — from storage;
-     *  resolves availability as a side effect (success ⇒ true,
-     *  failure/absence ⇒ false). The Trash's row leads `folders` in every
-     *  outcome. */
+    /** Re-read the listing — the documents, the folders AND the text files
+     *  — from storage; resolves availability as a side effect (success ⇒
+     *  true, failure/absence ⇒ false). The Trash's row leads `folders` in
+     *  every outcome. */
     async refresh() {
       if (!d?.storage) {
-        store.patch({ available: false, list: [], folders: [TRASH_ROW] });
+        store.patch(NOTHING());
         return;
       }
       try {
         const records = await d.storage.list();
         const folderRecords = d.storage.listFolders ? await d.storage.listFolders() : [];
+        const textRecords = d.storage.listTexts ? await d.storage.listTexts() : [];
         const list = records
           .map(({ id, name, createdAt, modifiedAt, icon, w, h, folder, png }) => ({
             id,
@@ -391,9 +433,23 @@ export function createFiles(deps = null) {
             modifiedAt,
           }))
           .sort(byCreation);
-        store.patch({ available: true, list, folders: [TRASH_ROW, ...folders] });
-      } catch {
-        store.patch({ available: false, list: [], folders: [TRASH_ROW] });
+        const texts = textRecords
+          .map(({ id, name, createdAt, modifiedAt, folder, text }) => ({
+            id,
+            name,
+            createdAt,
+            modifiedAt,
+            folder: folder ?? null,
+            size: textSize(text),
+          }))
+          .sort(byCreation);
+        store.patch({ available: true, list, folders: [TRASH_ROW, ...folders], texts });
+      } catch (err) {
+        // Named on the console: a listing that fails reads as "Save
+        // unavailable" with an empty desktop, and a silent cause once hid a
+        // missing store for an afternoon (storage/db.js header).
+        console.warn('sprite-machine: the library could not be read —', err);
+        store.patch(NOTHING());
       }
     },
 
@@ -541,7 +597,7 @@ export function createFiles(deps = null) {
       if (!rec || id === TRASH) return null;
       const target = containerOf(state, parent);
       if (isTrashed(state, target)) return null;
-      const { docs, folders: dirs } = descendantsOf(state, id);
+      const { docs, folders: dirs, texts } = descendantsOf(state, id);
       const finalName = name ?? copyName(state, target, rec.name, 'folder');
       /** @type {Map<string, string>} old folder id -> its copy's id */
       const map = new Map();
@@ -575,6 +631,18 @@ export function createFiles(deps = null) {
             Title: full.name,
             'Creation Time': new Date(t).toISOString(),
           }),
+          createdAt: t,
+          modifiedAt: t,
+          folder: map.get(containerOf(state, r.folder)) ?? rootId,
+        });
+      }
+      for (const r of texts) {
+        const full = await d.storage.getText(r.id);
+        if (!full) continue;
+        const t = now();
+        await d.storage.putText({
+          ...full,
+          id: newId(),
           createdAt: t,
           modifiedAt: t,
           folder: map.get(containerOf(state, r.folder)) ?? rootId,
@@ -695,24 +763,136 @@ export function createFiles(deps = null) {
           if (full) await d.storage.put({ ...full, folder: into });
         }
       }
+      for (const r of state.texts) {
+        if ((r.folder ?? null) === id) {
+          const full = await d.storage.getText(r.id);
+          if (full) await d.storage.putText({ ...full, folder: into });
+        }
+      }
       await d.storage.removeFolder(id);
       await this.refresh();
     },
 
     /**
-     * Empty the Trash: every document and every folder under it, however
-     * deep, removed from storage — the one destructive operation here —
-     * then one refresh. Resolves the removed ids (the workspace reverts
-     * any open context holding one of the documents). The Trash's own
-     * row stands.
-     * @returns {Promise<{docs: string[], folders: string[]}>}
+     * Empty the Trash: every document, folder and text file under it,
+     * however deep, removed from storage — the one destructive operation
+     * here — then one refresh. Resolves the removed ids (the workspace
+     * reverts any open context holding one of the documents; a text
+     * window closes through the listing). The Trash's own row stands.
+     * @returns {Promise<{docs: string[], folders: string[], texts: string[]}>}
      */
     async emptyTrash() {
-      const { docs, folders } = descendantsOf(store.get(), TRASH);
+      const { docs, folders, texts } = descendantsOf(store.get(), TRASH);
       for (const r of docs) await d.storage.remove(r.id);
+      for (const t of texts) await d.storage.removeText(t.id);
       for (const f of folders) await d.storage.removeFolder(f.id);
       await this.refresh();
-      return { docs: docs.map((r) => r.id), folders: folders.map((f) => f.id) };
+      return {
+        docs: docs.map((r) => r.id),
+        folders: folders.map((f) => f.id),
+        texts: texts.map((t) => t.id),
+      };
+    },
+
+    // --- text files (header: A TEXT FILE IS ITS TEXT) ---------------------------
+
+    /**
+     * Store a NEW text file in a container (`folder` null: the desktop) —
+     * the seeding's path (loaders.js), and any later arrival's. The name
+     * as given. Resolves `{id, name}`, or null for a trashed target.
+     * @param {{name: string, text: string, folder?: string|null}} init
+     */
+    async createText({ name, text, folder = null }) {
+      const state = store.get();
+      const target = containerOf(state, folder);
+      if (isTrashed(state, target)) return null;
+      const id = newId();
+      const t = now();
+      await d.storage.putText({
+        id,
+        name,
+        text: String(text ?? ''),
+        createdAt: t,
+        modifiedAt: t,
+        folder: target,
+      });
+      await this.refresh();
+      return { id, name };
+    },
+
+    /** A stored text file's text — what its window shows. Null when the id
+     *  is gone or storage is out of reach. @param {string} id
+     *  @returns {Promise<string|null>} */
+    async textOf(id) {
+      if (!d?.storage?.getText) return null;
+      const rec = await d.storage.getText(id).catch(() => null);
+      return rec ? String(rec.text ?? '') : null;
+    },
+
+    /** The text file by id off the listing (the row is the record less its
+     *  text). */
+    textRec(id) {
+      return store.get().texts.find((t) => t.id === id) ?? null;
+    },
+
+    /** Rename a text file in place — a rename is metadata, so `modifiedAt`
+     *  stands, as a document's does. An open window retitles through the
+     *  listing. */
+    async renameText(id, name) {
+      const rec = await d.storage.getText(id);
+      if (!rec) return;
+      await d.storage.putText({ ...rec, name });
+      await this.refresh();
+    },
+
+    /**
+     * File a text file into a folder (`null`: the desktop) — moveDoc's
+     * twin: catalog, not content. Resolves true when the record moved.
+     * @param {string} id @param {string|null} folder
+     */
+    async moveText(id, folder) {
+      const rec = await d.storage.getText(id);
+      if (!rec) return false;
+      const target = containerOf(store.get(), folder);
+      if ((rec.folder ?? null) === target) return false;
+      await d.storage.putText({ ...rec, folder: target });
+      await this.refresh();
+      return true;
+    },
+
+    /**
+     * Copy a text file into a container as a NEW file — copyDoc's twin: a
+     * new id, fresh times, the text cloned, named as given else by copyName
+     * over the target's text files. Resolves `{id, name}`, or null: the
+     * source is gone, or the target is the Trash or inside it.
+     * @param {string} id @param {{folder?: string|null, name?: string}} [into]
+     */
+    async copyText(id, { folder = null, name } = {}) {
+      const state = store.get();
+      const target = containerOf(state, folder);
+      if (isTrashed(state, target)) return null;
+      const rec = await d.storage.getText(id);
+      if (!rec) return null;
+      const finalName = name ?? copyName(state, target, rec.name, 'text');
+      const nid = newId();
+      const t = now();
+      await d.storage.putText({
+        ...rec,
+        id: nid,
+        name: finalName,
+        createdAt: t,
+        modifiedAt: t,
+        folder: target,
+      });
+      await this.refresh();
+      return { id: nid, name: finalName };
+    },
+
+    /** Delete a stored text file (the recursive removal is emptyTrash's;
+     *  nothing in the UI calls this). */
+    async removeText(id) {
+      await d.storage.removeText(id);
+      await this.refresh();
     },
 
     /**

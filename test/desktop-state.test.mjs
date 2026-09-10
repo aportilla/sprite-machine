@@ -40,6 +40,12 @@ test('a v3 blob from before the flag reads as SEEDED (its existence had already 
   );
 });
 
+test('the text files’ record reads the other way: only a stated true counts, so a blob from before them seeds them once', () => {
+  assert.equal(migrateDesktopState(v3({ seeded: true })).seededTexts, false);
+  assert.equal(migrateDesktopState(v3({ seededTexts: true })).seededTexts, true);
+  assert.equal(migrateDesktopState(v3({ seededTexts: 'yes' })).seededTexts, false);
+});
+
 test('v1 and v2 blobs migrate shallowly and read as seeded (their window geometry drops); nothing usable → null', () => {
   const two = migrateDesktopState({
     v: 2,
@@ -57,6 +63,7 @@ test('v1 and v2 blobs migrate shallowly and read as seeded (their window geometr
     activeFileId: 'x',
     icons: { 'doc:x': { left: 1, top: 2 } },
     seeded: true,
+    seededTexts: false,
   });
   const one = migrateDesktopState({ v: 1, lastDocId: 'y', icons: {} });
   assert.deepEqual(one, {
@@ -65,6 +72,7 @@ test('v1 and v2 blobs migrate shallowly and read as seeded (their window geometr
     activeFileId: 'y',
     icons: {},
     seeded: true,
+    seededTexts: false,
   });
   // A brand-new profile: unseeded, no state.
   assert.equal(migrateDesktopState(null), null);

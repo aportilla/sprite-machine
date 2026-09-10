@@ -16,6 +16,7 @@ import {
   UNTITLED_FOLDER,
   TRASH,
   childrenOf,
+  itemCount,
   isInside,
   isTrashed,
   descendantsOf,
@@ -355,6 +356,71 @@ test('the Trash is listed without a record, refuses a rename, a move, a removal 
     childrenOf(st, TRASH).docs.length + childrenOf(st, TRASH).folders.length,
     0
   );
+});
+
+// --- text files ------------------------------------------------------------------
+
+test('a text file is its text: it lists, files, renames, copies with the counting, lifts out of a removed folder, travels in a copied folder, and empties with the Trash', async () => {
+  const { files, storage } = makeWorld();
+  await files.refresh();
+  const made = await files.createText({ name: 'Read Me', text: 'Hello.\n\nBye.' });
+  assert.equal(await files.textOf(made.id), 'Hello.\n\nBye.');
+  assert.equal(
+    files.get().texts[0].size,
+    12,
+    'the row carries the byte length, not the text'
+  );
+  assert.equal('text' in files.get().texts[0], false);
+  assert.deepEqual(
+    childrenOf(files.get(), null).texts.map((t) => t.name),
+    ['Read Me']
+  );
+
+  await files.renameText(made.id, 'Read Me First');
+  assert.equal(files.textRec(made.id).name, 'Read Me First');
+  assert.equal(await files.textOf(made.id), 'Hello.\n\nBye.', 'a rename keeps the text');
+
+  const box = await files.createFolder({ name: 'Box' });
+  assert.equal(await files.moveText(made.id, box.id), true);
+  assert.equal(await files.moveText(made.id, box.id), false, 'already there');
+  assert.equal(childrenOf(files.get(), box.id).texts.length, 1);
+  assert.equal(itemCount(files.get(), box.id), 1);
+
+  const copy = await files.copyText(made.id, { folder: box.id });
+  assert.equal(copy.name, 'Read Me First copy', 'counted beside the original');
+  assert.equal(await files.textOf(copy.id), 'Hello.\n\nBye.');
+  assert.equal(
+    await files.copyText(made.id, { folder: TRASH }),
+    null,
+    'never into the Trash'
+  );
+  assert.equal(await files.createText({ name: 'x', text: '', folder: TRASH }), null);
+
+  const boxCopy = await files.copyFolder(box.id, { parent: null });
+  assert.equal(
+    childrenOf(files.get(), boxCopy.id).texts.length,
+    2,
+    'a folder copies its text files with it'
+  );
+
+  await files.removeFolder(box.id);
+  assert.deepEqual(
+    childrenOf(files.get(), null)
+      .texts.map((t) => t.name)
+      .sort(),
+    ['Read Me First', 'Read Me First copy'],
+    'lifted onto the desktop'
+  );
+
+  assert.equal(await files.moveText(made.id, TRASH), true);
+  assert.equal(await files.moveFolder(boxCopy.id, TRASH), true);
+  assert.equal(itemCount(files.get(), TRASH), 2);
+  const d = descendantsOf(files.get(), TRASH);
+  assert.equal(d.texts.length, 3, 'the loose one and the two in the trashed folder');
+  const removed = await files.emptyTrash();
+  assert.equal(removed.texts.length, 3);
+  assert.deepEqual([...storage.texts.keys()], [copy.id], 'the copy on the desktop alone');
+  assert.equal(await files.textOf(made.id), null);
 });
 
 // --- copies (Copy / Paste, Duplicate) -------------------------------------------

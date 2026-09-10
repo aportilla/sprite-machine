@@ -27,7 +27,7 @@
 import { createStore } from './store.js';
 
 /**
- * @typedef {{kind: 'doc'|'folder', id: string}} ClipboardItemRef
+ * @typedef {{kind: 'doc'|'folder'|'text', id: string}} ClipboardItemRef
  * @typedef {{items: ClipboardItemRef[], text: string}} ClipboardState
  *   text: what the app wrote to the system clipboard as `text/plain` for
  *   these items — the token a paste matches against; '' with nothing copied.
