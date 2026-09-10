@@ -830,8 +830,12 @@ as the box opens**, so Return OKs the splash: the kit's dialog grammar
 (vintage-frames 0.6.2 — kit ask #12) is that a `vf-dialog` opens on a slotted
 `autofocus`, else its first text field, else its default button, and **Return
 anywhere in a box fires the default button**, a focused link following itself
-instead. The same grammar runs every dialog here, so a value typed into
-Tile Size… and Returned is committed and OK'd in one stroke. The version and
+instead. A field it opens on is focused but **not selected**, so a seeded
+name — the New box's, the save prompt's — waits with the caret at its end
+until the kit selects what it focuses (kit ask #15); the app doesn't reach
+into the field's shadow root for it. The same grammar runs every dialog here,
+so a value typed into Tile Size… and Returned is committed and OK'd in one
+stroke. The version and
 the date are **build facts, never markup** — `vite.config.js` defines them
 from package.json's `version` and HEAD's commit date, so every build of one
 commit says the same thing and a capture stays byte-identical — and
