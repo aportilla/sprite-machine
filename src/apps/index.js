@@ -1,19 +1,21 @@
 // ---------------------------------------------------------------------------
-// The application registry (docs/apps-plan.md §3.2): the three applications
-// in one order — the Finder (the desktop's), the Sprite Editor (the
-// document's), the Text Viewer (the read-me's) — and the default, the one
+// The application registry (docs/apps-plan.md §3.2): the applications in
+// one order — the Finder (the desktop's), the Sprite Editor (the
+// document's), the Text Viewer (the read-me's), Desktop Patterns (the
+// control panel's, a desk accessory's seat) — and the default, the one
 // whose menus the bar holds when nothing is active. Each application is
 // one directory under src/apps/ holding its menus as markup (menus.html,
 // imported whole) and one module on one shape — `{ id, name, menus,
 // init({ menus, deps }) }` — that shell/menu-bar.js parses, initializes and
-// swaps in and out of the bar as shell.frontApp turns. A fourth application
-// is a fourth directory and one entry here.
+// swaps in and out of the bar as shell.frontApp turns. Another application
+// is another directory and one entry here.
 // ---------------------------------------------------------------------------
 
 import { FINDER } from '../state/shell.js';
 import { finder } from './finder/index.js';
 import { spriteEditor } from './sprite-editor/index.js';
 import { textViewer } from './text-viewer/index.js';
+import { desktopPatterns } from './desktop-patterns/index.js';
 
 /** @typedef {import('../state/shell.js').AppId} AppId */
 
@@ -35,7 +37,7 @@ import { textViewer } from './text-viewer/index.js';
  */
 
 /** @type {App[]} */
-export const APPS = [finder, spriteEditor, textViewer];
+export const APPS = [finder, spriteEditor, textViewer, desktopPatterns];
 
 /** @type {AppId} */
 export const DEFAULT_APP = FINDER;

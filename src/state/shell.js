@@ -1,11 +1,11 @@
 // ---------------------------------------------------------------------------
 // `shell` slice — the desktop chrome's shared state: which APPLICATION is
-// front (the Finder, the Sprite Editor or the Text Viewer — docs/apps-plan.md),
-// its one-boolean shadow `appActive` (is the Sprite Editor front — "a
-// document window is the desktop's active window"), and the DESKTOP PATTERN
-// (System 7's General Controls / 7.5's Desktop Patterns setting — what the
-// Desktop Patterns panel's Set writes, what shell/patterns.js paints onto
-// the desktop and desktop-state.js persists).
+// front (the Finder, the Sprite Editor, the Text Viewer or Desktop Patterns
+// — docs/apps-plan.md), its one-boolean shadow `appActive` (is the Sprite
+// Editor front — "a document window is the desktop's active window"), and
+// the DESKTOP PATTERN (System 7's General Controls / 7.5's Desktop Patterns
+// setting — what the Desktop Patterns panel's Set writes, what
+// shell/patterns.js paints onto the desktop and desktop-state.js persists).
 // Store-driven so the menu bar's swap, the menu checkmarks + enabled states
 // and the windows' `hidden` attributes read one truth (a menu pick and a
 // desktop click are the same action). Document windows live elsewhere
@@ -15,10 +15,11 @@
 // THE FRONT APPLICATION is a reading of the desktop's active window, made
 // in the one place the activation lands (shell/windows.js applyActive): a
 // document window active → the Sprite Editor; a panel window active → the
-// application its owner declared at adoption (a folder window and the
-// Desktop Patterns panel say the Finder, a text window the Text Viewer);
-// no active window, or a panel that declares nothing → the Finder, the
-// desktop's application and the default. The menu bar belongs to the front
+// application its owner declared at adoption (a folder window says the
+// Finder, a text window the Text Viewer, the control panel Desktop
+// Patterns — its own application, a desk accessory's seat); no active
+// window, or a panel that declares nothing → the Finder, the desktop's
+// application and the default. The menu bar belongs to the front
 // application (shell/menu-bar.js swaps its menus on every change here),
 // and `appActive` is `frontApp === SPRITE_EDITOR`, written in the SAME
 // patch by the one setter, so the two can never disagree.
@@ -42,13 +43,17 @@
 
 import { createStore } from './store.js';
 
-/** The three applications' ids (docs/apps-plan.md §3.1) — the bottom of
- *  the dependency arrows, so shell/ and apps/ both import them. A fourth
- *  application is a fourth constant and a fourth directory under src/apps/. */
+/** The applications' ids (docs/apps-plan.md §3.1) — the bottom of the
+ *  dependency arrows, so shell/ and apps/ both import them. Another
+ *  application is another constant here, a directory under src/apps/ and
+ *  one registry entry. */
 export const FINDER = 'finder';
 export const SPRITE_EDITOR = 'sprite-editor';
 export const TEXT_VIEWER = 'text-viewer';
-/** @typedef {typeof FINDER | typeof SPRITE_EDITOR | typeof TEXT_VIEWER} AppId */
+export const DESKTOP_PATTERNS = 'desktop-patterns';
+/** @typedef {typeof FINDER | typeof SPRITE_EDITOR | typeof TEXT_VIEWER | typeof DESKTOP_PATTERNS} AppId */
+/** @type {readonly AppId[]} */
+const APP_IDS = [FINDER, SPRITE_EDITOR, TEXT_VIEWER, DESKTOP_PATTERNS];
 
 /** The utility (windoid) windows, by shell id — the three permanent ones
  *  (visibility appActive's alone) and the toggleable 3D Sprite Atlas
@@ -87,7 +92,7 @@ export function createShell() {
      *  (shell/windows.js: the activeWindow read at wire-up, vf-activate
      *  thereafter). One patch writes the id and its boolean shadow. */
     setFrontApp(id) {
-      const frontApp = id === SPRITE_EDITOR || id === TEXT_VIEWER ? id : FINDER;
+      const frontApp = APP_IDS.includes(id) ? id : FINDER;
       if (store.get().frontApp === frontApp) return;
       store.patch({ frontApp, appActive: frontApp === SPRITE_EDITOR });
     },

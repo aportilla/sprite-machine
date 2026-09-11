@@ -26,14 +26,15 @@
            live in every application — and, between it and the clock, the
            front application's menus and no other's: the Finder's File /
            Edit / View / Special, the Sprite Editor's File / Edit / Tools /
-           View, the Text Viewer's File / Edit / View. Those are NOT here:
-           each application authors its menus as a fragment in its own
-           directory (src/apps/<id>/menus.html), and shell/menu-bar.js
-           parses them once and slots the front application's in — the
-           outgoing application's lifted out, the incoming one's inserted —
-           on every change of shell.frontApp: a document window active is
-           the Sprite Editor, a text window the Text Viewer, a folder
-           window, the Desktop Patterns panel or nothing the Finder. A
+           View, the Text Viewer's File / Edit / View, Desktop Patterns'
+           File / View. Those are NOT here: each application authors its
+           menus as a fragment in its own directory
+           (src/apps/<id>/menus.html), and shell/menu-bar.js parses them
+           once and slots the front application's in — the outgoing
+           application's lifted out, the incoming one's inserted — on every
+           change of shell.frontApp: a document window active is the Sprite
+           Editor, a text window the Text Viewer, the control panel Desktop
+           Patterns, a folder window or nothing the Finder. A
            detached menu's items claim no key (the kit's contract), so the
            Sprite Editor's ⌘S does nothing in the Finder with no `disabled`
            written anywhere. `shortcuts` grants every slotted item's
@@ -54,9 +55,11 @@
           <vf-separator></vf-separator>
           <!-- The Desktop Patterns control panel (shell/patterns.js): a
                window, not a dialog, so no ellipsis — the Apple menu's
-               Control Panels listed it bare. Machine-level like About; it
-               IS the Finder's window, so opening it brings the Finder
-               forward. (Empty Trash… sat here from Sep 9 to Sep 11 2026,
+               Control Panels listed it bare. Opened from here in every
+               application, like About; the panel is an application of its
+               own (src/apps/desktop-patterns — a desk accessory's seat),
+               so opening it brings Desktop Patterns forward and its File /
+               View onto the bar. (Empty Trash… sat here from Sep 9 to Sep 11 2026,
                while the bar was every role's; it is the Finder's Special
                menu's now — src/apps/finder/menus.html.) -->
           <vf-menu-item value="desktop-patterns">Desktop Patterns</vf-menu-item>
@@ -792,11 +795,15 @@
 
     <!-- ================ The Desktop Patterns window template ============= -->
     <!-- ONE clone at a time, opened by Sprite Machine → Desktop Patterns
-         (shell/patterns.js), removed by its close box — existence IS
-         visibility, the document windows' discipline. A DOCUMENT-TIER
-         window (the striped bar and close box of System 7.5's Desktop
-         Patterns control panel — a windoid's slim bar carries no title),
-         movable, FIXED-size: no grow box, no zoom box. The size is authored
+         (shell/patterns.js), removed by its close box or its own
+         application's File → Close / Quit — existence IS visibility, the
+         document windows' discipline. The Desktop Patterns APPLICATION's
+         window (src/apps/desktop-patterns — a desk accessory's seat; the
+         panel is adopted as that application's, so it holding active swaps
+         the bar to File / View): a DOCUMENT-TIER window (the striped bar
+         and close box of System 7.5's Desktop Patterns control panel — a
+         windoid's slim bar carries no title), movable, FIXED-size: no grow
+         box, no zoom box. The size is authored
          here, the one box shell/layout.js takes as input (centeredBox): the
          body's 222-wide column — the preview well (222×160, the kit's rule
          framing it) over the 13×3 chooser of 16px cells (13×16 + 12 rules +

@@ -36,9 +36,10 @@
 //   the pure placement that puts them on a raster, so arrange() re-places
 //   them and the resize re-pin moves them like every window, and with the
 //   APPLICATION the panel belongs to (`app` — the Finder for a folder
-//   window and the control panel, the Text Viewer for a read-me), which is
-//   what the bar shows while the panel holds active (see APP ACTIVATION
-//   below); the owner appends and removes the node. A folder window is the
+//   window, the Text Viewer for a read-me, Desktop Patterns for the control
+//   panel), which is what the bar shows while the panel holds active (see
+//   APP ACTIVATION below); the owner appends and removes the node. A folder
+//   window is the
 //   one window that REOPENS WHERE IT WAS: addPanel takes its remembered
 //   nine-slice pin (read by windowPin at its last close or snapshot) and
 //   re-expresses it on the current raster by the resize rule's own policy,
@@ -82,11 +83,11 @@
 // (docs/apps-plan.md §3.1): a document window → the Sprite Editor; a panel
 // → the application its owner declared at adoption (addPanel's `app`); no
 // active window, or a panel that declares nothing → the Finder, the
-// desktop's application. So a panel window holding active (the Desktop
-// Patterns control panel — a System 7 control panel opened in the FINDER's
-// layer; a folder window; a read-me's, which is the Text Viewer's) reads
-// as another application's turn: opening it deactivates the Sprite Editor
-// (the windoids hide, the bar swaps) and closing it (the kit promotes the
+// desktop's application. So a panel window holding active (a folder
+// window, the FINDER's; a read-me's, the Text Viewer's; the Desktop
+// Patterns control panel, an application of its own) reads as another
+// application's turn: opening it deactivates the Sprite Editor (the
+// windoids hide, the bar swaps) and closing it (the kit promotes the
 // topmost document window) brings the Sprite Editor back.
 // Deactivation is interaction-only, and the PAGE owns the press test (the
 // kit's 0.4.0 position: only the page knows which presses mean "the
@@ -635,7 +636,8 @@ export function initWindows(desktop) {
   // it, and this test covers the bezel alone; the field's own "this press
   // is the Finder" case lives in shell/icons.js, calling the same
   // clearActive(). A press in a folder window needs neither: the window
-  // activates itself, and a panel active IS the Finder's turn (applyActive).
+  // activates itself, and a panel active IS its application's turn
+  // (applyActive).
   const onDesktopPress = (e) => {
     if (e.target === desktop) desktop.clearActive();
   };

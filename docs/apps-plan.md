@@ -13,11 +13,17 @@ directories and the registry, `shell/menu-bar.js` the bar's owner,
 `shell/menus.js` dissolved, `shell.frontApp` beside `appActive`, Empty
 Trash… in the Finder's Special menu, the Text Viewer's Quit and Edit menu,
 Arrange Windows in all three View menus; README §Three applications, one
-menu bar and §Menu bar are the spec as built. One addition beyond the
-plan: `windows.addPanel` re-reads the active window after registering a
+menu bar and §Menu bar are the spec as built. Two departures from the text
+below: `windows.addPanel` re-reads the active window after registering a
 panel's application, so the front application is right whichever order an
-owner appends, adopts and raises in. The decisions in §6 are the user's;
-the steps in §4 assumed the recommendations where nothing was decided.
+owner appends, adopts and raises in; and **Desktop Patterns is a fourth
+application** (the user's call, the same day — a desk accessory's seat:
+`src/apps/desktop-patterns/`, its bar File with Close / Quit and View with
+Arrange Windows), so where §3.1 and §3.4 say the control panel is the
+Finder's, read its own — `patterns.js` declares `DESKTOP_PATTERNS`, and the
+Finder's Close closes the front folder window alone. The decisions in §6
+are the user's; the steps in §4 assumed the recommendations where nothing
+was decided.
 
 The short version: **the menu bar belongs to the front application, and the
 front application is a reading of the desktop's active window** — a

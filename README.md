@@ -330,27 +330,28 @@ application**: the Apple menu sat at the left in every one, the application's
 own menus followed, and switching applications — clicking one of its windows,
 or the desktop, which was the Finder's — replaced those menus wholesale, the
 Finder's File / Edit / View / Special giving way to MacPaint's or TeachText's.
-Sprite Machine is three applications, and the bar is the front one's (the
+Sprite Machine is four applications, and the bar is the front one's (the
 plan is [docs/apps-plan.md](docs/apps-plan.md)):
 
-- **The Finder** — the desktop and its icons, the folder windows, the Desktop
-  Patterns panel; the drag, the rubber band, Copy / Paste, New Folder, Empty
-  Trash…. The desktop's application and the default: it is front whenever
-  nothing is active.
+- **The Finder** — the desktop and its icons, the folder windows; the drag,
+  the rubber band, Copy / Paste, New Folder, Empty Trash…. The desktop's
+  application and the default: it is front whenever nothing is active.
 - **The Sprite Editor** — the document windows, the four windoids, the
   options strip, the tool keys and every command over a document.
 - **The Text Viewer** — the read-me windows, TeachText's seat (see
   [Text files](#text-files)).
+- **Desktop Patterns** — the control panel, an application of its own, a
+  desk accessory's seat (see [Desktop Patterns](#desktop-patterns)).
 
 **The front application is a reading of the desktop's active window**, made
 in the one place the activation lands (`shell/windows.js`'s wire, into
 `shell.frontApp`): a **document window** active means the Sprite Editor; a
 **panel window** active means the application its owner declared when it
-adopted the window (`windows.addPanel`'s `app` — a folder window and the
-control panel say the Finder, a text window the Text Viewer); **no active
-window** means the Finder. `appActive` — "is the Sprite Editor front" — is
-written in the same patch, so the windoids, the options strip and the tool
-keys read exactly what they always read.
+adopted the window (`windows.addPanel`'s `app` — a folder window says the
+Finder, a text window the Text Viewer, the control panel Desktop Patterns);
+**no active window** means the Finder. `appActive` — "is the Sprite Editor
+front" — is written in the same patch, so the windoids, the options strip
+and the tool keys read exactly what they always read.
 
 - **Clicking the desktop background or a desktop icon brings the Finder
   forward** — the PAGE owns the press test, the kit's furniture being slotted
@@ -368,9 +369,9 @@ keys read exactly what they always read.
   activation **clears the Finder selection** (an icon's double-click and
   File → New… alike): the highlight names what the next Finder action acts
   on, and the editor is forward now.
-- **Panels are other applications' windows.** A folder window or the Desktop
-  Patterns panel holding active is the Finder's turn; a text window holding
-  active is the Text Viewer's. Opening one deactivates the Sprite Editor
+- **Panels are other applications' windows.** A folder window holding
+  active is the Finder's turn, a text window the Text Viewer's, the control
+  panel Desktop Patterns'. Opening one deactivates the Sprite Editor
   exactly as the desktop click does, and closing it hands active to the
   topmost document window, which brings the editor back.
 - Closing the last document window leaves the Finder front over a bare
@@ -381,7 +382,8 @@ keys read exactly what they always read.
   never before.
 
 **Each application is one directory under `src/apps/`** — `finder`,
-`sprite-editor`, `text-viewer` — holding its menus as markup (`menus.html`, a
+`sprite-editor`, `text-viewer`, `desktop-patterns` — holding its menus as
+markup (`menus.html`, a
 fragment of `vf-menu` elements, imported whole) and one module on one shape:
 an id, a name, the fragment, and `init({ menus, deps })`, which binds
 behavior to the parsed nodes and returns the application's public verbs and
@@ -398,7 +400,7 @@ the Finder with no `disabled` written anywhere — the Finder's own ⌘S doing
 nothing, as on a Mac — and ⌘C over a read-me's prose copies the prose,
 never a lit icon, since the Finder's Copy is off the bar then. A menu is
 addressed by its `data-menu` and an item by its `value`, within the
-application's own nodes: two applications may each hold a `close` or an
+application's own nodes: every application holds a `close` and an
 `arrange`, and only the front one's is ever connected, so no key is ever
 contested. Cross-application calls go through the registry's actions at pick
 time: the Finder's New… raises the Sprite Editor's New box, and an icon's
@@ -423,21 +425,22 @@ the Undo/Redo enablement.
 The leftmost menu, **Sprite Machine**, is the Apple menu's seat and role:
 one menu, in every application, holding what is the machine's rather than
 an application's — _About…_ (also the boot greeting) and _Desktop Patterns_
-(a window, not a dialog, so no ellipsis; it is the Finder's window, so
-opening it brings the Finder forward). Its title is the text for now; the
-kit's `label` slot takes a 16×16 glyph the day one is drawn, the Apple
-menu's picture, with the text kept as the accessible name. To its right sit
-**the front application's menus and no other's**, and the **clock** keeps
-the bar's right end through every swap:
+(a window, not a dialog, so no ellipsis — the Apple menu's Control Panels;
+the panel is an application of its own, so opening it brings Desktop
+Patterns forward). Its title is the text for now; the kit's `label` slot
+takes a 16×16 glyph the day one is drawn, the Apple menu's picture, with the
+text kept as the accessible name. To its right sit **the front application's
+menus and no other's**, and the **clock** keeps the bar's right end through
+every swap:
 
 ```
-Finder         │ Sprite Machine  File  Edit  View  Special                 10:42 │
-Sprite Editor  │ Sprite Machine  File  Edit  Tools  View                   10:42 │
-Text Viewer    │ Sprite Machine  File  Edit  View                          10:42 │
+Finder            │ Sprite Machine  File  Edit  View  Special              10:42 │
+Sprite Editor     │ Sprite Machine  File  Edit  Tools  View                10:42 │
+Text Viewer       │ Sprite Machine  File  Edit  View                       10:42 │
+Desktop Patterns  │ Sprite Machine  File  View                             10:42 │
 ```
 
-**The Finder's menus** — the bare desktop, a folder window or the Desktop
-Patterns panel front:
+**The Finder's menus** — the bare desktop or a folder window front:
 
 - **File** — _New…_ ⌃N (the one New — always a **document**, through the
   Sprite Editor's New box: the Finder's way to make one, as a double-click
@@ -446,8 +449,8 @@ Patterns panel front:
   folder_ in the front folder window else on the desktop, its name selected
   for typing; no key equivalent; greyed while the front window is the
   Trash's or a trashed folder's), then, after a rule, _Close_ ⌃W (the front
-  folder window, else the Desktop Patterns panel; greyed with the bare
-  desktop front). No Quit: the Finder had none.
+  folder window; greyed with the bare desktop front). No Quit: the Finder
+  had none.
 - **Edit** — _Copy_ ⌘C, _Paste_ ⌘V, _Select All_ ⌘A, the commands over the
   icons (see [Copy and Paste](#folders)), each with its own reading — Copy
   a selected icon that is not the Trash, Paste a front container that
@@ -571,6 +574,15 @@ showed over a read-only document:
   left live on a read-only file.
 - **View** — _Arrange Windows_ ⌘J, the arrange alone, greyed while the screen
   is arranged.
+
+**Desktop Patterns' menus** — the control panel front, a desk accessory's
+bar:
+
+- **File** — _Close_ ⌃W and _Quit_ ⌃Q, one panel ever, so both close it (a
+  selection never set is discarded, the close box's path).
+- **View** — _Arrange Windows_ ⌘J, the arrange alone, greyed while the screen
+  is arranged. No Edit: the panel holds no text field, and its choosing is
+  the mouse's.
 
 **The clock** — System 7.5's menu bar clock at the bar's right end, ticking
 on the minute; **pressing it** shows the **date** for three seconds. It's
@@ -774,9 +786,12 @@ zoom box; its body a `vf-stack pad="12"`, since a window body carries no inset
 of its own and this is the one window whose content wants one) cloned per open
 and **removed by its close box** — a second pick just brings it forward, one
 panel ever — centered by `centeredBox` and **adopted as a panel**, so Arrange
-re-centers it and a resize re-pins it like every window. It is the Finder's
-window, and the Finder's File → Close closes it: see
-[Three applications, one menu bar](#three-applications-one-menu-bar).
+re-centers it and a resize re-pins it like every window. It is **an
+application's window, its own**: Desktop Patterns is the fourth application,
+a desk accessory's seat, so the panel holding active swaps the bar to its
+File / View, and its File → Close or Quit closes it — see
+[Three applications, one menu bar](#three-applications-one-menu-bar) and
+[Menu bar](#menu-bar).
 
 ### Folders
 
@@ -1300,8 +1315,8 @@ src/lib/      the editor's domain — pure, no THREE and no DOM: the atlas's rin
 src/texts/    the built-in TEXT FILES — the read-me documents, one .txt each, imported
               whole (?raw) and listed by the index with the names their icons wear;
               seeded once per profile like the samples
-src/apps/     the three APPLICATIONS, one directory each on one shape — finder,
-              sprite-editor, text-viewer: its menus as a vf-menu fragment (menus.html,
+src/apps/     the four APPLICATIONS, one directory each on one shape — finder,
+              sprite-editor, text-viewer, desktop-patterns: its menus as a vf-menu fragment (menus.html,
               imported whole) and the module that wires them (every dialog flow, every
               gate, the application's public verbs) — and the registry (index) in the
               bar's order

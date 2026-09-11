@@ -1,15 +1,16 @@
 // ---------------------------------------------------------------------------
 // The FINDER — the desktop's application (docs/apps-plan.md): front while
-// the bare desktop, a folder window or the Desktop Patterns panel holds the
-// desktop's active state (nothing active reads as the Finder too — the
-// default), its menus File / Edit / View / Special (menus.html beside this
-// file) on the bar then and off it otherwise (shell/menu-bar.js). This
-// module wires those menus: New… (through the Sprite Editor's box — the
-// one New, always a document), New Folder, Close (the front folder window
-// or the control panel), the clipboard's three, Arrange Windows, and Empty
-// Trash… with its alert. The icon layer (shell/icons.js), the drag and the
-// rubber band are the Finder's too, but they are the kit's gestures over
-// the desktop and wire themselves; what lives here is the bar's share.
+// the bare desktop or a folder window holds the desktop's active state
+// (nothing active reads as the Finder too — the default), its menus File /
+// Edit / View / Special (menus.html beside this file) on the bar then and
+// off it otherwise (shell/menu-bar.js). This module wires those menus:
+// New… (through the Sprite Editor's box — the one New, always a document),
+// New Folder, Close (the front folder window), the clipboard's three,
+// Arrange Windows, and Empty Trash… with its alert. The icon layer
+// (shell/icons.js), the drag and the rubber band are the Finder's too, but
+// they are the kit's gestures over the desktop and wire themselves; what
+// lives here is the bar's share. The Desktop Patterns control panel is NOT
+// the Finder's: it is an application of its own (apps/desktop-patterns).
 //
 // COPY / PASTE / SELECT ALL (Sep 10 2026, docs/clipboard-plan.md) are the
 // Edit menu's commands over the icons: Copy takes the selected icons (the
@@ -34,7 +35,7 @@
 // claim no key (the kit's contract), so the Finder's ⌘C is inert in the
 // Sprite Editor with nothing written. What remains is each item's own
 // reading: New Folder the front container (not the Trash or inside it);
-// Close the front folder window or the control panel; Copy the selection,
+// Close the front folder window; Copy the selection,
 // Paste the front container, and all three NO TEXT CONTROL FOCUSED — read
 // off focusin / focusout's composed path, since the kit's key equivalents
 // check disabled and the match but never where the stroke landed, and an
@@ -72,7 +73,7 @@ export const finder = {
   name: 'Finder',
   menus,
   init({ menus, deps }) {
-    const { desktop, windows, patterns, folders, icons, modalOpen, showStorage } = deps;
+    const { desktop, windows, folders, icons, modalOpen, showStorage } = deps;
     const $ = (sel) => {
       const el = desktop.querySelector(sel);
       if (!el) throw new Error(`apps/finder: missing element ${sel}`);
@@ -355,12 +356,11 @@ export const finder = {
           break;
         }
         case 'close': {
-          // The Finder's front window: the front folder window, else the
-          // Desktop Patterns panel (a text window is the Text Viewer's, and
-          // its own Close is on the bar then).
+          // The Finder's front window: the front folder window (a text
+          // window is the Text Viewer's and the control panel Desktop
+          // Patterns', each with its own Close on the bar then).
           const f = folders.activeFolder();
           if (f != null) folders.close(f);
-          else if (patterns.isActive()) patterns.close();
           break;
         }
       }
@@ -448,8 +448,8 @@ export const finder = {
     // front window is the Trash's, or a trashed folder's (System 7's own —
     // a folder is not made in the Trash; the slice refuses regardless); it
     // has no key equivalent, so a text control's focus leaves it alone.
-    // Close reads the front folder window or the control panel, re-read on
-    // every change of the desktop's active window (vf-activate). The three
+    // Close reads the front folder window, re-read on every change of the
+    // desktop's active window (vf-activate). The three
     // in the Edit menu read two more things: Copy needs a selected icon that
     // is not the Trash (the icon layer's selection(), re-read on its
     // onSelectionChange: the kit's vf-select, the activation's clear, the
@@ -476,7 +476,7 @@ export const finder = {
     const syncGate = () => {
       const st = files.get();
       const front = folders.activeFolder();
-      itemClose.disabled = !(front != null || patterns.isActive());
+      itemClose.disabled = front == null;
       itemNewFolder.disabled = isTrashed(st, front);
       itemCopy.disabled = textFocused || icons.selection().length === 0;
       itemPaste.disabled = textFocused || isTrashed(st, front);
@@ -516,8 +516,8 @@ export const finder = {
     // while the screen IS the arrangement (windows.arranged — every visible
     // window at the box its placement would write; the hidden windoids
     // don't count, so a bare desktop reads arranged), live the moment a
-    // folder window, the control panel or a document window behind the
-    // Finder sits off its placement. windows.onLayout is the geometry
+    // folder window or a document window behind the Finder sits off its
+    // placement. windows.onLayout is the geometry
     // signal; the stores cover the placement's inputs.
     const itemArrange = item(menuView, 'arrange');
     const syncArrange = () => {

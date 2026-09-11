@@ -30,8 +30,9 @@
 //   menu and the clock (the clock is a slotted vf-label style.css keeps at
 //   the right end), and on every change of shell.frontApp — the desktop's
 //   activation wire's reading of the active window (shell/windows.js): a
-//   document window the Sprite Editor, a text window the Text Viewer, a
-//   folder window, the control panel or nothing the Finder — the outgoing
+//   document window the Sprite Editor, a text window the Text Viewer, the
+//   control panel Desktop Patterns, a folder window or nothing the Finder
+//   — the outgoing
 //   application's menus are REMOVED and the incoming one's INSERTED. Nodes
 //   moved, never rebuilt, so an item's state survives the trip and a menu
 //   reads on its return exactly as it was left. The kit takes menus coming
@@ -45,7 +46,7 @@
 //   role gating (the sixteen DOC_SCOPED items, the Finder-role clauses).
 //   Detach, never hide: a hidden menu's items would stay connected and keep
 //   claiming. The bar's `label` follows — Finder, Sprite Editor, Text
-//   Viewer — so the menubar announces whose it is.
+//   Viewer, Desktop Patterns — so the menubar announces whose it is.
 //
 //   THE BOOT: nothing is active at wire-up, shell.frontApp reads the
 //   Finder, and the first sync slots the Finder's menus — synchronous, at
@@ -147,8 +148,9 @@ export function initMenuBar(desktop, { apps, defaultApp }, services) {
         break;
       case 'desktop-patterns':
         // The Desktop Patterns control panel (shell/patterns.js): a window,
-        // machine-level like About — live in every application. Opening it
-        // brings the Finder forward: it's the Finder's window.
+        // opened from here in every application — the Apple menu's Control
+        // Panels. Opening it brings Desktop Patterns forward: the panel is
+        // that application's window (apps/desktop-patterns).
         services.patterns.open();
         break;
     }

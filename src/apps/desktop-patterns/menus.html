@@ -1,0 +1,31 @@
+<!-- DESKTOP PATTERNS' menus (docs/apps-plan.md; a fourth application, the
+     user's call Sep 11 2026) — the control panel as an application of its
+     own, a desk accessory's seat: front while its panel (shell/patterns.js)
+     holds the desktop's active state. A fragment of vf-menu elements:
+     shell/menu-bar.js parses it once into live nodes, slots them between
+     the Sprite Machine menu and the clock while Desktop Patterns is front
+     and lifts them out when another application comes forward — a detached
+     menu claims no key (the kit's contract). apps/desktop-patterns/index.js
+     wires the nodes: a menu is addressed by data-menu, an item by value,
+     WITHIN this fragment. The smallest bar of the four: a desk accessory
+     under System 7 showed File to close and quit it, and this machine's
+     one command over the whole screen; no Edit — the panel holds no text
+     field, and its choosing is the mouse's (a click on a cell, Set Desktop
+     Pattern). -->
+<vf-menu data-menu="file" label="File">
+  <!-- Close ⌃W (Control alone — ⌘W is the browser's before the page sees
+       it): the panel, a selection never set discarded (the close box's
+       twin). Always live here: the application is front only with the
+       panel active. -->
+  <vf-menu-item value="close" shortcut="⌃W">Close</vf-menu-item>
+  <!-- Quit ⌃Q (on Close's reasoning): a desk accessory's Quit — one panel
+       ever, so it is the same close under the application's own word. -->
+  <vf-menu-item value="quit" shortcut="⌃Q">Quit</vf-menu-item>
+</vf-menu>
+<vf-menu data-menu="view" label="View">
+  <!-- ⌘J — Arrange Windows, in every application's View menu: here the
+       ARRANGE alone (the boot placement re-run on the current raster — the
+       panel back to the raster's center with the rest), greyed while the
+       screen already IS the arrangement (windows.arranged). -->
+  <vf-menu-item value="arrange" shortcut="⌘J" disabled>Arrange Windows</vf-menu-item>
+</vf-menu>
