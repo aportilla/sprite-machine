@@ -104,10 +104,12 @@
 // dirty-checking flow (the Sprite Editor's, apps/sprite-editor) — the
 // workspace does the removing.
 //
-// The ZOOM BOX (document windows only — the template declares `zoomable`)
-// toggles a window between the placement's zoomed state and the size it
-// had before the zoom (a session truth, never persisted), top-left held
-// both ways: see onZoom below.
+// The ZOOM BOX toggles a window between an expanded state and what it had
+// before (a session truth, never persisted): a DOCUMENT window's (the
+// template declares `zoomable`) grows right and down to the vacancy with
+// its top-left held both ways; a PANEL that declares an `expanded` box at
+// adoption (the text windows — a reading column) goes to that box and
+// back, its state read at the click by nearness. See onZoom below.
 //
 // ⌘J — View → Arrange Windows — is ONE item under a STATE rule (the Sprite
 // Editor owns the item, apps/sprite-editor; arranged() and zoomActive()
@@ -140,6 +142,7 @@ import {
   cascadeFrom,
   cascadeSlot,
   initialPlacement,
+  nearBox,
   pinOf,
   pinTo,
   spriteHeightFor,
@@ -410,9 +413,11 @@ export function initWindows(desktop) {
   };
   // Panel windows adopted from outside (see the header), each with the
   // pure placement that puts it on a raster — `(desktopW, desktopH) → box`
-  // — and the application it belongs to (what the bar shows while it holds
-  // active; the Finder when the owner declared none).
-  /** @type {Map<VfWindow, {boxFor: (w: number, h: number) => {left: number, top: number, width: number, height: number}, app: import('../state/shell.js').AppId}>} */
+  // — the application it belongs to (what the bar shows while it holds
+  // active; the Finder when the owner declared none) and, for a panel with
+  // a zoom box, its expanded box on a raster, the same pure shape (null
+  // for none).
+  /** @type {Map<VfWindow, {boxFor: (w: number, h: number) => {left: number, top: number, width: number, height: number}, app: import('../state/shell.js').AppId, expanded: ((w: number, h: number) => {left: number, top: number, width: number, height: number}) | null}>} */
   const panels = new Map();
   const panelBox = (win) => {
     const boxFor = panels.get(win)?.boxFor;
@@ -684,6 +689,18 @@ export function initWindows(desktop) {
       width: win.width ?? 0,
       height: win.height ?? 0,
     };
+    // An EXPANDED panel (a read-me at its zoom box's column, read the
+    // click's way — near the box on the raster it sat on) stays expanded:
+    // the box re-derives on the new raster instead of pinning, so the
+    // column keeps its pads and its center and the next click still reads
+    // it expanded. writeBox drops the pin record, so the resize after a
+    // move away from the column reads a fresh pin.
+    const expanded = panels.get(win)?.expanded;
+    if (expanded && nearBox(cur, expanded(before.width, before.height))) {
+      const g = expanded(after.width, after.height);
+      writeBox(win, { ...g, left: snapSys(g.left, win), top: snapSys(g.top, win) });
+      return;
+    }
     let rec = pins.get(win);
     // Moved or resized since this path last wrote it (a non-resizable
     // window compares position only: the Sprite View's height is the
@@ -721,6 +738,27 @@ export function initWindows(desktop) {
       height: win.height,
     });
   };
+  /** A remembered pin re-expressed on the CURRENT raster by the resize
+   *  rule's policy for `win`, then clamped on like every placement — where
+   *  a browser resize would have carried the box, on screen. A folder
+   *  window's reopen (addPanel) and a panel's restore from its expanded box
+   *  (expandToggle) land through it. */
+  const pinnedBox = (win, pin) =>
+    clampedBox(
+      desktop,
+      win,
+      pinTo(
+        pin,
+        { width: desktop.width, height: desktop.height },
+        WINDOW_FRAME,
+        policyOf(win, {
+          left: win.left ?? 0,
+          top: win.top ?? 0,
+          width: win.width ?? 0,
+          height: win.height ?? 0,
+        })
+      )
+    );
 
   const api = {
     byId,
@@ -877,7 +915,10 @@ export function initWindows(desktop) {
      *  resize from there, and arrange() sends it to `boxFor`. `app` names
      *  the APPLICATION the panel belongs to — what the bar shows while the
      *  panel holds active (the header's APP ACTIVATION); undeclared, the
-     *  Finder. The window must already be a slotted child of the desktop
+     *  Finder. `expanded` is its ZOOM BOX, when it has one: the expanded
+     *  box on a raster, `boxFor`'s pure shape (onZoom below — the owner's
+     *  template declares `zoomable`). The window must already be a slotted
+     *  child of the desktop
      *  (the clamp reads its live lattice); if the kit has already made it
      *  the active window, the declaration re-reads the mirror, so the
      *  front application is right whichever order the owner appends,
@@ -885,24 +926,12 @@ export function initWindows(desktop) {
      *  @param {VfWindow} win
      *  @param {(w: number, h: number) => {left: number, top: number, width: number, height: number}} boxFor
      *  @param {import('./layout.js').Pin | null} [pin]
-     *  @param {{app?: import('../state/shell.js').AppId}} [opts] */
-    addPanel(win, boxFor, pin = null, { app = FINDER } = {}) {
-      panels.set(win, { boxFor, app });
+     *  @param {{app?: import('../state/shell.js').AppId, expanded?: (w: number, h: number) => {left: number, top: number, width: number, height: number}}} [opts] */
+    addPanel(win, boxFor, pin = null, { app = FINDER, expanded } = {}) {
+      panels.set(win, { boxFor, app, expanded: expanded ?? null });
       if (desktop.activeWindow === win) applyActive(win);
       if (pin) {
-        const cur = {
-          left: win.left ?? 0,
-          top: win.top ?? 0,
-          width: win.width ?? 0,
-          height: win.height ?? 0,
-        };
-        const g = pinTo(
-          pin,
-          { width: desktop.width, height: desktop.height },
-          WINDOW_FRAME,
-          policyOf(win, cur)
-        );
-        writeBox(win, clampedBox(desktop, win, g));
+        writeBox(win, pinnedBox(win, pin));
       } else {
         placePanel(win);
       }
@@ -1090,10 +1119,58 @@ export function initWindows(desktop) {
       win.height = z.height;
     }
   };
+  // A PANEL's zoom box — the text windows', whose owner declares the
+  // expanded box at adoption (layout.js expandedTextBox, a reading
+  // column) — is System 7's standard-state / user-state toggle with the
+  // state READ at the click, never kept: a window whose every edge sits
+  // near the expanded box on the live raster (layout.js nearBox — a
+  // lattice snap or a nudge off still counts) goes back to what it had,
+  // and any other goes to the expanded box. The expanded box MOVES the
+  // window as well as sizing it, so what the expand records is the whole
+  // box — as its nine-slice pin on the raster it sat on (a folder window's
+  // remembered-box discipline), so the restore lands where a browser
+  // resize would have carried the window had it never expanded, on
+  // screen (pinnedBox). With nothing recorded — a window grown by hand
+  // onto the column, a record already spent — the panel's own placement
+  // is the fallback: its authored size at the slot it opened on, where
+  // Arrange Windows sends it. The expanded box pads from the menu bar,
+  // above the windows' reserve (the options strip is hidden while the
+  // panel's application is front), so its write snaps onto the lattice
+  // and never clamps; a browser resize keeps it expanded (repin).
+  /** Pre-expand pins, per panel — recorded by the expand, spent by the
+   *  restore (zoomMemory's discipline). */
+  const expandMemory = new WeakMap();
+  const expandToggle = (win) => {
+    const expanded = panels.get(win)?.expanded;
+    if (!expanded) return;
+    const raster = { width: desktop.width, height: desktop.height };
+    const cur = {
+      left: win.left ?? 0,
+      top: win.top ?? 0,
+      width: win.width ?? 0,
+      height: win.height ?? 0,
+    };
+    const target = expanded(raster.width, raster.height);
+    if (nearBox(cur, target)) {
+      const pin = expandMemory.get(win);
+      expandMemory.delete(win);
+      const back = pin ? pinnedBox(win, pin) : panelBox(win);
+      if (back) writeBox(win, back);
+    } else {
+      expandMemory.set(win, pinOf(cur, raster, WINDOW_FRAME));
+      writeBox(win, {
+        ...target,
+        left: snapSys(target.left, win),
+        top: snapSys(target.top, win),
+      });
+    }
+  };
   const onZoom = (e) => {
     const win = e.target;
-    if (!(win instanceof VfWindow) || keyOf(win) == null) return;
-    zoomToggle(win);
+    if (!(win instanceof VfWindow)) return;
+    if (keyOf(win) != null) zoomToggle(win);
+    else if (panels.get(win)?.expanded) expandToggle(win);
+    else return;
     notifyLayout();
   };
   desktop.addEventListener('vf-zoom', onZoom);

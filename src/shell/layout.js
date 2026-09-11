@@ -32,6 +32,13 @@
 //   same boundaries the doc box leaves its cascade room against — so a
 //   zoomed window fills the open area without running under the rail.
 //
+//   expandedTextBox() is the TEXT windows' zoom box (Sep 11 2026): a
+//   reading column — the desktop below the menu bar, TEXT_EXPAND_PAD in
+//   from every edge, never wider than TEXT_EXPAND_MAX_WIDTH and centered
+//   across — and nearBox() is how its toggle reads the state at the click:
+//   a window whose every edge sits within EXPAND_NEAR of that box is
+//   expanded, so nothing has to remember that it is.
+//
 //   centeredBox() is the PANEL windows' placement — the Desktop Patterns
 //   control panel: a fixed-size window centered in the open area below the
 //   options strip's band, the way the Finder placed a window it had no
@@ -685,6 +692,67 @@ export function folderBox(desktopW, desktopH, size, n = 0) {
     width: size.width,
     height: size.height,
   };
+}
+
+// --- the text windows' expanded state (Sep 11 2026) ----------------------------
+// A read-me's zoom box (windows.js onZoom — a panel that declares an
+// expanded box at adoption) toggles between this box, System 7's STANDARD
+// state — the size the application thinks best — and the user's own, the
+// box it had before. A read-me reads best as a column: the desktop below
+// the MENU BAR (the Text Viewer is front whenever its zoom box is clicked,
+// so the options strip is hidden and the bar is the desktop's top edge),
+// TEXT_EXPAND_PAD in from every edge, but never wider than
+// TEXT_EXPAND_MAX_WIDTH — it fills the height of any raster, and on a wide
+// one stands centered rather than running the width.
+export const TEXT_EXPAND_PAD = 20;
+export const TEXT_EXPAND_MAX_WIDTH = 520;
+/** How close is "at" the expanded box: every edge within half the pad —
+ *  past a lattice snap (a quantum of 2 or 4 system px) and a nudge, short
+ *  of a real move or grow. */
+export const EXPAND_NEAR = TEXT_EXPAND_PAD / 2;
+
+/**
+ * A text window's expanded box on a `desktopW`×`desktopH` raster: the
+ * desktop below the menu bar inset TEXT_EXPAND_PAD on every side, the width
+ * capped at TEXT_EXPAND_MAX_WIDTH and the box centered across. Floored at
+ * DOC_MIN, the zoom box's own floor, so a tiny raster still expands to a
+ * workable box (hanging off it, the resize rule's posture), its left edge
+ * never off the raster's. Whole system px.
+ *
+ * @param {number} desktopW
+ * @param {number} desktopH
+ * @returns {{left: number, top: number, width: number, height: number}}
+ */
+export function expandedTextBox(desktopW, desktopH) {
+  const top = MENU_BAR + TEXT_EXPAND_PAD;
+  const width = Math.max(
+    DOC_MIN,
+    Math.min(TEXT_EXPAND_MAX_WIDTH, desktopW - 2 * TEXT_EXPAND_PAD)
+  );
+  return {
+    left: Math.max(0, Math.floor((desktopW - width) / 2)),
+    top,
+    width,
+    height: Math.max(DOC_MIN, desktopH - TEXT_EXPAND_PAD - top),
+  };
+}
+
+/**
+ * Is `box` close to `target` — each of its four edges within `tol` of the
+ * target's? The text windows' zoom box reads its state with it, at the
+ * click and across a browser resize (windows.js).
+ *
+ * @param {{left: number, top: number, width: number, height: number}} box
+ * @param {{left: number, top: number, width: number, height: number}} target
+ * @param {number} [tol]
+ */
+export function nearBox(box, target, tol = EXPAND_NEAR) {
+  return (
+    Math.abs(box.left - target.left) <= tol &&
+    Math.abs(box.top - target.top) <= tol &&
+    Math.abs(box.left + box.width - (target.left + target.width)) <= tol &&
+    Math.abs(box.top + box.height - (target.top + target.height)) <= tol
+  );
 }
 
 /**

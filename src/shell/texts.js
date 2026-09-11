@@ -46,13 +46,23 @@
 //   THE TITLE follows the model: the listing drives it (a rename from the
 //   icon retitles the window), and a text whose record is gone closes its
 //   window — the folder windows' sync.
+//
+//   THE ZOOM BOX (Sep 11 2026 — the template declares `zoomable`) expands
+//   a read-me to a READING COLUMN: the whole desktop below the menu bar,
+//   20 in from every edge but never wider than 520, centered — the height
+//   of any screen, never the width of a wide one (layout.js
+//   expandedTextBox). A second click puts it back where it was. The
+//   window layer owns the toggle (windows.js onZoom — this module only
+//   declares the box at adoption): the state is read at the click, by
+//   how close the window sits to the column, and a browser resize keeps
+//   an expanded window expanded.
 // ---------------------------------------------------------------------------
 
 import { VfWindow } from 'vintage-frames';
 import { files } from '../state/files.js';
 import { build } from '../state/build.js';
 import { TEXT_VIEWER } from '../state/shell.js';
-import { folderBox } from './layout.js';
+import { expandedTextBox, folderBox } from './layout.js';
 
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
@@ -126,9 +136,11 @@ export function initTexts(desktop, windows) {
     // slot-in — the read-me's application coming forward.
     desktop.append(win);
     wins.set(id, win);
-    // The Text Viewer's panel: the bar shows its menus while it is front.
+    // The Text Viewer's panel: the bar shows its menus while it is front,
+    // and its zoom box toggles the reading column (see the header).
     windows.addPanel(win, (w, h) => folderBox(w, h, size, n), null, {
       app: TEXT_VIEWER,
+      expanded: expandedTextBox,
     });
     desktop.bringToFront(win);
     notify();

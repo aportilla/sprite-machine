@@ -890,7 +890,9 @@
          desktop's active state, it IS another application's turn — Sprite
          Machine deactivates (windoids and strip hide) while it is front, as
          it did when a read-me opened TeachText over it. No header, no
-         status strip, no zoom box (the folder windows' "not yet"). The body
+         status strip; a ZOOM BOX (`zoomable`) that expands the read-me to
+         a reading column and back (layout.js expandedTextBox, windows.js
+         onZoom). The body
          is the file's text in ONE kit paragraph on the body face — Geneva,
          the reading face, TeachText's own — kept verbatim by the page's one
          text-flow rule (style.css .text-body: pre-wrap, so the file's line
@@ -909,6 +911,7 @@
         heading="untitled"
         movable
         resizable
+        zoomable
         scrollbars="vertical"
         width="440"
         height="320"

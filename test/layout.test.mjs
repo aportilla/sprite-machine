@@ -1,7 +1,8 @@
 // Node-runnable tests for the desktop's window + icon arithmetic
 // (shell/layout.js): the RESIZE RULE — the nine-slice pin in both frames, and
-// the placement as its fixed point — the cascade's slot rules, and a tiny
-// raster's finiteness. Never where a window goes. Run: node --test
+// the placement as its fixed point — the cascade's slot rules, the text zoom
+// box's nearness reading, and a tiny raster's finiteness. Never where a
+// window goes. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -25,6 +26,8 @@ import {
   TOOLS_BOX,
   WINDOW_FRAME,
   ICON_FRAME,
+  nearBox,
+  EXPAND_NEAR,
 } from '../src/shell/layout.js';
 
 // The Tools palette's box — the placement's one fixed input.
@@ -126,6 +129,17 @@ test('cascade: every slot held wraps instead of walking off the raster; a slot r
     slot: 2,
   });
   assert.deepEqual(cascadeSlot(b, CASCADE_SLOTS + 1), cascadeSlot(b, 1));
+});
+
+test('near: a box reads at its target while every edge is within the tolerance — the far edges too', () => {
+  const t = box(300, 40, 520, 700);
+  assert.ok(nearBox(t, t));
+  // A lattice snap or a nudge off, on any edge, still reads near…
+  assert.ok(nearBox(box(302, 38, 520, 700), t));
+  assert.ok(nearBox(box(300, 40, 520 + EXPAND_NEAR, 700 - EXPAND_NEAR), t));
+  // …one edge past it does not: a move, or a grow with the top-left held.
+  assert.ok(!nearBox(box(300 + EXPAND_NEAR + 1, 40, 520, 700), t));
+  assert.ok(!nearBox(box(300, 40, 520, 700 - EXPAND_NEAR - 1), t));
 });
 
 test('pin: a strut keeps its offset from its edge, a spring its fraction of the middle', () => {

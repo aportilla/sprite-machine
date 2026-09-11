@@ -1009,10 +1009,11 @@ A first pass, deliberately: **plain text, display only**.
   seeded reaches no existing profile (a versioned re-seed), a dropped or
   pasted `.txt` (only PNGs arrive today), and any editing.
 - **The window** (`shell/texts.js`, cloned from `#tpl-text-window`) is the
-  classic read-me's: a document-tier window — striped bar, close box,
-  `movable resizable scrollbars="vertical"`, the kit's rail on the frame's
-  right edge with the grow box in its corner cell — TeachText wrapped its
-  text to the window's width and scrolled it up and down only. The body is
+  classic read-me's: a document-tier window — striped bar, close box, zoom
+  box, `movable resizable zoomable scrollbars="vertical"`, the kit's rail
+  on the frame's right edge with the grow box in its corner cell —
+  TeachText wrapped its text to the window's width and scrolled it up and
+  down only. The body is
   the file's text in **one kit paragraph on the body face** (Geneva, the
   reading face), verbatim: the page's one text-flow rule keeps the file's
   line breaks and blank lines and wraps its long lines at the window, a
@@ -1036,7 +1037,22 @@ A first pass, deliberately: **plain text, display only**.
   from the doc box's corner, stepped per text window already open —
   re-placed by Arrange Windows and re-pinned by a browser resize like every
   window, and **nothing about it persists**: not its box, not its scroll,
-  not that it was open. No zoom box yet, with the folder windows.
+  not that it was open.
+- **The zoom box expands it to a reading column**: the whole desktop below
+  the menu bar, **20 in from every edge** but **never wider than 520**,
+  centered — the height of any screen, never the width of a wide one
+  (`expandedTextBox` in `shell/layout.js`). A second click puts it back
+  **where it was**, and which way a click goes is **read at the click**,
+  never kept: a window whose every edge sits within 10 of the column is
+  expanded — a nudge or a lattice snap still counts — so it restores, and
+  any other expands. What it had is remembered as its **nine-slice pin**,
+  the folder windows' discipline, so the restore lands where a browser
+  resize would have carried it; with nothing remembered — a window grown
+  by hand onto the column — it takes its placement, the authored 440 × 320
+  at the slot it opened on. A browser resize keeps an expanded window
+  expanded, and Arrange Windows sends it home like every window. The
+  document window's zoom box is the other kind: top-left held, grown to
+  the vacancy (see [Windows](#windows)).
 
 ### The About box
 
@@ -1282,7 +1298,8 @@ watertightness and its gate, the region trace, the skin's bake and its UV
 read, the rasterizers, the document format, the document and library
 contracts, and the resize rule. The state slices get a few behavior tests
 each, never the store's discipline per setter; the layout tests cover the
-resize rule and the cascade's slots, never where a window goes.
+resize rule, the cascade's slots and the text zoom box's nearness, never
+where a window goes.
 
 ### Testing
 
