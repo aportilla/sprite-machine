@@ -49,8 +49,9 @@
 // the viewport runs to the frame's edge — a body or a viewport carries no
 // inset of its own since 0.6.0), so a row wider than the window scrolls
 // under the rail, and the user sizes the window's WIDTH with the grow box
-// (shell/windows.js declares the kit's size rect: min-width at the
-// controls, min-height = max-height = ringHeightFor(size), so the window
+// (the Sprite Editor's windows.js declares the kit's size rect: min-width
+// at the controls, min-height = max-height = ringHeightFor(size), so the
+// window
 // resizes on the horizontal axis alone). The paper is the body's one
 // in-flow box, at the plane's origin by flow, and as wide as the plane:
 // the kit sizes its scrolled plane to in-flow content that cannot wrap

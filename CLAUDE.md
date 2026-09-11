@@ -28,6 +28,49 @@ Read `README.md` first; it is the spec. The testing policy is
   (what, why, the decisions, tests), no counts, and the
   `Claude-Session:` trailer. Commit and push on the user's word only.
 
+## Applications and the shell
+
+The desktop is four applications — the Finder, the Sprite Editor, the Text
+Viewer and Desktop Patterns, one directory each under `src/apps/` — over
+one shell. Keep them apart:
+
+- **Application behavior lives in its application's directory**: its menus
+  and commands (`menus.html`, `index.js`), and its windows — their markup
+  (`windows.html`), lifecycle, adoption and what their close and zoom boxes
+  mean (`windows.js`), and their placement and sizes (`layout.js`, pure).
+  `src/shell/` holds only what every application shares: the window
+  manager's rules (`shell/windows.js` — `windows.adopt`, the
+  front-application reading, the resize rule, Arrange Windows composed from
+  each application's group) and the desktop's geometry (`shell/layout.js` —
+  the landmarks, `WINDOW_ORIGIN`, the cascade, nearness, the pin).
+- **Primitives in the shell, choices in the application.** A cascade, a
+  pin, a centered box or a nearness test may live in the shell; which box,
+  which size and what "zoomed" means belong to the application. Shell code
+  that names an application, a kind of window, or a number derived from
+  one application's art is in the wrong place — and existing code that
+  does it is debt to pay down, never a precedent to copy.
+- **The arrows point one way**: `src/apps/` imports `src/shell/`, never the
+  reverse. An application reaches the shell through generic declarations
+  (`windows.adopt`, `arrangeWith`, `setFrameBands`) and signals
+  (`onLayout`, `onWindows`, `onRaster`, `beforeFront`); the shell never
+  calls into an application through a hook the application injected.
+- **Cross-application calls** go through `deps.apps`, read at pick time,
+  never at wire-up, so the order the applications initialize in never
+  matters.
+- The move that put every window in its application is
+  `docs/app-windows-plan.md` (built 2026-09-11); its follow-ups — the scene
+  beside its windoids, the components beside their application — take the
+  same direction.
+
+A larger change starts as a plan in `docs/<topic>-plan.md`, on the shape
+the recent plans share (`folders-plan.md`, `trash-plan.md`,
+`clipboard-plan.md`, `apps-plan.md`): a status line quoting the ask, the
+System 7 model it copies, the design, steps that each land green, kit
+asks, numbered decisions for the user with a recommendation each, tests
+by the rules, follow-ups and files touched. The decisions are the user's:
+record each in the plan, dated, when it is made, and keep the status line
+current as steps land.
+
 ## Releasing
 
 Two versions live here, and they are independent:

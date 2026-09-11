@@ -11,8 +11,9 @@
 // and the bar's own press controller hit-tests titles and rows by COORDINATE
 // and ignores everything else — so the clock's pointerdown is its own, and
 // the page's existing chrome rules already say the right things about it: a
-// press inside the bar keeps the Finder selection (shell/icons.js's CHROME
-// test) and never deactivates the application (shell/windows.js's press test
+// press inside the bar keeps the Finder selection (the icon layer's CHROME
+// test, apps/finder/icons.js) and never deactivates the application
+// (shell/windows.js's press test
 // is `target === desktop`). The label's line box is pinned to the bar's 20px
 // (style.css) so its em sits on the same rows as the menu titles.
 //

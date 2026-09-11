@@ -29,7 +29,8 @@ export function createStage(canvas, { cam = null } = {}) {
   // backdrop of its own, so the model (and the ground's shadow, a
   // ShadowMaterial — shadow-only, transparent) composites over whatever the
   // page puts behind the canvas — the 3D View's kit pattern well
-  // (index.html's #stage-well, a vf-container with a 1-bit pattern).
+  // (the Sprite Editor's windows.html #stage-well, a vf-container with a
+  // 1-bit pattern).
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true });
   renderer.setPixelRatio(1);
   renderer.setClearColor(0x000000, 0);

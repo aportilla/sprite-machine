@@ -6,8 +6,10 @@
 //
 //   THE SPRITE MACHINE MENU is the Apple menu's seat and role — authored in
 //   index.html at the bar's left, live in every application: About Sprite
-//   Machine… (also the boot greeting) and Desktop Patterns, the machine's
-//   things rather than an application's. Its handler and the shared dialogs
+//   Machine… (also the boot greeting) and Desktop Patterns (the control
+//   panel, opened through the registry — that application's `open`), the
+//   machine's things rather than an application's. Its handler and the
+//   shared dialogs
 //   live here: the About box (its version and date lines filled from the
 //   build facts), the storage-unavailable notice, and the `modalOpen()`
 //   guard every handler in every application keeps (a key equivalent fires
@@ -56,12 +58,14 @@
 //   CROSS-APPLICATION CALLS go through `deps.apps` — the registry's
 //   actions by id, filled as each `init` returns, read at pick time (never
 //   at wire-up, so the order of initialization cannot bite): the Finder's
-//   New… calls the Sprite Editor's newDocument(); main.js's icon layer
-//   calls its openDoc(id) through the same record (returned as `apps`).
+//   New… calls the Sprite Editor's newDocument(), and its icon layer the
+//   Sprite Editor's openDoc(id) and the Text Viewer's open(id); main.js
+//   reads the Finder's positions() and pins() through the same record for
+//   the desktop state's snapshot (returned as `apps`).
 // ---------------------------------------------------------------------------
 
 import { session } from '../state/session.js';
-import { shell } from '../state/shell.js';
+import { shell, DESKTOP_PATTERNS } from '../state/shell.js';
 
 /**
  * What the controller hands every application's `init`: the shell's
@@ -69,12 +73,10 @@ import { shell } from '../state/shell.js';
  * @typedef {{
  *   desktop: import('vintage-frames').VfDesktop,
  *   windows: ReturnType<typeof import('./windows.js').initWindows>,
- *   patterns: ReturnType<typeof import('./patterns.js').initPatterns>,
  *   ring: ReturnType<typeof import('../scene/ring.js').initRing>,
  *   model: ReturnType<typeof import('../scene/model-export.js').initModelExport>,
- *   folders: ReturnType<typeof import('./folders.js').initFolders>,
- *   texts: ReturnType<typeof import('./texts.js').initTexts>,
- *   icons: ReturnType<typeof import('./icons.js').initIcons>,
+ *   iconPos(key: string): {left: number, top: number} | null,
+ *   windowPin(key: string): import('./layout.js').Pin | null,
  *   showAbout(): void,
  *   showStorage(): void,
  *   modalOpen(): boolean,
@@ -88,12 +90,12 @@ import { shell } from '../state/shell.js';
  *   The applications in the bar's order, and the one whose menus the bar
  *   holds for an id no application claims.
  * @param {Omit<AppDeps, 'desktop'|'showAbout'|'showStorage'|'modalOpen'|'apps'>} services
- *   The shell's services the applications wire to: the window layer, the
- *   panel owners (the Desktop Patterns control panel, the folder windows,
- *   the text windows), the 3D Sprite Atlas's renderer follower (Export
- *   Sprite Atlas… renders through it), the 3D model export's subject
- *   (Export 3D Model… writes its glb through it), and the icon layer (New
- *   Folder's rename box, Copy's selection).
+ *   The shell's services the applications wire to: the window manager, the
+ *   3D Sprite Atlas's renderer follower (Export Sprite Atlas… renders
+ *   through it), the 3D model export's subject (Export 3D Model… writes its
+ *   glb through it), and the desktop state's two readers the Finder
+ *   restores its furniture from (a saved icon position and a saved folder
+ *   window's pin, by the item's key — desktop-state.js).
  */
 export function initMenuBar(desktop, { apps, defaultApp }, services) {
   const $ = (sel) => {
@@ -147,11 +149,12 @@ export function initMenuBar(desktop, { apps, defaultApp }, services) {
         showAbout();
         break;
       case 'desktop-patterns':
-        // The Desktop Patterns control panel (shell/patterns.js): a window,
-        // opened from here in every application — the Apple menu's Control
-        // Panels. Opening it brings Desktop Patterns forward: the panel is
-        // that application's window (apps/desktop-patterns).
-        services.patterns.open();
+        // The Desktop Patterns control panel: a window, opened from here in
+        // every application — the Apple menu's Control Panels — through the
+        // registry (that application's `open`, read at the pick). Opening it
+        // brings Desktop Patterns forward: the panel is that application's
+        // own window (apps/desktop-patterns).
+        actionsById[DESKTOP_PATTERNS]?.open();
         break;
     }
   });
@@ -209,8 +212,10 @@ export function initMenuBar(desktop, { apps, defaultApp }, services) {
     /** The boot greeting (main.js): a load with no ?file=<name> to open
      *  parks at the About box. */
     showAbout,
-    /** Every application's public verbs by id — the Sprite Editor's
-     *  openDoc for the icon layer's double-click (main.js, late-bound). */
+    /** Every application's public verbs by id — main.js reads the Finder's
+     *  positions and pins through it for the desktop state's snapshot, and
+     *  surfaces a dropped file's window through the Sprite Editor's
+     *  showDocument. */
     apps: actionsById,
     dispose() {
       for (const instance of instances) instance.dispose();

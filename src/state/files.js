@@ -61,7 +61,7 @@
 //
 // A TEXT FILE IS ITS TEXT (Sep 10 2026): the third kind of catalog item —
 // the read-me documents on the desktop, plain text shown in a TeachText
-// window (shell/texts.js) — a record of its own in storage's third store,
+// window (apps/text-viewer) — a record of its own in storage's third store,
 // `{id, name, text, createdAt, modifiedAt, folder}`, listed here as `texts`
 // (a TextRow: the record less its text, plus `size`, the text's UTF-8 byte
 // length, the Empty Trash alert's K). It files like a document — the same

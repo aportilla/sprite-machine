@@ -6,11 +6,14 @@
 // off it otherwise (shell/menu-bar.js). This module wires those menus:
 // New… (through the Sprite Editor's box — the one New, always a document),
 // New Folder, Close (the front folder window), the clipboard's three,
-// Arrange Windows, and Empty Trash… with its alert. The icon layer
-// (shell/icons.js), the drag and the rubber band are the Finder's too, but
-// they are the kit's gestures over the desktop and wire themselves; what
-// lives here is the bar's share. The Desktop Patterns control panel is NOT
-// the Finder's: it is an application of its own (apps/desktop-patterns).
+// Arrange Windows, and Empty Trash… with its alert. Its windows are its own
+// (docs/app-windows-plan.md), made here: the folder windows (windows.js,
+// windows.html) and the icon layer over the desktop's field and theirs
+// (icons.js — the drag, the rubber band, filing, the selection the Edit
+// menu reads). What this module adds is the bar's share, and two readings
+// main.js hands the desktop state's snapshot (`positions`, `pins`). The
+// Desktop Patterns control panel is NOT the Finder's: it is an application
+// of its own (apps/desktop-patterns).
 //
 // COPY / PASTE / SELECT ALL (Sep 10 2026, docs/clipboard-plan.md) are the
 // Edit menu's commands over the icons: Copy takes the selected icons (the
@@ -66,6 +69,8 @@ import { TILE_MIN, TILE_MAX } from 'sprite-machine';
 import { sheetShape } from '../../lib/sheet-shape.js';
 import { readSheetMeta } from '../../loaders.js';
 import { bytesToImageData } from '../../image-io.js';
+import { initFolderWindows } from './windows.js';
+import { initIcons } from './icons.js';
 
 /** @type {import('../index.js').App} */
 export const finder = {
@@ -73,7 +78,18 @@ export const finder = {
   name: 'Finder',
   menus,
   init({ menus, deps }) {
-    const { desktop, windows, folders, icons, modalOpen, showStorage } = deps;
+    const { desktop, windows, modalOpen, showStorage } = deps;
+    // The application's windows (the header): the folder windows, each
+    // reopening at the pin the desktop state remembers for it, and the icon
+    // layer over the desktop's field and theirs — its opens are other
+    // applications' verbs, read at the pick through the registry.
+    const folders = initFolderWindows(desktop, windows, { savedPin: deps.windowPin });
+    const icons = initIcons(desktop, {
+      windows,
+      folders,
+      apps: deps.apps,
+      savedPos: deps.iconPos,
+    });
     const $ = (sel) => {
       const el = desktop.querySelector(sel);
       if (!el) throw new Error(`apps/finder: missing element ${sel}`);
@@ -158,7 +174,7 @@ export const finder = {
       dlgPaste.show();
     }
 
-    /** The item keys' three prefixes are the icon layer's (shell/icons.js).
+    /** The item keys' three prefixes are the icon layer's (icons.js).
      *  @returns {import('../../state/clipboard.js').ClipboardItemRef} */
     const refOf = (key) => {
       const at = key.indexOf(':');
@@ -532,9 +548,18 @@ export const finder = {
     syncArrange();
 
     return {
-      actions: {},
+      actions: {
+        /** Every icon position the layer knows, by key — what the desktop
+         *  state's snapshot writes (main.js). */
+        positions: () => icons.positions(),
+        /** Every folder window's pin the Finder knows, by key — the
+         *  snapshot's other reading. */
+        pins: () => folders.pins(),
+      },
       dispose() {
         for (const fn of teardown) fn();
+        icons.dispose();
+        folders.dispose();
       },
     };
   },

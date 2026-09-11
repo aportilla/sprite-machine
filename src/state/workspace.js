@@ -13,10 +13,11 @@
 // window per document).
 //
 // ACTIVATION MIRRORS THE KIT: the desktop's vf-activate event is the truth,
-// and shell/windows.js writes it here via setActive — nothing else does.
-// Programmatic activation goes through the window layer (bringToFront), so
-// the event remains the single writer and the mirror can never disagree
-// with the pixels.
+// and the Sprite Editor's windows write it here via setActive, from the
+// window manager's beforeFront (apps/sprite-editor/windows.js) — nothing
+// else does. Programmatic activation goes through the kit (bringToFront),
+// so the event remains the single writer and the mirror can never
+// disagree with the pixels.
 //
 // DIRTY TRACKING rides each context's doc channels (the wiring the files
 // slice used to own): any live stroke or structural change marks the
@@ -251,7 +252,8 @@ export function createWorkspace(deps = {}) {
     },
 
     /** The activation mirror — written ONLY from the desktop's vf-activate
-     *  wire (shell/windows.js). Null = the desktop is focused. */
+     *  wire (the Sprite Editor's beforeFront mirror,
+     *  apps/sprite-editor/windows.js). Null = no document window active. */
     setActive(key) {
       store.patch({ activeKey: key != null && byKey(key) ? key : null });
     },

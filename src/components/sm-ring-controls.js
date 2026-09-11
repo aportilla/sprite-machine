@@ -9,13 +9,14 @@
 // each, right-aligned so a caption hugs its field) and the four number
 // fields — views / elev over from / size, bound live to the ring slice, the
 // same settings File → Export Sprite Atlas… edits — each at the top/left
-// shell/layout.js's RING_FIELDS states, in whole system px the kit writes
+// apps/sprite-editor/layout.js's RING_FIELDS states, in whole system px the kit writes
 // as live calc(): two rows 4 in and 4 apart, a caption dropped 4 below its
 // row where its baseline meets the field's, an 8 inset, 40 and 36 caption
 // columns, 6 gaps, the kit's 74 × 25 number field. Nothing is measured and
 // no layout is styled: the header's height is RING_STRIP (the DITL's 62
-// over the rule), authored on the window in index.html as `header-height`
-// — the kit's grammar — at the same number as layout.js's; and that same
+// over the rule), authored on the window in its markup (the Sprite Editor's
+// windows.html) as `header-height` — the kit's grammar — at the same number
+// as layout.js's; and that same
 // arithmetic is the windoid's width floor (RING_MIN_WIDTH — the
 // controls' 258 plus the borders; a window can't be dragged narrower, so
 // the header never clips a field).
@@ -45,7 +46,7 @@ import { css, LitElement, html } from 'lit';
 import { live } from 'lit/directives/live.js';
 import { ring, RING_MAX_VIEWS, RING_MIN_SIZE, RING_MAX_SIZE } from '../state/ring.js';
 import { StoreController } from '../state/store-controller.js';
-import { RING_FIELDS } from '../shell/layout.js';
+import { RING_FIELDS } from '../apps/sprite-editor/layout.js';
 import { baseStyles } from './base-styles.js';
 
 export class SmRingControls extends LitElement {

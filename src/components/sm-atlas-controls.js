@@ -3,10 +3,12 @@
 // slotted into the window's HEADER (`slot="header"` — vintage-frames 0.6.1:
 // a white band over a 1px rule between the title bar and the body, across
 // the whole window, a positioning anchor for what is placed in it;
-// `header-height` authored in index.html = SPRITE_STRIP): the FACE
+// `header-height` authored in the windoid's markup, the Sprite Editor's
+// windows.html, = SPRITE_STRIP): the FACE
 // PICKER — the six cube-view radios (sm-face-picker, a presentational leaf)
 // serving the ACTIVE document — in a placed vf-container at the picker
-// block's rectangle, SPRITE_PICKER_AT / SPRITE_PICKER in shell/layout.js
+// block's rectangle, SPRITE_PICKER_AT / SPRITE_PICKER in
+// apps/sprite-editor/layout.js
 // (centered across the fixed-width header's interior, the pad down from its
 // top, the block's own 186 × 45). The host is `display: contents`; nothing
 // here is styled.
@@ -34,7 +36,7 @@ import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { workspace } from '../state/workspace.js';
 import { StoreController } from '../state/store-controller.js';
-import { SPRITE_PICKER, SPRITE_PICKER_AT } from '../shell/layout.js';
+import { SPRITE_PICKER, SPRITE_PICKER_AT } from '../apps/sprite-editor/layout.js';
 import './sm-face-picker.js'; // registers <sm-face-picker>
 import { baseStyles } from './base-styles.js';
 

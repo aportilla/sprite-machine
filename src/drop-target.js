@@ -20,9 +20,9 @@ const dragHasFiles = (e) =>
 
 /**
  * @param {{onLoaded?: (ctx: object) => void}} [opts]  onLoaded fires with
- *   the context a drop actually opened — main.js points it at
- *   windows.activateContext, so the new document window surfaces (and
- *   reactivates the application) even on a drop onto the bare desktop.
+ *   the context a drop actually opened — main.js points it at the Sprite
+ *   Editor's showDocument, so the new document window surfaces (and
+ *   brings the application forward) even on a drop onto the bare desktop.
  */
 export function initDropTarget({ onLoaded } = {}) {
   const body = document.body;

@@ -318,10 +318,12 @@ seeding, no About greet, no state writes; and `?flat=1`, `?diag=1` and
 ## The desktop
 
 The shell is a full System 7 virtual desktop: `index.html` is one
-`<vf-desktop>` skeleton (menu bar, options strip, the utility windoids,
-dialogs, the icon layer, plus a `<template>` the document windows clone from)
-fitted to the viewport at boot, with the kit's page-drawn cursor on top. The
-page sets **layout only** — every aesthetic is the kit's.
+`<vf-desktop>` skeleton (the menu bar, the options strip, the desktop's icon
+field and the dialogs) fitted to the viewport at boot, with the kit's
+page-drawn cursor on top; every window is its application's, authored in the
+application's own directory and appended at its init or its open (see
+[Windows](#windows)). The page sets **layout only** — every aesthetic is the
+kit's.
 
 ### Three applications, one menu bar
 
@@ -344,10 +346,10 @@ plan is [docs/apps-plan.md](docs/apps-plan.md)):
   desk accessory's seat (see [Desktop Patterns](#desktop-patterns)).
 
 **The front application is a reading of the desktop's active window**, made
-in the one place the activation lands (`shell/windows.js`'s wire, into
-`shell.frontApp`): a **document window** active means the Sprite Editor; a
-**panel window** active means the application its owner declared when it
-adopted the window (`windows.addPanel`'s `app` — a folder window says the
+in the one place the activation lands (the window manager's wire,
+`shell/windows.js`, into `shell.frontApp`): an active window means the
+application its owner declared when it adopted the window (`windows.adopt`'s
+`app` — a **document window** says the Sprite Editor, a folder window the
 Finder, a text window the Text Viewer, the control panel Desktop Patterns);
 **no active window** means the Finder. `appActive` — "is the Sprite Editor
 front" — is written in the same patch, so the windoids, the options strip
@@ -360,9 +362,9 @@ and the tool keys read exactly what they always read.
   with them, the bare-letter tool keys go inert, and the bar **swaps** to the
   Finder's menus (see [Menu bar](#menu-bar)). The icon selection **survives
   the trip to the menu bar**, since a press on the bar is no press on the
-  desktop; the kit's `vf-icon` would clear on it, so `shell/icons.js`
-  re-selects across that press — a page-side bridge until the kit exempts
-  its own chrome (kit ask #5).
+  desktop; the kit's `vf-icon` would clear on it, so the Finder's icon
+  layer (`apps/finder/icons.js`) re-selects across that press — a
+  page-side bridge until the kit exempts its own chrome (kit ask #5).
 - **Clicking any document window — or opening one — brings the Sprite Editor
   forward**: the windoids come back exactly where they were, aimed at the
   newly active document, the bar swaps to the editor's menus, and the
@@ -383,12 +385,12 @@ and the tool keys read exactly what they always read.
 
 **Each application is one directory under `src/apps/`** — `finder`,
 `sprite-editor`, `text-viewer`, `desktop-patterns` — holding its menus as
-markup (`menus.html`, a
-fragment of `vf-menu` elements, imported whole) and one module on one shape:
+markup (`menus.html`, a fragment of `vf-menu` elements, imported whole), its
+windows (see [Windows](#windows)) and one module on one shape:
 an id, a name, the fragment, and `init({ menus, deps })`, which binds
 behavior to the parsed nodes and returns the application's public verbs and
-its teardown. `src/apps/index.js` lists the three in the bar's order; a
-fourth application is a fourth directory and one entry. The bar's owner,
+its teardown. `src/apps/index.js` lists the four in the bar's order; a
+fifth application is a fifth directory and one entry. The bar's owner,
 `shell/menu-bar.js`, parses each fragment once into live nodes, slots the
 front application's between the Sprite Machine menu and the clock, and on
 every change of the front application **lifts the outgoing menus out and
@@ -403,9 +405,11 @@ addressed by its `data-menu` and an item by its `value`, within the
 application's own nodes: every application holds a `close` and an
 `arrange`, and only the front one's is ever connected, so no key is ever
 contested. Cross-application calls go through the registry's actions at pick
-time: the Finder's New… raises the Sprite Editor's New box, and an icon's
-double-click opens through the editor's `openDoc`. The dialogs stay in
-`index.html`, the desktop's top layer; only their handlers moved.
+time: the Finder's New… raises the Sprite Editor's New box, an icon's
+double-click opens through the editor's `openDoc` (a text file's through the
+Text Viewer's `open`), and the Sprite Machine menu opens the control panel
+through Desktop Patterns' `open`. The dialogs stay in `index.html`, the
+desktop's top layer; only their handlers moved.
 
 ### Documents are windows
 
@@ -608,14 +612,33 @@ the Tools menu _display_ those letters without double-firing them.
 
 ### Windows
 
-Two tiers, two regimes — plus the **panel windows** on demand, document tier
-but not documents: the Desktop Patterns control panel, the folder windows and
-the text windows.
+**Every application owns its windows; the shell runs them** (the plan is
+[docs/app-windows-plan.md](docs/app-windows-plan.md)). An application's
+directory holds its windows' markup (`windows.html` — templates, and the
+Sprite Editor's windoids), their lifecycle and what their close and zoom
+boxes mean (`windows.js`), and their placement and sizes (`layout.js`,
+pure). The **window manager**, `shell/windows.js`, holds only what every
+window obeys, whoever owns it: every window enters through one call,
+`windows.adopt`, with its owner's declarations — its application, its
+placement, a remembered pin, its resize policy, a box it keeps across a
+resize, the catalog item it shows; the front application is read off the
+active window; one resize rule re-pins every window; and Arrange Windows is
+a composition — each application's group, arranged by its own rules, plus
+every window with a placement of its own. The desktop's landmarks and
+geometry primitives are `shell/layout.js`: the menu bar's and the options
+strip's bands, **`WINDOW_ORIGIN`** (the corner a document window, a folder
+window and a read-me all open on), the cascade, the nearness test and the
+nine-slice pin.
+
+The Sprite Editor's windows come in two tiers, two regimes; the other
+applications' — the Desktop Patterns control panel, the folder windows and
+the text windows — are document tier but not documents.
 
 - **Document windows**: one per open document, cloned from a template by the
-  reconciler in `shell/windows.js` — created on open (the doc box, cascaded
-  into the first free slot, never a remembered position), removed on close
-  (existence IS visibility). Each is `movable resizable zoomable`; its title
+  Sprite Editor's reconciler (`apps/sprite-editor/windows.js`) — created on
+  open (the doc box, cascaded into the first free slot, never a remembered
+  position), removed on close (existence IS visibility). Each is `movable
+resizable zoomable`; its title
   is its document's name, its `status` strip names the face it's editing, and
   its `<sm-editor>` lives exactly as long as the document is open. The title
   bar's **zoom box** is a stateless toggle with the top-left held both ways —
@@ -625,8 +648,10 @@ the text windows.
   truth). **⌘J's zoom half is this toggle**, and because a zoomed window's far
   edges are struts of the nine-slice pin, a browser resize keeps it zoomed.
 - **Utility windoids**: the **Tools palette**, the **Full Sprite View** and
-  the **3D View** — static markup, **permanently open**, no close box and no
-  menu toggle, on screen whenever the application is active — plus the **3D
+  the **3D View** — the Sprite Editor's own markup, appended hidden at its
+  init, **permanently open**, no close box and no menu toggle, on screen
+  whenever the application is front (System 7's suspend and resume: another
+  application coming forward hides them, its return shows them) — plus the **3D
   Sprite Atlas**, the one toggleable windoid. They float above every document
   window, never take the active state (clicking the 3D View can't deactivate
   the window you're drawing in), and hide as a set when the application
@@ -636,7 +661,8 @@ the text windows.
   re-inserts its node, and the kit does that in a task after the press's click
   has landed. Every windoid's controls strip is the window's **header**, a
   white band over a 1px rule outside the scroll area, its `header-height`
-  authored in `index.html` at the same number `shell/layout.js` carries.
+  authored in the Sprite Editor's `windows.html` at the same number its
+  `layout.js` carries.
 - **The Full Sprite View** carries the **face picker** in its header (a placed
   `vf-container` declaring `pattern="white"`, since a bare one would inherit
   the desktop's — kit ask #6's bridge) over the **atlas grid**, its body: a
@@ -717,11 +743,12 @@ not measurements.
   toggling it on never moves an existing window (System 7 didn't rearrange
   your windows when you showed a palette — Arrange does).
 
-Positions and sizes come from a **smart placement** computed against the live
-raster (`shell/layout.js`, pure): the Tools palette top-left; the Full Sprite
-View over the 3D View as a right-hand rail, one column, both right-flush at
-the same width; and the document window **top-left aligned beside the Tools
-palette**, filling the vacant middle but for the **cascade room** at the right
+The Sprite Editor's positions and sizes come from a **smart placement**
+computed against the live raster (`apps/sprite-editor/layout.js`, pure): the
+Tools palette top-left; the Full Sprite View over the 3D View as a
+right-hand rail, one column, both right-flush at the same width; and the
+document window on the desktop's `WINDOW_ORIGIN`, **top-left aligned beside
+the Tools palette**, filling the vacant middle but for the **cascade room** at the right
 and bottom — so each further document window opens at the **same size**,
 **cascaded** down-right into the first slot no open window holds (five slots,
 a closed or dragged-away window giving its slot back, a full cascade wrapping
@@ -740,7 +767,8 @@ When the **browser window resizes**, the raster re-fits and **one rule moves
 every window**, placed or dragged alike — the **nine-slice pin**
 (`pinOf`/`pinTo`). The open space below the options strip is cut by a **ring
 of outer bands** — 100 system px at the left and bottom, widened at the top
-and right to hold the rail — around a **middle that grows and shrinks**. Each
+and right to hold the rail (the Sprite Editor declares the two at its init;
+one frame for every window) — around a **middle that grows and shrinks**. Each
 window edge keeps its place in its slice: an edge in a band is a **strut**
 (its offset from that raster edge holds), an edge in the middle a **spring**
 (its fraction of the middle holds). So a window tucked against the right edge
@@ -785,9 +813,11 @@ own `parsePattern`. The window is a fixed-size `vf-window` (no grow box, no
 zoom box; its body a `vf-stack pad="12"`, since a window body carries no inset
 of its own and this is the one window whose content wants one) cloned per open
 and **removed by its close box** — a second pick just brings it forward, one
-panel ever — centered by `centeredBox` and **adopted as a panel**, so Arrange
-re-centers it and a resize re-pins it like every window. It is **an
-application's window, its own**: Desktop Patterns is the fourth application,
+panel ever — **adopted by the window manager** with the shell's `centeredBox`
+as its placement, so Arrange re-centers it and a resize re-pins it like every
+window. It is **an application's window, its own**
+(`apps/desktop-patterns/windows.js`): Desktop Patterns is the fourth
+application,
 a desk accessory's seat, so the panel holding active swaps the bar to its
 File / View, and its File → Close or Quit closes it — see
 [Three applications, one menu bar](#three-applications-one-menu-bar) and
@@ -824,10 +854,10 @@ items`, plain ink, off the model) over the Finder's **double rule** — black,
   **placed `vf-icon-field`** at the plane's origin, so the window's
   `placementAt()` and the field's coordinates agree, sized to the folder's
   **extent** — the viewport at least, grown to hold every icon — which IS the
-  scroll range. It is **adopted by `shell/windows.js` as a panel**, placed
-  fresh by `folderBox` (the doc box's corner stepped down-right per folder
-  window already open), re-placed by Arrange Windows and re-pinned by a
-  browser resize.
+  scroll range. It is the Finder's own (`apps/finder/windows.js`), **adopted
+  by the window manager** with its placement — the shell's `cascadedBox`,
+  the desktop's `WINDOW_ORIGIN` stepped down-right per folder window already
+  open — re-placed by Arrange Windows and re-pinned by a browser resize.
 - **Its box persists** — the Finder remembered every folder window's rect, and
   so does this app, the one window it remembers — **in relative terms**: not
   the box but its **nine-slice pin**, read off the live window at every
@@ -841,7 +871,8 @@ items`, plain ink, off the model) over the Finder's **double rule** — black,
   Windows still sends every folder window to its cascade slot: the arrangement
   is the reset, and what is on screen is what is remembered. Nothing else
   persists — not the scroll, and not that it was open. No zoom box yet.
-- **The icon layer is a reconciler over containers**: the desktop's field for
+- **The icon layer is a reconciler over containers** (the Finder's,
+  `apps/finder/icons.js`): the desktop's field for
   the items whose container is the desktop, plus one field per open folder
   window for that folder's children — folders first, then documents, in
   listing order. **Positions persist by item**, each in its **current
@@ -1008,8 +1039,8 @@ A first pass, deliberately: **plain text, display only**.
   drop a `.txt` in and list it. Not yet: a revision to a file already
   seeded reaches no existing profile (a versioned re-seed), a dropped or
   pasted `.txt` (only PNGs arrive today), and any editing.
-- **The window** (`shell/texts.js`, cloned from `#tpl-text-window`) is the
-  classic read-me's: a document-tier window — striped bar, close box, zoom
+- **The window** (the Text Viewer's `apps/text-viewer/windows.js`, cloned
+  from `#tpl-text-window` in its `windows.html`) is the classic read-me's: a document-tier window — striped bar, close box, zoom
   box, `movable resizable zoomable scrollbars="vertical"`, the kit's rail
   on the frame's right edge with the grow box in its corner cell —
   TeachText wrapped its text to the window's width and scrolled it up and
@@ -1026,23 +1057,24 @@ A first pass, deliberately: **plain text, display only**.
   title, and a file emptied from the Trash closes it.
 - **It is the Text Viewer's window.** Opening a read-me on System 7
   switched you to TeachText: its palettes hid and the menu bar became
-  TeachText's. Here the window is a **panel** declared the Text Viewer's
-  (`windows.addPanel`'s `app`), so holding the desktop's active state makes
+  TeachText's. Here the window is **adopted as the Text Viewer's**
+  (`windows.adopt`'s `app`), so holding the desktop's active state makes
   the Text Viewer the front application — the windoids hide, the strip
   goes, and the bar swaps to its menus: File with _Close_ ⌃W (this window)
   and _Quit_ ⌃Q (every text window in turn), Edit with _Copy_ ⌘C and
   _Select All_ ⌘A over the prose, View with _Arrange Windows_ (see
   [Menu bar](#menu-bar)); closing hands active back to the topmost document
-  window. It is placed fresh at every open — the folder window's cascade
-  from the doc box's corner, stepped per text window already open —
+  window. It is placed fresh at every open — the shell's cascade from the
+  desktop's `WINDOW_ORIGIN`, stepped per text window already open —
   re-placed by Arrange Windows and re-pinned by a browser resize like every
   window, and **nothing about it persists**: not its box, not its scroll,
   not that it was open.
 - **The zoom box expands it to a reading column**: the whole desktop below
   the menu bar, **20 in from every edge** but **never wider than 520**,
   centered — the height of any screen, never the width of a wide one
-  (`expandedTextBox` in `shell/layout.js`). A second click puts it back
-  **where it was**, and which way a click goes is **read at the click**,
+  (`expandedTextBox` in `apps/text-viewer/layout.js`). A second click puts
+  it back **where it was**, and which way a click goes is **read at the
+  click**,
   never kept: a window whose every edge sits within 10 of the column is
   expanded — a nudge or a lattice snap still counts — so it restores, and
   any other expands. What it had is remembered as its **nine-slice pin**,
@@ -1050,9 +1082,11 @@ A first pass, deliberately: **plain text, display only**.
   resize would have carried it; with nothing remembered — a window grown
   by hand onto the column — it takes its placement, the authored 440 × 320
   at the slot it opened on. A browser resize keeps an expanded window
-  expanded, and Arrange Windows sends it home like every window. The
-  document window's zoom box is the other kind: top-left held, grown to
-  the vacancy (see [Windows](#windows)).
+  expanded, and Arrange Windows sends it home like every window. The zoom
+  box is the Text Viewer's own: its one declaration to the window manager
+  is the column as the box the window keeps across a resize. The document
+  window's zoom box is the other kind, the Sprite Editor's: top-left held,
+  grown to the vacancy (see [Windows](#windows)).
 
 ### The About box
 
@@ -1290,16 +1324,18 @@ the top row. See the engine's `views.js` for all six projection mappings.
 ## Architecture
 
 The whole grid pipeline is **pure typed-array code — no THREE, no DOM**, the
-app-state layer (`src/state/`) is pure JS, and the desktop's arithmetic
-(`shell/layout.js`) is a pure module — all of it Node-tested (`npm test` over
+app-state layer (`src/state/`) is pure JS, and the window and icon arithmetic
+(the desktop's `shell/layout.js`, each application's `layout.js`) is pure — all
+of it Node-tested (`npm test` over
 both packages' `test/*.test.mjs`), densest where a bug would be
 silent and expensive: the visual-hull carve and coloring, the wedge mesh's
 watertightness and its gate, the region trace, the skin's bake and its UV
 read, the rasterizers, the document format, the document and library
 contracts, and the resize rule. The state slices get a few behavior tests
 each, never the store's discipline per setter; the layout tests cover the
-resize rule, the cascade's slots and the text zoom box's nearness, never
-where a window goes.
+resize rule, the cascade's slots and the nearness reading (the shell's), the
+placement as the rule's fixed point (the Sprite Editor's) and the icons' frame
+(the Finder's), never where a window goes.
 
 ### Testing
 
@@ -1333,10 +1369,14 @@ src/texts/    the built-in TEXT FILES — the read-me documents, one .txt each, 
               whole (?raw) and listed by the index with the names their icons wear;
               seeded once per profile like the samples
 src/apps/     the four APPLICATIONS, one directory each on one shape — finder,
-              sprite-editor, text-viewer, desktop-patterns: its menus as a vf-menu fragment (menus.html,
-              imported whole) and the module that wires them (every dialog flow, every
-              gate, the application's public verbs) — and the registry (index) in the
-              bar's order
+              sprite-editor, text-viewer, desktop-patterns: its menus as a vf-menu
+              fragment (menus.html, imported whole), the module that wires them (index —
+              every dialog flow, every gate, the application's public verbs), and its
+              windows: their markup (windows.html — templates, and the Sprite Editor's
+              windoids), their lifecycle, adoption, close and zoom boxes (windows.js)
+              and their geometry (layout.js, pure and Node-tested), the Finder's icon
+              layer (icons.js) beside its folder windows — and the registry (index) in
+              the bar's order
 src/state/    the app-state layer, pure JS and Node-tested: store + the Lit bridges; doc
               (two channels) and history, FACTORIES one per open document; workspace (the
               open documents as DocContexts, activeKey, the stored flows); files (the
@@ -1350,14 +1390,15 @@ src/storage/  the IndexedDB wrapper (`docs`, whose `folder` is its one non-chunk
 src/scene/    stage (renderer, camera, lights, framing, on-demand loop); rebuilder, the
               pipeline's ONLY consumer, handing every mesh out through the onMesh seam;
               the atlas's offscreen world and its follower; the glb export's subject
-src/shell/    the desktop's behavior over the index.html skeleton: layout (ALL the window
-              and icon arithmetic, pure and Node-tested — the placement, the cascade, the
-              derived sizes and DITLs, pinOf / pinTo / isPin), windows (the two regimes,
-              the resize rule, arrange / arranged / zoomActive, the panel adoption and
-              the front-application reading), menu-bar (the Sprite Machine menu, the
-              shared dialogs, the parse of each application's fragment and the swap),
-              icons (the reconciler, the Finder wire, filing), folders, texts (the Text
-              Viewer's windows), desktop-state, url-state, clock, patterns
+src/shell/    what every application shares, over the index.html skeleton: layout (the
+              desktop's geometry, pure and Node-tested — the landmarks and WINDOW_ORIGIN,
+              the cascade, the centered and cascaded boxes, the nearness test, the
+              windows' frame, pinOf / pinTo / isPin), windows (the window manager:
+              adoption, the front-application reading, the resize rule, Arrange Windows
+              as a composition, the markup parse every application's windows go
+              through), menu-bar (the Sprite Machine menu, the shared dialogs, the parse
+              of each application's fragment and the swap), desktop-pattern (the
+              pattern's wire), desktop-state, url-state, clock
 src/          main (the composition root), boot/params, loaders (+ seedDefaultDocs),
               drop-target, shortcuts, image-io, and components/ — all Lit and shadow DOM
               but for sm-color-picker: sm-editor over sm-draw-canvas and draw-overlays,

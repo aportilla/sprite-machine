@@ -26,8 +26,9 @@
 //
 // A CONNECTED chrome component: prefs drives it (a live() binding, so a
 // re-render can't skip a re-sync) and the toggle is a prefs action. The
-// windoid's width floor in shell/windows.js no longer rides this row — its
-// content, 77 (8 pad + the ~61 checkbox + 8 pad), sits well inside the
+// windoid's width floor (apps/sprite-editor/layout.js STAGE_MIN_WIDTH) no
+// longer rides this row — its content, 77 (8 pad + the ~61 checkbox + 8
+// pad), sits well inside the
 // canvas floor there; a strip that outgrows that floor is what to
 // re-measure against (see the note there).
 // ---------------------------------------------------------------------------

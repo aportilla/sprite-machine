@@ -5,7 +5,8 @@
 // Editor front — "a document window is the desktop's active window"), and
 // the DESKTOP PATTERN (System 7's General Controls / 7.5's Desktop Patterns
 // setting — what the Desktop Patterns panel's Set writes, what
-// shell/patterns.js paints onto the desktop and desktop-state.js persists).
+// shell/desktop-pattern.js paints onto the desktop and desktop-state.js
+// persists).
 // Store-driven so the menu bar's swap, the menu checkmarks + enabled states
 // and the windows' `hidden` attributes read one truth (a menu pick and a
 // desktop click are the same action). Document windows live elsewhere
@@ -13,32 +14,30 @@
 // visibility is existence, not a flag here.
 //
 // THE FRONT APPLICATION is a reading of the desktop's active window, made
-// in the one place the activation lands (shell/windows.js applyActive): a
-// document window active → the Sprite Editor; a panel window active → the
-// application its owner declared at adoption (a folder window says the
-// Finder, a text window the Text Viewer, the control panel Desktop
+// in the one place the activation lands (the window manager's wire,
+// shell/windows.js): an active window → the application its owner declared
+// at adoption (a document window says the Sprite Editor, a folder window
+// the Finder, a text window the Text Viewer, the control panel Desktop
 // Patterns — its own application, a desk accessory's seat); no active
-// window, or a panel that declares nothing → the Finder, the desktop's
+// window, or one that declares nothing → the Finder, the desktop's
 // application and the default. The menu bar belongs to the front
 // application (shell/menu-bar.js swaps its menus on every change here),
 // and `appActive` is `frontApp === SPRITE_EDITOR`, written in the SAME
 // patch by the one setter, so the two can never disagree.
 //
-// Three of the UTILITY windows (Tools palette, 3D View, Sprite View) are
-// PERMANENT chrome: no close box, no menu toggle — `appActive` alone decides
-// whether they're on screen. The fourth, the 3D Sprite Atlas, is the one
-// exception: it hides with the application like the rest AND behind its own
-// toggle (prefs.showRing — View → 3D Sprite Atlas, its close box). They
-// belong to the Sprite Editor, so they hide as a set while another
-// application is front and return with it. Both fields are transient
-// session state MIRRORING the desktop's own activation truth
-// (desktop.activeWindow): shell/windows.js seeds them by READING that truth
-// at wire-up and follows vf-activate thereafter — never from a constant of
-// its own, so the mirror can't disagree with the kit. They therefore boot
-// as the Finder (nothing has activated yet — a dialog-greeted boot stays
-// desktop-focused, no windoids without a document window) and flip to the
-// Sprite Editor the moment any document window opens: the kit activates a
-// newly slotted window.
+// The Sprite Editor's palettes — its utility windoids and the options strip
+// — read `appActive`: on screen exactly while it is front, hidden as a set
+// while another application is (apps/sprite-editor/windows.js; the 3D
+// Sprite Atlas behind its own toggle as well, prefs.showRing). Both fields
+// are transient session state MIRRORING the desktop's own activation truth
+// (desktop.activeWindow): the window manager (shell/windows.js) seeds them
+// by READING that truth at wire-up and follows vf-activate thereafter —
+// never from a constant of its own, so the mirror can't disagree with the
+// kit. They therefore boot as the Finder (nothing has activated yet — a
+// dialog-greeted boot stays desktop-focused, no windoids without a
+// document window) and flip to the Sprite Editor the moment any document
+// window opens: the open brings its window to the front, and the kit
+// activates it.
 // ---------------------------------------------------------------------------
 
 import { createStore } from './store.js';
@@ -54,12 +53,6 @@ export const DESKTOP_PATTERNS = 'desktop-patterns';
 /** @typedef {typeof FINDER | typeof SPRITE_EDITOR | typeof TEXT_VIEWER | typeof DESKTOP_PATTERNS} AppId */
 /** @type {readonly AppId[]} */
 const APP_IDS = [FINDER, SPRITE_EDITOR, TEXT_VIEWER, DESKTOP_PATTERNS];
-
-/** The utility (windoid) windows, by shell id — the three permanent ones
- *  (visibility appActive's alone) and the toggleable 3D Sprite Atlas
- *  (`ring`: appActive AND prefs.showRing); document windows are
- *  workspace-managed. */
-export const WINDOW_IDS = ['tools', 'sprite', 'stage', 'ring'];
 
 /** The desktop pattern a desktop boots on — the kit's own default, the
  *  classic 50% dither (vintage-frames docs/PATTERNS.md). */
@@ -100,8 +93,9 @@ export function createShell() {
     /** @param {string} v  A kit pattern name or sixteen hex digits — the
      *  Desktop Patterns panel's Set, or the boot restore. Stored as given
      *  (trimmed; an empty write is the default): the slice doesn't validate
-     *  — the wire (shell/patterns.js) checks a restored value against the
-     *  kit's grammar, and the panel only ever sets library names. */
+     *  — the wire (shell/desktop-pattern.js) checks a restored value
+     *  against the kit's grammar, and the panel only ever sets library
+     *  names. */
     setDesktopPattern(v) {
       const next = String(v ?? '').trim() || DEFAULT_DESKTOP_PATTERN;
       if (store.get().desktopPattern === next) return;

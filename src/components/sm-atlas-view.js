@@ -15,8 +15,9 @@
 // the red-tinted cube art on 2026-09-04 — the windoid's chrome is 1-bit end
 // to end, the sprite art the only color in it).
 //
-// The windoid is FIXED-size — no grow box: shell/windows.js pins its width
-// to the atlas grid block (SPRITE_WIDTH in shell/layout.js — cols ×
+// The windoid is FIXED-size — no grow box: the Sprite Editor's windows pin
+// its width to the atlas grid block (SPRITE_WIDTH in the application's
+// layout.js, apps/sprite-editor — cols ×
 // ATLAS_GRID.cell + interior rules + borders) and derives its height from
 // the active TILE's ratio (square tiles ⇒ square cells) plus the chrome
 // (the header included), so the grid fills the body exactly — no margins,
@@ -62,7 +63,7 @@ import { createRef, ref } from 'lit/directives/ref.js';
 import { workspace, followActive } from '../state/workspace.js';
 import { StoreController } from '../state/store-controller.js';
 import { DEFAULT_ATLAS_LAYOUT } from 'sprite-machine';
-import { ATLAS_GRID } from '../shell/layout.js';
+import { ATLAS_GRID } from '../apps/sprite-editor/layout.js';
 import { baseStyles } from './base-styles.js';
 import { parsePatternAttr } from './ui-bits.js';
 

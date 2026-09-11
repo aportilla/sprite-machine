@@ -14,9 +14,10 @@
          Everything aesthetic is the kit's; this markup is layout only. -->
     <!-- Deactivation is the PAGE's decision (the kit's position: only the
          page knows which presses mean "the Finder"): shell/windows.js routes
-         a press on the desktop's own dither — and shell/icons.js a press in
-         the icon layer — through desktop.clearActive(), which clears the
-         document tier. Reactivation is any press into a document window. -->
+         a press on the desktop's own dither — and the Finder's icon layer
+         (apps/finder/icons.js) a press in the icon field — through
+         desktop.clearActive(), which clears the document tier. Reactivation
+         is any press into a document window. -->
     <vf-desktop id="desktop" bezel="10">
       <!-- ============================== Menu bar ======================== -->
       <!-- ONE bar, the FRONT APPLICATION's (docs/apps-plan.md): System 7's
@@ -53,8 +54,9 @@
         <vf-menu id="menu-app" label="Sprite Machine">
           <vf-menu-item value="about">About Sprite Machine…</vf-menu-item>
           <vf-separator></vf-separator>
-          <!-- The Desktop Patterns control panel (shell/patterns.js): a
-               window, not a dialog, so no ellipsis — the Apple menu's
+          <!-- The Desktop Patterns control panel (apps/desktop-patterns — its
+               window, opened through the registry): a window, not a dialog,
+               so no ellipsis — the Apple menu's
                Control Panels listed it bare. Opened from here in every
                application, like About; the panel is an application of its
                own (src/apps/desktop-patterns — a desk accessory's seat),
@@ -84,187 +86,12 @@
            not a window), drawn as a kit vf-container band (white paper over
            a bottom rule — the menu bar's anatomy, no shadow) so its edge
            scales with the raster. Like the utility windoids it belongs to the
-           application: the whole band hides while the desktop is focused
-           (the component gates on shell.appActive) and returns with the
-           app. -->
+           Sprite Editor: the whole band hides while another application is
+           front (the component gates on shell.appActive) and returns with
+           it. It stays in this skeleton — an in-flow band of the desktop,
+           not a window (every window is its application's: src/apps/<id>/
+           windows.html); its height is shell/layout.js's TOP_RESERVE. -->
       <sm-options-bar></sm-options-bar>
-
-      <!-- ======================= The utility windoids =================== -->
-      <!-- Three are permanent chrome: always on screen while the application
-           is active — no close box (shell/windows.js sets closable=false;
-           markup can't express a boolean attribute's off state) and no menu
-           toggle. The fourth, the 3D Sprite Atlas (#win-ring), is the one
-           TOGGLEABLE windoid: View → 3D Sprite Atlas shows it (off every
-           load) and its close box — the kit's, kept — hides it again.
-           Geometry is NOT authored here: shell/windows.js computes
-           the smart arrangement from the live raster at boot (the Tools
-           palette top-left, the sprite/stage rail right, the atlas strip
-           docked at the bottom — shell/layout.js) and clamps;
-           a browser resize re-pins every window proportionally. All four
-           are utility windoids: they float above the document tier, never
-           take the active state, and hide with the application when the
-           desktop is clicked (shell/windows.js gates their hidden on
-           appActive — and, for the atlas strip, on prefs.showRing too). A
-           windoid bar shows no title text (the kit's
-           11px bar has no title patch); the heading still names the window
-           for assistive tech. DOCUMENT windows are not here: one
-           exists per open document, cloned from #tpl-document-window by the
-           reconciler in shell/windows.js and appended as a direct child of
-           the desktop (its stacking manager only sees direct vf-window
-           children). -->
-      <!-- Every windoid's controls strip is the window's HEADER
-           (vintage-frames 0.6.1 — `slot="header"`: the Finder window's
-           header line, a white band over a 1px rule between the title bar
-           and the body across the whole window, a positioning anchor for
-           what is placed in it; `header-height` counts its rule and is
-           AUTHORED here, the kit's grammar — the same number as
-           shell/layout.js's arithmetic (STAGE_STRIP, SPRITE_STRIP,
-           RING_STRIP): change one, change the other). The body below it
-           runs to the frame: a vf-window body carries no inset of its own
-           (vintage-frames 0.6.0 — an inset is the content's, stated with a
-           vf-stack pad; the `flush` attribute the windows used to set is
-           retired). -->
-      <!-- The Full Sprite View: the FACE PICKER (the six cube-view radios,
-           serving the ACTIVE document) in the header — sm-atlas-controls
-           places the picker block at the DITL's rectangle, SPRITE_PICKER_AT
-           — over the live whole-atlas grid, the body (sm-atlas-view). The
-           windoid is FIXED-size — movable but not resizable (no grow box):
-           shell/windows.js sizes it to the atlas grid block's width and
-           derives its height from the active atlas's ratio plus the chrome,
-           the header included, so the atlas exactly fills the body
-           (fitSprite — SPRITE_WIDTH / SPRITE_STRIP / SPRITE_CHROME in
-           shell/layout.js). -->
-      <vf-window
-        id="win-sprite"
-        variant="utility"
-        heading="Full Sprite View"
-        movable
-        header-height="62"
-      >
-        <sm-atlas-controls slot="header"></sm-atlas-controls>
-        <!-- No status strip: an empty status slot draws no bottom bar (the
-             kit's .status.empty), so the atlas runs down to the frame.
-             `pattern` paints a kit 1-bit pattern behind each face tile (a
-             library name or sixteen hex digits — vintage-frames
-             docs/PATTERNS.md), so a tile's transparent texels read against
-             paper; drop the attribute for plain white cells. -->
-        <sm-atlas-view pattern="gray-12"></sm-atlas-view>
-      </vf-window>
-
-      <!-- The 3D View: the controls strip (the one render toggle — rotate,
-           off every load, in a kit row stack in sm-stage-controls; the
-           low-poly "smooth" pass is always on, no box for it) in the header,
-           STAGE_STRIP tall, over the THREE canvas in a kit vf-container that
-           fills the body (`fill-width fill-height`) and paints a 1-bit
-           pattern as its background: the THREE scene renders with a
-           TRANSPARENT clear (scene/stage.js), so the model — and its shadow
-           — composite over the kit's pattern, not a flat gray. `pattern` is
-           the kit grammar (a library name or sixteen hex digits); drop it
-           for a bare white well. shell/windows.js floors this windoid's
-           size at its chrome plus a canvas that still reads as a view, the
-           strip's one checkbox well inside it. -->
-      <vf-window
-        id="win-stage"
-        variant="utility"
-        heading="3D View"
-        movable
-        resizable
-        header-height="24"
-      >
-        <sm-stage-controls slot="header"></sm-stage-controls>
-        <vf-container id="stage-well" fill-width fill-height pattern="gray-12">
-          <canvas id="viewport"></canvas>
-        </vf-container>
-        <sm-status-line kind="build" slot="status"></sm-status-line>
-      </vf-window>
-
-      <!-- The 3D Sprite Atlas: the active document's model rendered
-           ORTHOGRAPHICALLY from a ring of evenly stepped yaw angles at one
-           elevation — the rotation set an engine consumes — as a row of
-           tiles, one cell per view at the TILE SIZE (1:1 — the `size`
-           setting is the tile's edge in px, 2–255, the model's envelope
-           fit to it), butted — no rules between — on ONE sheet of kit
-           paper running across the whole body: white — the ring slice's
-           `paper` setting, which nothing writes today (white / black /
-           gray are the values it admits, each a kit pattern by name in
-           state/ring.js, gray the `dots` dither; a control for it was
-           built and retired, the choice being meant for the app to make
-           from the sheet's content one day); the grid draws no rules and
-           a cell paints nothing, so
-           a frame's transparent margin reads as the unbroken paper, which
-           runs on past the last tile (sm-ring-view.js), under a two-row
-           controls strip (views / elev / from / size — the same settings
-           File → Export Sprite Atlas… edits, live). Toggleable: View → 3D Sprite Atlas shows it (hidden
-           every load), the close box hides it — the ONE windoid that keeps
-           the kit's close box. The classic scrolling document window turned
-           windoid: `scrollbars="horizontal"` puts the kit's rail on the
-           frame's bottom edge where a status strip would be (none here —
-           the empty status slot is what lets the kit reserve the rail's
-           corner cell for the grow box), the body runs to the frame and
-           the rail (a window body and a scroll viewport carry no inset of
-           their own — vintage-frames 0.6.0 retired `flush`), and
-           `resizable` gives it the grow box — on the
-           HORIZONTAL axis alone, through the kit's size rect (the Patterns
-           strip's idiom: min-height = max-height locks the axis), declared
-           from shell/windows.js rather than authored here because the
-           bound moves: min-height = max-height = ringHeightFor(size) (the
-           chrome over one row of cells, re-declared as the size changes)
-           and min-width = the controls' RING_MIN_WIDTH; the row scrolls
-           under the rail past it. The placement seeds the width with the natural
-           row (capped at the vacant middle), docks it on the bottom margin,
-           left-aligned with the document window, and shortens the doc box
-           to clear it only while it is shown (shell/layout.js). The
-           controls strip is the window's HEADER (vintage-frames 0.6.1 —
-           `slot="header"`: the Finder window's header line, a white band
-           over a 1px rule between the title bar and the body, outside the
-           scroll area, so the controls hold while the row scrolls under
-           them; `header-height` authored below = RING_STRIP, the DITL's 62
-           over the rule in shell/layout.js), its four captions and fields
-           placed at the DITL's
-           rectangles against the header's corner (sm-ring-controls.js).
-           The body is the row alone
-           (sm-ring-view.js): the paper — a vf-container pattern filling
-           the body's width (fill-width: as wide as the scroll plane, so
-           the paper runs past the last tile and under a scrolled row), the
-           tile tall, its pattern the slice's paper setting — in flow at
-           the plane's origin (the kit sizes its plane to the grid inside
-           it), holding a rules="none" vf-grid whose surface is cleared so
-           the paper shows through, each cell a vf-stack at the tile's
-           declared size (a kit box that paints nothing). The paper under
-           the grid is the app-side bridge for kit ask #11, a window body's
-           paper as a kit pattern (docs/kit-asks-body-pattern.md). -->
-      <vf-window
-        id="win-ring"
-        variant="utility"
-        heading="3D Sprite Atlas"
-        movable
-        resizable
-        scrollbars="horizontal"
-        header-height="63"
-      >
-        <sm-ring-controls slot="header"></sm-ring-controls>
-        <sm-ring-view></sm-ring-view>
-      </vf-window>
-
-      <!-- The floating Tools palette: utility tier — floats above the
-           document windows and never deactivates them. Its SIZE stays
-           authored (the one box layout.js takes as input): hugging the tool
-           strip with NO inner padding — the frameless grid of 22×19 cells,
-           each cell exactly one tool icon (6×19 + 5 rules = 119 tall, 22
-           wide), sits flush against the windoid's own frame (the
-           desk-accessory composition), + the chrome (1px borders, 12px
-           bar) = 24 × 133 — TOOLS_BOX in shell/layout.js, the same
-           arithmetic: change one, change the other. -->
-      <vf-window
-        id="win-tools"
-        variant="utility"
-        heading="Tools"
-        movable
-        width="24"
-        height="133"
-      >
-        <sm-tools-panel></sm-tools-panel>
-      </vf-window>
 
       <!-- ======================= Desktop file icons ===================== -->
       <!-- The desktop's field of icons — the kit's own container for them
@@ -275,13 +102,15 @@
            the desktop's raster and a saved position means what it meant
            (a placed field would move the origin under the menu bar); filled
            it has a surface to press, which is what the band needs. It sits
-           after the windoids and before the dialogs — the windows are out
-           of flow, the dialogs in the top layer — so its box is the raster
+           after the options strip and before the dialogs — every window is
+           out of flow (the applications append theirs), the dialogs in the
+           top layer — so its box is the raster
            below the menu bar and the options strip, clipped by the screen.
-           shell/icons.js renders one icon per saved document and per folder
-           whose container is the desktop into it (the open folder windows'
-           fields hold the rest); a press anywhere in it is a press on the
-           Finder (icons.js routes it through clearActive()). -->
+           The Finder's icon layer (apps/finder/icons.js) renders one icon
+           per saved document and per folder whose container is the desktop
+           into it (the open folder windows' fields hold the rest); a press
+           anywhere in it is a press on the Finder (icons.js routes it
+           through clearActive()). -->
       <vf-icon-field
         id="desktop-icons"
         label="Desktop"
@@ -300,8 +129,9 @@
            dialogs below still do (a stray click must never answer "Save
            changes?"). The kit consumes the click, so nothing beneath
            reacts: an icon under the pointer neither selects nor opens, and
-           a Finder selection survives (shell/icons.js's chrome-press bridge
-           already covers a press on any vf-dialog). The plain dBoxProc
+           a Finder selection survives (the Finder's chrome-press bridge,
+           apps/finder/icons.js, already covers a press on any vf-dialog).
+           The plain dBoxProc
            frame (no bar, no close box —
            `label` names it for assistive tech), the application's 32×32 icon
            (src/assets/sprite-machine-icon.png, shown through vf-img at 1:1 —
@@ -779,148 +609,6 @@
            light DOM alone (a shadow-rooted dialog opens above the cursor). -->
       <sm-color-picker></sm-color-picker>
     </vf-desktop>
-
-    <!-- ================== The document-window template ================== -->
-    <!-- One clone per open document (shell/windows.js reconciles them from
-         the workspace slice). The reconciler assigns id, heading, geometry
-         (staggered defaults or a restored position) and hands the editor +
-         face readout their DocContext BEFORE appending the clone to the
-         desktop. Inert markup — a <template> renders nothing here. -->
-    <template id="tpl-document-window">
-      <vf-window heading="untitled" movable resizable zoomable>
-        <sm-editor></sm-editor>
-        <sm-status-line kind="tile" slot="status"></sm-status-line>
-      </vf-window>
-    </template>
-
-    <!-- ================ The Desktop Patterns window template ============= -->
-    <!-- ONE clone at a time, opened by Sprite Machine → Desktop Patterns
-         (shell/patterns.js), removed by its close box or its own
-         application's File → Close / Quit — existence IS visibility, the
-         document windows' discipline. The Desktop Patterns APPLICATION's
-         window (src/apps/desktop-patterns — a desk accessory's seat; the
-         panel is adopted as that application's, so it holding active swaps
-         the bar to File / View): a DOCUMENT-TIER window (the striped bar
-         and close box of System 7.5's Desktop Patterns control panel — a
-         windoid's slim bar carries no title), movable, FIXED-size: no grow
-         box, no zoom box. The size is authored
-         here, the one box shell/layout.js takes as input (centeredBox): the
-         body's 222-wide column — the preview well (222×160, the kit's rule
-         framing it) over the 13×3 chooser of 16px cells (13×16 + 12 rules +
-         2 frame = 222 wide, 3×16 + 2 + 2 = 52 tall) over the default button
-         (20 + its 4px ring margins), two 10px gaps between — plus the
-         stack's 12px pad (the content's own inset: a vf-window body carries
-         none since vintage-frames 0.6.0, and this is the one window whose
-         content wants one — the stack paints nothing and takes no role),
-         the 18px title bar and the 1px borders: 248 × 304
-         (sm-desktop-patterns.js states the well and grid). -->
-    <template id="tpl-patterns-window">
-      <vf-window heading="Desktop Patterns" movable width="248" height="304">
-        <vf-stack pad="12">
-          <sm-desktop-patterns></sm-desktop-patterns>
-        </vf-stack>
-      </vf-window>
-    </template>
-
-    <!-- ================== The folder-window template ==================== -->
-    <!-- One clone per OPEN folder (shell/folders.js), removed by its close
-         box — existence IS visibility. The Finder's window: a DOCUMENT-TIER
-         window (the striped bar, a close box), movable and resizable, its
-         rails on both edges (scrollbars="both" — the corner cell holds the
-         grow box), adopted by shell/windows.js as a PANEL so Arrange and a
-         browser resize move it like every window; and, holding the
-         desktop's active state, it IS the Finder's turn — the application
-         deactivates (windoids and strip hide) while it is front. The header
-         is the Finder's item-count line over the Finder's DOUBLE RULE —
-         black, white, black — from two kit rules and no stylesheet: the
-         count line is a `vf-container fill-width height="18"
-         pattern="white" rule="bottom"` (the options strip's anatomy: 17
-         rows of white paper over one row of ink, its own bottom rule — the
-         divider's first line), holding one body-face label placed at
-         FOLDER_COUNT_AT against its corner (the header's own: the
-         container sits at the header's origin in flow) — and, for the
-         Trash's window and every trashed folder's, the Finder's "in the
-         Trash" mark ahead of it: a vf-img of the user's 12×12 trash
-         glyph, made and placed by folders.js (layout.js
-         FOLDER_TRASH_MARK_AT) with the count stepped right
-         (FOLDER_COUNT_AT_TRASHED), present exactly while the folder is
-         trashed — nothing of it in this markup; under it the
-         header's white shows for one row, then the header's own rule,
-         which `header-height` counts: 18 + 1 + 1 = 20 = FOLDER_STRIP in
-         shell/layout.js (the container's 18 is FOLDER_COUNT_LINE there),
-         System 7's header measured off the real Finder. `pattern="white"`
-         because a BARE vf-container paints the desktop pattern's ink (kit
-         ask #6). The body is one PLACED vf-icon-field at the plane's
-         origin (top/left 0 — so the window's placementAt() and the field's
-         coordinates agree), its width/height the folder's EXTENT
-         (folders.js fit: the viewport at least, grown to hold every icon),
-         which IS the scroll range. The SIZE is authored here, the one box
-         the placement takes as input (folderBox cascades it from the doc
-         box's corner): 320 wide — the plane (303 inside the borders and
-         the vertical rail) holds three lattice columns — and 223 tall: the
-         borders (2), the 18px bar, the header (20), two rows of 64px cells
-         at the 72 pitch inside 16px insets (168), the 15px rail. -->
-    <template id="tpl-folder-window">
-      <vf-window
-        heading="untitled folder"
-        movable
-        resizable
-        scrollbars="both"
-        header-height="20"
-        width="320"
-        height="223"
-      >
-        <vf-container slot="header" fill-width height="18" pattern="white" rule="bottom">
-          <vf-label face="body" class="folder-count" left="8" top="2"></vf-label>
-        </vf-container>
-        <vf-icon-field top="0" left="0"></vf-icon-field>
-      </vf-window>
-    </template>
-
-    <!-- =================== The text-window template ===================== -->
-    <!-- One clone per OPEN text file (shell/texts.js), removed by its close
-         box — existence IS visibility. TeachText's window, the read-me's: a
-         DOCUMENT-TIER window (the striped bar, a close box), movable and
-         resizable, the kit's VERTICAL rail on the frame's edge with the grow
-         box in its corner cell (scrollbars="vertical" — TeachText wrapped
-         its text to the window's width and scrolled it up and down only;
-         a `resizable` window without a status strip gets the corner cell
-         from the kit), adopted by shell/windows.js as a PANEL so Arrange
-         and a browser resize move it like every window; and, holding the
-         desktop's active state, it IS another application's turn — Sprite
-         Machine deactivates (windoids and strip hide) while it is front, as
-         it did when a read-me opened TeachText over it. No header, no
-         status strip; a ZOOM BOX (`zoomable`) that expands the read-me to
-         a reading column and back (layout.js expandedTextBox, windows.js
-         onZoom). The body
-         is the file's text in ONE kit paragraph on the body face — Geneva,
-         the reading face, TeachText's own — kept verbatim by the page's one
-         text-flow rule (style.css .text-body: pre-wrap, so the file's line
-         breaks and blank lines stand and its long lines wrap at the
-         window), inside a stack that fills the scroll plane's width (the
-         plane is never narrower than the viewport, so the copy wraps at the
-         window's edge and the rail's range is the text's height) with the
-         inset stated as the stack's pad — a window body carries none of
-         its own — 4 rows over and under, 6 columns each side, TeachText's
-         tight margin, for the eye. shell/texts.js writes the heading and
-         the text. The SIZE is authored here, the one box the placement
-         takes as input (folderBox cascades it from the doc box's corner):
-         440 × 320 — about seventy characters of Geneva 9 a line. -->
-    <template id="tpl-text-window">
-      <vf-window
-        heading="untitled"
-        movable
-        resizable
-        zoomable
-        scrollbars="vertical"
-        width="440"
-        height="320"
-      >
-        <vf-stack fill-width pad="4 6">
-          <vf-paragraph fill-width class="text-body"></vf-paragraph>
-        </vf-stack>
-      </vf-window>
-    </template>
 
     <script type="module" src="/src/main.js"></script>
   </body>

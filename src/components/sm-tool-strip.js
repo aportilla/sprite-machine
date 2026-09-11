@@ -10,7 +10,8 @@
 // black ink on transparency and nothing else (the Adobe Spectrum workflow
 // glyphs that used to draw them — and the dependency with them — are gone).
 // A CELL IS ITS ICON: the vf-grid's cell is stated at the art's size
-// (TOOL_CELL in shell/layout.js, which derives the windoid's box from it),
+// (TOOL_CELL in apps/sprite-editor/layout.js, which derives the windoid's
+// box from it),
 // and the art fills it edge to edge through the kit's `vf-img` — one image
 // pixel one system px, magnified nearest-neighbor on whole device pixels, so
 // the glyph is crisp at any display scale — no margin, no icon-size token,
@@ -44,7 +45,7 @@
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
-import { TOOL_CELL } from '../shell/layout.js';
+import { TOOL_CELL } from '../apps/sprite-editor/layout.js';
 import { baseStyles } from './base-styles.js';
 import selectUrl from '../assets/tools/select.png';
 import pencilUrl from '../assets/tools/pencil.png';

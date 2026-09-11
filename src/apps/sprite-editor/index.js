@@ -14,8 +14,11 @@
 // — the strip IS the preview), whose Export saves the strip's exact sheet as
 // «slug»-atlas.zip: the sheet PNG (with the ring's metadata chunk) and its
 // TexturePacker JSON, siblings by name in one stored zip — a browser gives
-// one download per gesture. File → Download is the source path. Behavior
-// only — the dialog markup lives in index.html, the aesthetics in the kit.
+// one download per gesture. File → Download is the source path. Its windows
+// are its own (docs/app-windows-plan.md): windows.js beside this file makes
+// them — the four windoids, the document windows, their zoom box and their
+// arrangement — from windows.html, on layout.js's arithmetic. The dialog
+// markup lives in index.html, the aesthetics in the kit.
 //
 // MULTI-DOCUMENT GRAMMAR: File actions target the ACTIVE workspace context;
 // New… / an icon's open / a drop always open a NEW window (opening never
@@ -84,6 +87,7 @@ import { ringFrame, ringSheet, ringAnchor, ringYaws } from '../../lib/ring.js';
 import { zipStore } from '../../lib/zip.js';
 import { loadSample, loadBlank } from '../../loaders.js';
 import { downloadPngBytes, downloadBlob, canvasToPngBytes } from '../../image-io.js';
+import { initEditorWindows } from './windows.js';
 
 /** @type {import('../index.js').App} */
 export const spriteEditor = {
@@ -92,6 +96,15 @@ export const spriteEditor = {
   menus,
   init({ menus, deps }) {
     const { desktop, windows, modalOpen, showStorage } = deps;
+    // The application's windows (windows.js — the windoids, the document
+    // windows, their zoom box and their arrangement): a document window's
+    // close box is this module's dirty-checking close (closeContext, below).
+    const editorWindows = initEditorWindows(desktop, windows, {
+      onDocumentClose: (key) => {
+        const ctx = workspace.byKey(key);
+        if (ctx) closeContext(ctx);
+      },
+    });
     const $ = (sel) => {
       const el = desktop.querySelector(sel);
       if (!el) throw new Error(`apps/sprite-editor: missing element ${sel}`);
@@ -284,7 +297,7 @@ export const spriteEditor = {
       if (saving.has(ctx.key) || dlgUnsaved.open) return;
       // Point the question at what the user sees: the asked-about document's
       // window comes forward first (the System 7 quit cascade's behavior).
-      windows.activateContext(ctx.key);
+      editorWindows.showDocument(ctx.key);
       discardPending = { ctx, next };
       unsavedMsg.textContent = `Save changes to “${ctx.name}” before closing?`;
       dlgUnsaved.show();
@@ -343,7 +356,7 @@ export const spriteEditor = {
     const openDoc = async (id) => {
       try {
         const res = await workspace.openStored(id);
-        if (res) windows.activateContext(res.ctx.key);
+        if (res) editorWindows.showDocument(res.ctx.key);
       } catch (err) {
         build.setError(`Couldn't open the document: ${err.message}`);
       }
@@ -454,7 +467,7 @@ export const spriteEditor = {
       const ctx = sample
         ? await loadSample(sample, { name })
         : loadBlank(clampTile(+newTile.value || BLANK_TILE), name);
-      if (ctx) windows.activateContext(ctx.key);
+      if (ctx) editorWindows.showDocument(ctx.key);
     }
     on(newTemplate, 'vf-change', () => {
       if (nameAuto) newName.value = pickedSample()?.name ?? workspace.nextUntitledName();
@@ -720,14 +733,16 @@ export const spriteEditor = {
       switch (v) {
         case 'ring':
           // The 3D Sprite Atlas windoid: a toggle on the prefs slice (off
-          // every load); shell/windows.js shows and hides the windoid off the
+          // every load); windows.js shows and hides the windoid off the
           // flag, and its close box clears it — one truth, mirrored back as
           // the checkmark by syncView below.
           prefs.setShowRing(!prefs.get().showRing);
           break;
         case 'arrange':
-          // The boot placement re-run on the current raster — windoids and
-          // every open document window (windows.js). The item wears this
+          // The boot placement re-run on the current raster — the window
+          // manager's arrange, running this application's group (the
+          // windoids and every open document window, windows.js) with every
+          // other window. The item wears this
           // value only while something on screen is off its placement
           // (syncArrange below), so a pick always has something to arrange.
           windows.arrange();
@@ -736,13 +751,14 @@ export const spriteEditor = {
           // The same item's other command (syncArrange below): everything
           // already arranged, ⌘J zooms the active document window — the
           // zoom box's own toggle — under the same "Arrange Windows" label.
-          windows.zoomActive();
+          editorWindows.zoomActive();
           break;
         default:
           // The open-windows section (syncWindows below): `window:<key>`
-          // brings that document window forward through the window layer's
-          // one activation funnel.
-          if (v.startsWith('window:')) windows.activateContext(v.slice('window:'.length));
+          // brings that document window forward through the kit's one
+          // activation funnel (showDocument).
+          if (v.startsWith('window:'))
+            editorWindows.showDocument(v.slice('window:'.length));
           break;
       }
     });
@@ -777,7 +793,7 @@ export const spriteEditor = {
     // (windows.arrange); with everything already where the placement puts it
     // — arrange would change nothing (windows.arranged) — it is the ZOOM,
     // the active document window through the zoom box's own toggle
-    // (windows.zoomActive). A window zoomed from its slot still reads
+    // (editorWindows.zoomActive). A window zoomed from its slot still reads
     // arranged — and so does any permutation of the documents across the
     // cascade's slots (a raise is bookkeeping, not layout) — so repeats of
     // ⌘J toggle the focused document between its slot and the vacancy while
@@ -823,8 +839,8 @@ export const spriteEditor = {
     // order, which a raise changes: a menu that shuffles under the pointer
     // is hostile. The value is `window:<key>` (the context key, never the
     // name — two saved documents can share one), and a pick brings that
-    // window forward through the window layer's one activation funnel
-    // (bringToFront → vf-activate). With no document window open the
+    // window forward through the kit's one activation funnel (showDocument:
+    // bringToFront → vf-activate). With no document window open the
     // section is absent, separator included: the menu ends at the markup's
     // last item, and no dangling rule. RECONCILED, not rebuilt: an item
     // lives as long as its window — the kit re-queries its slotted items on
@@ -897,27 +913,22 @@ export const spriteEditor = {
     teardown.push(prefs.subscribe(syncView));
     syncView();
 
-    // A document window's close box routes through the same dirty check.
-    windows.onDocumentClose = (key) => {
-      const ctx = workspace.byKey(key);
-      if (ctx) closeContext(ctx);
-    };
-    teardown.push(() => {
-      windows.onDocumentClose = null;
-    });
-
     return {
       actions: {
         /** The New box (File → New… here, and the Finder's). */
         newDocument,
         /** A stored document's open — the icon layer's double-click. */
         openDoc,
+        /** Bring an open document's window forward — a dropped file's
+         *  (main.js). */
+        showDocument: (key) => editorWindows.showDocument(key),
         confirmDiscard,
         closeContext,
         saveThen,
       },
       dispose() {
         for (const fn of teardown) fn();
+        editorWindows.dispose();
       },
     };
   },

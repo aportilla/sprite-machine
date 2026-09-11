@@ -6,9 +6,9 @@
 // here until Sep 4 2026; the low-poly wedge pass is ALWAYS ON now, the
 // rebuilder building the wedge mesh unconditionally, so it is no state at
 // all.) `showRing` is the 3D Sprite Atlas windoid's toggle — View → 3D
-// Sprite Atlas, its close box the same uncheck — read by
-// shell/windows.js (the windoid's visibility, the placement's shortened doc
-// box) and the renderer's follower (scene/ring.js renders only while
+// Sprite Atlas, its close box the same uncheck — read by the Sprite
+// Editor's windows (apps/sprite-editor/windows.js: the windoid's
+// visibility, the placement's shortened doc box) and the renderer's follower (scene/ring.js renders only while
 // shown); OFF every load. Nothing here persists — every load boots the
 // defaults.
 // ---------------------------------------------------------------------------

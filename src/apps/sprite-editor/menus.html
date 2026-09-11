@@ -1,6 +1,7 @@
 <!-- The SPRITE EDITOR's menus (docs/apps-plan.md §3.4) — the document
      application, front while a document window holds the desktop's active
-     state (shell/windows.js). A fragment of vf-menu elements:
+     state (its windows: windows.js beside this file). A fragment of vf-menu
+     elements:
      shell/menu-bar.js parses it once into live nodes, slots them between
      the Sprite Machine menu and the clock while the Sprite Editor is front
      and lifts them out when another application comes forward — a detached
@@ -110,7 +111,7 @@
     >Arrange Windows</vf-menu-item
   >
   <vf-separator></vf-separator>
-  <!-- The 3D Sprite Atlas windoid (index.html #win-ring) as a checkmark
+  <!-- The 3D Sprite Atlas windoid (windows.html #win-ring) as a checkmark
        toggle over prefs.showRing, OFF every load: the pick shows or hides
        it (the module flips the slice and mirrors it back as the check),
        and the windoid's own close box is the same uncheck — MacPaint's

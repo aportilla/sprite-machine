@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // <sm-desktop-patterns> — the Desktop Patterns control panel's body (the
-// window is index.html's #tpl-patterns-window, opened by shell/patterns.js
-// from Sprite Machine → Desktop Patterns): System 7.5's Desktop Patterns
+// window is the application's #tpl-patterns-window, apps/desktop-patterns,
+// opened from Sprite Machine → Desktop Patterns): System 7.5's Desktop Patterns
 // composition — the PREVIEW WELL across the top, the chooser under it, Set
 // Desktop Pattern along the bottom — with the classic scrollbar (one
 // pattern at a time, "67/74") replaced by a GRID of every pattern the kit
@@ -14,7 +14,7 @@
 // pending pattern from the desktop's current one; pressing a cell SELECTS
 // (the well previews it, the ring marks the cell — the desktop is
 // untouched), and only Set Desktop Pattern commits, through the shell
-// slice's one setter (shell/patterns.js writes it onto the desktop and
+// slice's one setter (shell/desktop-pattern.js writes it onto the desktop and
 // desktop-state.js persists it). Closing the window discards a selection
 // never set. A cell picks on the CLICK: the desktop raises a pressed
 // background window by re-inserting its node, and vintage-frames 0.5.4
@@ -149,7 +149,7 @@ export class SmDesktopPatterns extends LitElement {
     this.requestUpdate();
   }
 
-  // The one commit path: the shell slice's setter — shell/patterns.js
+  // The one commit path: the shell slice's setter — shell/desktop-pattern.js
   // paints it onto the desktop, desktop-state.js persists it.
   #set = () => {
     shell.setDesktopPattern(this.#pending);

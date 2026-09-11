@@ -1,14 +1,17 @@
 // ---------------------------------------------------------------------------
 // DESKTOP PATTERNS — the control panel as an application of its own
 // (docs/apps-plan.md; the user's call, Sep 11 2026): a desk accessory's
-// seat, front while its panel (shell/patterns.js — the window, the well,
-// the chooser and the Set button are that module's and its component's)
-// holds the desktop's active state, its menus File / View (menus.html
-// beside this file) on the bar then and off it otherwise
-// (shell/menu-bar.js). The smallest of the four: Close and Quit over the
-// one panel, and Arrange Windows. The panel opens from the Sprite Machine
-// menu — the Apple menu's Control Panels — and closes from its close box
-// or from here; nothing else is an application command.
+// seat, front while its panel holds the desktop's active state, its menus
+// File / View (menus.html beside this file) on the bar then and off it
+// otherwise (shell/menu-bar.js). The smallest of the four: Close and Quit
+// over the one panel, and Arrange Windows. The panel is its own window
+// (docs/app-windows-plan.md — windows.js and windows.html beside this file;
+// the well, the chooser and the Set button are its component's,
+// sm-desktop-patterns), opened from the Sprite Machine menu — the Apple
+// menu's Control Panels — through `open`, this application's public verb,
+// and closed from its close box or from here; nothing else is an
+// application command. The pattern it sets is the desktop's
+// (shell/desktop-pattern.js paints it).
 //
 // THE GATES: off the bar the items claim no key (the kit's contract), and
 // on it Close and Quit are always live (the application is front only with
@@ -21,6 +24,7 @@ import { prefs } from '../../state/prefs.js';
 import { ring } from '../../state/ring.js';
 import { DESKTOP_PATTERNS } from '../../state/shell.js';
 import { workspace } from '../../state/workspace.js';
+import { initPatternsWindow } from './windows.js';
 
 /** @type {import('../index.js').App} */
 export const desktopPatterns = {
@@ -28,7 +32,9 @@ export const desktopPatterns = {
   name: 'Desktop Patterns',
   menus,
   init({ menus, deps }) {
-    const { windows, patterns, modalOpen } = deps;
+    const { desktop, windows, modalOpen } = deps;
+    // The application's window (the header).
+    const panel = initPatternsWindow(desktop, windows);
     /** A menu of this application's, by its data-menu. */
     const menu = (name) => {
       const m = menus.find((el) => el.dataset.menu === name);
@@ -62,15 +68,15 @@ export const desktopPatterns = {
           // selection never set is discarded — the close box's path); the
           // kit then hands active to the topmost document window, or
           // leaves the bare desktop to the Finder.
-          patterns.close();
+          panel.close();
           break;
       }
     });
 
     on(menuView, 'vf-menu-select', (e) => {
       if (modalOpen()) return;
-      // Arrange Windows — the arrange alone (windows.js): every window back
-      // to its placement, the panel re-centered.
+      // Arrange Windows — the arrange alone (the window manager): every
+      // window back to its placement, the panel re-centered.
       if (menuDetail(e).value === 'arrange') windows.arrange();
     });
 
@@ -92,9 +98,14 @@ export const desktopPatterns = {
     syncArrange();
 
     return {
-      actions: {},
+      actions: {
+        /** Open the panel, or bring it forward — Sprite Machine → Desktop
+         *  Patterns, through the registry at the pick. */
+        open: () => panel.open(),
+      },
       dispose() {
         for (const fn of teardown) fn();
+        panel.dispose();
       },
     };
   },

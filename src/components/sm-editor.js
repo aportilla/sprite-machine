@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
 // <sm-editor> — a document window's body: the CONNECTED container for the
 // drawing surface. ONE EDITOR PER DOCUMENT, for the document's lifetime: the
-// window reconciler (shell/windows.js) clones it into every document window
-// with its `ctx` (the workspace DocContext) assigned BEFORE the append, and
+// Sprite Editor's window reconciler (apps/sprite-editor/windows.js) clones
+// it into every document window with its `ctx` (the workspace DocContext)
+// assigned BEFORE the append, and
 // it lives until the document closes — a hide (or the desktop's DOM
 // re-orders) never unmounts it, so canvas identity and focus behavior
 // survive. What it holds: the full-bleed white artwork well holding

@@ -2,8 +2,8 @@
 // The icon layer: one renameable icon per SAVED document and per FOLDER,
 // reconciled from the files slice into its CONTAINER — the desktop's field
 // (#desktop-icons, a vf-icon-field filling the screen) for the items whose
-// container is the desktop, and every OPEN folder window's field
-// (shell/folders.js) for that folder's children. Nothing else is an icon:
+// container is the desktop, and every OPEN folder window's field (windows.js
+// beside this file) for that folder's children. Nothing else is an icon:
 // the built-in defaults are seeded into the library at the first-ever boot,
 // so they're ordinary rows here, not a special cluster. A document's art is
 // generated from the document itself — the FRONT tile drawn into 32×32
@@ -11,9 +11,10 @@
 // (selection darkens instead of inverting); a folder's is the app's own
 // 1-bit art (src/assets/folder.png), whose selection, `target` and open
 // ghost are the kit's exact inversions and dithers of that one file.
-// Double-click opens (a document dirty-checked through the shell actions; a
-// folder into its window); an open document's — and an open folder's —
-// icon wears the kit's `open` ghost.
+// Double-click opens (a document through the Sprite Editor's openDoc,
+// dirty-checked, read through the registry at the pick; a folder into its
+// window); an open document's — and an open folder's — icon wears the
+// kit's `open` ghost.
 //
 // Positions are `left`/`top` properties in system px — never CSS — so a
 // drag writes back through the same declaration and desktop-state.js can
@@ -24,14 +25,14 @@
 // bar (icons are the Finder's furniture; the options strip is application
 // chrome, hidden whenever the desktop takes focus, so it reserves nothing
 // above an icon): a saved position (a previous session's drag) wins, else
-// the first FREE cell of the container's lattice (shell/layout.js
+// the first FREE cell of the container's lattice (layout.js
 // iconDefault — the classic left-edge column below the Tools band, wrapping
 // on a short raster; iconGridDefault inside a window — rows from the
 // plane's origin, wrapping at its width); on the desktop it is clamped
 // on-raster at boot, and a browser resize re-pins every desktop icon by the
-// same nine-slice rule as the windows, in the icons' own frame
-// (onDesktopResized below) — a window's icons are in its coordinates and
-// travel with it. The layer remembers a closed window's icon positions for
+// same nine-slice rule as the windows, in the icons' own frame (repinIcons
+// below, on the window manager's raster signal) — a window's icons are in
+// its coordinates and travel with it. The layer remembers a closed window's icon positions for
 // the session (folders.onWillClose), and hands desktop-state every position
 // it knows (positions()), so a closed folder never forgets its arrangement.
 //
@@ -80,8 +81,10 @@
 // selection inversion and open ghost are exact), `selectable movable
 // editable` (a rename is the Finder's, landing on files.renameText), no
 // `color` and no `data-folder` (nothing files INTO a text). A double-click
-// opens its window (shell/texts.js), whose being open is the icon's ghost;
-// the drag files it exactly as a document (files.moveText), the Trash
+// opens its window — the Text Viewer's `open`, an application's verb bound
+// late — and a window showing it (the window manager's isOpen, by the key)
+// is the icon's ghost; the drag files it exactly as a document
+// (files.moveText), the Trash
 // counts it, and its key is `text:<id>`, its position persisting like any
 // item's.
 //
@@ -99,24 +102,22 @@
 // ---------------------------------------------------------------------------
 
 import { snapSys, systemPxQuantum } from 'vintage-frames';
-import folderArtUrl from '../assets/folder.png';
-import trashArtUrl from '../assets/trash.png';
-import trashFullArtUrl from '../assets/trash-full.png';
-import textArtUrl from '../assets/text-file.png';
-import { genericDocIconDataUri } from '../image-io.js';
-import { build } from '../state/build.js';
-import { files, childrenOf, isInside, itemCount, TRASH } from '../state/files.js';
-import { shell } from '../state/shell.js';
-import { workspace } from '../state/workspace.js';
+import folderArtUrl from '../../assets/folder.png';
+import trashArtUrl from '../../assets/trash.png';
+import trashFullArtUrl from '../../assets/trash-full.png';
+import textArtUrl from '../../assets/text-file.png';
+import { genericDocIconDataUri } from '../../image-io.js';
+import { build } from '../../state/build.js';
+import { files, childrenOf, isInside, itemCount, TRASH } from '../../state/files.js';
+import { shell, SPRITE_EDITOR, TEXT_VIEWER } from '../../state/shell.js';
+import { workspace } from '../../state/workspace.js';
+import { pinOf, pinTo, MENU_BAR } from '../../shell/layout.js';
 import {
   iconDefault,
   iconGridDefault,
   trashDefault,
-  pinOf,
-  pinTo,
   ICON_CELL,
   ICON_FRAME,
-  MENU_BAR,
 } from './layout.js';
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
@@ -126,12 +127,18 @@ const TEXT = 'text:';
 
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
- * @param {{ actions: {openDoc(id: string): void},
- *           folders: ReturnType<typeof import('./folders.js').initFolders>,
- *           texts: ReturnType<typeof import('./texts.js').initTexts>,
+ * @param {{ windows: ReturnType<typeof import('../../shell/windows.js').initWindows>,
+ *           folders: ReturnType<typeof import('./windows.js').initFolderWindows>,
+ *           apps: Record<string, Record<string, (...args: any[]) => any>>,
  *           savedPos?: (key: string) => {left:number, top:number}|null }} opts
+ *   windows: the window manager — a text file's open ghost is whether a
+ *   window showing it is open (isOpen, re-read on onWindows), and its
+ *   raster signal re-pins the desktop's icons. folders: the Finder's folder
+ *   windows, the roots beside the desktop's field. apps: the registry's
+ *   actions by id — a document's open is the Sprite Editor's openDoc, a
+ *   text file's the Text Viewer's open, both read at the pick.
  */
-export function initIcons(desktop, { actions, folders, texts, savedPos = () => null }) {
+export function initIcons(desktop, { windows, folders, apps, savedPos = () => null }) {
   const desktopField = /** @type {any} */ (desktop.querySelector('#desktop-icons'));
   /** @type {(() => void)[]} */
   const teardown = [];
@@ -162,13 +169,13 @@ export function initIcons(desktop, { actions, folders, texts, savedPos = () => n
   // --- the Finder wire ---------------------------------------------------------
   // A press in the desktop's field — the bare dither or an icon on it — is
   // a press on the Finder. The page owns every "this press means the
-  // Finder" decision (the kit never takes it): windows.js covers the
-  // desktop host (the bezel, now that the field takes the dither's presses),
-  // and this covers the field — both routing through the same
-  // clearActive(). A press in a FOLDER WINDOW needs nothing: the window
-  // activates itself, and a panel active IS the Finder's turn (windows.js
-  // applyActive). A double-click's open then reactivates through the
-  // normal activateContext path.
+  // Finder" decision (the kit never takes it): the window manager
+  // (shell/windows.js) covers the desktop host (the bezel, now that the
+  // field takes the dither's presses), and this covers the field — both
+  // routing through the same clearActive(). A press in a FOLDER WINDOW
+  // needs nothing: the window activates itself, and a Finder window active
+  // IS the Finder's turn (the manager's activation wire). A double-click's
+  // open then reactivates through the opening application's own path.
   on(desktopField, 'pointerdown', () => desktop.clearActive());
 
   // The selection is the ICONS' own — the kit holds it, one per screen (it
@@ -276,7 +283,7 @@ export function initIcons(desktop, { actions, folders, texts, savedPos = () => n
   }
 
   /** Write a position onto an icon in its container's discipline. On the
-   *  desktop, the boot clamp — the windows' (windows.js clampWindow): a
+   *  desktop, the boot clamp — the windows' (shell/windows.js clampedBox): a
    *  position saved on a larger raster pulls back on-screen (an off-raster
    *  icon has nothing to grab, so it would be unreachable at any drag) and
    *  lands on the same k-system-px lattice a drag lands on, in the ICON's
@@ -358,7 +365,7 @@ export function initIcons(desktop, { actions, folders, texts, savedPos = () => n
   }
 
   function wireDoc(icon, id) {
-    icon.addEventListener('vf-open', () => actions.openDoc(id));
+    icon.addEventListener('vf-open', () => apps[SPRITE_EDITOR]?.openDoc(id));
     // In-place rename commits through the same workspace action the File
     // menu's Rename uses — the two paths converge, and any open window
     // of this document retitles along.
@@ -379,7 +386,7 @@ export function initIcons(desktop, { actions, folders, texts, savedPos = () => n
     });
   }
   function wireText(icon, id) {
-    icon.addEventListener('vf-open', () => texts.open(id));
+    icon.addEventListener('vf-open', () => apps[TEXT_VIEWER]?.open(id));
     icon.addEventListener('vf-change', (e) => {
       const detail = /** @type {CustomEvent} */ (e).detail;
       files.renameText(id, detail.label).catch(() => {
@@ -433,7 +440,7 @@ export function initIcons(desktop, { actions, folders, texts, savedPos = () => n
           icon.open = !!workspace.byFileId(rec.id);
         } else if (kind === 'text') {
           setArt(icon, textArtUrl);
-          icon.open = texts.isOpen(rec.id);
+          icon.open = windows.isOpen(key);
         } else {
           setArt(icon, kind === 'trash' ? trashArt(st) : folderArtUrl);
           icon.open = folders.isOpen(rec.id);
@@ -444,13 +451,13 @@ export function initIcons(desktop, { actions, folders, texts, savedPos = () => n
     }
   }
   // The listing drives which icons exist and where; the workspace and the
-  // text windows drive the open ghosts (windows opening and closing move
-  // them); the folder windows are the roots.
+  // window manager's window set drive the open ghosts (windows opening and
+  // closing move them); the folder windows are the roots.
   teardown.push(
     files.subscribe(sync),
     workspace.subscribe(sync),
     folders.onChange(sync),
-    texts.onChange(sync)
+    windows.onWindows(sync)
   );
   sync();
 
@@ -598,40 +605,40 @@ export function initIcons(desktop, { actions, folders, texts, savedPos = () => n
   /** Per-icon nine-slice pin across raster resizes: the unrounded pin plus
    *  the top/left this path last applied (a mismatch there means someone
    *  dragged the icon — or it is new — so its pin re-derives). The same
-   *  truth-cache discipline as the windows' (windows.js onDesktopResized),
-   *  for the same reason: re-deriving the pin each event from the
-   *  just-snapped position ratchets. */
+   *  truth-cache discipline as the windows' (the window manager's
+   *  onDesktopResized), for the same reason: re-deriving the pin each event
+   *  from the just-snapped position ratchets. */
   const pins = new WeakMap();
   const CELL = { width: ICON_CELL, height: ICON_CELL };
+  /** The raster changed size — the window manager's raster signal, told in
+   *  the same stroke as the windows' re-pin, per resize event, un-debounced
+   *  (and only on a real change of size). Every DESKTOP icon keeps its
+   *  nine-slice pin (the shell's pinOf/pinTo) in the ICON_FRAME: the
+   *  desktop below the MENU BAR (the options strip is no chrome of theirs),
+   *  uniform bands — no application furniture lives in the Finder's frame.
+   *  The classic left-edge column is a strut (it stays at its 16px), its
+   *  rows spring with the middle; an icon dragged into a corner stays in
+   *  that corner. A fixed-size box — the 64px cell — so its edges resolve
+   *  through the anchor rule. Deliberately NO clamp, like the windows: the
+   *  same pin always maps back exactly, so growing back returns every icon
+   *  whole. A folder window's icons are in its coordinates and travel with
+   *  it. */
+  const repinIcons = (before, after) => {
+    for (const icon of iconsIn(desktopField)) {
+      const cur = { ...posOf(icon), ...CELL };
+      let rec = pins.get(icon);
+      if (!rec || rec.left !== cur.left || rec.top !== cur.top) {
+        rec = { pin: pinOf(cur, before, ICON_FRAME) };
+      }
+      const pos = pinTo(rec.pin, after, ICON_FRAME, { size: CELL });
+      icon.left = snapSys(pos.left, icon);
+      icon.top = snapSys(pos.top, icon);
+      pins.set(icon, { pin: rec.pin, left: icon.left, top: icon.top });
+    }
+  };
+  teardown.push(windows.onRaster(repinIcons));
 
   return {
-    /** The raster changed size (main.js calls this in the same stroke as
-     *  the windows' re-pin, per resize event, un-debounced). Every DESKTOP
-     *  icon keeps its nine-slice pin (shell/layout.js pinOf/pinTo) in the
-     *  ICON_FRAME: the desktop below the MENU BAR (the options strip is no
-     *  chrome of theirs), uniform bands — no application furniture lives
-     *  in the Finder's frame. The classic left-edge column is a strut (it
-     *  stays at its 16px), its rows spring with the middle; an icon
-     *  dragged into a corner stays in that corner. A fixed-size box — the
-     *  64px cell — so its edges resolve through the anchor rule.
-     *  Deliberately NO clamp, like the windows: the same pin always maps
-     *  back exactly, so growing back returns every icon whole. A folder
-     *  window's icons are in its coordinates and travel with it. */
-    onDesktopResized(before) {
-      const after = { width: desktop.width, height: desktop.height };
-      if (before.width === after.width && before.height === after.height) return;
-      for (const icon of iconsIn(desktopField)) {
-        const cur = { ...posOf(icon), ...CELL };
-        let rec = pins.get(icon);
-        if (!rec || rec.left !== cur.left || rec.top !== cur.top) {
-          rec = { pin: pinOf(cur, before, ICON_FRAME) };
-        }
-        const pos = pinTo(rec.pin, after, ICON_FRAME, { size: CELL });
-        icon.left = snapSys(pos.left, icon);
-        icon.top = snapSys(pos.top, icon);
-        pins.set(icon, { pin: rec.pin, left: icon.left, top: icon.top });
-      }
-    },
     /** Every position the layer knows, by key — the live icons' (the
      *  properties ARE the truth after any drag) under the remembered ones
      *  (a closed window's), and `null` for an item filed away and not yet

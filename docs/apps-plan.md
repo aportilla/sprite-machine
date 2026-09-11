@@ -390,7 +390,9 @@ The document format and its chunks, storage, the desktop-state blob, the
 URL mirror, the windows and windoids and their placement, the options
 strip, the tool keys, the icon layer and the drag, the Trash's rules, the
 Desktop Patterns panel, every dialog's anatomy and copy, the About box,
-the clock, the engine. The kit is untouched.
+the clock, the engine. The kit is untouched. (The windows, the windoids and
+the icon layer moved into their applications afterwards —
+[app-windows-plan.md](app-windows-plan.md).)
 
 ## 4. Steps
 

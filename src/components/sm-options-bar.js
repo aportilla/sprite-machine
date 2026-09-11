@@ -38,7 +38,7 @@
 // A CONNECTED chrome component: session (tool + ink + option values) and doc
 // (the clamp bounds derive from the live tile geometry) drive it; every leaf
 // event becomes a session action. `:host` IS the strip — the desktop lays it
-// out in flow right under the menu bar (shell/windows.js's TOP_RESERVE keeps
+// out in flow right under the menu bar (shell/layout.js's TOP_RESERVE keeps
 // the window tier clear of the band).
 //
 // ---------------------------------------------------------------------------

@@ -33,12 +33,9 @@ import {
 import { initWindows } from './shell/windows.js';
 import { initMenuBar } from './shell/menu-bar.js';
 import { APPS, DEFAULT_APP } from './apps/index.js';
-import { SPRITE_EDITOR } from './state/shell.js';
-import { initIcons } from './shell/icons.js';
-import { initFolders } from './shell/folders.js';
-import { initTexts } from './shell/texts.js';
+import { FINDER, SPRITE_EDITOR } from './state/shell.js';
 import { initClock } from './shell/clock.js';
-import { initPatterns } from './shell/patterns.js';
+import { initDesktopPattern } from './shell/desktop-pattern.js';
 import { createDesktopState } from './shell/desktop-state.js';
 import { initUrlState } from './shell/url-state.js';
 import './components/sm-editor.js'; // registers <sm-editor>
@@ -67,15 +64,16 @@ const boot = parseBootParams(location.search, {
 // The page owns the viewport: measure it, let fitWithin() derive the largest
 // whole raster that fits, re-derive on resize and scale change (zoom, a
 // monitor swap). Every re-fit re-pins the windows AND the desktop icons
-// (windows.js / icons.js each keep their nine-slice pin across the size
-// change, in their own frames) — live in the same handler, un-debounced:
+// (the window manager's re-pin, the Finder's icon layer riding its raster
+// signal — each keeping its nine-slice pin across the size change, in its
+// own frame) — live in the same handler, un-debounced:
 // the raster itself re-fits per resize event, so a debounce would leave the
 // windows hanging off a shrunk raster mid-drag and then jump. The kit's
 // System 7 pointer set takes over the cursor.
 const desktop = /** @type {import('vintage-frames').VfDesktop} */ (
   document.getElementById('desktop')
 );
-/** Bound to the windows' + icons' re-pins once the shell is wired (the boot
+/** Bound to the window manager's re-pin once the shell is wired (the boot
  *  fit below runs before any window or icon exists). */
 let repinDesktop = (/** @type {{width: number, height: number}} */ _before) => {};
 const fitDesktop = () => {
@@ -106,16 +104,17 @@ files.init({
 const dstate = createDesktopState(boot.fresh);
 
 // --- shell ------------------------------------------------------------------
-// The application's windows take no saved state: their geometry is placed
-// fresh from the live raster at every boot and every open (shell/windows.js
-// header); a folder window's remembered pin arrives through folders.js
-// below.
+// The window manager (shell/windows.js). The applications' windows take no
+// saved state — their geometry is placed fresh from the live raster at
+// every boot and every open — but for the Finder's furniture: a folder
+// window's remembered pin reaches the Finder through the menu bar's deps
+// below (the desktop state's windowPin), as do the icons' positions.
 const windows = initWindows(desktop);
 // The desktop pattern: the last session's choice restored onto the desktop
 // (nothing under ?fresh — the dither), written before the desktop's first
-// render; and the Desktop Patterns control panel's owner (its menu item
-// routes through the menu bar's Sprite Machine menu).
-const patterns = initPatterns(desktop, windows, { saved: dstate.desktopPattern() });
+// render (shell/desktop-pattern.js — the desktop's wire; the control panel
+// that sets it is Desktop Patterns', an application of its own).
+const desktopPattern = initDesktopPattern(desktop, { saved: dstate.desktopPattern() });
 // The 3D Sprite Atlas: the follower (scene/ring.js) that makes its offscreen
 // renderer on the first render — wired here, ahead of the menus, because
 // File → Export Sprite Atlas… renders through it; and the 3D model export's
@@ -123,51 +122,33 @@ const patterns = initPatterns(desktop, windows, { saved: dstate.desktopPattern()
 // a glb. The rebuilder below hands both every mesh through the onMesh seam.
 const ringFollow = initRing(createRingRenderer);
 const modelExport = initModelExport();
-// The folder windows (shell/folders.js — the Finder's windows, panels of
-// the window layer, each reopening at the pin the desktop state remembers
-// for it) and the text windows (shell/texts.js — the Text Viewer's, panels
-// placed fresh at every open), then the icon layer over them (its roots
-// are the desktop's field and every open folder's; a text icon's open is
-// the text window's), then the menu bar over all three: the Sprite Machine
-// menu and the three applications' menus (src/apps — the Finder's, the
-// Sprite Editor's, the Text Viewer's), swapped as the front application
-// changes (shell/menu-bar.js). The icon layer's document open action is
-// the Sprite Editor's (dirty-checked), bound late: the Finder's New Folder
-// needs the layer for its rename box.
-const folders = initFolders(desktop, windows, { savedPin: dstate.windowPin });
-const texts = initTexts(desktop, windows);
-/** @type {ReturnType<typeof initMenuBar>} */
-let menuBar;
-const icons = initIcons(desktop, {
-  actions: { openDoc: (id) => menuBar.apps[SPRITE_EDITOR].openDoc(id) },
-  folders,
-  texts,
-  savedPos: dstate.iconPos,
-});
-menuBar = initMenuBar(
+// The menu bar: the Sprite Machine menu and the four applications
+// (src/apps), each wiring its menus and its own windows — the Finder its
+// folder windows and the icon layer over the desktop's field (restored
+// from the desktop state's two readers), the Text Viewer its read-mes,
+// Desktop Patterns its panel — swapped as the front application changes
+// (shell/menu-bar.js).
+const menuBar = initMenuBar(
   desktop,
   { apps: APPS, defaultApp: DEFAULT_APP },
   {
     windows,
-    patterns,
     ring: ringFollow,
     model: modelExport,
-    folders,
-    texts,
-    icons,
+    iconPos: dstate.iconPos,
+    windowPin: dstate.windowPin,
   }
 );
 // The menu bar clock (shell/clock.js).
 const clock = initClock(/** @type {HTMLElement} */ (document.getElementById('clock')));
 // Wired only now — nothing between the boot fit and here can fire a resize
 // (this top level runs synchronously to completion before any event task).
-repinDesktop = (before) => {
-  windows.onDesktopResized(before);
-  icons.onDesktopResized(before);
-};
+repinDesktop = (before) => windows.onDesktopResized(before);
+// The Finder's furniture, read at every snapshot through its actions.
+const finder = menuBar.apps[FINDER];
 const stopPersist = dstate.start({
-  readIcons: icons.positions,
-  readWindows: folders.pins,
+  readIcons: () => finder.positions(),
+  readWindows: () => finder.pins(),
 });
 // The address bar mirrors the active SAVED document (#<name>, replaceState),
 // so a plain reload restores what's on screen; ?fresh leaves even the URL
@@ -175,6 +156,9 @@ const stopPersist = dstate.start({
 const stopUrlState = boot.fresh ? () => {} : initUrlState();
 
 // --- scene ------------------------------------------------------------------
+// The 3D View's canvas lives in the Sprite Editor's windoid, which its init
+// appended above (apps/sprite-editor/windows.js) — so the stage is built
+// after the menu bar.
 const stage = createStage(
   /** @type {HTMLCanvasElement} */ (document.getElementById('viewport')),
   { cam: boot.cam }
@@ -190,8 +174,9 @@ const rebuilder = initRebuilder(stage, {
 });
 
 const disposeDrop = initDropTarget({
-  // A drop opens a new document window; surface + activate it.
-  onLoaded: (ctx) => windows.activateContext(ctx.key),
+  // A drop opens a new document window; surface + activate it (the Sprite
+  // Editor's showDocument, read at the drop).
+  onLoaded: (ctx) => menuBar.apps[SPRITE_EDITOR].showDocument(ctx.key),
 });
 // The global tool shortcuts (B/R/G/I/E → session actions); the menu key
 // equivalents (⌘S, ⌘Z, …) are the kit's own, declared on the menu items.
@@ -220,13 +205,12 @@ if (hot) {
     ringFollow.dispose();
     disposeShortcuts();
     disposeDrop();
-    windows.dispose();
+    // The applications first — each releases and removes its own windows —
+    // then the manager they were adopted into.
     menuBar.dispose();
-    icons.dispose();
-    texts.dispose();
-    folders.dispose();
+    windows.dispose();
     clock.dispose();
-    patterns.dispose();
+    desktopPattern.dispose();
     stopPersist();
     stopUrlState();
     window.removeEventListener('resize', fitDesktop);

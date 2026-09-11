@@ -1,13 +1,16 @@
 // ---------------------------------------------------------------------------
 // The TEXT VIEWER — the read-me application, TeachText's seat
-// (docs/apps-plan.md): front while a text window (shell/texts.js) holds the
-// desktop's active state, its menus File / Edit / View (menus.html beside
-// this file) on the bar then and off it otherwise (shell/menu-bar.js). The
-// smallest application: Close and Quit over its windows, Copy and Select All
-// over the read-me's prose — the two commands TeachText left live on a
-// read-only document — and Arrange Windows. The windows themselves, their
-// text and the selection's reading and writing are shell/texts.js's (the
-// DOM is the window owner's); this module wires the bar to those verbs.
+// (docs/apps-plan.md): front while one of its windows holds the desktop's
+// active state, its menus File / Edit / View (menus.html beside this file)
+// on the bar then and off it otherwise (shell/menu-bar.js). The smallest
+// application: Close and Quit over its windows, Copy and Select All over the
+// read-me's prose — the two commands TeachText left live on a read-only
+// document — and Arrange Windows. Its windows are its own
+// (docs/app-windows-plan.md): windows.js beside this file makes them — their
+// markup (windows.html), their text, their zoom box, the prose selection's
+// reading and writing — and this module wires the bar to those verbs.
+// `open` is its public verb: the Finder's icon layer opens a text file
+// through it, at the double-click.
 //
 // THE GATES: off the bar the items claim no key (the kit's contract), and
 // on it Close, Quit and Select All are always live (the application is
@@ -23,6 +26,7 @@ import { prefs } from '../../state/prefs.js';
 import { ring } from '../../state/ring.js';
 import { TEXT_VIEWER } from '../../state/shell.js';
 import { workspace } from '../../state/workspace.js';
+import { initTextWindows } from './windows.js';
 
 /** @type {import('../index.js').App} */
 export const textViewer = {
@@ -30,7 +34,9 @@ export const textViewer = {
   name: 'Text Viewer',
   menus,
   init({ menus, deps }) {
-    const { desktop, windows, texts, modalOpen } = deps;
+    const { desktop, windows, modalOpen } = deps;
+    // The application's windows (the header).
+    const texts = initTextWindows(desktop, windows);
     /** A menu of this application's, by its data-menu. */
     const menu = (name) => {
       const m = menus.find((el) => el.dataset.menu === name);
@@ -96,14 +102,14 @@ export const textViewer = {
 
     on(menuView, 'vf-menu-select', (e) => {
       if (modalOpen()) return;
-      // Arrange Windows — the arrange alone (windows.js): every window back
-      // to its placement, the text windows onto their cascade.
+      // Arrange Windows — the arrange alone (the window manager): every
+      // window back to its placement, the text windows onto their cascade.
       if (menuDetail(e).value === 'arrange') windows.arrange();
     });
 
     // --- the gates ----------------------------------------------------------------
     // Copy follows the document's selection: live while the prose selected
-    // lies in a text window and is not empty (shell/texts.js reads it), so a
+    // lies in a text window and is not empty (windows.js reads it), so a
     // selection in a dialog's field or nowhere leaves ⌘C to the browser.
     const itemCopy = item(menuEdit, 'copy');
     const syncCopy = () => {
@@ -130,9 +136,14 @@ export const textViewer = {
     syncArrange();
 
     return {
-      actions: {},
+      actions: {
+        /** Open a text file's window, or bring it forward — the Finder's
+         *  icon layer's double-click, through the registry at the pick. */
+        open: (id) => texts.open(id),
+      },
       dispose() {
         for (const fn of teardown) fn();
+        texts.dispose();
       },
     };
   },

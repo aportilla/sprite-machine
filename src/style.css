@@ -78,7 +78,7 @@ body {
   outline-offset: calc(var(--vf-scale, 1) * 1px);
 }
 
-/* A text window's body (index.html #tpl-text-window, shell/texts.js): the
+/* A text window's body (apps/text-viewer/windows.html #tpl-text-window): the
    file's text in one kit paragraph, kept VERBATIM — its line breaks and
    blank lines stand, its long lines wrap at the window's width, and a word
    longer than the window breaks rather than widening the scroll plane
@@ -111,7 +111,8 @@ sm-color-picker {
    backdrop) fills the window body by its own `fill-width fill-height` —
    the one size the kit can't state for it, since the windoid's grow box
    sets it; the kit measures the undeclared box for its raster. The
-   controls strip above it is the window's header (index.html). The THREE
+   controls strip above it is the window's header (the Sprite Editor's
+   windows.html). The THREE
    canvas fills the well. No background of its own: the renderer clears
    transparent (scene/stage.js), so the well's pattern shows through
    behind the model. */
