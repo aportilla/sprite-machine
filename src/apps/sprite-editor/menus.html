@@ -78,19 +78,6 @@
        beside a live stepper) was retired for it, Sep 9 2026. -->
   <vf-menu-item value="tile-size">Tile Size…</vf-menu-item>
 </vf-menu>
-<!-- The tool items' bare-letter shortcuts are DISPLAY-only by kit contract
-     (an unmodified printable key never matches), so src/shortcuts.js keeps
-     owning the actual S/B/R/G/E/I keys. The selection leads, as MacPaint's
-     palette did; the live tool is checked (the same session truth the tool
-     strip and the keys write). -->
-<vf-menu data-menu="tools" label="Tools">
-  <vf-menu-item value="tool-select" shortcut="S">Selection</vf-menu-item>
-  <vf-menu-item value="tool-pencil" shortcut="B" checked>Pencil</vf-menu-item>
-  <vf-menu-item value="tool-rect" shortcut="R">Rectangle</vf-menu-item>
-  <vf-menu-item value="tool-fill" shortcut="G">Fill</vf-menu-item>
-  <vf-menu-item value="tool-eraser" shortcut="E">Eraser</vf-menu-item>
-  <vf-menu-item value="tool-eyedropper" shortcut="I">Eyedropper</vf-menu-item>
-</vf-menu>
 <vf-menu data-menu="view" label="View">
   <!-- The ⌘J item LEADS the menu — the one command over the whole screen —
        with the rule right after it; the windoid toggle and the open-windows
@@ -137,4 +124,17 @@
        forward. Absent, separator included, with no document window open.
        The Sprite Editor's alone (docs/apps-plan.md §6.8): System 7's
        Finder and TeachText listed no windows. -->
+</vf-menu>
+<!-- The tool items' bare-letter shortcuts are DISPLAY-only by kit contract
+     (an unmodified printable key never matches), so src/shortcuts.js keeps
+     owning the actual S/B/R/G/E/I keys. The selection leads, as MacPaint's
+     palette did; the live tool is checked (the same session truth the tool
+     strip and the keys write). -->
+<vf-menu data-menu="tools" label="Tools">
+  <vf-menu-item value="tool-select" shortcut="S">Selection</vf-menu-item>
+  <vf-menu-item value="tool-pencil" shortcut="B" checked>Pencil</vf-menu-item>
+  <vf-menu-item value="tool-rect" shortcut="R">Rectangle</vf-menu-item>
+  <vf-menu-item value="tool-fill" shortcut="G">Fill</vf-menu-item>
+  <vf-menu-item value="tool-eraser" shortcut="E">Eraser</vf-menu-item>
+  <vf-menu-item value="tool-eyedropper" shortcut="I">Eyedropper</vf-menu-item>
 </vf-menu>
