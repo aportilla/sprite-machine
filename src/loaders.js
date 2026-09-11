@@ -84,7 +84,7 @@ export async function loadSample(sample, { name = sample.name, face } = {}) {
  * `sprite-machine:transforms`, the `sprite-machine:ring` settings — read
  * BEST-EFFORT: a non-PNG, a torn chunk list or a garbled transforms chunk
  * costs only what it garbles (a name, the transforms), never the pixels.
- * The drop's reading (loadFile) and the paste's (shell/menus.js, a PNG off
+ * The drop's reading (loadFile) and the paste's (apps/finder, a PNG off
  * the system clipboard — very likely chunkless, the browser having
  * re-encoded it) share it.
  * @param {Uint8Array} bytes

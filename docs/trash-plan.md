@@ -195,7 +195,10 @@ already there.
   and before the rule over Quit — the user's call for now (2026-09-09):
   System 7 kept it in the Finder's Special menu, which here would hold
   one command; the day Clean Up joins it, a Special menu earns its place
-  and both move there (§7). The ellipsis is the app's grammar, System 7's
+  and both move there (§7). _Moved 2026-09-11: the menu bar is the front
+  application's now ([apps-plan.md](apps-plan.md)), the Finder's bar its
+  own, and the item is the Finder's **Special → Empty Trash…** — one
+  item until Clean Up joins it._ The ellipsis is the app's grammar, System 7's
   promise of a box — the alert below. Live in both roles — a Finder
   command over the catalog, like New Folder, but it opens no window and
   selects nothing, so it changes no role — and **greyed while the Trash
@@ -333,7 +336,9 @@ closed, a blemish, not a fault.
 2. **Where Empty Trash… lives.** The Finder's Special menu would hold one
    command here; the File menu never had it. **Decided 2026-09-09: the
    Sprite Machine menu, for now** (§2.5) — a Special menu the day Clean
-   Up gives it a second item (§7).
+   Up gives it a second item (§7). _Superseded 2026-09-11: with the bar the
+   front application's ([apps-plan.md](apps-plan.md) §6.4), the Finder's
+   Special menu holds it, one item._
 3. **An open document's fate at Empty** — the case where a document is
    trashed while its window is open, and the Trash is then emptied. The
    window keeps its pixels either way; the stored file behind it is gone.
@@ -417,9 +422,10 @@ and kit attributes earn nothing.
 - **The "in use" refusal** (§5.3c), should the untitled-and-dirty reading
   grate.
 - **The caution icon** (§5.8) for this alert and the unsaved one.
-- **Clean Up Window / Clean Up Desktop** (folders plan §7) — and with
-  them a **Special menu**, the Finder's, into which Empty Trash… moves
-  from the Sprite Machine menu (§5.2).
+- **Clean Up Window / Clean Up Desktop** (folders plan §7) — into the
+  Finder's **Special menu**, which arrived 2026-09-11 with the
+  applications ([apps-plan.md](apps-plan.md)) holding Empty Trash… alone
+  (§5.2).
 - Never: Eject Disk, Erase Disk, Restart, Shut Down — no disks here, and
   Quit is the cascade.
 

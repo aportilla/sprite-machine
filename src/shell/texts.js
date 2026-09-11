@@ -27,15 +27,21 @@
 //   machine), placed fresh at every open like a document window, never a
 //   folder window's remembered pin.
 //
-//   ANOTHER APPLICATION'S TURN. Opening a read-me on System 7 switched you
-//   to TeachText: the front application's palettes hid. Here a panel
-//   holding the desktop's active state mirrors as the desktop-focused role
-//   (windows.js applyActive — a DOCUMENT window active, not any window),
-//   so a text window front deactivates Sprite Machine exactly as a folder
-//   window does — the windoids hide, the options strip goes, the
-//   document-scoped items grey — and closing it hands active to the
-//   topmost document window. activeText() reads which text's window holds
-//   active — what File → Close closes.
+//   THE TEXT VIEWER'S TURN. Opening a read-me on System 7 switched you to
+//   TeachText: the front application's palettes hid and the menu bar
+//   became TeachText's. Here a text window is adopted as the TEXT VIEWER's
+//   panel (windows.addPanel's `app` — apps/text-viewer is the
+//   application, its menus File / Edit / View), so holding the desktop's
+//   active state makes the Text Viewer the front application (windows.js
+//   applyActive): a text window front deactivates the Sprite Editor
+//   exactly as a folder window does — the windoids hide, the options strip
+//   goes, the bar swaps — and closing it hands active to the topmost
+//   document window. activeText() reads which text's window holds active —
+//   what the Text Viewer's File → Close closes; closeAll() is its Quit;
+//   selectAll() and selectedText() are its Edit menu's two commands over
+//   the read-me's prose (the window's DOM is this module's, so the
+//   selection's reading and writing live here, the application calling
+//   through).
 //
 //   THE TITLE follows the model: the listing drives it (a rename from the
 //   icon retitles the window), and a text whose record is gone closes its
@@ -45,6 +51,7 @@
 import { VfWindow } from 'vintage-frames';
 import { files } from '../state/files.js';
 import { build } from '../state/build.js';
+import { TEXT_VIEWER } from '../state/shell.js';
 import { folderBox } from './layout.js';
 
 /**
@@ -119,7 +126,10 @@ export function initTexts(desktop, windows) {
     // slot-in — the read-me's application coming forward.
     desktop.append(win);
     wins.set(id, win);
-    windows.addPanel(win, (w, h) => folderBox(w, h, size, n));
+    // The Text Viewer's panel: the bar shows its menus while it is front.
+    windows.addPanel(win, (w, h) => folderBox(w, h, size, n), null, {
+      app: TEXT_VIEWER,
+    });
     desktop.bringToFront(win);
     notify();
     return win;
@@ -149,12 +159,26 @@ export function initTexts(desktop, windows) {
   };
   const unsubscribe = files.subscribe(sync);
 
+  /** The text whose window `node` sits in, or null — a light-DOM node of
+   *  the window (the selection's anchor is the slotted text node inside
+   *  the body's paragraph), an element or a text node alike. */
+  const textOfNode = (node) => {
+    const el = node instanceof Element ? node : (node?.parentElement ?? null);
+    const win = el?.closest('vf-window');
+    return win instanceof VfWindow ? idOf(win) : null;
+  };
+
   return {
     /** Open a text file's window (or bring it forward). Resolves it, or
      *  null for a file that is gone. */
     open,
     /** Close a text file's window (the close box's path, File → Close's). */
     close,
+    /** Close every open text window, in turn — TeachText's Quit (a read-me
+     *  is read-only, so nothing asks). */
+    closeAll() {
+      for (const id of [...wins.keys()]) close(id);
+    },
     /** @param {string} id */
     isOpen: (id) => wins.has(id),
     /** The text file whose window holds the desktop's active state — the
@@ -162,6 +186,29 @@ export function initTexts(desktop, windows) {
     activeText() {
       const w = desktop.activeWindow;
       return w ? idOf(w) : null;
+    },
+    /** The prose the mouse has selected in one of these windows, or '' —
+     *  what the Text Viewer's Edit → Copy hands the system clipboard, and
+     *  what its gate reads (live while this is not empty). A selection
+     *  anchored anywhere else — a field, another window — is not the
+     *  read-me's and reads empty here. */
+    selectedText() {
+      const sel = document.getSelection();
+      if (!sel || sel.isCollapsed || textOfNode(sel.anchorNode) == null) return '';
+      return sel.toString();
+    },
+    /** Select the whole text of a window's body — the Text Viewer's Edit →
+     *  Select All over the front read-me (one Range over the paragraph, so
+     *  the kit's own copy path and selectedText() both read it). */
+    selectAll(id) {
+      const win = wins.get(id);
+      const body = win ? bodyOf(win) : null;
+      const sel = document.getSelection();
+      if (!body || !sel) return;
+      const range = document.createRange();
+      range.selectNodeContents(body);
+      sel.removeAllRanges();
+      sel.addRange(range);
     },
     /** A window opened or closed. Returns the unsubscribe. */
     onChange(fn) {

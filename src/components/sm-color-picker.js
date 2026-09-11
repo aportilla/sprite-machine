@@ -212,7 +212,7 @@ export class SmColorPicker extends LitElement {
                 // Cancel the key: the commit closes the dialog during this
                 // keydown and focus returns to the opener (the ink swatch,
                 // a button) — an uncancelled Enter's keypress would click
-                // it and reopen the dialog (shell/menus.js, the name
+                // it and reopen the dialog (apps/sprite-editor, the name
                 // prompt's Enter, has the same note).
                 e.preventDefault();
                 this.#commit();

@@ -1,10 +1,10 @@
 // ---------------------------------------------------------------------------
 // The composition root — the only file that assembles the app, with no logic
 // of its own: parse the boot params, seed the stores, fit the desktop raster
-// and take over the cursor, wire the shell (windows / menus / icons /
-// persistence), create the THREE stage + mesh rebuilder, and open the boot
-// document(s). Everything else coordinates through the state slices
-// (state/) — see README's Architecture section.
+// and take over the cursor, wire the shell (windows / the menu bar and its
+// three applications / icons / persistence), create the THREE stage + mesh
+// rebuilder, and open the boot document(s). Everything else coordinates
+// through the state slices (state/) — see README's Architecture section.
 // ---------------------------------------------------------------------------
 
 import './style.css';
@@ -31,7 +31,9 @@ import {
   genericDocIconDataUri,
 } from './image-io.js';
 import { initWindows } from './shell/windows.js';
-import { initMenus } from './shell/menus.js';
+import { initMenuBar } from './shell/menu-bar.js';
+import { APPS, DEFAULT_APP } from './apps/index.js';
+import { SPRITE_EDITOR } from './state/shell.js';
 import { initIcons } from './shell/icons.js';
 import { initFolders } from './shell/folders.js';
 import { initTexts } from './shell/texts.js';
@@ -112,7 +114,7 @@ const windows = initWindows(desktop);
 // The desktop pattern: the last session's choice restored onto the desktop
 // (nothing under ?fresh — the dither), written before the desktop's first
 // render; and the Desktop Patterns control panel's owner (its menu item
-// routes through menus.js).
+// routes through the menu bar's Sprite Machine menu).
 const patterns = initPatterns(desktop, windows, { saved: dstate.desktopPattern() });
 // The 3D Sprite Atlas: the follower (scene/ring.js) that makes its offscreen
 // renderer on the first render — wired here, ahead of the menus, because
@@ -123,30 +125,38 @@ const ringFollow = initRing(createRingRenderer);
 const modelExport = initModelExport();
 // The folder windows (shell/folders.js — the Finder's windows, panels of
 // the window layer, each reopening at the pin the desktop state remembers
-// for it) and the text windows (shell/texts.js — TeachText's, panels placed
-// fresh at every open), then the icon layer over them (its roots are the
-// desktop's field and every open folder's; a text icon's open is the text
-// window's), then the menus over all three. The icon layer's document open
-// action is the menus' (dirty-checked), bound late: the menus need the
-// layer for New Folder's rename box.
+// for it) and the text windows (shell/texts.js — the Text Viewer's, panels
+// placed fresh at every open), then the icon layer over them (its roots
+// are the desktop's field and every open folder's; a text icon's open is
+// the text window's), then the menu bar over all three: the Sprite Machine
+// menu and the three applications' menus (src/apps — the Finder's, the
+// Sprite Editor's, the Text Viewer's), swapped as the front application
+// changes (shell/menu-bar.js). The icon layer's document open action is
+// the Sprite Editor's (dirty-checked), bound late: the Finder's New Folder
+// needs the layer for its rename box.
 const folders = initFolders(desktop, windows, { savedPin: dstate.windowPin });
 const texts = initTexts(desktop, windows);
-/** @type {ReturnType<typeof initMenus>} */
-let menus;
+/** @type {ReturnType<typeof initMenuBar>} */
+let menuBar;
 const icons = initIcons(desktop, {
-  actions: { openDoc: (id) => menus.actions.openDoc(id) },
+  actions: { openDoc: (id) => menuBar.apps[SPRITE_EDITOR].openDoc(id) },
   folders,
   texts,
   savedPos: dstate.iconPos,
 });
-menus = initMenus(desktop, windows, {
-  patterns,
-  ring: ringFollow,
-  model: modelExport,
-  folders,
-  texts,
-  icons,
-});
+menuBar = initMenuBar(
+  desktop,
+  { apps: APPS, defaultApp: DEFAULT_APP },
+  {
+    windows,
+    patterns,
+    ring: ringFollow,
+    model: modelExport,
+    folders,
+    texts,
+    icons,
+  }
+);
 // The menu bar clock (shell/clock.js).
 const clock = initClock(/** @type {HTMLElement} */ (document.getElementById('clock')));
 // Wired only now — nothing between the boot fit and here can fire a resize
@@ -211,7 +221,7 @@ if (hot) {
     disposeShortcuts();
     disposeDrop();
     windows.dispose();
-    menus.dispose();
+    menuBar.dispose();
     icons.dispose();
     texts.dispose();
     folders.dispose();
@@ -308,7 +318,7 @@ async function bootDocuments() {
     }
   }
 
-  menus.actions.showAbout();
+  menuBar.showAbout();
 }
 
 bootDocuments();

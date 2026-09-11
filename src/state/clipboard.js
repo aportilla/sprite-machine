@@ -21,7 +21,7 @@
 // system half. Session-only, never persisted; a reference to an item since
 // emptied from the Trash simply skips at the paste — the Finder's own
 // reading of a stale Clipboard. Pure: the store's shape and one selector,
-// Node-tested; the system clipboard calls are the wire's (shell/menus.js).
+// Node-tested; the system clipboard calls are the wire's (apps/finder).
 // ---------------------------------------------------------------------------
 
 import { createStore } from './store.js';

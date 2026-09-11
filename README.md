@@ -54,9 +54,9 @@ browser and reopened by double-clicking their icons, with **folders** to file
 them in and the **Trash** to delete them by — beside the **read-me text
 files** the app ships, opened into TeachText's window (see
 [Text files](#text-files)). Clicking the desktop is
-"switching to the Finder": the application deactivates, its windoids hide, and
-the menus fall back to the desktop's grammar. See
-[The desktop](#the-desktop).
+"switching to the Finder": the Sprite Editor deactivates, its windoids hide,
+and the menu bar becomes the Finder's — one bar, the front application's,
+as System 7's was. See [The desktop](#the-desktop).
 
 The first-ever boot **seeds two starter documents** (Car, Cube) as ordinary
 saved files. They are created once and never come back: the profile records
@@ -323,42 +323,87 @@ dialogs, the icon layer, plus a `<template>` the document windows clone from)
 fitted to the viewport at boot, with the kit's page-drawn cursor on top. The
 page sets **layout only** — every aesthetic is the kit's.
 
-### One machine, two roles
+### Three applications, one menu bar
 
-On a real System 7 machine the desktop belonged to the **Finder**: clicking it
-switched applications — the app's windows lost their stripes and its palettes
-hid. Sprite Machine has exactly one application, so both roles share one menu
-bar and one boolean decides everything: **is a document window the desktop's
-active window?**
+On a real System 7 machine the menu bar belonged to the **front
+application**: the Apple menu sat at the left in every one, the application's
+own menus followed, and switching applications — clicking one of its windows,
+or the desktop, which was the Finder's — replaced those menus wholesale, the
+Finder's File / Edit / View / Special giving way to MacPaint's or TeachText's.
+Sprite Machine is three applications, and the bar is the front one's (the
+plan is [docs/apps-plan.md](docs/apps-plan.md)):
 
-- **Clicking the desktop background or a desktop icon deactivates the
-  application** — the PAGE owns the press test, the kit's furniture being
-  slotted light DOM, so only the page knows which presses mean "the Finder".
-  Every document window goes plain, the windoids **hide**, the options strip
-  hides with them, the bare-letter tool keys go inert, and the menus drop to
-  the **Finder grammar** — About / Desktop Patterns / Empty Trash… / New… /
-  New Folder / Quit stay enabled (see [Menu bar](#menu-bar)). The icon
-  selection **survives the trip to the menu bar**, since a press on the
-  application's chrome is no press on the desktop; the kit's `vf-icon` would
-  clear on it, so `shell/icons.js` re-selects across that press — a page-side
-  bridge until the kit exempts its own chrome (kit ask #5). Everything
-  document-scoped greys out, and a disabled item's key equivalent never fires
-  (the kit's contract), so ⌘S/⌘Z/⌘K gate with their menus.
-- **Clicking any document window — or opening one — reactivates**: the
-  windoids come back exactly where they were, aimed at the newly active
-  document, and the activation **clears the Finder selection** (an icon's
-  double-click and File → New… alike): the highlight names what the next
-  Finder action acts on, and the application is forward now.
-- **Panels are the Finder's windows.** `appActive` is "a **document** window
-  is the desktop's active window", not "any window is", so a panel holding
-  active mirrors as the desktop-focused state exactly like none: opening the
-  Desktop Patterns panel or a folder window deactivates the application, and
-  closing it hands active to the topmost document window.
-- Closing the last document window leaves the same state: a bare desktop whose
-  windoid arrangement survives for the next open. **Boot begins here too**:
-  until the first document window opens nothing has activated, so an
-  About-greeted load shows the Finder grammar with the windoids hidden. A
-  windoid is on screen _because_ a document window is, never before.
+- **The Finder** — the desktop and its icons, the folder windows, the Desktop
+  Patterns panel; the drag, the rubber band, Copy / Paste, New Folder, Empty
+  Trash…. The desktop's application and the default: it is front whenever
+  nothing is active.
+- **The Sprite Editor** — the document windows, the four windoids, the
+  options strip, the tool keys and every command over a document.
+- **The Text Viewer** — the read-me windows, TeachText's seat (see
+  [Text files](#text-files)).
+
+**The front application is a reading of the desktop's active window**, made
+in the one place the activation lands (`shell/windows.js`'s wire, into
+`shell.frontApp`): a **document window** active means the Sprite Editor; a
+**panel window** active means the application its owner declared when it
+adopted the window (`windows.addPanel`'s `app` — a folder window and the
+control panel say the Finder, a text window the Text Viewer); **no active
+window** means the Finder. `appActive` — "is the Sprite Editor front" — is
+written in the same patch, so the windoids, the options strip and the tool
+keys read exactly what they always read.
+
+- **Clicking the desktop background or a desktop icon brings the Finder
+  forward** — the PAGE owns the press test, the kit's furniture being slotted
+  light DOM, so only the page knows which presses mean "the Finder". Every
+  document window goes plain, the windoids **hide**, the options strip hides
+  with them, the bare-letter tool keys go inert, and the bar **swaps** to the
+  Finder's menus (see [Menu bar](#menu-bar)). The icon selection **survives
+  the trip to the menu bar**, since a press on the bar is no press on the
+  desktop; the kit's `vf-icon` would clear on it, so `shell/icons.js`
+  re-selects across that press — a page-side bridge until the kit exempts
+  its own chrome (kit ask #5).
+- **Clicking any document window — or opening one — brings the Sprite Editor
+  forward**: the windoids come back exactly where they were, aimed at the
+  newly active document, the bar swaps to the editor's menus, and the
+  activation **clears the Finder selection** (an icon's double-click and
+  File → New… alike): the highlight names what the next Finder action acts
+  on, and the editor is forward now.
+- **Panels are other applications' windows.** A folder window or the Desktop
+  Patterns panel holding active is the Finder's turn; a text window holding
+  active is the Text Viewer's. Opening one deactivates the Sprite Editor
+  exactly as the desktop click does, and closing it hands active to the
+  topmost document window, which brings the editor back.
+- Closing the last document window leaves the Finder front over a bare
+  desktop whose windoid arrangement survives for the next open. **Boot
+  begins here too**: until the first document window opens nothing has
+  activated, so an About-greeted load shows the Finder's bar with the
+  windoids hidden. A windoid is on screen _because_ a document window is,
+  never before.
+
+**Each application is one directory under `src/apps/`** — `finder`,
+`sprite-editor`, `text-viewer` — holding its menus as markup (`menus.html`, a
+fragment of `vf-menu` elements, imported whole) and one module on one shape:
+an id, a name, the fragment, and `init({ menus, deps })`, which binds
+behavior to the parsed nodes and returns the application's public verbs and
+its teardown. `src/apps/index.js` lists the three in the bar's order; a
+fourth application is a fourth directory and one entry. The bar's owner,
+`shell/menu-bar.js`, parses each fragment once into live nodes, slots the
+front application's between the Sprite Machine menu and the clock, and on
+every change of the front application **lifts the outgoing menus out and
+inserts the incoming ones** — nodes moved, never rebuilt, so an item's state
+survives the trip. The kit takes menus coming and going, and **a detached
+menu claims no key**: an item's key equivalent is a document listener added
+on connect and removed on disconnect, so the Sprite Editor's ⌘S is inert in
+the Finder with no `disabled` written anywhere — the Finder's own ⌘S doing
+nothing, as on a Mac — and ⌘C over a read-me's prose copies the prose,
+never a lit icon, since the Finder's Copy is off the bar then. A menu is
+addressed by its `data-menu` and an item by its `value`, within the
+application's own nodes: two applications may each hold a `close` or an
+`arrange`, and only the front one's is ever connected, so no key is ever
+contested. Cross-application calls go through the registry's actions at pick
+time: the Finder's New… raises the Sprite Editor's New box, and an icon's
+double-click opens through the editor's `openDoc`. The dialogs stay in
+`index.html`, the desktop's top layer; only their handlers moved.
 
 ### Documents are windows
 
@@ -375,10 +420,51 @@ the Undo/Redo enablement.
 
 ### Menu bar
 
-- **Sprite Machine** — _About…_ (also the boot greeting), _Desktop
-  Patterns_ (a window, not a dialog, so no ellipsis) and _Empty Trash…_
-  (greyed while the Trash is empty, no key equivalent). All three are live in
-  both roles.
+The leftmost menu, **Sprite Machine**, is the Apple menu's seat and role:
+one menu, in every application, holding what is the machine's rather than
+an application's — _About…_ (also the boot greeting) and _Desktop Patterns_
+(a window, not a dialog, so no ellipsis; it is the Finder's window, so
+opening it brings the Finder forward). Its title is the text for now; the
+kit's `label` slot takes a 16×16 glyph the day one is drawn, the Apple
+menu's picture, with the text kept as the accessible name. To its right sit
+**the front application's menus and no other's**, and the **clock** keeps
+the bar's right end through every swap:
+
+```
+Finder         │ Sprite Machine  File  Edit  View  Special                 10:42 │
+Sprite Editor  │ Sprite Machine  File  Edit  Tools  View                   10:42 │
+Text Viewer    │ Sprite Machine  File  Edit  View                          10:42 │
+```
+
+**The Finder's menus** — the bare desktop, a folder window or the Desktop
+Patterns panel front:
+
+- **File** — _New…_ ⌃N (the one New — always a **document**, through the
+  Sprite Editor's New box: the Finder's way to make one, as a double-click
+  is its way to open one; System 7's Finder made no documents, but this
+  machine's is the one document application), _New Folder_ (makes _untitled
+  folder_ in the front folder window else on the desktop, its name selected
+  for typing; no key equivalent; greyed while the front window is the
+  Trash's or a trashed folder's), then, after a rule, _Close_ ⌃W (the front
+  folder window, else the Desktop Patterns panel; greyed with the bare
+  desktop front). No Quit: the Finder had none.
+- **Edit** — _Copy_ ⌘C, _Paste_ ⌘V, _Select All_ ⌘A, the commands over the
+  icons (see [Copy and Paste](#folders)), each with its own reading — Copy
+  a selected icon that is not the Trash, Paste a front container that
+  accepts one — and all three greyed while any text field has focus, so an
+  icon's rename box or a dialog's field keeps its native ⌘C / ⌘V / ⌘A. No
+  Undo, Cut or Clear, greyed or otherwise: the Finder had no Cut of files,
+  and the Trash is the Finder's undo.
+- **View** — _Arrange Windows_ ⌘J, the arrange alone (the Sprite Editor's
+  item below carries the rule), greyed while the screen already is the
+  arrangement. No window tail: System 7's Finder listed no windows, and the
+  way back to an open document is its window's click, or its icon.
+- **Special** — _Empty Trash…_ (see [The Trash](#the-trash)), greyed while
+  the Trash is empty, no key equivalent; one item until Clean Up joins it.
+
+**The Sprite Editor's menus** — a document window front. Every item is
+document-scoped by construction, so none needs a role gate:
+
 - **File** — _New…_ ⌃N (classic Photoshop's New box: a **Name** across the
   top, seeded with the next untitled name and following the template popup
   until typed in, over the **Settings** group — the template, Empty Document or
@@ -386,25 +472,21 @@ the Undo/Redo enablement.
   template's art has a native size — with OK over Cancel at the right, OK
   greyed while the name is blank; the document opens unsaved under that
   name, so its first Save prompts with it — and there is **one New**: it
-  always makes a **document**, from either role, never the folder below.
+  always makes a **document**, from either application, never a folder.
   Its key is Control's, ⌃N, on Close's reasoning: the browser owns ⌘N. And
   where System 7 could spend its ⌘N on the Finder's New Folder, this
-  machine spends its New on the document), _New Folder_ (a **Finder
-  command**, live in the Finder role only — greyed while a document window
-  is active, like Copy and Paste: it makes _untitled folder_ in the front
-  folder window else on the desktop, its name selected for typing; no key
-  equivalent; greyed too while the Finder's front window is the Trash's),
-  _Close_ ⌃W (the active document, dirty-checked — or, in the Finder role,
-  the front folder window, else the front text window; Control, not ⌘,
-  since the browser owns ⌘W — see
-  the key equivalents note below), _Save_ ⌘S (an untitled's first save
-  prompts for a name), _Duplicate_ ⌘D, _Rename…_, _Download_ ⇧⌘E (the
-  document `.png` verbatim — the downloaded atlas IS the source format, hence
-  Download rather than Export, and no ellipsis: it acts immediately), the two
-  exports, and _Quit_ ⌃Q (the System 7 cascade: every open document in turn,
-  one unsaved-changes alert per dirty one with its window brought forward as
-  it's asked about, Cancel anywhere aborting the rest; live in both roles,
-  greyed with no document window open, since there is nothing to quit).
+  machine spends its New on the document), then, after a rule, _Close_ ⌃W
+  (the active document, dirty-checked; Control, not ⌘, since the browser
+  owns ⌘W — see the key equivalents note below), _Save_ ⌘S (an untitled's
+  first save prompts for a name), _Duplicate_ ⌘D, _Rename…_, _Download_
+  ⇧⌘E (the document `.png` verbatim — the downloaded atlas IS the source
+  format, hence Download rather than Export, and no ellipsis: it acts
+  immediately), the two exports, and _Quit_ ⌃Q (the System 7 cascade: every
+  open document in turn, one unsaved-changes alert per dirty one with its
+  window brought forward as it's asked about, Cancel anywhere aborting the
+  rest; always live here, the editor being front only with a document open
+  — the route from the Finder is a click on any document window first, as
+  it was on a Mac).
 - **Export 3D Model…** writes the model as **one glTF 2.0 binary** from the
   engine's own writer (`gltf.js`, through its `modelToGlb` — the headless
   path and the menu are one function; three's `GLTFExporter` encodes a texture
@@ -433,21 +515,18 @@ the Undo/Redo enablement.
   whenever a model exists, the windoid shown or not.
 - **Edit** — _Undo_ ⌘Z / _Redo_ ⇧⌘Z (the ACTIVE document's history; disabled
   until it has something, which hands the key back to a focused field's native
-  undo), then, after a rule, _Copy_ ⌘C / _Paste_ ⌘V / _Select All_ ⌘A — the
-  **Finder-role** commands over the icons (see [Copy and Paste](#folders)):
-  live while a document window is _not_ the desktop's active window, greyed
-  in the application role, where the same labels wait for the selection
-  tool's pixel clipboard — one Edit menu, the forward role's command under
-  one label, System 7's own model — and greyed too while any text field has
-  focus, so an icon's rename box or a dialog's field keeps its native ⌘C /
-  ⌘V / ⌘A. Then, after a rule, _Pick Color…_ ⌘K and _Tile Size…_ (the active
-  document's square tile size behind a modal that commits on OK alone — the
-  one property that is an edit; see [Drawing editor](#drawing-editor)). No
-  Cut and no Clear: the Finder had no Cut of files.
-  **Tools** lists the six sticky
-  modes with the active one checkmarked — the same session truth the tool
-  strip and the S/B/R/G/E/I keys write, so a pick from any of the three moves
-  all three.
+  undo), then, after a rule, _Copy_ ⌘C / _Paste_ ⌘V / _Select All_ ⌘A —
+  **greyed placeholders**, waiting for the selection tool's pixel clipboard
+  (the Finder's Edit menu holds the live three over the icons; the same
+  labels read the front application's command, one bar, System 7's own
+  model), and greyed they claim no key, so a dialog's field keeps its native
+  ⌘C / ⌘V / ⌘A. Then, after a rule, _Pick Color…_ ⌘K and _Tile Size…_ (the
+  active document's square tile size behind a modal that commits on OK
+  alone — the one property that is an edit; see
+  [Drawing editor](#drawing-editor)). No Cut and no Clear yet.
+- **Tools** lists the six sticky modes with the active one checkmarked — the
+  same session truth the tool strip and the S/B/R/G/E/I keys write, so a
+  pick from any of the three moves all three.
 - **View** — _Arrange Windows_ ⌘J **leads the menu**: **one item, one label,
   two commands under a state rule**, and which one is a reading of the
   windows, never of what was pressed last. With anything on screen off its
@@ -460,29 +539,43 @@ the Undo/Redo enablement.
   the box its placement would write (`arranged()`); hidden windows don't
   count, nor the atlas strip's width, nor which document sits on which slot.
   Only the item's **value** turns with the state; the **label never does** —
-  the zoom is a variant of arranging, not a second command to announce.
-  Greyed with no document window open, and, arranged, in the Finder role.
+  the zoom is a variant of arranging, not a second command to announce. The
+  Finder's and the Text Viewer's ⌘J items carry the arrange alone, greyed
+  while the screen is arranged, so ⌘J means the same thing wherever you are.
 
   Then, after a separator, _3D Sprite Atlas_ (a checkmark toggle, **off every
   load**; the windoid's close box is the same uncheck, MacPaint's palettes
-  closing from their box and coming back from the menu; document-scoped, so it
-  greys with the desktop focused). Then, after a second separator, the **open
-  document windows**, one item each (System 7's Window-menu idiom): each reads
-  its document's name, the **active** one is checked, the order is **creation
-  order**, and a pick brings that window forward through the same activation
-  funnel a title-bar click takes. Nothing of it is in the markup —
-  `shell/menus.js` reconciles the section off the workspace, and with no
-  document window open it is absent, separator included.
+  closing from their box and coming back from the menu). Then, after a second
+  separator, the **open document windows**, one item each (System 7's
+  Window-menu idiom): each reads its document's name, the **active** one is
+  checked, the order is **creation order**, and a pick brings that window
+  forward through the same activation funnel a title-bar click takes.
+  Nothing of it is in the markup — `apps/sprite-editor` reconciles the
+  section off the workspace, and with no document window open it is absent,
+  separator included. The tail is the Sprite Editor's alone: System 7's
+  Finder and TeachText listed no windows.
 
   And **no _Fullscreen_ item**, on purpose: the Fullscreen API reserves
   **Esc** for its own exit, beyond the page's reach, so the editor's Esc
   bindings die in it, and Chrome's top layer puts the fullscreened page over
   the kit's page-drawn cursor.
 
-- **The clock** — System 7.5's menu bar clock at the bar's right end, ticking
-  on the minute; **pressing it** shows the **date** for three seconds. It's
-  chrome, not a menu: a press keeps the Finder selection, never deactivates
-  the application, and takes no focus.
+**The Text Viewer's menus** — a text window front, what TeachText's bar
+showed over a read-only document:
+
+- **File** — _Close_ ⌃W (the front read-me) and _Quit_ ⌃Q (every text window
+  in turn, TeachText's Quit; nothing asks, a read-me being read-only).
+- **Edit** — _Copy_ ⌘C (the prose the mouse selected, to the system
+  clipboard; greyed while the selection is empty or lies outside a text
+  window) and _Select All_ ⌘A (the whole text), the two commands TeachText
+  left live on a read-only file.
+- **View** — _Arrange Windows_ ⌘J, the arrange alone, greyed while the screen
+  is arranged.
+
+**The clock** — System 7.5's menu bar clock at the bar's right end, ticking
+on the minute; **pressing it** shows the **date** for three seconds. It's
+chrome, not a menu: a press keeps the Finder selection, never deactivates
+the application, and takes no focus.
 
 Key equivalents are the kit's own (Ctrl stands in for ⌘ off-Mac). ⌘N/⌘W/⌘Q
 stay unassigned on purpose — the browser owns them before the page sees
@@ -491,13 +584,15 @@ Control key alone (the kit's ⌃ never stands in for ⌘): ⌃W is the one W
 chord a Mac browser leaves to the page, ⌥W typing ∑, and ⌃N is N's. The
 trade is off-Mac, where Ctrl+W
 and Ctrl+N are the browser's own Close Tab and New Window, reserved — the
-items show the keys there and never fire. A disabled item claims nothing, so
-with no document open ⌘J falls through to
-off-Mac browsers' own Downloads, exactly as a greyed Undo leaves ⌘Z to a
-focused field's native undo. The bare-letter tool keys live in
-`src/shortcuts.js`; the kit deliberately never matches an unmodified printable
-key, which is what lets the Tools menu _display_ those letters without
-double-firing them.
+items show the keys there and never fire. A key equivalent is the **front
+application's**: a menu off the bar claims nothing, so ⌘S in the Finder
+does nothing, as it did on a Mac, and the bar flashes the menu a fired
+command lives in. A disabled item claims nothing either, so with the
+screen arranged the Finder's ⌘J falls through to off-Mac browsers' own
+Downloads, exactly as a greyed Undo leaves ⌘Z to a focused field's native
+undo. The bare-letter tool keys live in `src/shortcuts.js`; the kit
+deliberately never matches an unmodified printable key, which is what lets
+the Tools menu _display_ those letters without double-firing them.
 
 ### Windows
 
@@ -680,7 +775,8 @@ of its own and this is the one window whose content wants one) cloned per open
 and **removed by its close box** — a second pick just brings it forward, one
 panel ever — centered by `centeredBox` and **adopted as a panel**, so Arrange
 re-centers it and a resize re-pins it like every window. It is the Finder's
-window: see [One machine, two roles](#one-machine-two-roles).
+window, and the Finder's File → Close closes it: see
+[Three applications, one menu bar](#three-applications-one-menu-bar).
 
 ### Folders
 
@@ -845,11 +941,13 @@ a folder made inside it.
   with its contents intact. Both wear the Finder's **"in the Trash" mark**: a
   small 12×12 1-bit trash glyph at the head of the count line, the count
   stepping right to make room, present exactly while the folder is trashed.
-- **Sprite Machine → Empty Trash…** — in the application's menu rather than
-  System 7's Special menu for now (a Special menu earns its place the day
-  Clean Up gives it a second item) — raises the Finder's alert in the unsaved
-  box's anatomy, naming N items and the K they use, over Cancel and a default
-  OK. OK removes every document and folder under the Trash from IndexedDB
+- **Special → Empty Trash…** — the Finder's Special menu, where System 7 kept
+  it, one item until Clean Up joins it (it sat in the Sprite Machine menu
+  while one bar served every role; emptying the Trash from the Sprite Editor
+  means a desktop click first, as on a Mac) — raises the Finder's alert in
+  the unsaved box's anatomy, naming N items and the K they use, over Cancel
+  and a default OK. OK removes every document and folder under the Trash
+  from IndexedDB
   (`files.emptyTrash`, the one destructive operation in the app), and the
   listing's refresh does the rest: the icons go, the count reads 0 items, the
   can flattens, a trashed folder's open window closes. The seeding's record
@@ -910,25 +1008,28 @@ A first pass, deliberately: **plain text, display only**.
   is async like a document's) and the window appears with its content; a
   second open brings the existing window forward; the listing drives its
   title, and a file emptied from the Trash closes it.
-- **It is another application's window.** Opening a read-me on System 7
-  switched you to TeachText, and Sprite Machine's palettes hid: here the
-  window is a **panel** (`windows.addPanel`), so holding the desktop's
-  active state reads as the Finder role — the windoids hide, the strip
-  goes, the document-scoped items grey, and File → Close ⌃W closes it;
-  closing hands active back to the topmost document window. It is placed
-  fresh at every open — the folder window's cascade from the doc box's
-  corner, stepped per text window already open — re-placed by Arrange
-  Windows and re-pinned by a browser resize like every window, and
-  **nothing about it persists**: not its box, not its scroll, not that it
-  was open. No zoom box yet, with the folder windows.
+- **It is the Text Viewer's window.** Opening a read-me on System 7
+  switched you to TeachText: its palettes hid and the menu bar became
+  TeachText's. Here the window is a **panel** declared the Text Viewer's
+  (`windows.addPanel`'s `app`), so holding the desktop's active state makes
+  the Text Viewer the front application — the windoids hide, the strip
+  goes, and the bar swaps to its menus: File with _Close_ ⌃W (this window)
+  and _Quit_ ⌃Q (every text window in turn), Edit with _Copy_ ⌘C and
+  _Select All_ ⌘A over the prose, View with _Arrange Windows_ (see
+  [Menu bar](#menu-bar)); closing hands active back to the topmost document
+  window. It is placed fresh at every open — the folder window's cascade
+  from the doc box's corner, stepped per text window already open —
+  re-placed by Arrange Windows and re-pinned by a browser resize like every
+  window, and **nothing about it persists**: not its box, not its scroll,
+  not that it was open. No zoom box yet, with the folder windows.
 
 ### The About box
 
 **Sprite Machine → About…** — and every load the URL gives no document to
 open: the classic launch splash, System 7's About box on the plain dBoxProc
 frame (no bar, no close box; OK, Escape, or a **click anywhere outside the
-box** dismisses it onto whatever was there — at boot, the bare desktop in the
-Finder role, nothing opened and nothing activated). The click-away is the
+box** dismisses it onto whatever was there — at boot, the bare desktop with
+the Finder front, nothing opened and nothing activated). The click-away is the
 kit's own **`light-dismiss`**, an opt-in the markup states on this one dialog:
 a splash dismisses on a click away, while System 7's modal boxes refused an
 outside click, and every question dialog here still does — a stray click must
@@ -953,7 +1054,7 @@ stroke. The version and
 the date are **build facts, never markup** — `vite.config.js` defines them
 from package.json's `version` and HEAD's commit date, so every build of one
 commit says the same thing — and
-`shell/menus.js` writes them into the box's two empty spans at wire-up.
+`shell/menu-bar.js` writes them into the box's two empty spans at wire-up.
 Bumping `version` is the whole release ritual.
 
 ### Documents: a document IS a .png
@@ -1199,6 +1300,11 @@ src/lib/      the editor's domain — pure, no THREE and no DOM: the atlas's rin
 src/texts/    the built-in TEXT FILES — the read-me documents, one .txt each, imported
               whole (?raw) and listed by the index with the names their icons wear;
               seeded once per profile like the samples
+src/apps/     the three APPLICATIONS, one directory each on one shape — finder,
+              sprite-editor, text-viewer: its menus as a vf-menu fragment (menus.html,
+              imported whole) and the module that wires them (every dialog flow, every
+              gate, the application's public verbs) — and the registry (index) in the
+              bar's order
 src/state/    the app-state layer, pure JS and Node-tested: store + the Lit bridges; doc
               (two channels) and history, FACTORIES one per open document; workspace (the
               open documents as DocContexts, activeKey, the stored flows); files (the
@@ -1215,10 +1321,11 @@ src/scene/    stage (renderer, camera, lights, framing, on-demand loop); rebuild
 src/shell/    the desktop's behavior over the index.html skeleton: layout (ALL the window
               and icon arithmetic, pure and Node-tested — the placement, the cascade, the
               derived sizes and DITLs, pinOf / pinTo / isPin), windows (the two regimes,
-              the resize rule, arrange / arranged / zoomActive, the panel adoption), menus
-              (actions, the two-role gating, every dialog flow), icons (the reconciler,
-              the Finder wire, filing), folders, texts (TeachText's windows),
-              desktop-state, url-state, clock, patterns
+              the resize rule, arrange / arranged / zoomActive, the panel adoption and
+              the front-application reading), menu-bar (the Sprite Machine menu, the
+              shared dialogs, the parse of each application's fragment and the swap),
+              icons (the reconciler, the Finder wire, filing), folders, texts (the Text
+              Viewer's windows), desktop-state, url-state, clock, patterns
 src/          main (the composition root), boot/params, loaders (+ seedDefaultDocs),
               drop-target, shortcuts, image-io, and components/ — all Lit and shadow DOM
               but for sm-color-picker: sm-editor over sm-draw-canvas and draw-overlays,

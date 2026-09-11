@@ -2,7 +2,7 @@
 // The 3D model export's SUBJECT: the rebuilder's current mesh, held through
 // the onMesh seam (main.js fans the seam out to the 3D Sprite Atlas's
 // follower and to this), and the glb made from it on demand (File → Export
-// 3D Model…, shell/menus.js). Nothing here runs the pipeline or renders,
+// 3D Model…, apps/sprite-editor). Nothing here runs the pipeline or renders,
 // and nothing here writes: the engine's `modelToGlb` does — the mesh's own
 // buffers ARE the export, the skin encoded from bytes and never through a
 // canvas — so this path and a headless build are one function.

@@ -19,199 +19,58 @@
          document tier. Reactivation is any press into a document window. -->
     <vf-desktop id="desktop" bezel="10">
       <!-- ============================== Menu bar ======================== -->
-      <!-- `shortcuts` grants every item's `shortcut` attribute its live
-           app-wide key equivalent (Ctrl stands in for ⌘ off-Mac). The two
-           System 7 staples ⌘N/⌘W stay unassigned on purpose: the browser
-           owns them before the page ever sees them. New and Close answer
-           ⌃N and ⌃W instead, the Control key alone (see the items). -->
+      <!-- ONE bar, the FRONT APPLICATION's (docs/apps-plan.md): System 7's
+           menu bar belonged to whichever application was front, the Apple
+           menu at its left in every one. Here the bar holds the Sprite
+           Machine menu — the Apple menu's seat and role, authored below and
+           live in every application — and, between it and the clock, the
+           front application's menus and no other's: the Finder's File /
+           Edit / View / Special, the Sprite Editor's File / Edit / Tools /
+           View, the Text Viewer's File / Edit / View. Those are NOT here:
+           each application authors its menus as a fragment in its own
+           directory (src/apps/<id>/menus.html), and shell/menu-bar.js
+           parses them once and slots the front application's in — the
+           outgoing application's lifted out, the incoming one's inserted —
+           on every change of shell.frontApp: a document window active is
+           the Sprite Editor, a text window the Text Viewer, a folder
+           window, the Desktop Patterns panel or nothing the Finder. A
+           detached menu's items claim no key (the kit's contract), so the
+           Sprite Editor's ⌘S does nothing in the Finder with no `disabled`
+           written anywhere. `shortcuts` grants every slotted item's
+           `shortcut` attribute its live app-wide key equivalent (Ctrl
+           stands in for ⌘ off-Mac). The two System 7 staples ⌘N/⌘W stay
+           unassigned on purpose: the browser owns them before the page
+           ever sees them. New and Close answer ⌃N and ⌃W instead, the
+           Control key alone (see the fragments). -->
       <vf-menu-bar shortcuts>
+        <!-- The Sprite Machine menu (shell/menu-bar.js): the machine's
+             things rather than an application's — About… (also the boot
+             greeting) and the control panel — in every application. Its
+             title is the text for now; the kit's `label` slot takes a
+             16×16 glyph the day one is drawn, the Apple menu's picture,
+             with this attribute kept as the accessible name. -->
         <vf-menu id="menu-app" label="Sprite Machine">
           <vf-menu-item value="about">About Sprite Machine…</vf-menu-item>
           <vf-separator></vf-separator>
           <!-- The Desktop Patterns control panel (shell/patterns.js): a
                window, not a dialog, so no ellipsis — the Apple menu's
-               Control Panels listed it bare. App-level like About, live in
-               both roles; it IS the Finder's window, so opening it
-               deactivates the application. -->
+               Control Panels listed it bare. Machine-level like About; it
+               IS the Finder's window, so opening it brings the Finder
+               forward. (Empty Trash… sat here from Sep 9 to Sep 11 2026,
+               while the bar was every role's; it is the Finder's Special
+               menu's now — src/apps/finder/menus.html.) -->
           <vf-menu-item value="desktop-patterns">Desktop Patterns</vf-menu-item>
-          <!-- Empty Trash… (shell/menus.js → workspace.emptyTrash): the
-               Finder's command over the Trash's contents, behind the
-               Finder's alert (#dlg-empty-trash below — the ellipsis,
-               System 7's promise of a box). Here rather than in a Special
-               menu, for now (Sep 9 2026): System 7's Special menu would
-               hold this one command; the day Clean Up joins it, both move
-               there. A command over the catalog — it opens no window and
-               changes no role — so live in both roles like New…;
-               greyed while the Trash is empty (menus.js re-reads the
-               listing), which on a virgin profile is this `disabled`. No
-               key equivalent, as System 7 gave it none. -->
-          <vf-menu-item value="empty-trash" disabled>Empty Trash…</vf-menu-item>
         </vf-menu>
-        <vf-menu id="menu-file" label="File">
-          <!-- New…'s key is ⌃N — the Control key alone (the kit's ⌃ means
-               Control, never a ⌘ stand-in), ⌘N being the browser's New
-               Window before the page ever sees it. ONE New, and it always
-               opens a DOCUMENT — in either role, never the folder below
-               (System 7 gave the Finder's ⌘N to New Folder; this machine's
-               New is the application's). Off-Mac Ctrl+N is the browser's
-               New Window, reserved — the item shows the key and never
-               fires there, the same trade Close makes with ⌃W. -->
-          <vf-menu-item value="new" shortcut="⌃N">New…</vf-menu-item>
-          <!-- New Folder (shell/menus.js → the files slice's createFolder):
-               a FINDER command — it makes "untitled folder" in the active
-               folder window, else on the desktop, its name selected for
-               typing (the icon's rename box). No key equivalent: ⌃N is
-               New…'s — the DOCUMENT command — and System 7's own ⌘N (with
-               ⇧⌘N) is the browser's. Finder role only: greyed while a
-               document window is active (menus.js), and while the Trash's
-               window is front. -->
-          <vf-menu-item value="new-folder">New Folder</vf-menu-item>
-          <vf-separator></vf-separator>
-          <!-- Close's key is ⌃W — the Control key alone (the kit's ⌃ means
-               Control, never a ⌘ stand-in): ⌘W is the browser's before the
-               page sees it, and ⌥W types ∑ on a Mac, so Control is the one
-               W chord a Mac browser leaves to the page. Off-Mac Ctrl+W is
-               the browser's Close Tab, reserved — the item shows the key
-               and never fires there, an accepted trade (Sep 9 2026). -->
-          <vf-menu-item value="close" shortcut="⌃W">Close</vf-menu-item>
-          <vf-menu-item value="save" shortcut="⌘S">Save</vf-menu-item>
-          <vf-menu-item value="duplicate" shortcut="⌘D">Duplicate</vf-menu-item>
-          <vf-menu-item value="rename">Rename…</vf-menu-item>
-          <vf-separator></vf-separator>
-          <!-- Download is the SOURCE path (the document .png verbatim — no
-               dialog, so no ellipsis); the two Export items derive OTHER
-               artifacts and raise their configurators (parked — see the
-               export dialogs below). -->
-          <vf-menu-item value="download" shortcut="⇧⌘E">Download</vf-menu-item>
-          <vf-menu-item value="export-model">Export 3D Model…</vf-menu-item>
-          <vf-menu-item value="export-atlas">Export Sprite Atlas…</vf-menu-item>
-          <vf-separator></vf-separator>
-          <!-- Quit (shell/menus.js): the System 7 cascade over the open
-               documents, so live exactly while a document window is open —
-               in either role, a document behind the Finder still counting —
-               and boots `disabled` to match the empty workspace, like
-               Undo/Redo. Its key is ⌃Q on Close's reasoning: ⌘Q is the
-               browser's before the page sees it. -->
-          <vf-menu-item value="quit" shortcut="⌃Q" disabled>Quit</vf-menu-item>
-        </vf-menu>
-        <vf-menu id="menu-edit" label="Edit">
-          <vf-menu-item value="undo" shortcut="⌘Z" disabled>Undo</vf-menu-item>
-          <vf-menu-item value="redo" shortcut="⇧⌘Z" disabled>Redo</vf-menu-item>
-          <vf-separator></vf-separator>
-          <!-- Copy / Paste / Select All (shell/menus.js, docs/clipboard-plan.md):
-               System 7's Edit order, and FINDER-ROLE commands — over the
-               selected icons (documents and folders, in any container) and
-               the Finder's front container (the front folder window, else
-               the desktop). Live while a document window is NOT the
-               desktop's active window; greyed in the application role, where
-               the same two labels wait for the selection tool's pixel
-               clipboard (docs/selection-tool-plan.md) — one Edit menu, the
-               forward role's command under one label. Greyed too while a
-               text control has focus (an icon's rename box, a dialog's
-               field), so the field keeps its native ⌘C/⌘V/⌘A: a disabled
-               item claims no key (the kit's contract — a greyed Undo's ⌘Z,
-               likewise). Copy needs a selected icon that is not the Trash;
-               Paste needs a front container that is not the Trash or inside
-               it. What Paste pastes is decided at the pick, off a read of
-               the SYSTEM clipboard: the app's own copy (files and folders
-               from the catalog, chunks and subtrees intact), or a PNG copied
-               elsewhere — a new document if it is a sprite sheet, the alert
-               below (#dlg-paste) if not. No Cut, no Clear: the Finder had no
-               Cut of files. Boot `disabled` to match the Finder role with
-               nothing selected, like Undo/Redo. ⌘C, ⌘V and ⌘A reach the page
-               (the browser takes none before a keydown; Ctrl stands in
-               off-Mac). -->
-          <vf-menu-item value="copy" shortcut="⌘C" disabled>Copy</vf-menu-item>
-          <vf-menu-item value="paste" shortcut="⌘V" disabled>Paste</vf-menu-item>
-          <vf-menu-item value="select-all" shortcut="⌘A" disabled
-            >Select All</vf-menu-item
-          >
-          <vf-separator></vf-separator>
-          <vf-menu-item value="pick-color" shortcut="⌘K">Pick Color…</vf-menu-item>
-          <!-- Tile Size…: the active document's square tile size, behind a
-               modal that commits on OK alone (#dlg-tile below). The one
-               property that is an EDIT — a retile is an undoable change to
-               the sheet — so it lives here; File → Properties… (the name and
-               the atlas dims beside a live stepper) was retired for it,
-               Sep 9 2026. -->
-          <vf-menu-item value="tile-size">Tile Size…</vf-menu-item>
-        </vf-menu>
-        <!-- The tool items' bare-letter shortcuts are DISPLAY-only by kit
-             contract (an unmodified printable key never matches), so
-             src/shortcuts.js keeps owning the actual S/B/R/G/E/I keys. The
-             selection leads, as MacPaint's palette did. -->
-        <vf-menu id="menu-tools" label="Tools">
-          <vf-menu-item value="tool-select" shortcut="S">Selection</vf-menu-item>
-          <vf-menu-item value="tool-pencil" shortcut="B" checked>Pencil</vf-menu-item>
-          <vf-menu-item value="tool-rect" shortcut="R">Rectangle</vf-menu-item>
-          <vf-menu-item value="tool-fill" shortcut="G">Fill</vf-menu-item>
-          <vf-menu-item value="tool-eraser" shortcut="E">Eraser</vf-menu-item>
-          <vf-menu-item value="tool-eyedropper" shortcut="I">Eyedropper</vf-menu-item>
-        </vf-menu>
-        <vf-menu id="menu-view" label="View">
-          <!-- The ⌘J item LEADS the menu — the one command over the whole
-               screen — with the rule right after it; the windoid toggle and
-               the open-windows tail follow below the rule. No Fullscreen
-               item, on purpose (tried and retired Sep 4 2026): the
-               Fullscreen API reserves Esc for its own exit in every browser,
-               beyond the page's reach — so the editor's Esc bindings (drop
-               a selection, cancel a drag) went dead in fullscreen — and
-               Chrome's top layer put the fullscreened page over the kit's
-               page-drawn cursor. The browser's own window fullscreen (⌃⌘F
-               on the Mac) leaves Esc to the page. -->
-          <!-- ⌘J: ONE item, "Arrange Windows", two commands under a STATE
-               rule (menus.js owns the sync and writes the VALUE; the label
-               is this markup's and never turns — a label that turned with
-               the state, "Zoom Window" once arranged, was retired Sep 7
-               2026): with anything on screen off
-               its placement — a drag, a grow, a zoom, the browser resized
-               — the value is `arrange` (the boot placement re-run on the
-               CURRENT raster, the windoids back to the rail, every open
-               document window onto the cascade); with everything already
-               where the placement puts it — Arrange would change nothing
-               — the value is `zoom` (the active document window through
-               the zoom box's own toggle, Arrange's variant for a screen
-               already arranged; a window zoomed from its slot, like any
-               permutation of the documents across the cascade, still
-               reads arranged, so repeats toggle that one window while
-               nothing else moves). Greyed without an open document window
-               (nothing on screen to arrange) — boots disabled to match the
-               empty workspace, like Undo/Redo — and, arranged, in the
-               Finder role (no active window to zoom). ⌘J: one of the few
-               clean letters left (no Mac browser binds it — Downloads is
-               ⇧⌘J), beside ⌘K. Off-Mac,
-               Ctrl+J IS the browser's Downloads, which the kit's claim
-               pre-empts while the item is live; a disabled item claims
-               nothing (the kit's contract — a greyed Undo's ⌘Z, likewise),
-               so with nothing open the stroke falls through to the
-               browser. -->
-          <vf-menu-item id="item-arrange" value="arrange" shortcut="⌘J" disabled
-            >Arrange Windows</vf-menu-item
-          >
-          <vf-separator></vf-separator>
-          <!-- The 3D Sprite Atlas windoid (#win-ring below) as a checkmark
-               toggle over prefs.showRing, OFF every load: the pick shows or
-               hides it (menus.js flips the slice and mirrors it back as the
-               check), and the windoid's own close box is the same uncheck —
-               MacPaint's palettes closed from their box and came back from
-               the menu. Document-scoped (greys with the desktop focused),
-               like the Tools menu's modes. -->
-          <vf-menu-item value="ring">3D Sprite Atlas</vf-menu-item>
-          <!-- The OPEN DOCUMENT WINDOWS follow here — a dynamic section,
-               nothing in the markup: after this menu's last authored item,
-               menus.js (syncWindows) keeps a separator and one item per
-               open document window — the document's name, the active
-               window's checked, in creation order, value `window:<key>`;
-               a pick brings that window forward, from the Finder role too.
-               Absent, separator included, with no document window open. -->
-        </vf-menu>
+        <!-- The front application's menus land here, before the clock. -->
         <!-- The menu bar clock (System 7.5's Date & Time clock): a kit
              vf-label at the bar's right end. The bar's slot is unfiltered
              and its row is flex, so style.css's margin-inline-start: auto
              lands it there, clear of the menu coordination (the bar
-             hit-tests titles by coordinate and ignores the rest). Boots
-             empty — the text and the press-to-date flip are
-             shell/clock.js's, so markup never carries a stale time. -->
+             hit-tests titles by coordinate and ignores the rest), and the
+             swap inserts the menus before it, so it holds the right end
+             through every change of application. Boots empty — the text
+             and the press-to-date flip are shell/clock.js's, so markup
+             never carries a stale time. -->
         <vf-label id="clock"></vf-label>
       </vf-menu-bar>
 
@@ -453,7 +312,7 @@
            the app (and any unsaved document) stays put; the arrow stays the
            arrow over it, System 7 having no pointing hand (style.css inks
            it) — and OK bottom right. The version and date lines are BUILD
-           facts, so the markup boots them empty and shell/menus.js fills
+           facts, so the markup boots them empty and shell/menu-bar.js fills
            them (package.json's version, HEAD's commit date — vite.config.js
            `define`); the markup never carries a stale number. The dialog's
            anatomy (vintage-frames 0.8.0): the body is the frame's inner
@@ -517,7 +376,8 @@
            corner, `origin`, 16 in from the body's, so it stays flush
            however wide its labels measure). The name
            seeds with the next untitled name and follows the template popup
-           until typed in (shell/menus.js), so a copy of the Car still opens
+           until typed in (apps/sprite-editor — the Finder's New… raises the
+           same box through it), so a copy of the Car still opens
            as "Car"; the document opens UNSAVED under whatever it says, and
            its first Save prompts with it. OK is greyed while the name is
            blank, the Save As prompt's rule; Return anywhere is OK by the
@@ -579,7 +439,7 @@
            left, Save (the default) over Cancel as a vertical group at the
            right — placed by its own top-right corner (`origin`) 16 in from
            the body's, whatever the button's word measures; Save stays
-           DISABLED until the field holds a name (shell/menus.js keeps it in
+           DISABLED until the field holds a name (apps/sprite-editor keeps it in
            step with the text, and swaps the caption, the accessible label
            and the default button's text per use). Escape reads as Cancel;
            no bar, no close box. Placed from the body's corner (the frame's
@@ -610,7 +470,7 @@
 
       <!-- The Tile Size dialog (Edit → Tile Size…): one field over Cancel /
            OK, the Colors dialog's pending model — the field is seeded from
-           the active document at show and READ AT OK (shell/menus.js), so
+           the active document at show and READ AT OK (apps/sprite-editor), so
            a step or a typed value moves nothing behind the modal; Return is
            OK by the kit's dialog grammar, Escape reads as Cancel. The
            retired Properties… retiled live on every change. The form is
@@ -645,7 +505,7 @@
            Cancel alone at the bottom right. Every item placed by top/left
            from the body's corner — the frame's inner edge, 5 in, since
            vintage-frames 0.8.0 (the numbers are the kit's own, traced from
-           the capture); the ids are the wiring (shell/menus.js). -->
+           the capture); the ids are the wiring (apps/sprite-editor). -->
       <vf-dialog
         id="dlg-unsaved"
         frame="plain"
@@ -667,7 +527,7 @@
         <vf-button id="btn-unsaved-cancel" left="202" top="101">Cancel</vf-button>
       </vf-dialog>
 
-      <!-- The Empty Trash alert (shell/menus.js): the Finder's — "The Trash
+      <!-- The Empty Trash alert (apps/finder, its Special menu): the Finder's — "The Trash
            contains N items, which use XK of disk space. Are you sure you
            want to permanently remove these items?" — in the unsaved box's
            anatomy: the plain dBoxProc frame, the question in the display
@@ -704,7 +564,7 @@
         </vf-button-group>
       </vf-dialog>
 
-      <!-- The paste alert (shell/menus.js, docs/clipboard-plan.md §2.5): a
+      <!-- The paste alert (apps/finder, docs/clipboard-plan.md §2.5): a
            picture pasted from outside that is NOT a sprite sheet — a 3×2
            atlas of square tiles, 1–64 px a tile — raises this and nothing
            lands. The Empty Trash box's anatomy: the plain dBoxProc frame,
@@ -826,7 +686,7 @@
            offset angle, and the tile size (the frame's edge in px, the
            model's envelope fit to it) — over a readout of the sheet the
            settings produce. The fields are bound LIVE
-           to the ring slice (shell/menus.js): a change here moves the
+           to the ring slice (apps/sprite-editor): a change here moves the
            windoid's strip behind the modal at once, and Cancel doesn't
            revert — the settings are non-destructive and the strip IS the
            preview (not the Colors dialog's pending model). Export saves

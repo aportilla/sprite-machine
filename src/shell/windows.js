@@ -31,16 +31,19 @@
 //
 //   PANEL WINDOWS: document-tier windows that are NOT documents — the
 //   Desktop Patterns control panel (shell/patterns.js owns its lifecycle
-//   and its body) and the folder windows (shell/folders.js). Adopted here
-//   (addPanel / removePanel) with the pure placement that puts them on a
-//   raster, so arrange() re-places them and the resize re-pin moves them
-//   like every window; the owner appends and removes the node. A folder
-//   window is the one window that REOPENS WHERE IT WAS: addPanel takes its
-//   remembered nine-slice pin (read by windowPin at its last close or
-//   snapshot) and re-expresses it on the current raster by the resize
-//   rule's own policy, clamped on-raster — the same arithmetic as a browser
-//   resize with the window open, then the boot clamp. A panel holding the
-//   desktop's active state is the Finder's turn (see APP ACTIVATION below).
+//   and its body), the folder windows (shell/folders.js) and the text
+//   windows (shell/texts.js). Adopted here (addPanel / removePanel) with
+//   the pure placement that puts them on a raster, so arrange() re-places
+//   them and the resize re-pin moves them like every window, and with the
+//   APPLICATION the panel belongs to (`app` — the Finder for a folder
+//   window and the control panel, the Text Viewer for a read-me), which is
+//   what the bar shows while the panel holds active (see APP ACTIVATION
+//   below); the owner appends and removes the node. A folder window is the
+//   one window that REOPENS WHERE IT WAS: addPanel takes its remembered
+//   nine-slice pin (read by windowPin at its last close or snapshot) and
+//   re-expresses it on the current raster by the resize rule's own policy,
+//   clamped on-raster — the same arithmetic as a browser resize with the
+//   window open, then the boot clamp.
 //
 // PLACEMENT comes from shell/layout.js (pure), and ONLY from there: the
 // smart arrangement is computed from the live raster at boot (windoids) and
@@ -72,36 +75,44 @@
 //
 // APP ACTIVATION has one writer: the desktop's vf-activate event (the kit
 // fires it on every change of active document-tier window, null included)
-// lands here and is mirrored into BOTH truths — shell.appActive (the
-// boolean the chrome gates on) and workspace.activeKey (which document).
-// appActive is "a DOCUMENT window is the desktop's active window", not
-// "any window is": a panel window holding active (the Desktop Patterns
-// control panel — a System 7 control panel opened in the FINDER's layer)
-// mirrors as the desktop-focused state exactly like none, so opening it
-// deactivates the application and closing it (the kit promotes the topmost
-// document window) brings the application back.
+// lands here and is mirrored into BOTH truths — shell.frontApp (WHICH
+// APPLICATION is front, with its boolean shadow appActive — the Sprite
+// Editor front — in the same patch) and workspace.activeKey (which
+// document). The front application is a READING of the active window
+// (docs/apps-plan.md §3.1): a document window → the Sprite Editor; a panel
+// → the application its owner declared at adoption (addPanel's `app`); no
+// active window, or a panel that declares nothing → the Finder, the
+// desktop's application. So a panel window holding active (the Desktop
+// Patterns control panel — a System 7 control panel opened in the FINDER's
+// layer; a folder window; a read-me's, which is the Text Viewer's) reads
+// as another application's turn: opening it deactivates the Sprite Editor
+// (the windoids hide, the bar swaps) and closing it (the kit promotes the
+// topmost document window) brings the Sprite Editor back.
 // Deactivation is interaction-only, and the PAGE owns the press test (the
 // kit's 0.4.0 position: only the page knows which presses mean "the
 // Finder"): a press on the desktop's bare dither — wired here — or in the
 // icon layer (shell/icons.js) routes through desktop.clearActive(); the
 // kit adds its own null when the last document window leaves. The mirrors
 // initialize by READING the kit's truth (desktop.activeWindow — null on a
-// fresh boot, so a dialog-greeted boot is desktop-focused), never from a
+// fresh boot, so a dialog-greeted boot is the Finder's), never from a
 // constant; opening any document window activates through the kit.
 //
 // Close boxes never hide windows directly: the permanent windoids have no
 // close box at all, the 3D Sprite Atlas's is its toggle's uncheck (onClose
 // below), and a document window's close routes through the injected
-// dirty-checking flow (menus.js) — the workspace does the removing.
+// dirty-checking flow (the Sprite Editor's, apps/sprite-editor) — the
+// workspace does the removing.
 //
 // The ZOOM BOX (document windows only — the template declares `zoomable`)
 // toggles a window between the placement's zoomed state and the size it
 // had before the zoom (a session truth, never persisted), top-left held
 // both ways: see onZoom below.
 //
-// ⌘J — View → Arrange Windows — is ONE item under a STATE rule (menus.js
-// owns the item; arranged() and zoomActive() here are its two halves; the
-// label is "Arrange Windows" in both states, only the item's VALUE turns):
+// ⌘J — View → Arrange Windows — is ONE item under a STATE rule (the Sprite
+// Editor owns the item, apps/sprite-editor; arranged() and zoomActive()
+// here are its two halves; the label is "Arrange Windows" in both states,
+// only the item's VALUE turns — the Finder's and the Text Viewer's ⌘J items
+// carry the arrange alone, greyed while arranged() reads true):
 // arranged() asks whether the screen IS the arrangement — every visible
 // window's live box against the box its placement would write on the
 // current raster — and the item's value is `arrange` while something is
@@ -120,7 +131,7 @@
 // ---------------------------------------------------------------------------
 
 import { snapSys, systemPxQuantum, VfWindow } from 'vintage-frames';
-import { shell, WINDOW_IDS } from '../state/shell.js';
+import { shell, WINDOW_IDS, FINDER, SPRITE_EDITOR } from '../state/shell.js';
 import { prefs } from '../state/prefs.js';
 import { ring } from '../state/ring.js';
 import { workspace, followActive } from '../state/workspace.js';
@@ -338,8 +349,8 @@ export function initWindows(desktop) {
   /** The layout signal (onLayout below): told after every geometry write
    *  this module makes — a placement, a re-fit, a re-pin, a zoom, the
    *  window set changing — and after every gesture it hears (a drag's
-   *  release, a grow's commit). menus.js re-derives the View menu's ⌘J
-   *  item's value (arrange / zoom) on it (arranged()). */
+   *  release, a grow's commit). Each application re-derives its View
+   *  menu's ⌘J item on it (arranged()). */
   const layoutListeners = new Set();
   const notifyLayout = () => {
     for (const fn of layoutListeners) fn();
@@ -397,11 +408,13 @@ export function initWindows(desktop) {
     for (const id of WINDOW_IDS) placeWindoid(id, smart);
   };
   // Panel windows adopted from outside (see the header), each with the
-  // pure placement that puts it on a raster: `(desktopW, desktopH) → box`.
-  /** @type {Map<VfWindow, (w: number, h: number) => {left: number, top: number, width: number, height: number}>} */
+  // pure placement that puts it on a raster — `(desktopW, desktopH) → box`
+  // — and the application it belongs to (what the bar shows while it holds
+  // active; the Finder when the owner declared none).
+  /** @type {Map<VfWindow, {boxFor: (w: number, h: number) => {left: number, top: number, width: number, height: number}, app: import('../state/shell.js').AppId}>} */
   const panels = new Map();
   const panelBox = (win) => {
-    const boxFor = panels.get(win);
+    const boxFor = panels.get(win)?.boxFor;
     return boxFor
       ? clampedBox(desktop, win, boxFor(desktop.width, desktop.height))
       : null;
@@ -580,9 +593,10 @@ export function initWindows(desktop) {
   syncDocs(); // HMR: rebuild windows for contexts that survived the reload
 
   // --- app activation: desktop -> the two mirrors -------------------------------
-  // This wire is the single writer of both appActive (the boolean) and
-  // workspace.activeKey (which document): desktop.activeWindow read once at
-  // wire-up, then vf-activate (a document-tier window, or null) per change.
+  // This wire is the single writer of both shell.frontApp (which
+  // application, with appActive its shadow) and workspace.activeKey (which
+  // document): desktop.activeWindow read once at wire-up, then vf-activate
+  // (a document-tier window, or null) per change.
   const keyOf = (win) => {
     for (const [key, rec] of byKey) if (rec.win === win) return key;
     return null;
@@ -590,10 +604,13 @@ export function initWindows(desktop) {
   const applyActive = (win) => {
     const key = win ? keyOf(win) : null;
     workspace.setActive(key);
-    // A DOCUMENT window active, not any window: a panel (the Desktop
-    // Patterns control panel) holding active is the Finder's turn — the
-    // desktop-focused state (see the header's APP ACTIVATION).
-    shell.setAppActive(key != null);
+    // The front application is a reading of the active window (the
+    // header's APP ACTIVATION): a document window is the Sprite Editor's, a
+    // panel its declared owner's, nothing — or a panel that declared none —
+    // the Finder's.
+    shell.setFrontApp(
+      key != null ? SPRITE_EDITOR : (win && panels.get(win)?.app) || FINDER
+    );
   };
   const onActivate = (e) => applyActive(/** @type {CustomEvent} */ (e).detail.window);
   desktop.addEventListener('vf-activate', onActivate);
@@ -628,9 +645,9 @@ export function initWindows(desktop) {
   // --- close boxes ------------------------------------------------------------
   // A window's close box fires vf-close on the window itself (dialog closes
   // have a non-window target and pass through). Document windows carry one
-  // — it routes through the dirty-checking flow menus.js injects — and so
-  // does the 3D Sprite Atlas windoid alone among the windoids: its close is
-  // the View menu's uncheck, one truth (prefs.showRing).
+  // — it routes through the dirty-checking flow the Sprite Editor injects —
+  // and so does the 3D Sprite Atlas windoid alone among the windoids: its
+  // close is the View menu's uncheck, one truth (prefs.showRing).
   /** A resizable window's size floor — the 3D View's own, the ring's (the
    *  strip's width over its derived height), the kit's for the rest —
    *  applied on the re-pin itself (shell/layout.js pinTo): the declared
@@ -705,7 +722,8 @@ export function initWindows(desktop) {
 
   const api = {
     byId,
-    /** Injected by menus.js: the dirty-checking close flow, per context key. */
+    /** Injected by the Sprite Editor (apps/sprite-editor): the
+     *  dirty-checking close flow, per context key. */
     onDocumentClose: null,
     /** Make a document window the active one (which also reactivates the
      *  application — bringToFront fires vf-activate). */
@@ -726,9 +744,9 @@ export function initWindows(desktop) {
      *  cascade; a sixth and beyond wrap, as an open would). The one way to
      *  get the arrangement back after moving things around or resizing the
      *  browser. From the Finder role with a document open it also re-rails
-     *  the hidden windoids, ready for the next open (menus.js greys the
-     *  item with no document windows — nothing to arrange). Positions only:
-     *  nothing activates or re-stacks. */
+     *  the hidden windoids, ready for the next open (each application
+     *  greys its item while arranged() reads true — nothing to arrange).
+     *  Positions only: nothing activates or re-stacks. */
     arrange() {
       placeUtility();
       let slot = 0;
@@ -761,9 +779,10 @@ export function initWindows(desktop) {
      *  window may sit ZOOMED from its slot (the zoom box's own box for that
      *  top-left, zoomBoxFor): its zoom is part of the arranged reading, so
      *  the item's value stays `zoom` and the next ⌘J restores that one
-     *  window — an arrange there would re-cascade and swap. The View
-     *  menu's ⌘J item carries the value `arrange` while this reads false
-     *  and `zoom` while it reads true (menus.js); its label never turns. */
+     *  window — an arrange there would re-cascade and swap. The Sprite
+     *  Editor's ⌘J item carries the value `arrange` while this reads false
+     *  and `zoom` while it reads true (apps/sprite-editor); its label never
+     *  turns. */
     arranged() {
       const KEYS = /** @type {const} */ (['left', 'top', 'width', 'height']);
       /** @param {VfWindow} win */
@@ -818,13 +837,14 @@ export function initWindows(desktop) {
       }
       return true;
     },
-    /** ⌘J's other half (menus.js, once everything is arranged): the ACTIVE
-     *  document window through the zoom box's own toggle (zoomToggle below
-     *  — from the slot it sits on to the vacancy's edges, top-left held,
-     *  and back). A window zoomed from its slot still reads arranged
-     *  (above), so the item's value stays `zoom` and repeats toggle that
-     *  one window while nothing else moves. Nothing without an active document
-     *  window (the Finder role — menus.js greys the item there). */
+    /** ⌘J's other half (the Sprite Editor's, once everything is arranged):
+     *  the ACTIVE document window through the zoom box's own toggle
+     *  (zoomToggle below — from the slot it sits on to the vacancy's edges,
+     *  top-left held, and back). A window zoomed from its slot still reads
+     *  arranged (above), so the item's value stays `zoom` and repeats
+     *  toggle that one window while nothing else moves. Nothing without an
+     *  active document window (another application front — its own ⌘J
+     *  item is the arrange alone). */
     zoomActive() {
       const key = workspace.get().activeKey;
       const win = key != null ? byKey.get(key)?.win : null;
@@ -852,11 +872,21 @@ export function initWindows(desktop) {
      *  on-raster; the live re-pin never does), so a reopened window lands
      *  exactly where a browser resize would have carried it had it stayed
      *  open, on screen. Either way the re-pin moves it on every raster
-     *  resize from there, and arrange() sends it to `boxFor`. The window
-     *  must already be a slotted child of the desktop (the clamp reads its
-     *  live lattice). */
-    addPanel(win, boxFor, pin = null) {
-      panels.set(win, boxFor);
+     *  resize from there, and arrange() sends it to `boxFor`. `app` names
+     *  the APPLICATION the panel belongs to — what the bar shows while the
+     *  panel holds active (the header's APP ACTIVATION); undeclared, the
+     *  Finder. The window must already be a slotted child of the desktop
+     *  (the clamp reads its live lattice); if the kit has already made it
+     *  the active window, the declaration re-reads the mirror, so the
+     *  front application is right whichever order the owner appends,
+     *  adopts and raises in.
+     *  @param {VfWindow} win
+     *  @param {(w: number, h: number) => {left: number, top: number, width: number, height: number}} boxFor
+     *  @param {import('./layout.js').Pin | null} [pin]
+     *  @param {{app?: import('../state/shell.js').AppId}} [opts] */
+    addPanel(win, boxFor, pin = null, { app = FINDER } = {}) {
+      panels.set(win, { boxFor, app });
+      if (desktop.activeWindow === win) applyActive(win);
       if (pin) {
         const cur = {
           left: win.left ?? 0,
@@ -976,7 +1006,7 @@ export function initWindows(desktop) {
       // and let the next init rebuild from the surviving workspace state.
       for (const [, rec] of byKey) rec.win.remove();
       byKey.clear();
-      panels.clear(); // the owner (shell/patterns.js) removes its node
+      panels.clear(); // the owners (patterns, folders, texts) remove their nodes
     },
   };
 
@@ -1071,8 +1101,9 @@ export function initWindows(desktop) {
   // is the window's own business), so its release — a pointerup anywhere
   // on the desktop, read a task later so the kit's own settle has landed —
   // stands in; a grow box's drag fires vf-resize, and its `commit` is the
-  // gesture settling. Either just re-derives the View menu's readout
-  // (menus.js) — cheap, and a release that moved nothing changes nothing.
+  // gesture settling. Either just re-derives the View menus' ⌘J readouts
+  // (the applications') — cheap, and a release that moved nothing changes
+  // nothing.
   const onRelease = () => {
     setTimeout(notifyLayout, 0);
   };

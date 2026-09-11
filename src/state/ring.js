@@ -8,7 +8,7 @@
 // is the FAÇADE over whichever one the windoid serves: `get()` reads it,
 // `subscribe` fires on its changes AND on a switch to another document's,
 // and each setter routes to it — so the strip (sm-ring-controls), the body
-// (sm-ring-view), File → Export Sprite Atlas…'s fields (shell/menus.js), the
+// (sm-ring-view), File → Export Sprite Atlas…'s fields (apps/sprite-editor), the
 // renderer's follower (scene/ring.js) and the windoid's height rule
 // (shell/windows.js) all read one store-shaped object and follow the active
 // document for free, the way the windoids themselves do. The served context

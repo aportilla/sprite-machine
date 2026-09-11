@@ -79,7 +79,12 @@ role, where the same two labels wait for the selection tool's pixel
 clipboard. A greyed item claims no key (the kit's contract), so in the
 application role ⌘C/⌘V fall through to the browser as they do today —
 nothing changes on the canvas, and a document window's text field keeps
-its native copy and paste. The finer gate is §2.6.
+its native copy and paste. The finer gate is §2.6. _Since 2026-09-11
+([apps-plan.md](apps-plan.md)) the Edit menu is the **Finder's own**
+(`src/apps/finder/menus.html`, the three live items and nothing greyed),
+on the bar only while the Finder is front; the greyed placeholders are the
+Sprite Editor's Edit menu's, and the role clause of the gate is gone — a
+menu off the bar claims no key._
 
 ### 2.2 One clipboard, two payloads
 

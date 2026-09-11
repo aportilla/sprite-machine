@@ -815,7 +815,11 @@ eye on the dev server are the verification.
   the Edit menu as the Finder's commands over files and folders, live in
   the Finder role and **greyed in the application role**, waiting for this
   pixel clipboard — the same labels read the forward role's command, one
-  Edit menu; Cut and Clear are not yet in the markup. The gating plumbing
+  Edit menu; Cut and Clear are not yet in the markup. (Since 2026-09-11 the
+  bar is the front application's, [apps-plan.md](apps-plan.md): the greyed
+  three are the **Sprite Editor's** Edit menu's,
+  `src/apps/sprite-editor/menus.html`, and this clipboard lands in
+  `src/apps/sprite-editor/index.js`.) The gating plumbing
   NOW EXISTS (added with the
   strip's readout, 2026-08-28): the canvas emits `sm-selection
 {bounds|null}` on every real outline change (deduped, never per ants

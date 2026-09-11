@@ -46,16 +46,17 @@
 //   reopens a window. The icons inside keep their positions the same way,
 //   by item, as the desktop's do.
 //
-//   THE FINDER'S TURN. A panel holding the desktop's active state mirrors
-//   as the desktop-focused role (windows.js applyActive: a DOCUMENT window
-//   active, not any window), so clicking into a folder window — or opening
-//   one — deactivates the application: the windoids hide, the options strip
-//   goes, the document-scoped items grey, exactly what a System 7 Finder
-//   window did to the front application; closing it hands active to the
-//   topmost document window (the kit promotes the survivor), and the
-//   application returns where it was. activeFolder() reads which folder's
-//   window holds active — the Finder's "front window", what New Folder
-//   creates in, what File → Close closes.
+//   THE FINDER'S TURN. A folder window is adopted as the FINDER's panel
+//   (windows.addPanel's `app`), so holding the desktop's active state
+//   makes the Finder the front application (windows.js applyActive):
+//   clicking into a folder window — or opening one — deactivates the
+//   Sprite Editor — the windoids hide, the options strip goes, the bar
+//   swaps to the Finder's menus, exactly what a System 7 Finder window did
+//   to the front application; closing it hands active to the topmost
+//   document window (the kit promotes the survivor), and the Sprite Editor
+//   returns where it was. activeFolder() reads which folder's window holds
+//   active — the Finder's "front window", what New Folder creates in, what
+//   its File → Close closes.
 //
 //   THE HEADER COUNT follows the model (the files slice's childrenOf), never
 //   the DOM — re-counted on every listing change, "N items", plain ink.
@@ -81,6 +82,7 @@
 import { VfWindow } from 'vintage-frames';
 import trashMarkUrl from '../assets/trash-indicator.png';
 import { files, itemCount, isTrashed } from '../state/files.js';
+import { FINDER } from '../state/shell.js';
 import {
   folderBox,
   folderViewport,
@@ -213,11 +215,13 @@ export function initFolders(desktop, windows, { savedPin = () => null } = {}) {
     wins.set(id, win);
     // Where it lands: the pin its window closed at this session, else the
     // one a prior session stored, else the fresh placement — the cascade,
-    // also what Arrange Windows re-places it onto.
+    // also what Arrange Windows re-places it onto. The Finder's panel: the
+    // bar shows the Finder's menus while it is front.
     windows.addPanel(
       win,
       (w, h) => folderBox(w, h, size, n),
-      remembered.get(id) ?? savedPin(keyOf(id))
+      remembered.get(id) ?? savedPin(keyOf(id)),
+      { app: FINDER }
     );
     remembered.delete(id);
     desktop.bringToFront(win);

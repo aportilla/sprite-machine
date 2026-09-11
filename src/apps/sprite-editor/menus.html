@@ -1,0 +1,140 @@
+<!-- The SPRITE EDITOR's menus (docs/apps-plan.md §3.4) — the document
+     application, front while a document window holds the desktop's active
+     state (shell/windows.js). A fragment of vf-menu elements:
+     shell/menu-bar.js parses it once into live nodes, slots them between
+     the Sprite Machine menu and the clock while the Sprite Editor is front
+     and lifts them out when another application comes forward — a detached
+     menu claims no key (the kit's contract), so ⌘S does nothing in the
+     Finder with no `disabled` written anywhere, exactly the Finder's own
+     ⌘S doing nothing. Every item here is document-scoped BY CONSTRUCTION:
+     the application is front only with a document window active, so there
+     is always a document to save, close or quit, and no role gate remains.
+     apps/sprite-editor/index.js wires the nodes: a menu is addressed by
+     data-menu, an item by value, WITHIN this fragment — never by id, since
+     another application's fragment may hold the same values. -->
+<vf-menu data-menu="file" label="File">
+  <!-- New…'s key is ⌃N — the Control key alone (the kit's ⌃ means Control,
+       never a ⌘ stand-in), ⌘N being the browser's New Window before the
+       page ever sees it. ONE New, and it always opens a DOCUMENT (the New
+       box, index.html #dlg-new): the Finder's File menu holds the same
+       item and calls through to this application's box. Off-Mac Ctrl+N is
+       the browser's New Window, reserved — the item shows the key and
+       never fires there, the same trade Close makes with ⌃W. -->
+  <vf-menu-item value="new" shortcut="⌃N">New…</vf-menu-item>
+  <vf-separator></vf-separator>
+  <!-- Close's key is ⌃W — the Control key alone: ⌘W is the browser's
+       before the page sees it, and ⌥W types ∑ on a Mac, so Control is the
+       one W chord a Mac browser leaves to the page. Off-Mac Ctrl+W is the
+       browser's Close Tab, reserved — the item shows the key and never
+       fires there, an accepted trade (Sep 9 2026). Closes the active
+       document, dirty-checked (the unsaved-changes alert). -->
+  <vf-menu-item value="close" shortcut="⌃W">Close</vf-menu-item>
+  <vf-menu-item value="save" shortcut="⌘S">Save</vf-menu-item>
+  <vf-menu-item value="duplicate" shortcut="⌘D">Duplicate</vf-menu-item>
+  <vf-menu-item value="rename">Rename…</vf-menu-item>
+  <vf-separator></vf-separator>
+  <!-- Download is the SOURCE path (the document .png verbatim — no
+       dialog, so no ellipsis); the two Export items derive OTHER artifacts
+       and raise their configurators (index.html's export dialogs). -->
+  <vf-menu-item value="download" shortcut="⇧⌘E">Download</vf-menu-item>
+  <vf-menu-item value="export-model">Export 3D Model…</vf-menu-item>
+  <vf-menu-item value="export-atlas">Export Sprite Atlas…</vf-menu-item>
+  <vf-separator></vf-separator>
+  <!-- Quit: the System 7 cascade over the open documents — every one in
+       turn, one unsaved-changes alert per dirty one with its window
+       brought forward, Cancel anywhere aborting the rest. Always live
+       here: the Sprite Editor is front only with a document open, so
+       there is always something to quit (the Finder had no Quit; the way
+       from the Finder is a click on any document window, then ⌃Q). Its
+       key is ⌃Q on Close's reasoning: ⌘Q is the browser's before the page
+       sees it. -->
+  <vf-menu-item value="quit" shortcut="⌃Q">Quit</vf-menu-item>
+</vf-menu>
+<vf-menu data-menu="edit" label="Edit">
+  <!-- Undo / Redo follow the ACTIVE document's history: disabled until it
+       has something, which hands the key back to a focused field's native
+       undo (a disabled item claims no key). Boot disabled to match an
+       empty history. -->
+  <vf-menu-item value="undo" shortcut="⌘Z" disabled>Undo</vf-menu-item>
+  <vf-menu-item value="redo" shortcut="⇧⌘Z" disabled>Redo</vf-menu-item>
+  <vf-separator></vf-separator>
+  <!-- Copy / Paste / Select All: the PLACEHOLDERS for the selection tool's
+       pixel clipboard (docs/selection-tool-plan.md, docs/clipboard-plan.md
+       §2.1) — System 7's Edit order, greyed until that clipboard exists
+       (nothing syncs them). Greyed, they claim no key, so ⌘C / ⌘V / ⌘A in
+       the Sprite Editor fall through to the browser as they always have —
+       a dialog's field keeps its native copy and paste. The Finder's Edit
+       menu holds the live three over the icons; the same labels read the
+       front application's command, one bar. -->
+  <vf-menu-item value="copy" shortcut="⌘C" disabled>Copy</vf-menu-item>
+  <vf-menu-item value="paste" shortcut="⌘V" disabled>Paste</vf-menu-item>
+  <vf-menu-item value="select-all" shortcut="⌘A" disabled>Select All</vf-menu-item>
+  <vf-separator></vf-separator>
+  <vf-menu-item value="pick-color" shortcut="⌘K">Pick Color…</vf-menu-item>
+  <!-- Tile Size…: the active document's square tile size, behind a modal
+       that commits on OK alone (index.html #dlg-tile). The one property
+       that is an EDIT — a retile is an undoable change to the sheet — so
+       it lives here; File → Properties… (the name and the atlas dims
+       beside a live stepper) was retired for it, Sep 9 2026. -->
+  <vf-menu-item value="tile-size">Tile Size…</vf-menu-item>
+</vf-menu>
+<!-- The tool items' bare-letter shortcuts are DISPLAY-only by kit contract
+     (an unmodified printable key never matches), so src/shortcuts.js keeps
+     owning the actual S/B/R/G/E/I keys. The selection leads, as MacPaint's
+     palette did; the live tool is checked (the same session truth the tool
+     strip and the keys write). -->
+<vf-menu data-menu="tools" label="Tools">
+  <vf-menu-item value="tool-select" shortcut="S">Selection</vf-menu-item>
+  <vf-menu-item value="tool-pencil" shortcut="B" checked>Pencil</vf-menu-item>
+  <vf-menu-item value="tool-rect" shortcut="R">Rectangle</vf-menu-item>
+  <vf-menu-item value="tool-fill" shortcut="G">Fill</vf-menu-item>
+  <vf-menu-item value="tool-eraser" shortcut="E">Eraser</vf-menu-item>
+  <vf-menu-item value="tool-eyedropper" shortcut="I">Eyedropper</vf-menu-item>
+</vf-menu>
+<vf-menu data-menu="view" label="View">
+  <!-- The ⌘J item LEADS the menu — the one command over the whole screen —
+       with the rule right after it; the windoid toggle and the open-windows
+       tail follow below the rule. No Fullscreen item, on purpose (tried
+       and retired Sep 4 2026): the Fullscreen API reserves Esc for its own
+       exit in every browser, beyond the page's reach — so the editor's Esc
+       bindings (drop a selection, cancel a drag) went dead in fullscreen —
+       and Chrome's top layer put the fullscreened page over the kit's
+       page-drawn cursor. The browser's own window fullscreen (⌃⌘F on the
+       Mac) leaves Esc to the page. -->
+  <!-- ⌘J: ONE item, "Arrange Windows", two commands under a STATE rule
+       (apps/sprite-editor owns the sync and writes the VALUE; the label is
+       this markup's and never turns — a label that turned with the state,
+       "Zoom Window" once arranged, was retired Sep 7 2026): with anything
+       on screen off its placement — a drag, a grow, a zoom, the browser
+       resized — the value is `arrange` (the boot placement re-run on the
+       CURRENT raster, the windoids back to the rail, every open document
+       window onto the cascade); with everything already where the
+       placement puts it — Arrange would change nothing — the value is
+       `zoom` (the active document window through the zoom box's own
+       toggle, Arrange's variant for a screen already arranged; a window
+       zoomed from its slot, like any permutation of the documents across
+       the cascade, still reads arranged, so repeats toggle that one window
+       while nothing else moves). The one item whose value turns wears
+       data-item, its stable address. ⌘J: one of the few clean letters left
+       (no Mac browser binds it — Downloads is ⇧⌘J), beside ⌘K. Off-Mac,
+       Ctrl+J IS the browser's Downloads, which the kit's claim pre-empts
+       while the item is live. -->
+  <vf-menu-item data-item="arrange" value="arrange" shortcut="⌘J"
+    >Arrange Windows</vf-menu-item
+  >
+  <vf-separator></vf-separator>
+  <!-- The 3D Sprite Atlas windoid (index.html #win-ring) as a checkmark
+       toggle over prefs.showRing, OFF every load: the pick shows or hides
+       it (the module flips the slice and mirrors it back as the check),
+       and the windoid's own close box is the same uncheck — MacPaint's
+       palettes closed from their box and came back from the menu. -->
+  <vf-menu-item value="ring">3D Sprite Atlas</vf-menu-item>
+  <!-- The OPEN DOCUMENT WINDOWS follow here — a dynamic section, nothing
+       in the markup: after this menu's last authored item, the module
+       (syncWindows) keeps a separator and one item per open document
+       window — the document's name, the active window's checked, in
+       creation order, value `window:<key>`; a pick brings that window
+       forward. Absent, separator included, with no document window open.
+       The Sprite Editor's alone (docs/apps-plan.md §6.8): System 7's
+       Finder and TeachText listed no windows. -->
+</vf-menu>
