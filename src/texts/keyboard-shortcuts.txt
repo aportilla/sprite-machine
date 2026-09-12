@@ -1,0 +1,67 @@
+Keyboard Shortcuts
+
+The menu bar belongs to the front application, and a key equivalent belongs to the menu it is on: the Sprite Editor's ⌘S does nothing in the Finder, exactly as it did on a Mac. Click a document window and the editor's keys are live; click the desktop and the Finder's are.
+
+WHY CONTROL, NOT COMMAND
+
+New, Close and Quit answer ⌃N, ⌃W and ⌃Q — the Control key, not ⌘. The browser takes ⌘N, ⌘W and ⌘Q before the page ever sees them, and ⌃W is the one W chord a Mac browser leaves to us. So ⌘W closes the browser tab rather than the document window; if any open document has unsaved changes the browser asks before it goes. Off a Mac, Ctrl+W and Ctrl+N are the browser's own Close Tab and New Window: the items show the keys there and never fire.
+
+THE FINDER — the desktop, a folder window
+
+⌃N — New Sprite
+⌃W — Close the front folder window
+⌘C — Copy the selected icons
+⌘V — Paste
+⌘A — Select All
+⌘J — Arrange Windows
+
+THE SPRITE EDITOR — a document window
+
+⌃N — New…
+⌃W — Close the active document
+⌘S — Save
+⌘D — Duplicate
+⇧⌘E — Download the sheet as a .png
+⌃Q — Quit
+⌘Z — Undo
+⇧⌘Z — Redo
+⌘K — Pick Color…
+⌘J — Arrange Windows
+
+THE TOOLS
+
+S — Selection
+B — Pencil
+R — Rectangle
+G — Fill
+E — Eraser
+I — Eyedropper
+
+A tool key works while a document window is front and nothing is being typed into.
+
+THE TEXT VIEWER — a read-me window
+
+⌃W — Close
+⌃Q — Quit
+⌘C — Copy the selected prose
+⌘A — Select All
+⌘J — Arrange Windows
+
+DESKTOP PATTERNS — the control panel
+
+⌃W — Close
+⌃Q — Quit
+⌘J — Arrange Windows
+
+THE MOUSE AND THE MODIFIERS
+
+Double-click — open a document, a folder or a read-me
+Return — rename the selected icon; in a dialog, the default button
+Right-click — erase with whichever tool you are holding, while the button is down
+Option — sample a color without leaving the tool you are in
+Shift — square a rectangle, lock a move to one axis, toggle icons in a rubber band
+Esc — cancel a drag, drop a selection, dismiss a dialog
+
+ONE COMMAND OVER THE WHOLE SCREEN
+
+⌘J is in every application's View menu and means the same thing wherever you are. With anything out of place it arranges the screen; with everything already arranged it zooms the front document window, so pressing it again toggles that one window and moves nothing else.

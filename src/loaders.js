@@ -21,7 +21,11 @@
 // built-in samples into the library as ordinary stored documents — a
 // truly-virgin-boot one-shot (see its doc comment) — and `seedDefaultTexts`
 // stores the built-in text files (src/texts/) the same way, on their own
-// record.
+// record. `restoreDefaultFiles` runs the two over whatever the library is
+// MISSING (`missingDefaults`, the reading its menu item's gate shares): the
+// seeding keeps its one-shot records, and the Finder's Special → Restore
+// Default Files is how a profile that has already booted gets a built-in
+// added since — or one it deleted.
 // ---------------------------------------------------------------------------
 
 import { validateSheet, clampTile, isPng, readTextChunks } from 'sprite-machine';
@@ -198,4 +202,50 @@ export async function seedDefaultTexts(texts, existing = new Set()) {
     }
     await new Promise((r) => setTimeout(r, 2)); // the listing's sort key, as above
   }
+}
+
+/**
+ * The built-in files this profile is MISSING — every sample document and
+ * every built-in text file whose name is nowhere in the library, the Trash
+ * INCLUDED: a trashed Read Me is still a Read Me, and restoring beside it
+ * would make a second file of that name where the way back is to drag the
+ * first one out. Pure over the passed state, so the menu can ask it on
+ * every listing change; it is the one reading under both halves of
+ * Restore Default Files — what the command stores, and whether the item is
+ * live at all.
+ * @param {import('./state/files.js').FilesState} state
+ * @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}[]} samples
+ * @param {{name: string, text: string}[]} texts
+ */
+export function missingDefaults(state, samples, texts) {
+  const docNames = new Set(state.list.map((r) => r.name));
+  const textNames = new Set(state.texts.map((t) => t.name));
+  return {
+    docs: samples.filter((s) => !docNames.has(s.name)),
+    texts: texts.filter((t) => !textNames.has(t.name)),
+  };
+}
+
+/**
+ * Restore the built-in files — the Finder's Special → Restore Default
+ * Files, and the ONE route by which an existing profile gets a built-in.
+ * The seeding proper stays a one-shot on its two records (`seeded`,
+ * `seededTexts`): a profile takes the built-ins at its first boot and never
+ * again, so a read-me added to src/texts/ after that profile existed, and
+ * a Car its owner deleted, both reach it only from here.
+ *
+ * ADDITIVE AND BY NAME, which is what makes it safe to pick twice: the two
+ * seeders run over the missing entries alone, so a built-in already in the
+ * library is left exactly as it stands — a renamed Cube, a Read Me dragged
+ * into a folder, a Car painted over are all somebody's file now, never
+ * this command's to overwrite, and no name is ever doubled. What it stores
+ * is stored the way the first boot stores it: ordinary new files on the
+ * desktop, from then on the user's.
+ * @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}[]} samples
+ * @param {{name: string, text: string}[]} texts
+ */
+export async function restoreDefaultFiles(samples, texts) {
+  const missing = missingDefaults(files.get(), samples, texts);
+  await seedDefaultDocs(missing.docs);
+  await seedDefaultTexts(missing.texts);
 }

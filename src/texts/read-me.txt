@@ -21,7 +21,7 @@ Edit → Tile Size… retiles the sheet to any square size from 1 to 64.
 
 SAVING AND FILING
 
-Documents are saved in the browser (File → Save, ⌘S) and live as icons on the desktop. Drag them into folders, rename them from their icons, and drag them to the Trash to delete them; Empty Trash… in the Sprite Machine menu is what removes them for good. File → Download saves the sheet as a .png, which is the document itself: drop it back onto the desktop to open it again.
+Documents are saved in the browser (File → Save, ⌘S) and live as icons on the desktop. Drag them into folders, rename them from their icons, and drag them to the Trash to delete them; Empty Trash… in the Finder's Special menu is what removes them for good. File → Download saves the sheet as a .png, which is the document itself: drop it back onto the desktop to open it again.
 
 EXPORTING
 

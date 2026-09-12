@@ -91,4 +91,22 @@
        the Trash from the Sprite Editor means a desktop click first, as it
        did on a Mac. -->
   <vf-menu-item value="empty-trash" disabled>Empty Trash…</vf-menu-item>
+  <vf-separator></vf-separator>
+  <!-- Restore Default Files (loaders.js restoreDefaultFiles): the built-in
+       documents and read-me text files the library is MISSING, stored
+       afresh on the desktop. The seeding proper is a one-shot on its own
+       records — a profile takes the built-ins at its first boot and never
+       again — so this is the route by which a profile that has already
+       booted gets a read-me added to the app since, or a Car it deleted.
+       Below the rule, and Empty Trash… above it: one command destroys what
+       is there, this one only adds what is not. No ellipsis — it is
+       additive and by name, so there is nothing to warn about and no
+       question to ask; and no key equivalent, as System 7 gave its Special
+       menu none. Greyed while every built-in is already in the library, the
+       Trash INCLUDED (a trashed Read Me is still a Read Me: the way back to
+       it is to drag it out) — the Finder's own idiom, Empty Trash…'s grey
+       over an empty can, and it greys itself the moment the restore lands.
+       Broken storage greys it too: there is no library to restore into.
+       (apps/finder/index.js syncRestore.) -->
+  <vf-menu-item value="restore-defaults" disabled>Restore Default Files</vf-menu-item>
 </vf-menu>

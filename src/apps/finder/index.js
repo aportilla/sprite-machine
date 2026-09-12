@@ -6,7 +6,8 @@
 // off it otherwise (shell/menu-bar.js). This module wires those menus:
 // New… (through the Sprite Editor's box — the one New, always a document),
 // New Folder, Close (the front folder window), the clipboard's three,
-// Arrange Windows, and Empty Trash… with its alert. Its windows are its own
+// Arrange Windows, and the Special menu's two — Empty Trash… with its
+// alert, and Restore Default Files. Its windows are its own
 // (docs/app-windows-plan.md), made here: the folder windows (windows.js,
 // windows.html) and the icon layer over the desktop's field and theirs
 // (icons.js — the drag, the rubber band, filing, the selection the Edit
@@ -44,8 +45,9 @@
 // check disabled and the match but never where the stroke landed, and an
 // enabled Copy would claim ⌘C typed into an icon's rename box; Arrange
 // Windows the windows' state (greyed while the screen IS the arrangement);
-// Empty Trash… the Trash's contents. Every handler guards on "no modal
-// open" (deps.modalOpen): key equivalents fire app-wide.
+// Empty Trash… the Trash's contents; Restore Default Files whether any
+// built-in is missing at all. Every handler guards on "no modal open"
+// (deps.modalOpen): key equivalents fire app-wide.
 // ---------------------------------------------------------------------------
 
 import menus from './menus.html?raw';
@@ -67,7 +69,9 @@ import { createDoc } from '../../state/doc.js';
 import { createRingSettings } from '../../state/ring-settings.js';
 import { TILE_MIN, TILE_MAX } from 'sprite-machine';
 import { sheetShape } from '../../lib/sheet-shape.js';
-import { readSheetMeta } from '../../loaders.js';
+import { readSheetMeta, missingDefaults, restoreDefaultFiles } from '../../loaders.js';
+import { SAMPLES } from '../../lib/sprite-data.js';
+import { TEXTS } from '../../texts/index.js';
 import { bytesToImageData } from '../../image-io.js';
 import { initFolderWindows } from './windows.js';
 import { initIcons } from './icons.js';
@@ -413,9 +417,26 @@ export const finder = {
 
     on(menuSpecial, 'vf-menu-select', (e) => {
       if (modalOpen()) return;
-      // Empty Trash…: the Finder's command over the catalog (the alert
-      // above); greyed while the Trash is empty (syncTrash below).
-      if (menuDetail(e).value === 'empty-trash') showEmptyTrash();
+      switch (menuDetail(e).value) {
+        // Empty Trash…: the Finder's command over the catalog (the alert
+        // above); greyed while the Trash is empty (syncTrash below).
+        case 'empty-trash':
+          showEmptyTrash();
+          break;
+        // Restore Default Files: the built-ins the library is missing,
+        // stored afresh on the desktop (loaders.js restoreDefaultFiles —
+        // additive and by name, so nothing already there is touched). The
+        // route by which a profile that has already booted gets a read-me
+        // added since, the seeding being a one-shot on its own records.
+        // No dialog: the icons appearing IS the feedback, and the item
+        // greys itself behind them (syncRestore below). A failure lands on
+        // the build slice like every file op's.
+        case 'restore-defaults':
+          restoreDefaultFiles(SAMPLES, TEXTS).catch((err) =>
+            build.setError(`Restore Default Files failed: ${err.message}`)
+          );
+          break;
+      }
     });
 
     // The browser's own Edit → Paste (its menu bar; no keydown, so the kit's
@@ -526,6 +547,22 @@ export const finder = {
     };
     teardown.push(files.subscribe(syncTrash));
     syncTrash();
+
+    // Restore Default Files is live exactly while some built-in is missing —
+    // the same reading the command acts on (loaders.js missingDefaults), off
+    // the listing, so a restore greys it again behind the icons it just made
+    // and an emptied Trash lights it. A trashed built-in counts as present.
+    // Broken storage (a private window) greys it: there is no library to
+    // restore into, and Save says so in its own words.
+    const itemRestore = item(menuSpecial, 'restore-defaults');
+    const syncRestore = () => {
+      const st = files.get();
+      const missing = missingDefaults(st, SAMPLES, TEXTS);
+      itemRestore.disabled =
+        !st.available || !(missing.docs.length + missing.texts.length);
+    };
+    teardown.push(files.subscribe(syncRestore));
+    syncRestore();
 
     // Arrange Windows ⌘J — the arrange alone here (the zoom box is a
     // document window's, the Sprite Editor's item's other half): greyed

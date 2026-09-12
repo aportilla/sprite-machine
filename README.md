@@ -64,9 +64,13 @@ the seeding (a `seeded` flag written only once every built-in is stored), and
 that record, not the mere presence of state, suppresses it — so a first boot
 cut short by a reload finishes seeding on the next one, nothing doubled, while
 deleting or emptying later never resurrects them. The **built-in text files**
-(`src/texts/`, the Read Me) seed the same way on a record of their own,
-`seededTexts`, since they arrived after every profile's first record was
-written: a profile from before them gets them on its next boot, once.
+(`src/texts/` — the Read Me and Keyboard Shortcuts) seed the same way on a
+record of their own, `seededTexts`, since they arrived after every profile's
+first record was written. Both records stay **one-shot**, so a built-in added
+to the app after a profile's first boot does not arrive on its next one: the
+Finder's **Special → Restore Default Files** stores whatever the library is
+missing, and is the only route by which an existing profile — or one whose
+owner deleted a built-in — gets it (see [Menu bar](#menu-bar)).
 
 Every load **boots to the About box** (see [The About box](#the-about-box)).
 OK it, or click outside it, and the bare desktop is yours — unless the URL
@@ -467,7 +471,18 @@ Desktop Patterns  │ Sprite Machine  File  View                             10:
   arrangement. No window tail: System 7's Finder listed no windows, and the
   way back to an open document is its window's click, or its icon.
 - **Special** — _Empty Trash…_ (see [The Trash](#the-trash)), greyed while
-  the Trash is empty, no key equivalent; one item until Clean Up joins it.
+  the Trash is empty; then, after a rule, _Restore Default Files_, which
+  stores the built-in documents and read-me text files the library is
+  **missing** — the route by which a profile that has already booted gets a
+  built-in the app gained since, or one it deleted, the seeding itself being
+  a one-shot (see [Desktop icons & state](#desktop-icons--state)). Additive
+  and **by name**: a built-in already in the library is left exactly as it
+  stands, renamed, filed, painted over or trashed, so picking it twice
+  doubles nothing and overwrites nothing. No ellipsis — there is no question
+  to ask — and it is greyed while nothing is missing, the Trash counting as
+  the library (a trashed Read Me is still a Read Me; the way back to it is
+  to drag it out). Neither item has a key equivalent, as System 7's Special
+  menu gave none. Clean Up joins them one day.
 
 **The Sprite Editor's menus** — a document window front. Every item is
 document-scoped by construction, so none needs a role gate:
@@ -1033,12 +1048,17 @@ A first pass, deliberately: **plain text, display only**.
   menu serves documents.
 - **The built-ins ship with the app**: `src/texts/` holds each read-me as
   a `.txt`, imported whole, and `TEXTS` lists them with the names their
-  icons wear. They seed like Car and Cube — ordinary stored files from then
-  on, renamed, filed or trashed for good — on their own `seededTexts`
-  record, so an existing profile gets them on its next boot. To add one,
-  drop a `.txt` in and list it. Not yet: a revision to a file already
-  seeded reaches no existing profile (a versioned re-seed), a dropped or
-  pasted `.txt` (only PNGs arrive today), and any editing.
+  icons wear — **Read Me**, the tour of the machine, and **Keyboard
+  Shortcuts**, every key equivalent by application beside the mouse
+  modifiers and the ⌃W/⌘W story. They seed like Car and Cube — ordinary
+  stored files from then on, renamed, filed or trashed for good — on their
+  own `seededTexts` record, written once. To add one, drop a `.txt` in and
+  list it; since that record is a one-shot, an existing profile takes the
+  new file from **Special → Restore Default Files**, never from a boot. Not
+  yet: a revision to a file already seeded reaches no existing profile (the
+  restore is by name and leaves a file that is there alone — a versioned
+  re-seed is still the follow-up), a dropped or pasted `.txt` (only PNGs
+  arrive today), and any editing.
 - **The window** (the Text Viewer's `apps/text-viewer/windows.js`, cloned
   from `#tpl-text-window` in its `windows.html`) is the classic read-me's: a document-tier window — striped bar, close box, zoom
   box, `movable resizable zoomable scrollbars="vertical"`, the kit's rail
@@ -1165,7 +1185,11 @@ boot** through the same save path as ⌘S and are ordinary mutable documents
 from then on; the seeding runs while the profile carries **no record of having
 seeded** — the `seeded` flag, written only after the last built-in is stored,
 so an interrupted boot seeds again next time, skipping what is already stored
-by name. **Double-click opens** — the only way into a stored document, the
+by name. That record is never rewritten, so **the Finder's Special → Restore
+Default Files is the only way a built-in reaches a profile twice**: it stores
+the built-in documents and text files whose names are nowhere in the library
+and touches nothing else, which is how a deleted Car comes back and how a
+read-me added to the app after a profile existed reaches it at all. **Double-click opens** — the only way into a stored document, the
 desktop being the file browser (into the existing window if one is open,
 deselecting the icon as the application takes focus); selecting an icon
 deactivates the application, and the highlight names what the next Finder
