@@ -1195,17 +1195,27 @@ deselecting the icon as the application takes focus); selecting an icon
 deactivates the application, and the highlight names what the next Finder
 action — a drag, a rename — acts on; every open doc's icon wears the kit's
 `open` ghost. Icon art is generated **from the document itself**: **the model**,
-not the sheet — rendered orthographically at the **three-quarter view** (45°
-round from the front, 45° up: the 3D View's own yaw, higher) into 32×32 → data
+not the sheet — rendered orthographically at the **three-quarter view** (35°
+round from the front, so the front face reads larger than the flank, and 45°
+up: higher than the 3D View's framing) into 32×32 → data
 URI, declared `color` so selection darkens instead of inverting. **The frame is
 the model's, not the lattice's** (`lib/icon.js`, the one place this parts
 company with the 3D Sprite Atlas): the tight projected bounding box of the
 geometry, so a two-voxel cube painted in the middle of a 64 tile fills its icon
-exactly as a 64-voxel ship does, and the tile size never enters it. **Hard
-pixels** — no antialiasing, no supersample, the 32px buffer IS the icon — the
-3D View's discipline, over the engine's own headless `buildModel` on a third
-offscreen GL context, made on the first icon (`scene/icon-renderer.js`,
-lighting the model through the atlas renderer's rig, `scene/rig.js`). It is
+exactly as a 64-voxel ship does, and the tile size never enters it. **Smooth
+inside, inked outside**: the model is rendered **supersampled** (3 px per icon
+px, no GL antialiasing) and **box-filtered down** — premultiplied, so an edge
+takes its color from the model and not from the clear — so the geometry's own
+edges land as coverage rather than a point sample's hit or miss; then the
+**silhouette is inked** as a System 7 icon's is — every pixel the model covers
+by half or more goes opaque in its own color, and a **one-pixel black outline**
+runs around that coverage (four-connected, the thin line a 1-bit icon draws on
+a diagonal), so the art reads as an object on any desktop pattern. The outline
+lies outside the model, so the fit leaves it room: the model spans 30 of the
+32 px. Both passes are pure (`lib/icon.js`), over the engine's own headless
+`buildModel` on a third offscreen GL context, made on the first icon
+(`scene/icon-renderer.js`, lighting the model through the atlas renderer's
+rig, `scene/rig.js`). It is
 rendered **once per save and cached on the record**, so a boot pays for no
 icon and a document that has never been saved since the render changed keeps
 the art its last save made. A document with **nothing painted** has no model

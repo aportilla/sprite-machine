@@ -96,7 +96,7 @@ const removeCursor = applyCursor();
 // disabled by ?fresh=1.
 //
 // A document's icon is a RENDER OF ITS MODEL (scene/icon-renderer.js) — the
-// 45°/45° three-quarter view, fitted to the object rather than to the tile —
+// 35°/45° three-quarter view, fitted to the object rather than to the tile —
 // taken once per save and cached on the record, so no boot pays for it. A
 // document with nothing painted (and a browser with no WebGL) has no model to
 // draw: the generic System 7 document glyph stands in.

@@ -2,23 +2,34 @@
 // The desktop icon's renderer: a document's 32×32 art, made from the DOCUMENT
 // ITSELF — the engine's headless entry (buildModel: slice the 3×2 atlas,
 // ingest, carve, colorize, the low-poly wedge mesh with its skin) rendered
-// orthographically from one pose on a tiny offscreen canvas, straight to a
-// PNG data URI. The files slice asks for one per SAVE (its `makeIcon`
+// orthographically from one pose on a small offscreen canvas, filtered down
+// and inked, to a PNG data URI. The files slice asks for one per SAVE (its `makeIcon`
 // dependency, wired in main.js) and caches what it gets on the document's
 // record, so this runs when a document is written and never when one is
 // listed or opened.
 //
-// THE POSE AND THE FIT are lib/icon.js's: 45° round from the front and 45°
+// THE POSE AND THE FIT are lib/icon.js's: 35° round from the front and 45°
 // up, with the frame the MODEL's own projected bounding box, not the
 // lattice's — a small object painted in the middle of a big tile fills its
 // icon exactly as a big one does. The icon is the object, not the sheet.
 //
-// HARD PIXELS (the user's call, Sep 11 2026): no antialiasing, no
-// supersample, no downsampling filter — the 32 px buffer IS the icon, every
-// pixel a point sample of the mesh, the 3D View's and the 3D Sprite Atlas's
-// discipline. The clear is transparent, so the art composites on whatever
-// desktop pattern is set, and outputColorSpace is the stage's SRGB so an
-// icon's colors agree with the 3D View's.
+// SMOOTH INSIDE, INKED OUTSIDE (the user's call, Sep 11 2026, over the same
+// day's hard point-sampled buffer). The GL buffer is the icon SUPERSAMPLED —
+// ICON_SUPERSAMPLE px per icon px, still no GL antialiasing, every sample a
+// point sample of the mesh — and lib/icon.js's two pure passes make the icon
+// of it: `downsample` box-filters the block into each pixel (premultiplied,
+// so an edge takes its color from the model and not from the clear), then
+// `inkOutline` hardens the silhouette to opaque and rings it with one black
+// pixel, so the art reads as an object on any desktop pattern. The clear is
+// transparent, so what the ring surrounds composites on whatever pattern is
+// set, and outputColorSpace is the stage's SRGB so an icon's colors agree
+// with the 3D View's.
+//
+// The copy out of the GL canvas is a 2D canvas's drawImage + getImageData in
+// the same task as the render, and the context keeps its drawing buffer
+// besides (preserveDrawingBuffer) — the atlas renderer's discipline; the
+// buffer is small. The icon's own 32×32 canvas takes the finished raster and
+// yields the PNG.
 //
 // ITS OWN SHORT-LIVED MODEL: this never touches the rebuilder's mesh. A save
 // may be of a document that is not the active one — the first-ever boot seeds
@@ -34,7 +45,16 @@
 import * as THREE from 'three';
 import { buildModel } from 'sprite-machine';
 import { ringCameraDir, ringCameraUp } from '../lib/ring.js';
-import { ICON_SIZE, ICON_YAW, ICON_ELEV, orthoFit } from '../lib/icon.js';
+import {
+  ICON_SIZE,
+  ICON_SUPERSAMPLE,
+  ICON_YAW,
+  ICON_ELEV,
+  orthoFit,
+  framedHalf,
+  downsample,
+  inkOutline,
+} from '../lib/icon.js';
 import { createRig } from './rig.js';
 
 /** The one pose, resolved once (lib/icon.js). */
@@ -43,10 +63,15 @@ const UP = ringCameraUp(ICON_YAW, ICON_ELEV);
 const dirV = new THREE.Vector3(...DIR);
 const center = new THREE.Vector3();
 
+/** The GL buffer's edge: the icon, supersampled. */
+const SAMPLED = ICON_SIZE * ICON_SUPERSAMPLE;
+
 export function createIconRenderer() {
   /** @type {{canvas: HTMLCanvasElement, renderer: THREE.WebGLRenderer,
    *   scene: THREE.Scene, camera: THREE.OrthographicCamera,
-   *   rig: ReturnType<typeof createRig>}|null} */
+   *   rig: ReturnType<typeof createRig>,
+   *   samples: CanvasRenderingContext2D, icon: HTMLCanvasElement,
+   *   art: CanvasRenderingContext2D}|null} */
   let world = null;
   let broken = false; // WebGL out of reach — don't retry on every save
 
@@ -58,17 +83,37 @@ export function createIconRenderer() {
         canvas,
         antialias: false,
         alpha: true,
-        preserveDrawingBuffer: true, // toDataURL reads the buffer below
+        preserveDrawingBuffer: true, // the copy out reads it below
       });
       renderer.setPixelRatio(1);
       renderer.setClearColor(0x000000, 0);
       renderer.shadowMap.enabled = false;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.setSize(ICON_SIZE, ICON_SIZE, false);
+      renderer.setSize(SAMPLED, SAMPLED, false);
       const scene = new THREE.Scene();
       scene.background = null;
       const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
-      world = { canvas, renderer, scene, camera, rig: createRig(scene) };
+      // The two 2D canvases: the samples read out of the GL buffer, and the
+      // icon the finished raster is written to.
+      const sampled = document.createElement('canvas');
+      sampled.width = SAMPLED;
+      sampled.height = SAMPLED;
+      const samples = sampled.getContext('2d', { willReadFrequently: true });
+      const icon = document.createElement('canvas');
+      icon.width = ICON_SIZE;
+      icon.height = ICON_SIZE;
+      const art = icon.getContext('2d');
+      if (!samples || !art) throw new Error('no 2D canvas');
+      world = {
+        canvas,
+        renderer,
+        scene,
+        camera,
+        rig: createRig(scene),
+        samples,
+        icon,
+        art,
+      };
     } catch (err) {
       // Named on the console: a desktop of generic glyphs is otherwise a
       // silent mystery.
@@ -95,14 +140,17 @@ export function createIconRenderer() {
       // so its positions are already the world's.
       const fit = orthoFit(mesh.geometry.attributes.position.array, DIR, UP);
       if (!fit) return null;
-      const { camera, renderer, scene, rig, canvas } = w;
+      const { camera, renderer, scene, rig, canvas, samples, icon, art } = w;
       center.set(...fit.center);
       // Clear of the box along the view axis; the planes bracket its depth.
       const dist = fit.depth + 2 * fit.half + 1;
-      camera.left = -fit.half;
-      camera.right = fit.half;
-      camera.top = fit.half;
-      camera.bottom = -fit.half;
+      // The frustum is the fit plus the outline's margin: the model spans
+      // the icon less one pixel a side, and the ring is inked into that.
+      const half = framedHalf(fit.half);
+      camera.left = -half;
+      camera.right = half;
+      camera.top = half;
+      camera.bottom = -half;
       camera.near = Math.max(0.01, dist - fit.depth);
       camera.far = dist + fit.depth;
       camera.updateProjectionMatrix();
@@ -115,7 +163,19 @@ export function createIconRenderer() {
       mesh.receiveShadow = false;
       scene.add(mesh);
       renderer.render(scene, camera);
-      return canvas.toDataURL('image/png');
+      // The copy out, in the same task as the render — cleared first, since
+      // drawImage composites and the last icon's pixels would show through
+      // this one's clear.
+      samples.clearRect(0, 0, SAMPLED, SAMPLED);
+      samples.drawImage(canvas, 0, 0);
+      const px = samples.getImageData(0, 0, SAMPLED, SAMPLED).data;
+      const raster = inkOutline(
+        downsample(px, SAMPLED, SAMPLED, ICON_SUPERSAMPLE),
+        ICON_SIZE,
+        ICON_SIZE
+      );
+      art.putImageData(new ImageData(raster, ICON_SIZE, ICON_SIZE), 0, 0);
+      return icon.toDataURL('image/png');
     } finally {
       w?.scene.remove(mesh);
       mesh.geometry?.dispose();
@@ -128,7 +188,8 @@ export function createIconRenderer() {
   return {
     /**
      * A document's icon art: its model at the icon pose, its visible extent
-     * fitted to the icon's bounds, as a 32×32 PNG data URI. Null where there
+     * fitted to the icon's bounds less the outline, smoothed by the
+     * supersample and ringed in black, as a 32×32 PNG data URI. Null where there
      * is no model to draw — a sheet with no painted view, or one that is not
      * a sheet — and null with no WebGL; the caller falls back to the generic
      * document glyph.
