@@ -3,10 +3,14 @@
 // of its own: parse the boot params, seed the stores, fit the desktop raster
 // and take over the cursor, wire the shell (windows / the menu bar and its
 // three applications / icons / persistence), create the THREE stage + mesh
-// rebuilder, and open the boot document(s). Everything else coordinates
+// rebuilder, lift the startup curtain on the composed desktop, and open the
+// boot document(s). Everything else coordinates
 // through the state slices (state/) — see README's Architecture section.
 // ---------------------------------------------------------------------------
 
+// First, ahead of everything that could throw: importing the curtain arms the
+// net that lifts it whatever this module's top level does (boot/curtain.js).
+import { liftCurtain } from './boot/curtain.js';
 import './style.css';
 import 'vintage-frames';
 import { applyCursor, onScaleChange } from 'vintage-frames';
@@ -200,6 +204,15 @@ const onBeforeUnload = (e) => {
   }
 };
 window.addEventListener('beforeunload', onBeforeUnload);
+
+// --- the curtain lifts ------------------------------------------------------
+// The desktop is composed — everything above ran to completion in this one
+// task — so the black screen the page booted behind comes off, a frame after
+// the real desktop has painted behind it (boot/curtain.js, and the inline
+// <style> in index.html that puts it there before any of this arrives). The
+// boot documents below are deliberately NOT waited for: they ride an
+// IndexedDB round-trip, and the desktop appears as soon as it is the desktop.
+liftCurtain();
 
 // --- HMR teardown -----------------------------------------------------------
 // Vite re-executes this module's top level on edit without unloading the old

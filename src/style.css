@@ -4,8 +4,8 @@
    The kit's components carry their own styles, and every sm-* component
    carries ITS own (standard Lit `static styles`, scoped to its shadow root).
    This sheet supplies only the PAGE's share: the shared palette tokens
-   (custom properties inherit into every shadow tree), the reset, the black
-   ground behind the desktop bezel, the light-DOM Colors dialog's page share
+   (custom properties inherit into every shadow tree), the reset, the
+   light-DOM Colors dialog's page share
    (host display, the hover readout's color chip), the 3D View body's
    column + viewport fill rules, the desktop-icon column width, the About
    box's link ink, and the drop overlay
@@ -24,18 +24,10 @@
 * {
   box-sizing: border-box;
 }
-html,
+/* The page's box and the black ground behind the desktop bezel are NOT here:
+   they are inline in index.html, the page's first frame (see that file's
+   comment and src/boot/curtain.js — this sheet arrives with main.js). */
 body {
-  height: 100%;
-  margin: 0;
-  /* The desktop is the viewport; a space-consuming scrollbar would shrink the
-     fitWithin measurement it derives the raster from. */
-  overflow: hidden;
-}
-body {
-  /* The ground behind the desktop bezel: the sub-system-pixel slack fitWithin
-     leaves stays invisible against black. */
-  background: var(--sm-black);
   color: var(--sm-black);
   /* Fallback for stray page text; real captions are vf-label / vf-paragraph. */
   font-family: 'VF Display', 'Chicago', 'Geneva', 'Helvetica Neue', Helvetica, Arial,

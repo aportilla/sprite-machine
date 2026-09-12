@@ -4,8 +4,42 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sprite Machine — pixel sprites → 3D</title>
+    <!-- The startup screen, and the ground under it. These rules are INLINE
+         on purpose — they are the only styles the page has on its first
+         frame: src/style.css is imported by main.js (in dev it arrives with
+         the module, and in the build the sheet is a blocking <link> but the
+         vf-* / sm-* elements below are still undefined until that module
+         registers them, so the markup's text would lay out as plain prose
+         for as long as the JS takes). So the document states its own black
+         screen and the boot lifts it once the desktop is composed —
+         src/boot/curtain.js, which is the other half of this. One below the
+         kit's page-drawn pointer (2147483647): the curtain is the screen,
+         and the kit still owns the topmost layer. -->
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        /* The desktop is the viewport; a space-consuming scrollbar would
+           shrink the fitWithin measurement it derives the raster from. */
+        overflow: hidden;
+        /* The ground behind the desktop bezel: the sub-system-pixel slack
+           fitWithin leaves stays invisible against black. */
+        background: #000;
+      }
+      #curtain {
+        position: fixed;
+        inset: 0;
+        background: #000;
+        z-index: 2147483646;
+      }
+    </style>
   </head>
   <body>
+    <!-- The black screen the page boots behind (the <style> above), removed
+         by the boot the moment the desktop is composed. -->
+    <div id="curtain"></div>
+
     <!-- The System 7 virtual desktop. The raster's width/height are set by
          main.js: the page measures the viewport and fitWithin() derives the
          largest whole raster on resize and scale changes; the black page body
