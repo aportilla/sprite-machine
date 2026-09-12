@@ -134,7 +134,8 @@ const modelExport = initModelExport();
 // folder windows and the icon layer over the desktop's field (restored
 // from the desktop state's two readers), the Text Viewer its read-mes,
 // Desktop Patterns its panel — swapped as the front application changes
-// (shell/menu-bar.js).
+// (shell/menu-bar.js); the About box's Show at startup reads and writes
+// the desktop state's greeting flag through the same services.
 const menuBar = initMenuBar(
   desktop,
   { apps: APPS, defaultApp: DEFAULT_APP },
@@ -144,6 +145,8 @@ const menuBar = initMenuBar(
     model: modelExport,
     iconPos: dstate.iconPos,
     windowPin: dstate.windowPin,
+    greet: dstate.greet,
+    setGreet: dstate.setGreet,
   }
 );
 // The menu bar clock (shell/clock.js).
@@ -233,7 +236,9 @@ if (hot) {
 // that SAVED document; any other load greets with the About box — the
 // classic launch splash (the same dialog as Sprite Machine → About…): OK it
 // — or click anywhere outside it — and the bare desktop is yours (File →
-// New… ⌃N, or a document's icon).
+// New… ⌃N, or a document's icon). The greeting is the box's own Show at
+// startup checkbox (desktop-state.js `greet`, true until unchecked): off,
+// such a load parks on the bare desktop with no box at all.
 // Three boots, in precedence order:
 //   1. DEV (?fresh or an explicit ?sample): the named sample opens as an
 //      untitled from in-memory data, storage untouched beyond a background
@@ -262,7 +267,8 @@ if (hot) {
 //      (window geometry is never restored). No param, an unknown name, a
 //      failed load, or broken storage (a private window — there's no
 //      library to name into; File → New… still makes untitled windows
-//      needing none) all fall back to the About box. A prior session's
+//      needing none) all fall back to the About box — the bare desktop,
+//      with the greeting switched off. A prior session's
 //      open windows are deliberately NOT reopened — the URL, not
 //      localStorage, says what a load shows (the icons still restore).
 async function bootDocuments() {
@@ -310,7 +316,7 @@ async function bootDocuments() {
     }
   }
 
-  menuBar.showAbout();
+  if (dstate.greet()) menuBar.showAbout();
 }
 
 bootDocuments();

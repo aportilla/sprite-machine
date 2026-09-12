@@ -11,7 +11,8 @@
 //   machine's things rather than an application's. Its handler and the
 //   shared dialogs
 //   live here: the About box (its version and date lines filled from the
-//   build facts), the storage-unavailable notice, and the `modalOpen()`
+//   build facts, its Show at startup checkbox the boot greeting's switch),
+//   the storage-unavailable notice, and the `modalOpen()`
 //   guard every handler in every application keeps (a key equivalent fires
 //   app-wide, and must not act under an open modal).
 //
@@ -89,15 +90,22 @@ import { shell, DESKTOP_PATTERNS } from '../state/shell.js';
  * @param {{apps: import('../apps/index.js').App[], defaultApp: import('../state/shell.js').AppId}} registry
  *   The applications in the bar's order, and the one whose menus the bar
  *   holds for an id no application claims.
- * @param {Omit<AppDeps, 'desktop'|'showAbout'|'showStorage'|'modalOpen'|'apps'>} services
+ * @param {Omit<AppDeps, 'desktop'|'showAbout'|'showStorage'|'modalOpen'|'apps'>
+ *   & {greet(): boolean, setGreet(on: boolean): void}} services
  *   The shell's services the applications wire to: the window manager, the
  *   3D Sprite Atlas's renderer follower (Export Sprite Atlas… renders
  *   through it), the 3D model export's subject (Export 3D Model… writes its
  *   glb through it), and the desktop state's two readers the Finder
  *   restores its furniture from (a saved icon position and a saved folder
- *   window's pin, by the item's key — desktop-state.js).
+ *   window's pin, by the item's key — desktop-state.js) — plus, for this
+ *   controller alone (no application sees them), the desktop state's
+ *   greeting flag, read and written by the About box's Show at startup.
  */
-export function initMenuBar(desktop, { apps, defaultApp }, services) {
+export function initMenuBar(
+  desktop,
+  { apps, defaultApp },
+  { greet, setGreet, ...services }
+) {
   const $ = (sel) => {
     const el = desktop.querySelector(sel);
     if (!el) throw new Error(`shell/menu-bar: missing element ${sel}`);
@@ -134,7 +142,21 @@ export function initMenuBar(desktop, { apps, defaultApp }, services) {
   const dlgStorage = $('#dlg-storage');
   $('#about-version').textContent = `version ${__APP_VERSION__}`;
   $('#about-date').textContent = __APP_DATE__;
-  const showAbout = () => dlgAbout.show();
+  // Show at startup — the greeting's switch, the desktop state's `greet`
+  // flag (checked by default: the box greets every load until it is
+  // unchecked; Sprite Machine → About… still opens it, and this same box
+  // is the way back on). It binds LIVE — written at the toggle, never
+  // committed by OK — because the splash is light-dismiss: a click-away
+  // must not silently discard the uncheck. Read again at every show, so
+  // the box always says the flag as it stands.
+  const chkGreet = $('#about-greet');
+  const showAbout = () => {
+    chkGreet.checked = greet();
+    dlgAbout.show();
+  };
+  on(chkGreet, 'vf-change', (e) =>
+    setGreet(!!(/** @type {CustomEvent} */ (e).detail.checked))
+  );
   // The storage-unavailable notice: what Save, Duplicate, New Folder and a
   // paste raise where IndexedDB is broken (a private window).
   const showStorage = () => dlgStorage.show();

@@ -72,8 +72,10 @@ Finder's **Special → Restore Default Files** stores whatever the library is
 missing, and is the only route by which an existing profile — or one whose
 owner deleted a built-in — gets it (see [Menu bar](#menu-bar)).
 
-Every load **boots to the About box** (see [The About box](#the-about-box)).
-OK it, or click outside it, and the bare desktop is yours — unless the URL
+Every load **boots to the About box** (see [The About box](#the-about-box))
+while its **Show at startup** checkbox is checked, as it is until unchecked —
+off, such a load lands on the bare desktop, no box. OK it, or click outside
+it, and the bare desktop is yours — unless the URL
 names a saved document (**`?file=Cube`**, or the bare fragment **`#Cube`**;
 case-insensitive, most-recently-modified on a collision), which opens that
 file on its remembered edited face. A prior session's open windows
@@ -821,8 +823,9 @@ from the desktop's current one; **clicking** a cell selects it — the well
 previews it and a ring marks the cell (1px black over the edge, 1px white
 inside, so it reads on `black` and `white` alike) — while the desktop stays as
 it was; only **Set Desktop Pattern** commits, through the shell slice's one
-setter, and the close box discards a selection never set. The pattern is the
-**one desktop setting that persists** (`?fresh=1` boots the dither), restored
+setter, and the close box discards a selection never set. The pattern is one
+of the **two desktop settings that persist** (the other the About box's
+**Show at startup**; `?fresh=1` boots the dither), restored
 before the desktop's first render, a corrupt value ignored through the kit's
 own `parsePattern`. The window is a fixed-size `vf-window` (no grow box, no
 zoom box; its body a `vf-stack pad="12"`, since a window body carries no inset
@@ -1121,6 +1124,20 @@ outside click, and every question dialog here still does — a stray click must
 never answer "Save changes?". The kit consumes the click, so nothing beneath
 reacts.
 
+A **Show at startup** checkbox shares the button row, at OK's left and
+centered on its face, **checked on a new profile**: the box greets every load
+while it is, and unchecking it leaves the next loads on the bare desktop —
+**Sprite Machine → About…** still opens the box, and its checkbox there is
+the way back on; there is no Preferences. It **binds live, never on OK**:
+the splash is light-dismiss, and a click-away must not silently discard the
+uncheck, so the toggle writes the flag at once (the desktop state's `greet`,
+beside the pattern; a blob from before it reads checked, so every profile
+keeps its greeting until it says otherwise). The label is System 7's
+checkbox grammar — sentence case, like the Views control panel's "Calculate
+folder sizes", where menu items and buttons take title case — and positive:
+checked is showing, never a "Don't show this again" whose on state is an
+absence.
+
 The application's **32×32 icon** sits beside three lines — **Sprite Machine**,
 **version N** with the date beside it, and **created by Adam Portilla** — over
 a two-paragraph blurb whose **Vintage Frames** is a real link to the kit's
@@ -1234,7 +1251,8 @@ corner stays there, and the same no-clamp reversibility means a
 shrink-then-grow round-trips every icon exactly home.
 
 Icon layout, the **folder windows' pins**, the open SAVED documents' edited
-faces (and which was active) and the **desktop pattern** persist in one
+faces (and which was active), the **desktop pattern** and the About box's
+**Show at startup** (`greet`; absent reads checked) persist in one
 versioned localStorage key (`shell/desktop-state.js`, v3 — a v1 or v2 blob
 migrates shallowly, the window geometry those versions persisted simply
 dropped), beside the **`seeded` flag**, snapshotted on change/exit. **No

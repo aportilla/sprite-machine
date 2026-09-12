@@ -158,7 +158,12 @@
            corner at 172 — 16 + [40 header (a 16px display line over two
            12px body lines, beside the 32px icon) + 8 + two 2-line paragraphs
            at 12px body lines with 16 between (64)] + 16 + the ringed 28px
-           default button + 16. -->
+           default button + 16. The greeting's switch — Show at startup —
+           shares the button row at the left, its box centered on OK's 20px
+           face (the ring's 4px inside 172 puts the face at 148–168, so
+           158), and it binds LIVE, never on OK: the splash is light-dismiss,
+           and a click-away must not discard an uncheck (shell/menu-bar.js;
+           the flag is the desktop state's `greet`). -->
       <vf-dialog
         id="dlg-about"
         frame="plain"
@@ -197,6 +202,9 @@
             </vf-paragraph>
           </vf-stack>
         </vf-stack>
+        <vf-checkbox id="about-greet" origin="center left" left="16" top="158"
+          >Show at startup</vf-checkbox
+        >
         <vf-button-group origin="bottom right" left="438" top="172">
           <vf-button id="btn-about-ok" variant="default">OK</vf-button>
         </vf-button-group>

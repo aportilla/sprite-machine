@@ -8,7 +8,9 @@
 // face (untitled windows are deliberately absent — no autosave, explicit
 // Save is the contract) plus which document was active, and the DESKTOP PATTERN
 // (the Desktop Patterns panel's setting — System 7 kept it in the System
-// file; here it's the one desktop setting that persists) — and the SEEDED
+// file; here one of the two desktop settings that persist), the GREET flag
+// (the other: whether a load with no document to open greets with the
+// About box — the box's own Show at startup checkbox) — and the SEEDED
 // flag: whether the profile's first-ever boot has stored the built-in
 // defaults (Car, Cube). An older v3 blob may still carry the retired
 // `showGrid` flag (it parses fine and drops on the next write) or lack
@@ -34,6 +36,17 @@
 // arrived after the documents' flag was already true on every profile: a
 // blob without it reads unseeded, so an existing profile gets the read-me
 // files on its next boot, once.
+//
+// THE GREET FLAG (Sep 12 2026) is the About box's Show at startup — the
+// one preference the app has, and the splash's own checkbox its only
+// control: unchecked, a load the URL gives no document parks on the bare
+// desktop instead of the box (main.js bootDocuments), and Sprite Machine →
+// About… still opens it, the same checkbox there the way back on. A blob
+// without it reads TRUE — the greeting is the default, and every profile
+// from before the flag keeps it — so only a stated false silences the
+// splash. Written at once on the toggle, like the seeding records: the
+// box is light-dismiss, and a click-away right after the uncheck must
+// still find it recorded.
 //
 // AN APPLICATION WINDOW'S GEOMETRY IS NOT HERE — not the windoids', not the
 // document windows'. A browser is resized and reopened on another monitor
@@ -140,6 +153,8 @@ export function createDesktopState(fresh) {
   let seeded = saved?.seeded === true;
   // The text files' record (header), on the same terms.
   let seededTexts = saved?.seededTexts === true;
+  // The greeting's switch (header): true unless a blob states false.
+  let greet = saved?.greet !== false;
   /** The synchronous writer, once start() has wired one. */
   let writeNow = () => {};
 
@@ -163,6 +178,17 @@ export function createDesktopState(fresh) {
     /** Record that it has — markSeeded's terms. */
     markSeededTexts() {
       seededTexts = true;
+      writeNow();
+    },
+
+    /** Does a load with no document to open greet with the About box? */
+    greet: () => greet,
+
+    /** The About box's Show at startup — written at once, the seeding
+     *  records' terms.
+     *  @param {boolean} on */
+    setGreet(on) {
+      greet = !!on;
       writeNow();
     },
 
@@ -246,6 +272,7 @@ export function createDesktopState(fresh) {
           pattern: shell.get().desktopPattern,
           seeded,
           seededTexts,
+          greet,
         };
       }
 
