@@ -1,13 +1,4 @@
-// ---------------------------------------------------------------------------
-// Small shared color helpers (pure — no DOM, no THREE). The editor palette build
-// (constants.js) and the Colors dialog's form + name lookup (sm-color-picker.js)
-// funnel through these so the parse/key logic lives in exactly one place.
-//
-// NOTE: rgbKey is a 24-bit BIG-endian RGB key (0xRRGGBB) for Set/Map dedup of
-// OPAQUE colors — deliberately distinct from ingest.js's canonical little-endian
-// packRGBA (which carries alpha and drives the render pipeline). This one only
-// ever identifies "which color", never round-trips to bytes.
-// ---------------------------------------------------------------------------
+// Color helpers shared by the palettes and the Colors dialog.
 
 /**
  * Parse a `#rrggbb` string into {r,g,b} bytes.
@@ -23,7 +14,7 @@ export function hexToRgb(css) {
 }
 
 /**
- * Format {r,g,b} bytes as a `#rrggbb` string — hexToRgb's inverse.
+ * Format {r,g,b} bytes as a `#rrggbb` string.
  * @param {{r:number,g:number,b:number}} c
  * @returns {string}
  */
@@ -31,11 +22,8 @@ export const rgbToHex = ({ r, g, b }) =>
   `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 
 /**
- * Normalize a hand-typed hex color to canonical `#rrggbb`, or null if the text
- * isn't one. Accepts an optional leading `#`, 3- or 6-digit forms, any case,
- * and surrounding whitespace; everything else — the empty string, a bare `#`,
- * wrong lengths, non-hex characters — is null (the Colors dialog disables OK
- * on it).
+ * Normalize typed hex to `#rrggbb`, or null if it isn't valid. Accepts an
+ * optional `#`, 3 or 6 digits, any case and surrounding whitespace.
  * @param {string} text
  * @returns {string|null}
  */

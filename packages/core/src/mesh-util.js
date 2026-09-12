@@ -1,22 +1,13 @@
-// ---------------------------------------------------------------------------
-// Shared helpers for the wedge mesh builder (wedge-mesh.js), and the ONE place
-// THREE meets the skin: the texture the pure bake (skin.js) becomes, and the
-// framing + material the builder finishes with. (The plain voxel builder that
-// once shared them, mesh.js, went with the test trim of Sep 5 2026 — dead
-// code with no consumer; the vertex-color linearizer went with the skin on
-// Sep 7 2026 — the GPU's sampler decodes sRGB now, where the CPU used to.)
-// ---------------------------------------------------------------------------
+// Mesh helpers for wedge-mesh.js: the skin as a THREE texture, and the final
+// framing and material.
 
 import * as THREE from 'three';
 import { unpackRGBA } from './ingest.js';
 
 /**
- * The skin as a texture. DataTexture's constructor already states the skin's
- * sampling contract — nearest filtering both ways, no mipmaps, flipY false
- * (texel row 0 is v = 0, the bake's orientation), unpackAlignment 1 — those
- * are the class's own defaults, named here as documentation, never restated
- * as a correction. The bytes are sRGB, so the texture says so and the
- * sampler decodes them on the way to the renderers' sRGB output.
+ * The skin as a DataTexture. The class defaults match the bake: nearest
+ * filtering, no mipmaps, and flipY false so texel row 0 is v = 0. The bytes
+ * are sRGB.
  * @param {import('./skin.js').Skin} skin
  * @returns {THREE.DataTexture}
  */
@@ -28,12 +19,10 @@ export function skinTexture(skin) {
 }
 
 /**
- * Shared final assembly: center the geometry on X/Z, leave Y exactly as
- * authored (no ground-rest — the Y translate is a hard 0; where the object
- * sits vertically is wherever the artist painted it, see carve.js), compute
- * bounds, and wrap it in the standard flat-shaded material with shadows on —
- * the skin as its `map`, or, with no map (flat mode), one packed `color`
- * (sRGB bytes) as its albedo.
+ * Final assembly: center the geometry on X and Z, leave Y as authored (see
+ * carve.js), compute bounds, and wrap it in a flat-shaded material with
+ * shadows on. The material takes the skin as `map`, or with no map a packed
+ * sRGB `color`.
  * @param {THREE.BufferGeometry} geo
  * @param {{nx:number, nz:number, s:number, map?:THREE.Texture|null, color?:number|null,
  *          userData?:Record<string,unknown>}} opts
@@ -43,7 +32,7 @@ export function finishVoxelMesh(
   geo,
   { nx, nz, s, map = null, color = null, userData = {} }
 ) {
-  geo.translate((-nx * s) / 2, 0, (-nz * s) / 2); // center X/Z; Y left as authored
+  geo.translate((-nx * s) / 2, 0, (-nz * s) / 2);
   geo.computeBoundingBox();
   geo.computeBoundingSphere();
 

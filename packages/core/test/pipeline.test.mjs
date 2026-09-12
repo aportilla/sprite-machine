@@ -1,7 +1,3 @@
-// Node-runnable correctness tests for the pure voxel pipeline (no THREE/DOM):
-// the visual-hull carve and its strict-registration rules, depth-aware
-// coloring, greedy meshing's area conservation, and the projection conventions.
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -13,12 +9,10 @@ import { VIEWS } from '../src/views.js';
 import { C, img, fill } from './helpers.mjs';
 
 const pk = (name) => packRGBA(...C[name], 255);
-// face index: px0 nx1 py2 ny3 pz4 nz5
 const F = { px: 0, nx: 1, py: 2, ny: 3, pz: 4, nz: 5 };
 const colorOf = (r, x, y, z, face) =>
   r.faceColor.get(voxIndex(x, y, z, r.dims) * 6 + F[face]);
 
-// --- 1. Solid cube (the reference demo) -------------------------------------
 test('solid cube: top=teal, +x=tan, +z=magenta, mirrored -x=tan', () => {
   const r = buildVoxels(
     { front: fill(3, 3, 'M'), right: fill(3, 3, 'N'), top: fill(3, 3, 'T') },
@@ -26,91 +20,73 @@ test('solid cube: top=teal, +x=tan, +z=magenta, mirrored -x=tan', () => {
   );
   assert.deepEqual(r.dims, { nx: 3, ny: 3, nz: 3 });
   assert.equal(r.solidCount, 27);
-  assert.equal(colorOf(r, 1, 2, 1, 'py'), pk('T')); // top face teal
-  assert.equal(colorOf(r, 2, 1, 1, 'px'), pk('N')); // +x face tan (mirror of right)
-  assert.equal(colorOf(r, 1, 1, 2, 'pz'), pk('M')); // +z face magenta
-  assert.equal(colorOf(r, 0, 1, 1, 'nx'), pk('N')); // -x face tan (from the right tile)
+  assert.equal(colorOf(r, 1, 2, 1, 'py'), pk('T'));
+  assert.equal(colorOf(r, 2, 1, 1, 'px'), pk('N')); // mirrored from right
+  assert.equal(colorOf(r, 1, 1, 2, 'pz'), pk('M'));
+  assert.equal(colorOf(r, 0, 1, 1, 'nx'), pk('N')); // from right
 });
 
-// --- 2. Non-cube slab: depth comes from the SIDE width ----------------------
+// Depth comes from the side view's width.
 test('2x1x1 slab: independent axis resolutions', () => {
   const r = buildVoxels({ front: fill(2, 1, 'M'), right: fill(1, 1, 'N') });
   assert.deepEqual(r.dims, { nx: 2, ny: 1, nz: 1 });
   assert.equal(r.solidCount, 2);
 });
 
-// --- 3. Depth-smear regression (the critical one) ---------------------------
-// A gap in Z (via the top view) makes two blocks share one front column.
-// The naive rule paints BOTH with the front pixel; the depth-aware rule paints
-// only the front-most, and the occluded one must NOT be front's color.
+// A gap in z makes two blocks share one front column. Only the front-most block
+// takes the front color.
 test('L-step: occluded +z face is not smeared with the front color', () => {
   const r = buildVoxels(
     {
-      front: fill(1, 1, 'R'), // nx=1, ny=1, front-most colored RED
+      front: fill(1, 1, 'R'), // nx=1, ny=1
       right: fill(3, 1, 'B'), // nz=3
-      // top image is nx(1) x nz(3); rows top->bottom map to z=2,1,0.
-      top: img(['G', '.', 'T']), // solid z=2 (green) & z=0 (teal), gap z=1
+      // Top rows map to z=2,1,0.
+      top: img(['G', '.', 'T']), // solid at z=2 and z=0, gap at z=1
     },
     { mirror: { x: true, y: false, z: false } }
   );
   assert.deepEqual(r.dims, { nx: 1, ny: 1, nz: 3 });
-  // gap carved out at z=1:
   assert.equal(r.solid[voxIndex(0, 0, 1, r.dims)], 0);
   assert.equal(r.solid[voxIndex(0, 0, 0, r.dims)], 1);
   assert.equal(r.solid[voxIndex(0, 0, 2, r.dims)], 1);
-  // front-most block gets front color; occluded block must NOT.
   assert.equal(colorOf(r, 0, 0, 2, 'pz'), pk('R'));
   assert.notEqual(colorOf(r, 0, 0, 0, 'pz'), pk('R'));
   assert.equal(colorOf(r, 0, 0, 2, 'py'), pk('G')); // top of front block
 });
 
-// --- 3b. Opposite-view registration slip must not erode a protrusion --------
-// A car's side mirror sticks out on the outer column (x=0,2). The TOP sprite
-// draws it one row back from where the BOTTOM sprite does (a 1-texel hand-draw
-// slip). Both views constrain the X-Z plane; a naive AND of the pair leaves an
-// empty intersection on the outer columns and deletes the mirror. Carving must
-// UNION opposite views per plane, keeping the protrusion the artist drew.
+// Top and bottom draw an outer-column protrusion one row apart. Carving unions
+// opposite views per plane, so both rows stay solid.
 test('opposite views: 1-texel top/bottom slip does not erase a protrusion', () => {
   const r = buildVoxels(
     {
-      front: fill(3, 1, 'M'), // nx=3, ny=1 — every column allowed by front/right
+      front: fill(3, 1, 'M'), // nx=3, ny=1
       right: fill(3, 1, 'N'), // nz=3
-      // top & bottom both map v->z as z=2,1,0 (bottom also mirrors x, but these
-      // tiles are x-symmetric): top's full row is at z=2, bottom's at z=1.
+      // Both map rows to z=2,1,0. Bottom mirrors x, but these tiles are x-symmetric.
       top: img(['TTT', '.T.', '.T.']), // outer cols (x=0,2) protrude at z=2
-      bottom: img(['.T.', 'TTT', '.T.']), // ...but bottom puts them at z=1
+      bottom: img(['.T.', 'TTT', '.T.']), // outer cols protrude at z=1
     },
     { mirror: { x: false, y: false, z: false } }
   );
   assert.deepEqual(r.dims, { nx: 3, ny: 1, nz: 3 });
-  // Union per plane keeps BOTH the top-drawn (z=2) and bottom-drawn (z=1) outer
-  // voxels; the old AND-every-view carve would have deleted both.
   assert.equal(r.solid[voxIndex(0, 0, 2, r.dims)], 1); // top's protrusion row
   assert.equal(r.solid[voxIndex(2, 0, 2, r.dims)], 1);
   assert.equal(r.solid[voxIndex(0, 0, 1, r.dims)], 1); // bottom's protrusion row
   assert.equal(r.solid[voxIndex(2, 0, 1, r.dims)], 1);
-  // Union is not a free-for-all: where NEITHER opposite view covers the outer
-  // column (z=0) it stays carved out.
+  // Neither view covers the outer columns at z=0.
   assert.equal(r.solid[voxIndex(0, 0, 0, r.dims)], 0);
   assert.equal(r.solid[voxIndex(2, 0, 0, r.dims)], 0);
-  // The body column (x=1) is solid the full depth.
   for (let z = 0; z < 3; z++) assert.equal(r.solid[voxIndex(1, 0, z, r.dims)], 1);
 });
 
-// --- 4. Asymmetric sides, mirror OFF: each side keeps its own art -----------
 test('asymmetric sides are not fabricated when mirror is off', () => {
   const r = buildVoxels(
     { front: fill(1, 1, 'R'), right: fill(1, 1, 'N'), left: fill(1, 1, 'M') },
     { mirror: { x: false, y: false, z: false } }
   );
-  assert.equal(colorOf(r, 0, 0, 0, 'px'), pk('M')); // +x from left (reads as left profile)
-  assert.equal(colorOf(r, 0, 0, 0, 'nx'), pk('N')); // -x from right (its own art)
+  assert.equal(colorOf(r, 0, 0, 0, 'px'), pk('M')); // +x from left
+  assert.equal(colorOf(r, 0, 0, 0, 'nx'), pk('N')); // -x from right
 });
 
-// --- 5. Every surface face is colored: a phantom block and a chunky truck ----
-// A diagonal-cross top over-approximates into phantom blocks (the convex hull's
-// trap); the truck is a coherent 3-face silhouette. Either way every exposed
-// face must carry a color.
 function assertSurfaceColored(r) {
   for (let idx = 0; idx < r.surfaceMask.length; idx++) {
     const m = r.surfaceMask[idx];
@@ -128,13 +104,13 @@ test('phantom block and 3-face chunky object: every surface face is colored', ()
   const phantom = buildVoxels({
     front: fill(3, 3, 'M'),
     right: fill(3, 3, 'N'),
-    top: img(['T.T', '.T.', 'T.T']), // diagonal cross
+    top: img(['T.T', '.T.', 'T.T']), // diagonal cross: yields phantom blocks
   });
   assert.ok(phantom.solidCount > 0);
   assertSurfaceColored(phantom);
 
   const truck = buildVoxels({
-    front: img(['.MM.', 'MMMM', 'MNNM']), // cab-ish silhouette
+    front: img(['.MM.', 'MMMM', 'MNNM']),
     right: img(['..BB..', 'BBBBBB', 'BBBBBB']),
     top: fill(4, 6, 'N'),
   });
@@ -143,52 +119,41 @@ test('phantom block and 3-face chunky object: every surface face is colored', ()
   assertSurfaceColored(truck);
 });
 
-// --- 6. Strict registration: tile padding is significant (no auto-crop) ------
-// A pixel's position inside its tile IS its position in the object, so a padded
-// view is NOT normalized away — the padding changes the geometry.
+// A pixel's position in its tile is its position in the object.
 test('strict registration: tile padding is preserved (not auto-cropped)', () => {
   const base = buildVoxels({ front: fill(2, 2, 'M'), right: fill(2, 2, 'N') });
   assert.deepEqual(base.dims, { nx: 2, ny: 2, nz: 2 });
-  // A 4x4 right with its 2x2 of pixels in the middle is a 4-wide, 4-tall view.
   const paddedRight = img(['....', '.NN.', '.NN.', '....']);
   const padded = buildVoxels({ front: fill(2, 2, 'M'), right: paddedRight });
-  // No crop: the padding grows the depth (nz) and height (ny) axes...
+  // The padding grows nz and ny.
   assert.deepEqual(padded.dims, { nx: 2, ny: 4, nz: 4 });
-  // ...and the resulting size mismatch on Y (front 2 vs right 4) is surfaced.
+  // Front (2) and right (4) disagree on Y.
   assert.ok(padded.warnings.some((w) => /disagree on Y/i.test(w)));
 });
 
-// --- 6b. Strict registration: identity placement, no auto ground-rest --------
-// The old pipeline bottom-anchored every view so content rested on y=0. Strict
-// registration keeps a pixel at the row the artist drew it: paint high in the
-// tile and the solid sits high (it floats — ground contact is the artist's job).
 test('strict registration: mid-tile Y is preserved (no bottom-anchor)', () => {
   const r = buildVoxels(
     {
-      front: img(['MM', '..', '..']), // content only in the TOP row -> world y=2
-      right: fill(1, 3, 'N'), // full-height side, same 3 rows -> Y agrees
+      front: img(['MM', '..', '..']), // top row only -> world y=2
+      right: fill(1, 3, 'N'), // full height, so Y agrees
     },
     { mirror: { x: false, y: false, z: false } }
   );
   assert.deepEqual(r.dims, { nx: 2, ny: 3, nz: 1 });
-  assert.equal(r.warnings.length, 0); // uniform Y (both 3 tall): no disagreement
-  // Top image row is world y = ny-1 = 2; that is where the solid lands...
+  assert.equal(r.warnings.length, 0);
+  // The top image row is world y = ny-1 = 2.
   assert.equal(r.solid[voxIndex(0, 2, 0, r.dims)], 1);
   assert.equal(r.solid[voxIndex(1, 2, 0, r.dims)], 1);
-  // ...NOT dropped to the ground (y=0,1 empty — the old bottom-anchor put it here).
   assert.equal(r.solid[voxIndex(0, 0, 0, r.dims)], 0);
   assert.equal(r.solid[voxIndex(0, 1, 0, r.dims)], 0);
   assert.equal(r.solidCount, 2);
 });
 
-// --- 6c. Strict registration: a narrower view anchors at the origin ----------
-// A wider TOP and a narrower FRONT disagree on X. The front is placed from the
-// origin (left), NOT centered, so it constrains the leftmost columns and warns.
 test('strict registration: a narrower view anchors at the origin (not centered)', () => {
   const r = buildVoxels({ front: fill(2, 1, 'M'), top: fill(4, 1, 'N') });
   assert.deepEqual(r.dims, { nx: 4, ny: 1, nz: 1 });
   assert.ok(r.warnings.some((w) => /disagree on X/i.test(w)));
-  // front (width 2) sits at x=0,1 (origin) -> those columns solid, x=2,3 carved.
+  // front (width 2) covers x=0,1
   assert.equal(r.solid[voxIndex(0, 0, 0, r.dims)], 1);
   assert.equal(r.solid[voxIndex(1, 0, 0, r.dims)], 1);
   assert.equal(r.solid[voxIndex(2, 0, 0, r.dims)], 0);
@@ -196,29 +161,27 @@ test('strict registration: a narrower view anchors at the origin (not centered)'
   assert.equal(r.solidCount, 2);
 });
 
-// --- 6d. Strict registration: the core contract — pixels must align ----------
-// A FRONT pixel at (col cx, row ry) only becomes a voxel where the TOP covers
-// column cx AND the SIDE covers row ry. Aligned pixels survive; misaligned carve.
+// A front pixel at (cx, ry) survives only where the top covers column cx and the
+// side covers row ry.
 test('strict registration: unmatched front pixels carve away', () => {
   const r = buildVoxels(
     {
-      // 3x3x3. front paints (x=2 at v=0 -> y=2) and (x=0 at v=2 -> y=0).
+      // front paints (x=2, y=2) and (x=0, y=0)
       front: img(['..M', '...', 'M..']),
-      top: img(['T..', 'T..', 'T..']), // covers only column x=0 (all z)
-      right: img(['...', '...', 'NNN']), // covers only row y=0 (bottom image row)
+      top: img(['T..', 'T..', 'T..']), // column x=0 only
+      right: img(['...', '...', 'NNN']), // row y=0 only
     },
     { mirror: { x: false, y: false, z: false } }
   );
   assert.deepEqual(r.dims, { nx: 3, ny: 3, nz: 3 });
-  // (x=0,y=0): top covers col 0 AND side covers row y=0 -> survives at some z.
+  // (x=0, y=0) is covered by both views, so it survives at some z.
   let survive = 0;
   for (let z = 0; z < 3; z++) survive += r.solid[voxIndex(0, 0, z, r.dims)];
   assert.ok(survive > 0, 'aligned pixel (x=0,y=0) should survive');
-  // (x=2,y=2): top has no column 2 -> fully carved regardless of the side.
+  // (x=2, y=2): the top has no column 2.
   for (let z = 0; z < 3; z++) assert.equal(r.solid[voxIndex(2, 2, z, r.dims)], 0);
 });
 
-// --- the regions: conservation (no holes/overlaps) + reduction ---------------
 function exposedFaceCount(r) {
   let n = 0;
   for (let i = 0; i < r.surfaceMask.length; i++) {
@@ -244,7 +207,7 @@ test('the regions cover the surface exactly: every exposed face in one region, n
     const regions = faceRegions(r.dims, r.surfaceMask, r.faceColor);
     let covered = 0;
     for (const g of regions) for (const p of g.present) covered += p;
-    assert.equal(covered, exposed); // the regions' cells are the exposed faces, once each
+    assert.equal(covered, exposed);
     assert.ok(regions.length <= exposed);
   }
 });
@@ -260,9 +223,6 @@ test('a solid cube is six regions, a quad each (12 tris)', () => {
 });
 
 test('the regions form on occupancy alone: a two-color wall is one region', () => {
-  // A 4×4 front painted in two colors over a full side and top. The color-
-  // aware merge gave two +z rects (one per band); on occupancy the wall is
-  // one 4×4 region — the paint is the skin's business (skin.test.mjs).
   const r = buildVoxels({
     front: img(['RRRR', 'RRRR', 'BBBB', 'BBBB']),
     right: fill(4, 4, 'T'),
@@ -278,24 +238,21 @@ test('the regions form on occupancy alone: a two-color wall is one region', () =
   );
 });
 
-// --- 7. Projection conventions pinned (docs/code can't silently drift) -------
 test('projection conventions: the object front pins to TOP/BOTTOM’s top row and LEFT’s left column', () => {
   const d = { nx: 4, ny: 3, nz: 5 };
-  // front is +z (z = nz-1). TOP and BOTTOM both put it on the top row (v=0) —
-  // BOTTOM is the sideways (left/right) flip of TOP, not end-over-end.
+  // The front is +z (z = nz-1). Top and bottom both put it on row v=0.
   assert.equal(VIEWS.top.project(0, 0, d.nz - 1, d).v, 0);
   assert.equal(VIEWS.top.project(0, 0, 0, d).v, d.nz - 1);
-  assert.equal(VIEWS.bottom.project(0, 0, d.nz - 1, d).v, 0); // front -> top row too
+  assert.equal(VIEWS.bottom.project(0, 0, d.nz - 1, d).v, 0);
   assert.equal(VIEWS.bottom.project(0, 0, 0, d).v, d.nz - 1);
-  // ...and BOTTOM mirrors X vs TOP (sideways flip): x=0 -> right column.
+  // Bottom mirrors x: x=0 is its right column.
   assert.equal(VIEWS.top.project(0, 0, 0, d).u, 0);
   assert.equal(VIEWS.bottom.project(0, 0, 0, d).u, d.nx - 1);
-  // LEFT: the object front is the left image column, the back the right one.
+  // Left: the front is the left image column.
   assert.equal(VIEWS.left.project(0, 0, d.nz - 1, d).u, 0);
   assert.equal(VIEWS.left.project(0, 0, 0, d).u, d.nz - 1);
 });
 
-// --- 8. Zero-view edge case: a single solid voxel, with a clear warning ------
 test('buildVoxels with no views yields one voxel and warns', () => {
   const r = buildVoxels({});
   assert.deepEqual(r.dims, { nx: 1, ny: 1, nz: 1 });

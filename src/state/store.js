@@ -1,20 +1,11 @@
-// ---------------------------------------------------------------------------
-// The whole state mechanism: a hand-rolled observable store. ~30 lines, zero
-// dependencies, pure JS — so every slice built on it gets direct Node tests.
+// A minimal observable store. Every slice is built on it.
 //
-// Semantics the slices rely on:
-//   - `get()` returns the CURRENT snapshot object; a patch replaces the object
-//     (spread), so `Object.is` on the snapshot is a valid "did anything change"
-//     check for subscribers.
-//   - `patch()` is a no-op (no new object, no notification) when every key is
-//     `Object.is`-equal to what's already there — callers can patch freely
-//     without generating phantom change events.
-//   - Values are held BY REFERENCE, never cloned: pixel buffers (`views`,
-//     `atlasImage`) keep their identity, which downstream code depends on.
-//   - Notification is synchronous and coarse-grained (whole slice): the
-//     subscribers are a handful of small lit templates and a rebuilder, and
-//     re-render is a cheap diff. No per-key selectors until measured to matter.
-// ---------------------------------------------------------------------------
+// - get() returns the current snapshot. patch() replaces the object, so
+//   Object.is on two snapshots detects a change.
+// - patch() does nothing when every key is Object.is-equal to the current value.
+// - Values are held by reference and never cloned. Pixel buffers keep their
+//   identity.
+// - Notification is synchronous and covers the whole slice.
 
 /**
  * @template {object} S

@@ -1,15 +1,6 @@
-// ---------------------------------------------------------------------------
-// Whole-app drag & drop for sprite sheets, plus the drop overlay. A plain
-// module (there is nothing componenty here — the listeners live on <body>, so
-// a drop lands anywhere on the desktop). A depth counter keeps the overlay
-// stable as the drag crosses child elements (dragenter/leave bubble from
-// every descendant); the overlay's visibility is a CSS rule off
-// `body.app-drag`, so this stays a classList toggle. The overlay renders into
-// the PAGE's light DOM, so its styles live with the page's share in
-// style.css. Dropped files route to the loaders — and a dropped PNG that IS
-// an exported document restores its name and transforms from its chunks
-// (loaders.loadFile).
-// ---------------------------------------------------------------------------
+// Whole-page drag and drop for sprite sheets, plus the drop overlay. A depth
+// counter keeps the overlay steady while dragenter and dragleave bubble from
+// descendants. body.app-drag shows the overlay (style.css).
 
 import { html, render } from 'lit';
 import { loadFile } from './loaders.js';
@@ -19,16 +10,13 @@ const dragHasFiles = (e) =>
   !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
 
 /**
- * @param {{onLoaded?: (ctx: object) => void}} [opts]  onLoaded fires with
- *   the context a drop actually opened — main.js points it at the Sprite
- *   Editor's showDocument, so the new document window surfaces (and
- *   brings the application forward) even on a drop onto the bare desktop.
+ * @param {{onLoaded?: (ctx: object) => void}} [opts]  onLoaded receives the
+ *   context a drop opened.
  */
 export function initDropTarget({ onLoaded } = {}) {
   const body = document.body;
 
-  // The overlay never changes — render it once into a stable mount (reused
-  // across HMR re-executions rather than stacked).
+  // Render once into a mount that is reused across HMR re-runs.
   let mount = document.getElementById('drop-overlay-mount');
   if (!mount) {
     mount = document.createElement('div');

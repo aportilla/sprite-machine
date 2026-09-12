@@ -1,7 +1,3 @@
-// Node-runnable tests for the PNG chunk surgery the document format rides on:
-// chunk round-trip, CRC validity, splice position (after IHDR, before IDAT),
-// replace semantics, unknown-chunk passthrough, and the error paths.
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -14,10 +10,7 @@ import {
   setTextChunks,
 } from '../src/png-chunks.js';
 
-// --- fixture: a tiny synthetic PNG ------------------------------------------
-// Chunks hand-assembled here (not via the module under test) so the suite
-// starts from an independent byte layout; CRCs come from the module's crc32,
-// which is itself pinned against a published reference value below.
+// Fixture: a tiny PNG assembled by hand, independent of setTextChunks.
 
 function chunk(type, data) {
   const out = new Uint8Array(8 + data.length + 4);
@@ -41,20 +34,17 @@ function concat(...arrays) {
   return out;
 }
 
-// A plausible IHDR (1×1, 8-bit RGBA) — the parser never inspects it, but a
-// real-shaped one keeps the fixture honest.
+// 1×1, 8-bit RGBA.
 const IHDR = chunk('IHDR', Uint8Array.of(0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0));
 const IDAT = chunk('IDAT', Uint8Array.of(1, 2, 3, 4, 5));
 const IEND = chunk('IEND', new Uint8Array(0));
-// An unknown ancillary chunk sitting between IHDR and IDAT, to prove passthrough.
+// An unknown ancillary chunk between IHDR and IDAT.
 const PRIV = chunk('prVt', Uint8Array.of(9, 9, 9));
 
 const BASE = concat(PNG_SIGNATURE, IHDR, PRIV, IDAT, IEND);
 
 const types = (bytes) => readChunks(bytes).map((c) => c.type);
 
-// The CRC of the 4 ASCII bytes "IEND" is a published PNG-spec constant — pins
-// the table/polynomial against an external reference, not our own output.
 test('crc32 matches the published IEND reference value', () => {
   assert.equal(crc32(new TextEncoder().encode('IEND')), 0xae426082);
 });
@@ -71,8 +61,7 @@ test('readChunks walks the list with verbatim offsets', () => {
     chunks.map((c) => c.type),
     ['IHDR', 'prVt', 'IDAT', 'IEND']
   );
-  // offset/end really do bracket the whole chunk: reassembling from them
-  // reproduces the file.
+  // offset..end spans the whole chunk, so reassembling reproduces the file.
   const rebuilt = concat(
     PNG_SIGNATURE,
     ...chunks.map((c) => BASE.subarray(c.offset, c.end))
@@ -95,8 +84,7 @@ test('text chunks round-trip (ASCII → tEXt) and land after IHDR', () => {
     Title: 'Cargo Ship',
     Software: 'sprite-machine 0.1.0',
   });
-  // Splice position: both text chunks sit between IHDR and the first IDAT
-  // (before even the unknown chunk that was already there), in entry order.
+  // Text chunks go directly after IHDR, in entry order.
   assert.deepEqual(types(out), ['IHDR', 'tEXt', 'tEXt', 'prVt', 'IDAT', 'IEND']);
 });
 
@@ -111,7 +99,7 @@ test('setTextChunks replaces an existing keyword instead of duplicating it, swit
   const once = setTextChunks(BASE, { Title: 'First', Software: 'sm' });
   const twice = setTextChunks(once, { Title: 'Second' });
   assert.deepEqual(readTextChunks(twice), { Title: 'Second', Software: 'sm' });
-  // Still exactly one Title chunk; the untouched Software chunk survives.
+  // One Title chunk, and Software is kept.
   assert.deepEqual(types(twice), ['IHDR', 'tEXt', 'tEXt', 'prVt', 'IDAT', 'IEND']);
   // A replace can switch encodings (tEXt → iTXt and back).
   const a = setTextChunks(BASE, { Title: 'plain' });

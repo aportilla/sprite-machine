@@ -1,30 +1,20 @@
-// ---------------------------------------------------------------------------
-// URL-param parsing → one typed boot object. Pure (string in, object out), so
-// it stays Node-testable. ?file (or a bare #fragment) is the one USER-FACING
-// param — the saved document a load should open instead of greeting with the
-// About box. The rest are dev hooks main.js applies: ?sample, ?edit and
-// ?fresh put a known document on screen from a clean profile (what
-// tools/capture.sh shoots), and ?flat / ?diag / ?cam are the mesh and camera
-// debug flags.
-// ---------------------------------------------------------------------------
+// Parses URL params into the boot options. Pure (no DOM).
+// ?file=<name> or #<name> opens a saved document. ?sample, ?edit and ?fresh
+// put a known document on screen from a clean profile (tools/capture.sh).
+// ?flat, ?diag and ?cam are mesh and camera debug flags.
 
 import { VIEW_NAMES } from 'sprite-machine';
 
 /**
  * @param {string} search  location.search (with or without the leading '?')
- * @param {{sampleNames?: string[], hash?: string}} [opts]  the sample names,
- *   injected — the sample module itself imports a PNG asset, which only Vite
- *   can load, and this parser must stay Node-runnable — plus location.hash
- *   (the `#Cube` shorthand for ?file=Cube).
+ * @param {{sampleNames?: string[], hash?: string}} [opts]  sampleNames is
+ *   injected because the samples module imports a PNG only Vite can load.
+ *   hash is location.hash.
  */
 export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
   const params = new URLSearchParams(search);
 
-  // ?file=<name> — or a bare #<name> fragment — asks the boot to open that
-  // SAVED document instead of greeting with the About box. This just
-  // carries the requested name; main.js resolves it against the refreshed
-  // library listing (case-insensitive) and falls back to the About box
-  // when nothing matches. ?file wins when both forms are given.
+  // ?file wins over the hash.
   let file = (params.get('file') ?? '').trim();
   if (!file && hash) {
     const frag = hash.replace(/^#/, '');
@@ -35,9 +25,7 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
     }
   }
 
-  // ?sample=<index|name>: a known name wins; else a clamped index; else 0.
-  // `sampleExplicit` records whether the param was GIVEN — an explicit sample
-  // is a dev path, opened in place of the About box greet.
+  // ?sample=<index|name>: a matching name, else a clamped index, else 0.
   let sampleIndex = 0;
   const q = params.get('sample');
   if (q != null && sampleNames.length) {
@@ -51,17 +39,15 @@ export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
   return {
     flat: params.get('flat') === '1',
     diag: params.get('diag') === '1',
-    /** @type {string|null} camera preset name (main maps it to a direction) */
+    /** @type {string|null} camera preset name */
     cam: params.get('cam'),
     /** @type {string|null} validated face name */
     edit: editParam && VIEW_NAMES.includes(editParam) ? editParam : null,
     sampleIndex,
     sampleExplicit: q != null,
-    /** @type {string|null} the ?file=/#fragment saved-doc name request */
+    /** @type {string|null} requested saved document name */
     file: file || null,
-    // ?fresh=1: boot with storage ignored — no desktop-state restore, no
-    // saved-doc icons, no seeding, no state writes: a clean slate on a
-    // machine with saved docs.
+    // ?fresh=1 ignores storage: no restore, no writes, no seeding.
     fresh: params.get('fresh') === '1',
   };
 }

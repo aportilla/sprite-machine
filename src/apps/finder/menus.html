@@ -1,127 +1,27 @@
-<!-- The FINDER's menus (docs/apps-plan.md §3.4) — the desktop's application,
-     front while the bare desktop or a folder window holds the desktop's
-     active state (shell/windows.js). A fragment
-     of vf-menu elements: shell/menu-bar.js parses it once into live nodes,
-     slots them between the Sprite Machine menu and the clock while the
-     Finder is front and lifts them out when another application comes
-     forward — a detached menu claims no key (the kit's contract), so the
-     Finder's ⌘C is inert in the Sprite Editor with no `disabled` written.
-     apps/finder/index.js wires the nodes: a menu is addressed by
-     data-menu, an item by value, WITHIN this fragment — never by id, since
-     another application's fragment may hold the same values (its own
-     `close`, its own `arrange`). The boot `disabled`s match a fresh
-     desktop (nothing selected, nothing to close, the Trash empty, the
-     screen arranged); the module re-reads every gate at wire-up. -->
+<!-- Finder menus. shell/menu-bar.js parses this fragment; apps/finder/index.js
+     addresses items by data-menu and value, not id. The boot disabled states
+     match a fresh desktop. -->
 <vf-menu data-menu="file" label="File">
-  <!-- New…'s key is ⌃N — the Control key alone (the kit's ⌃ means Control,
-       never a ⌘ stand-in), ⌘N being the browser's New Window before the
-       page ever sees it. ONE New, and it always opens a DOCUMENT — the
-       Finder's way to make one, as a double-click is its way to open one:
-       the item calls the Sprite Editor's New box (apps/sprite-editor's
-       newDocument), and creating from it opens a window, which brings the
-       Sprite Editor forward. System 7 gave the Finder's ⌘N to New Folder;
-       this machine spends its New on the document. Off-Mac Ctrl+N is the
-       browser's New Window, reserved — the item shows the key and never
-       fires there, the same trade Close makes with ⌃W. -->
+  <!-- ⌃N: the browser takes ⌘N before the page sees it. -->
   <vf-menu-item value="new" shortcut="⌃N">New Sprite</vf-menu-item>
-  <!-- New Folder (the files slice's createFolder): "untitled folder" in
-       the front folder window, else on the desktop, its name selected for
-       typing (the icon's rename box). No key equivalent: ⌃N is New…'s —
-       the DOCUMENT command — and System 7's own ⌘N (with ⇧⌘N) is the
-       browser's. Greyed while the Finder's front window is the Trash's, or
-       a trashed folder's (a folder is not made in the Trash). -->
   <vf-menu-item value="new-folder">New Folder</vf-menu-item>
   <vf-separator></vf-separator>
-  <!-- Close's key is ⌃W — the Control key alone: ⌘W is the browser's
-       before the page sees it, and ⌥W types ∑ on a Mac, so Control is the
-       one W chord a Mac browser leaves to the page. Off-Mac Ctrl+W is the
-       browser's Close Tab, reserved — the item shows the key and never
-       fires there (Sep 9 2026). The Finder's Close closes its front
-       window, the front folder window; greyed with the bare desktop front
-       (nothing to close). A text window and the Desktop Patterns panel are
-       other applications' windows, each with its own Close. -->
+  <!-- ⌃W: the browser takes ⌘W, and ⌥W types ∑ on a Mac. -->
   <vf-menu-item value="close" shortcut="⌃W" disabled>Close</vf-menu-item>
 </vf-menu>
 <vf-menu data-menu="edit" label="Edit">
-  <!-- Copy / Paste / Select All (docs/clipboard-plan.md): the Finder's
-       commands over the selected icons (documents, folders and text files,
-       in any container) and the Finder's front container (the front folder
-       window, else the desktop). Copy needs a selected icon that is not
-       the Trash; Paste needs a front container that is not the Trash or
-       inside it. What Paste pastes is decided at the pick, off a read of
-       the SYSTEM clipboard: the app's own copy (files and folders from the
-       catalog, chunks and subtrees intact), or a PNG copied elsewhere — a
-       new document if it is a sprite sheet, the paste alert (index.html
-       #dlg-paste) if not. All three grey while a text control has focus
-       (an icon's rename box, a dialog's field), so the field keeps its
-       native ⌘C/⌘V/⌘A: a disabled item claims no key (the kit's contract).
-       No Undo, Cut or Clear, greyed or otherwise: the Finder had no Cut of
-       files, and nothing here is undoable — the Trash is the Finder's
-       undo. ⌘C, ⌘V and ⌘A reach the page (the browser takes none before a
-       keydown; Ctrl stands in off-Mac). -->
+  <!-- Disabled while a text field has focus, so the field keeps native ⌘C/⌘V/⌘A. -->
   <vf-menu-item value="copy" shortcut="⌘C" disabled>Copy</vf-menu-item>
   <vf-menu-item value="paste" shortcut="⌘V">Paste</vf-menu-item>
   <vf-menu-item value="select-all" shortcut="⌘A">Select All</vf-menu-item>
 </vf-menu>
 <vf-menu data-menu="view" label="View">
-  <!-- ⌘J — Arrange Windows, the one command over the whole screen, in
-       every application's View menu: here the ARRANGE alone (the boot
-       placement re-run on the CURRENT raster — the hidden windoids back to
-       the rail, every document window onto the cascade, every folder
-       window to its placement), greyed while the
-       screen already IS the arrangement (windows.arranged — nothing to
-       arrange; the zoom box is a document window's, so the Sprite Editor's
-       item alone carries the zoom half). ⌘J is one of the few clean
-       letters left (no Mac browser binds it); off-Mac Ctrl+J is the
-       browser's Downloads, which the claim pre-empts only while the item
-       is live. The open-windows tail is the Sprite Editor's View menu's
-       (docs/apps-plan.md §6.8); the Finder's way back to an open document
-       is the window's own click, or its icon. -->
   <vf-menu-item value="arrange" shortcut="⌘J" disabled>Arrange Windows</vf-menu-item>
 </vf-menu>
 <vf-menu data-menu="special" label="Special">
-  <!-- Clean Up (docs/clean-up-plan.md): the ONE contextual item on this
-       bar — every icon of the Finder's front container snapped onto that
-       container's lattice, each to the nearest free cell, the arrangement
-       kept and only its slop gone. Its label follows its OBJECT, as System
-       7's did: "Clean Up Window" while a folder window holds the desktop's
-       active state, "Clean Up Desktop" without one (apps/finder/index.js
-       syncGate writes it; with the Finder front those are the only two
-       readings there are — a document window active means the Sprite
-       Editor is front and these menus are off the bar). This is not the ⌘J
-       case: there one command wore two names, here the object itself
-       changes. Never greyed — picking it on a container already tidy moves
-       nothing — and no key equivalent, as System 7's Special menu gave
-       none. At the head of the menu, above Empty Trash…, where System 7
-       kept it. The boot label matches a fresh desktop: no window front. -->
+  <!-- syncGate sets the label: "Clean Up Window" or "Clean Up Desktop". -->
   <vf-menu-item value="clean-up">Clean Up Desktop</vf-menu-item>
-  <!-- Empty Trash… (docs/trash-plan.md, workspace.emptyTrash): the Finder's
-       command over the Trash's contents, behind the Finder's alert
-       (index.html #dlg-empty-trash — the ellipsis, System 7's promise of a
-       box). System 7's Special menu, where the command lived, below Clean
-       Up as it was there (it sat in the Sprite Machine menu while the
-       bar was every role's — Sep 9 to Sep 11 2026). Greyed while the Trash
-       is empty (the listing is re-read), which on a virgin profile is this
-       `disabled`. No key equivalent, as System 7 gave it none. Emptying
-       the Trash from the Sprite Editor means a desktop click first, as it
-       did on a Mac. -->
   <vf-menu-item value="empty-trash" disabled>Empty Trash…</vf-menu-item>
   <vf-separator></vf-separator>
-  <!-- Restore Default Files (loaders.js restoreDefaultFiles): the built-in
-       documents and read-me text files the library is MISSING, stored
-       afresh on the desktop. The seeding proper is a one-shot on its own
-       records — a profile takes the built-ins at its first boot and never
-       again — so this is the route by which a profile that has already
-       booted gets a read-me added to the app since, or a Car it deleted.
-       Below the rule, and Empty Trash… above it: one command destroys what
-       is there, this one only adds what is not. No ellipsis — it is
-       additive and by name, so there is nothing to warn about and no
-       question to ask; and no key equivalent, as System 7 gave its Special
-       menu none. Greyed while every built-in is already in the library, the
-       Trash INCLUDED (a trashed Read Me is still a Read Me: the way back to
-       it is to drag it out) — the Finder's own idiom, Empty Trash…'s grey
-       over an empty can, and it greys itself the moment the restore lands.
-       Broken storage greys it too: there is no library to restore into.
-       (apps/finder/index.js syncRestore.) -->
   <vf-menu-item value="restore-defaults" disabled>Restore Default Files</vf-menu-item>
 </vf-menu>

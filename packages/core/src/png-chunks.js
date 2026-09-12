@@ -1,21 +1,11 @@
-// ---------------------------------------------------------------------------
-// PNG chunk surgery — the document format's foundation (a Sprite Machine
-// document IS one .png with its metadata in standard text chunks). Pure
-// typed-array code, zero deps, Node-tested like the rest of lib/.
+// PNG chunk reading and writing. A document is one .png with its metadata in
+// text chunks.
 //
-// A PNG is an 8-byte signature plus a chunk list; each chunk is
-//   length(4, big-endian) | type(4, ASCII) | data(length) | crc(4, over
-//   type+data). Ancillary text chunks (tEXt: Latin-1, iTXt: UTF-8) are
-//   standard, ignored by every decoder, and legal anywhere between IHDR and
-//   IEND — we splice ours right after IHDR (before the first IDAT), so a
-//   metadata read never has to scan past the pixel data.
-//
-// Reading and writing both handle tEXt AND iTXt; the writer picks tEXt when
-// the text survives Latin-1 and iTXt (UTF-8, uncompressed) otherwise, so a
-// plain ASCII Software tag stays the classic chunk while an emoji title still
-// round-trips. Compressed text chunks (zTXt / iTXt with the compression flag)
-// are passed through untouched but not decoded — nothing we write uses them.
-// ---------------------------------------------------------------------------
+// A PNG is an 8-byte signature and a chunk list. Each chunk is
+//   length (4, big-endian) | type (4, ASCII) | data | crc (4, over type + data).
+// Text chunks are written right after IHDR, before the first IDAT. The writer
+// uses tEXt when the text is Latin-1 and uncompressed iTXt (UTF-8) otherwise.
+// Compressed text chunks (zTXt, compressed iTXt) pass through undecoded.
 
 /** The 8-byte PNG signature. */
 export const PNG_SIGNATURE = Uint8Array.of(
@@ -38,7 +28,7 @@ export function isPng(bytes) {
   return true;
 }
 
-// --- CRC32 (the PNG polynomial), table built once ---------------------------
+// CRC32 lookup table for the PNG polynomial.
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -49,7 +39,7 @@ const CRC_TABLE = (() => {
   return t;
 })();
 
-/** CRC32 of a byte range (PNG flavor: over the chunk's type + data). @param {Uint8Array} bytes */
+/** CRC32 of a byte range (PNG runs it over type + data). @param {Uint8Array} bytes */
 export function crc32(bytes) {
   let c = 0xffffffff;
   for (let i = 0; i < bytes.length; i++) {
@@ -64,11 +54,9 @@ const readU32 = (b, i) =>
 const typeAt = (b, i) => String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]);
 
 /**
- * Parse the chunk list. Each entry's `data` is a SUBARRAY view into `bytes`
- * (no copies); `offset` is the chunk's start (the length field) and `end` one
- * past its CRC, so `bytes.subarray(offset, end)` is the whole chunk verbatim.
- * Throws on a non-PNG signature or a truncated chunk (a torn file should fail
- * loudly, not yield half a list).
+ * Parse the chunk list. Each entry's `data` is a subarray of `bytes`, `offset`
+ * is the chunk's start and `end` is one past its CRC. Throws on a bad
+ * signature or a truncated chunk.
  *
  * @param {Uint8Array} bytes
  * @returns {{type:string, data:Uint8Array, offset:number, end:number}[]}
@@ -90,7 +78,7 @@ export function readChunks(bytes) {
   return chunks;
 }
 
-// --- text codecs ------------------------------------------------------------
+// Text codecs.
 const latin1Encodable = (s) => {
   for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) > 0xff) return false;
   return true;
@@ -108,8 +96,7 @@ const latin1String = (b) => {
 const utf8Bytes = (s) => new TextEncoder().encode(s);
 const utf8String = (b) => new TextDecoder().decode(b);
 
-/** Serialize one chunk: length | type | data | crc(type+data). Exported for
- *  the encoder (png-encode.js), which frames IHDR / IDAT / IEND through it.
+/** Serialize one chunk: length | type | data | crc(type+data).
  *  @param {string} type  @param {Uint8Array} data */
 export function buildChunk(type, data) {
   const out = new Uint8Array(8 + data.length + 4);
@@ -131,20 +118,19 @@ function buildTextChunk(keyword, text) {
   return buildChunk('tEXt', data);
 }
 
-/** An iTXt chunk, uncompressed: keyword | 0 | 0 | 0 | lang… | 0 | xlat… | 0 | UTF-8 text. */
+/** An uncompressed iTXt chunk: keyword | 0 | 0 | 0 | lang | 0 | xlat | 0 | UTF-8 text. */
 function buildItxtChunk(keyword, text) {
   const kw = latin1Bytes(keyword);
   const tx = utf8Bytes(text);
   const data = new Uint8Array(kw.length + 5 + tx.length);
   data.set(kw, 0);
-  // keyword NUL, compression flag 0, compression method 0, empty language tag
-  // NUL, empty translated keyword NUL — five zero bytes in a row.
+  // The five bytes after the keyword stay zero: its NUL, the compression flag
+  // and method, and the NULs ending the empty language tag and translated keyword.
   data.set(tx, kw.length + 5);
   return buildChunk('iTXt', data);
 }
 
-// Decode one parsed text chunk to {keyword, text}, or null for a chunk we
-// don't decode (compressed variants pass through unread).
+// Decode a text chunk to {keyword, text}, or null when it is compressed.
 function decodeTextChunk(chunk) {
   const d = chunk.data;
   const nul = d.indexOf(0);
@@ -155,7 +141,7 @@ function decodeTextChunk(chunk) {
   }
   // iTXt: compressionFlag(1) compressionMethod(1) lang\0 translated\0 text
   const flag = d[nul + 1];
-  if (flag !== 0) return null; // compressed — not ours, leave it be
+  if (flag !== 0) return null; // compressed
   let i = nul + 3;
   while (i < d.length && d[i] !== 0) i++; // language tag
   i++;
@@ -165,11 +151,8 @@ function decodeTextChunk(chunk) {
 }
 
 /**
- * Every decodable text entry in the file, in chunk order, as
- * `{keyword: text}` — a later duplicate keyword wins (we never write
- * duplicates; a foreign file's are read leniently). A chunk scan stops
- * before IDAT costs nothing: our own writer puts every text chunk ahead of
- * the pixel data, but a foreign file's trailing chunks are read too.
+ * Every decodable text chunk as `{keyword: text}`, including chunks after
+ * IDAT. A later duplicate keyword wins.
  *
  * @param {Uint8Array} bytes
  * @returns {Record<string, string>}
@@ -186,13 +169,10 @@ export function readTextChunks(bytes) {
 }
 
 /**
- * Return a NEW file with `entries` written as text chunks: any existing
- * tEXt/iTXt chunk whose keyword appears in `entries` is removed (replace
- * semantics), the new chunks are spliced immediately after IHDR, and every
- * other chunk — critical or ancillary, known or unknown — passes through
- * byte-for-byte. An entry whose value is `null`/`undefined` just removes the
- * keyword. Insertion order follows `entries`' key order, so a rewrite is
- * deterministic.
+ * Return a new file with `entries` written as text chunks. Existing text
+ * chunks with those keywords are removed, the new chunks go right after IHDR
+ * in key order, and every other chunk is copied byte for byte. A null or
+ * undefined value only removes the keyword.
  *
  * @param {Uint8Array} bytes
  * @param {Record<string, string|null|undefined>} entries
@@ -202,7 +182,7 @@ export function setTextChunks(bytes, entries) {
   const chunks = readChunks(bytes);
   const replaced = new Set(Object.keys(entries));
 
-  /** @type {Uint8Array[]} the output's chunk byte-runs, in order */
+  /** @type {Uint8Array[]} output chunks, in order */
   const parts = [];
   const fresh = [];
   for (const [keyword, text] of Object.entries(entries)) {

@@ -1,21 +1,9 @@
-// ---------------------------------------------------------------------------
-// The headless entry: a sheet's pixels → the model → a glb. What File →
-// Export 3D Model… does in the app, with no app around it — a Node script at
-// a project's startup, a build step, or a three.js page that wants the mesh
-// itself and no file at all.
+// Headless entry: a sheet's pixels to a model, and a model to a glb.
 //
-// `buildModel` runs the whole chain — slice the 3×2 atlas, ingest, carve,
-// colorize, the low-poly wedge mesh with its skin — and hands back the
-// THREE.Mesh at ONE UNIT PER VOXEL: a position is a lattice coordinate, the
-// natural unit for a model whose author painted it texel by texel (the app's
-// stage scales the same mesh to its own world size; DEFAULT_WORLD_SIZE is
-// that stage's business). `modelToGlb` writes it as the glb the app exports,
-// so the export dialog and this path are one function: the mesh's buffers,
-// the skin encoded from bytes (never a canvas), the scale from the model's
-// units to glTF's meters, and the `sprite-machine` extras. Both are
-// synchronous and pure; a consumer that wants them off a main thread wraps
-// them in a worker or a child process.
-// ---------------------------------------------------------------------------
+// buildModel runs slice, ingest, carve, colorize and the wedge mesher, and
+// returns the mesh at one unit per voxel, so a position is a lattice
+// coordinate. modelToGlb writes the same glb as the app's export, with the
+// skin encoded from bytes. Both are synchronous.
 
 import { sliceAtlas, validateSheet } from './atlas.js';
 import { buildVoxels } from './pipeline.js';
@@ -25,8 +13,8 @@ import { glbFromModel } from './gltf.js';
 import { VIEW_NAMES } from './views.js';
 
 /**
- * A built model: the mesh, the lattice it was carved on, and the mesh's
- * units per voxel (1 from `buildModel`; the app's stage passes its own).
+ * A built model: the mesh, the lattice dims and the mesh's units per voxel
+ * (1 from buildModel).
  * @typedef {{
  *   mesh: import('three').Mesh,
  *   dims: {nx:number, ny:number, nz:number},
@@ -39,11 +27,11 @@ import { VIEW_NAMES } from './views.js';
 /**
  * Build the model of a 3×2 sprite sheet.
  * @param {{width:number, height:number, data:ArrayLike<number>}} sheet
- *   the atlas's RGBA pixels (an ImageData, or the same shape)
+ *   the atlas's RGBA pixels, ImageData-shaped
  * @param {{transforms?: Record<string, {rot?:number, flipX?:boolean, flipY?:boolean}>}} [opts]
- *   per-view reorientation, the document's `sprite-machine:transforms` chunk
+ *   per-view reorientation, as stored in the `sprite-machine:transforms` chunk
  * @returns {Model}  the mesh at one unit per voxel
- * @throws on a sheet that is not a sheet, or one with no painted view
+ * @throws on an invalid sheet, or one with no painted view
  */
 export function buildModel(sheet, { transforms = {} } = {}) {
   const bad = validateSheet(sheet);
@@ -70,13 +58,12 @@ export function buildModel(sheet, { transforms = {} } = {}) {
 }
 
 /**
- * The model as a glb: its buffers at the given scale, its skin embedded (or,
- * with no map, the material's flat color) behind a NEAREST sampler.
+ * The model as a glb, with its skin embedded behind a nearest sampler, or its
+ * flat color when the material has no map.
  * @param {{mesh: import('three').Mesh, dims: {nx:number, ny:number, nz:number}, unitsPerVoxel?: number}} model
  * @param {{name: string, voxelsPerMeter?: number, unlit?: boolean, generator?: string}} opts
- *   `voxelsPerMeter` is the reader's scale (10: a 40-voxel car is 4 m long);
- *   `unlit` puts KHR_materials_unlit on the material; `generator` names the
- *   writer in the asset
+ *   `voxelsPerMeter` sets the scale (at 10, a 40-voxel car is 4 m long);
+ *   `unlit` adds KHR_materials_unlit; `generator` is written to the asset
  * @returns {Uint8Array}  the .glb file
  */
 export function modelToGlb(

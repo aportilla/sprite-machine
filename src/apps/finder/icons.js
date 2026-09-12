@@ -1,120 +1,14 @@
-// ---------------------------------------------------------------------------
-// The icon layer: one renameable icon per SAVED document and per FOLDER,
-// reconciled from the files slice into its CONTAINER — the desktop's field
-// (#desktop-icons, a vf-icon-field filling the screen) for the items whose
-// container is the desktop, and every OPEN folder window's field (windows.js
-// beside this file) for that folder's children. Nothing else is an icon:
-// the built-in defaults are seeded into the library at the first-ever boot,
-// so they're ordinary rows here, not a special cluster. A document's art is
-// generated from the document itself — its MODEL rendered into 32×32 at the
-// three-quarter view (scene/icon-renderer.js), cached on the record by the
-// save that made it — so those icons declare the kit's `color` treatment
-// (selection darkens instead of inverting); a folder's is the app's own
-// 1-bit art (src/assets/folder.png), whose selection, `target` and open
-// ghost are the kit's exact inversions and dithers of that one file.
-// Double-click opens (a document through the Sprite Editor's openDoc,
-// dirty-checked, read through the registry at the pick; a folder into its
-// window); an open document's — and an open folder's — icon wears the
-// kit's `open` ghost.
+// Finder icon layer: reconciles the files slice into vf-icons in each
+// container's field (#desktop-icons for the desktop, one field per open folder
+// window).
 //
-// Positions are `left`/`top` properties in system px — never CSS — so a
-// drag writes back through the same declaration and desktop-state.js can
-// persist them, BY ITEM, in the item's CURRENT container's coordinates: the
-// desktop's are screen coordinates (the field is filled, not placed, so its
-// icons anchor to the raster), a window's are its plane's. PLACEMENT is the
-// windows' regime in the ICONS' frame — the whole desktop below the menu
-// bar (icons are the Finder's furniture; the options strip is application
-// chrome, hidden whenever the desktop takes focus, so it reserves nothing
-// above an icon): a saved position (a previous session's drag) wins, else
-// the first FREE cell of the container's lattice (layout.js — the
-// desktop's column down the RIGHT edge from below the menu bar, folding
-// into further columns to the left; a window's rows from the plane's
-// origin, wrapping at its width); on the desktop it is clamped
-// on-raster at boot, and a browser resize re-pins every desktop icon by the
-// same nine-slice rule as the windows, in the icons' own frame (repinIcons
-// below, on the window manager's raster signal) — a window's icons are in
-// its coordinates and travel with it. The layer remembers a closed window's icon positions for
-// the session (folders.onWillClose), and hands desktop-state every position
-// it knows (positions()), so a closed folder never forgets its arrangement.
-// CLEAN UP (Sep 12 2026, docs/clean-up-plan.md) is the one command over
-// those positions: the Finder's Special → Clean Up Window / Clean Up
-// Desktop takes every icon of ONE container onto that container's lattice,
-// each to the nearest free cell (layout.js cleanUp — an alignment, never a
-// re-flow), and the kit WALKS them there (vintage-frames 0.10.0's
-// vf-icon-field.dragIcons): one at a time in the lattice's fill order, each
-// icon's dotted outline travelling to its cell before the icon lands. The
-// Trash cleans up like any icon.
-//
-// FILING IS THE DRAG (Sep 7 2026, vintage-frames 0.7.0): a movable icon's
-// drag is the kit's — the classic dotted outline over everything, the icon
-// staying put, every selected icon of its field travelling as one, Escape
-// cancelling — reported as vf-drag / vf-drop (cancelable) with the pointer
-// and the outline's origin; the PAGE decides what a drop means (the kit's
-// position on every gesture: it reports, the consumer decides). Three
-// destinations, hit-tested with elementsFromPoint (the travelling icons
-// skipped — the outline is never a hit) and read only down to the first
-// window under the pointer, since the stack holds covered elements too:
-// what a window covers is hidden, so a folder icon or a window behind it
-// is never a destination (a drag inside a folder window over a desktop
-// folder it covers stays in the window). Onto a FOLDER ICON files the set
-// into that folder at its lattice's next free cells; into a FOLDER WINDOW
-// the set came from elsewhere files it there, each member where its own
-// outline was let go (the window's placementAt, held at the origin); out
-// onto the DESKTOP from a window files it to the root, each where its
-// outline was (the desktop's placementAt, held below the menu bar). A
-// window of ANOTHER APPLICATION — a document, a read-me, the control
-// panel — is none of them: the drop over it is cancelled and nothing
-// moves. Each of the three cancels the default action and moves the MODEL
-// (files.moveDoc / moveFolder — the icon element follows through the
-// reconciler, landing at the drop's position); a drop in the container the
-// set came from is left to the kit's default action, which moves the set
-// whole. A folder is never filed into itself or a descendant (the slice
-// refuses; the drop is cancelled and nothing moves; no highlight either).
-// Under a drag the folder icon under the pointer wears the kit's `target`
-// — the Finder's inverted destination.
-//
-// THE TRASH (Sep 9 2026) is the third kind, rendered from the files slice's
-// synthetic row like any desktop folder — so a drop onto it or into its
-// window IS deleting, through the paths above with nothing new — with
-// three differences and one addition: its art follows its contents (the
-// plain can empty, the bulging one with anything in it — src/assets/, the
-// user's 1-bit art, swapped by src, so the kit's ghost and `target` are
-// derivations of whichever can is up); it is not `editable` (the slice
-// refuses a rename regardless); its default place is the raster's
-// bottom-right corner (layout.js trashDefault), a saved position winning
-// as for every icon; and it is NEVER FILED — canFile refuses any set that
-// holds it, so a banded selection cannot carry it into a folder or a
-// window, while a drop of it on the bare desktop is the kit's own move.
-// It is furniture: on the desktop with or without a library, under ?fresh
-// too (the listing is never read there, so the desktop shows the one icon
-// in its corner whatever the machine has stored).
-//
-// THE TEXT FILES (Sep 10 2026) are the fourth kind, rendered from the files
-// slice's `texts` like the documents — the read-me documents, each wearing
-// the user's 32×32 1-bit newspaper art (src/assets/text-file.png, TeachText's
-// read-only document icon, three values like the folder's, so the kit's
-// selection inversion and open ghost are exact), `selectable movable
-// editable` (a rename is the Finder's, landing on files.renameText), no
-// `color` and no `data-folder` (nothing files INTO a text). A double-click
-// opens its window — the Text Viewer's `open`, an application's verb bound
-// late — and a window showing it (the window manager's isOpen, by the key)
-// is the icon's ghost; the drag files it exactly as a document
-// (files.moveText), the Trash
-// counts it, and its key is `text:<id>`, its position persisting like any
-// item's.
-//
-// THE SELECTION, READ AND WRITTEN (Sep 10 2026, docs/clipboard-plan.md):
-// Edit → Copy reads it (selection(): the selected icons' keys, the Trash
-// left out, in the listing's order — folders, then documents) and Paste and
-// Select All write it (select(keys) / selectAll(folder): the kit's public
-// setSelected, so `vf-select` reports each change). onSelectionChange is
-// the menus' one signal for the Copy gate: the kit's vf-select (bubbling,
-// composed — a press, the rubber band, a setSelected), plus the two writes
-// the kit never announces — the activation's clear below, and the chrome
-// bridge's re-select, which lands AFTER the vf-select the kit fired for its
-// own deselect, so a gate reading that event alone would grey Copy exactly
-// while the Edit menu is pulled down over a selected icon.
-// ---------------------------------------------------------------------------
+// - Keys are doc:<id>, folder:<id> and text:<id>. The Trash is a synthetic
+//   folder row.
+// - Positions are the icons' left/top properties in system px, in the
+//   container's coordinates. desktop-state.js persists them by key through
+//   positions().
+// - Filing is the kit's icon drag. A drop into another container moves the
+//   model, and the reconciler re-creates the icon there.
 
 import { snapSys, systemPxQuantum } from 'vintage-frames';
 import folderArtUrl from '../../assets/folder.png';
@@ -149,12 +43,7 @@ const TEXT = 'text:';
  *           folders: ReturnType<typeof import('./windows.js').initFolderWindows>,
  *           apps: Record<string, Record<string, (...args: any[]) => any>>,
  *           savedPos?: (key: string) => {left:number, top:number}|null }} opts
- *   windows: the window manager — a text file's open ghost is whether a
- *   window showing it is open (isOpen, re-read on onWindows), and its
- *   raster signal re-pins the desktop's icons. folders: the Finder's folder
- *   windows, the roots beside the desktop's field. apps: the registry's
- *   actions by id — a document's open is the Sprite Editor's openDoc, a
- *   text file's the Text Viewer's open, both read at the pick.
+ *   apps: the registry's actions by id, read at each open.
  */
 export function initIcons(desktop, { windows, folders, apps, savedPos = () => null }) {
   const desktopField = /** @type {any} */ (desktop.querySelector('#desktop-icons'));
@@ -165,8 +54,7 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
     teardown.push(() => el.removeEventListener(type, fn, opts));
   };
 
-  /** Every icon in every container — the desktop field's and the open
-   *  folder windows' (light-DOM descendants of the desktop element). */
+  /** Icons in every container: the desktop field and open folder windows. */
   const allIcons = () =>
     /** @type {any[]} */ ([...desktop.querySelectorAll('vf-icon[data-key]')]);
   const iconsIn = (root) =>
@@ -176,42 +64,21 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
   const keyOf = (icon) => /** @type {string} */ (icon.dataset.key);
   const posOf = (icon) => ({ left: icon.left ?? 0, top: icon.top ?? 0 });
 
-  // --- the selection's signal (header) --------------------------------------------
+  // Selection
   /** @type {Set<() => void>} */
   const selectionListeners = new Set();
-  /** Told when a Clean Up's walk has landed (onMoved). @type {Set<() => void>} */
+  /** @type {Set<() => void>} */
   const movedListeners = new Set();
   const notifySelection = () => {
     for (const fn of selectionListeners) fn();
   };
   on(desktop, 'vf-select', notifySelection);
 
-  // --- the Finder wire ---------------------------------------------------------
-  // A press in the desktop's field — the bare dither or an icon on it — is
-  // a press on the Finder. The page owns every "this press means the
-  // Finder" decision (the kit never takes it): the window manager
-  // (shell/windows.js) covers the desktop host (the bezel, now that the
-  // field takes the dither's presses), and this covers the field — both
-  // routing through the same clearActive(). A press in a FOLDER WINDOW
-  // needs nothing: the window activates itself, and a Finder window active
-  // IS the Finder's turn (the manager's activation wire). A double-click's
-  // open then reactivates through the opening application's own path.
+  // A press in the desktop field makes the Finder front. shell/windows.js
+  // handles the rest of the desktop host.
   on(desktopField, 'pointerdown', () => desktop.clearActive());
 
-  // The selection is the ICONS' own — the kit holds it, one per screen (it
-  // clears on any press outside an icon, across containers), and nothing
-  // mirrors it into a store: File → Open's Finder grammar was the one
-  // reader, and it retired with the item (Sep 9 2026). What the highlight
-  // names now is the next DRAG or rename.
-  //
-  // Opening moves focus INTO the application, and the ACTIVATION clears the
-  // selection: the moment a document window takes active (an icon
-  // double-click's vf-open, File → New… — any path that lands appActive),
-  // the highlight has nothing left to name and the application is forward
-  // now. Driven off the shell mirror rather than the open paths themselves,
-  // so every way a window comes forward converges here. Clearing is a plain
-  // property write (the kit's documented programmatic route; false detaches
-  // the icon's own outside listener).
+  // Clear the icon selection when an application window becomes active.
   const onAppActive = () => {
     if (!shell.get().appActive) return;
     const lit = allIcons().filter((icon) => icon.selected);
@@ -221,25 +88,13 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
   };
   teardown.push(shell.subscribe(onAppActive));
 
-  // A press on the APPLICATION'S CHROME keeps the Finder selection. The
-  // kit's vf-icon clears itself on ANY outside pointerdown — the menu bar
-  // included (still so on 0.7.0) — so pulling a menu down over a selected
-  // icon would drop its highlight (kit ask #5, APP-IA-PLAN.md §3.1).
-  // System 7's Finder kept the selection while a menu was pulled:
-  // the menu bar, a dropped menu and a modal dialog are the application's
-  // surfaces, not the desktop's, so a press on them says nothing about
-  // what's selected. The page bridges it with two capture listeners AROUND
-  // the kit's own: one on the document — registered here at wire-up, so it
-  // precedes every icon's outside listener (those attach on selection, and
-  // same-target listeners fire in registration order) — snapshots the icons
-  // the press is about to clear; one on the desktop (later in the same
-  // dispatch — the icons' have run by then, the chrome is slotted in the
-  // desktop) re-selects them, so the highlight is back before the menu bar's
-  // own handler even drops the panel. Setting `selected` is the kit's
-  // documented programmatic route; it re-arms the icon's outside listener.
-  // Remove this bridge once the kit exempts its own chrome.
+  // Workaround: vf-icon deselects on any outside pointerdown,
+  // including presses on the menu bar, menus and dialogs. The document capture
+  // listener records the selected icons. It is registered at wire-up so it runs
+  // before the icons' own listeners, which attach on selection. The desktop
+  // capture listener runs later in the same dispatch and re-selects them.
   const CHROME = 'vf-menu-bar, vf-menu, vf-dialog';
-  /** @type {any[]} the icons a chrome press is clearing mid-dispatch */
+  /** @type {any[]} icons selected when a chrome press began */
   let held = [];
   on(
     document,
@@ -263,13 +118,13 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
     true
   );
 
-  // --- positions: the session's memory ------------------------------------------
-  /** Positions of icons no longer live — a closed folder window's — by key,
-   *  in their container's coordinates. @type {Map<string, {left:number, top:number}>} */
+  // Positions
+  /** Icon positions from folder windows closed this session, by key.
+   *  @type {Map<string, {left:number, top:number}>} */
   const remembered = new Map();
-  /** Items filed this session and not yet rendered in their new container:
-   *  the drop's landing (`null`: the lattice's next free cell). Their saved
-   *  position is the OLD container's and is never consulted.
+  /** Items filed but not yet rendered in their new container: the drop
+   *  position, or null for the next free cell. Their saved position belongs to
+   *  the old container and is ignored.
    *  @type {Map<string, {left:number, top:number}|null>} */
   const pending = new Map();
   teardown.push(
@@ -278,26 +133,20 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
     })
   );
 
-  // --- the lattices --------------------------------------------------------------
-  /** The container's lattice: the desktop's raster-derived column down the
-   *  right edge, or a window's grid at its plane's width. Read live — the
-   *  raster and the window's size are both the moment's. */
+  // Lattices
+  /** A container's lattice: the desktop's, or a folder window's at its
+   *  current viewport width. */
   const gridFor = (folder) =>
     folder == null
       ? desktopLattice(desktop.width, desktop.height)
       : folderLattice(folders.viewportOf(folder)?.width ?? 0);
-  /** A container's field: the desktop's, or an open folder window's. */
   const rootOf = (folder) =>
     folder == null
       ? desktopField
       : (folders.fields().find(([id]) => id === folder)?.[1] ?? null);
-  /** The first lattice cell no icon in `root` OVERLAPS — where a new item
-   *  lands, and a filed one with no landing. A cell is held when some
-   *  icon's 64px plate covers part of it: for icons ON the lattice that is
-   *  the plain "an icon sits here" (both pitches are wider than the plate,
-   *  so neighbours never block each other), and for one OFF it — dragged,
-   *  or the Trash in its corner, which sits between two rows — it is what
-   *  keeps a new icon from landing over art that is already there. */
+  /** The first lattice cell no icon in `root` overlaps. A cell is taken when
+   *  any icon's 64px cell covers part of it, so off-lattice icons (a dragged
+   *  icon, the Trash) also block it. */
   function nextFree(root, folder) {
     const grid = gridFor(folder);
     const taken = iconsIn(root).map(posOf);
@@ -312,14 +161,9 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
     return latticeSlot(grid, 0);
   }
 
-  /** Write a position onto an icon in its container's discipline. On the
-   *  desktop, the boot clamp — the windows' (shell/windows.js clampedBox): a
-   *  position saved on a larger raster pulls back on-screen (an off-raster
-   *  icon has nothing to grab, so it would be unreachable at any drag) and
-   *  lands on the same k-system-px lattice a drag lands on, in the ICON's
-   *  frame: the whole desktop below the menu bar. Inside a window, the
-   *  plane's origin at least — the rails reach anything placed past the
-   *  viewport, so nothing else clamps. */
+  /** Write a position onto an icon. On the desktop it is snapped and clamped
+   *  on-raster below the menu bar, so a position saved on a larger raster stays
+   *  reachable. In a window it is kept at or past the plane's origin. */
   function place(icon, folder, pos) {
     if (folder == null) {
       const k = systemPxQuantum(icon);
@@ -341,9 +185,8 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
     }
   }
 
-  // --- the icons -----------------------------------------------------------------
-  /** Swap (or install) an icon's 32×32 art. The vf-img wrapper is created
-   *  once; later syncs only touch the img src when it actually changed. */
+  // Icons
+  /** Install or swap an icon's 32×32 art. */
   function setArt(icon, src) {
     let img = icon.querySelector('vf-img > img');
     if (!img) {
@@ -367,20 +210,16 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
     icon.width = 64;
     icon.selectable = true;
     icon.movable = true;
-    icon.editable = kind !== 'trash'; // the Trash keeps its name
+    icon.editable = kind !== 'trash';
     if (kind === 'doc') {
-      icon.color = true; // generated color art: selection darkens, not inverts
+      icon.color = true; // color art: the kit darkens it on selection
     } else if (kind !== 'text') {
-      // The drop's marker (the kit's recipe): what a drag files into — a
-      // folder's, and the Trash's the same way. A text file is 1-bit art
-      // like a folder's, and nothing files into it.
+      // data-folder marks a drop target: folders and the Trash.
       icon.dataset.folder = key.slice(FOLDER.length);
     }
-    root.append(icon); // appended first: the snap below reads the live scale
-    // Where it lands: a filing's landing (or its next free cell), else the
-    // position remembered from a window closed this session, else the
-    // saved one, else the container's default — the lattice's next free
-    // cell, or the Trash's corner.
+    root.append(icon); // before place(): the snap reads the live scale
+    // Precedence: a pending filing, a remembered position, a saved one, then
+    // the default.
     const fallback = () =>
       kind === 'trash'
         ? trashDefault(desktop.width, desktop.height)
@@ -396,13 +235,10 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
 
   function wireDoc(icon, id) {
     icon.addEventListener('vf-open', () => apps[SPRITE_EDITOR]?.openDoc(id));
-    // In-place rename commits through the same workspace action the File
-    // menu's Rename uses — the two paths converge, and any open window
-    // of this document retitles along.
     icon.addEventListener('vf-change', (e) => {
       const detail = /** @type {CustomEvent} */ (e).detail;
       workspace.renameStored(id, detail.label).catch(() => {
-        icon.label = detail.previous; // storage refused — restore
+        icon.label = detail.previous; // storage failed: restore
       });
     });
   }
@@ -425,17 +261,9 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
     });
   }
 
-  // --- the reconciler ------------------------------------------------------------
-  // Every ROOT — the desktop's field for the container null, plus one field
-  // per open folder window — holds exactly the icons of the items whose
-  // container it is (the folders first, then the documents, then the text
-  // files, each in listing order): an item that moved away is removed here
-  // and re-created in its new root if that root is on screen (its landing
-  // under `pending`); the label, the art and the open ghost are re-read
-  // every pass. Under ?fresh=1 the listing is never read (main.js), so the
-  // slice holds the Trash's row alone and the desktop shows the one icon,
-  // in its corner — the same on a machine with saved docs.
-  /** The Trash's can: plain while it holds nothing, bulging otherwise. */
+  // Reconciler
+  // Each root holds exactly the icons of its container's items. A moved item is
+  // removed and re-created in its new root if that root is open.
   const trashArt = (st) => (itemCount(st, TRASH) ? trashFullArtUrl : trashArtUrl);
   function sync() {
     const st = files.get();
@@ -466,7 +294,6 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
         if (icon.label !== rec.name) icon.label = rec.name;
         if (kind === 'doc') {
           setArt(icon, rec.icon ?? genericDocIconDataUri());
-          // The kit's `open` ghost marks every stored doc with a window open.
           icon.open = !!workspace.byFileId(rec.id);
         } else if (kind === 'text') {
           setArt(icon, textArtUrl);
@@ -476,13 +303,10 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
           icon.open = folders.isOpen(rec.id);
         }
       }
-      // The field's extent follows what it holds (the plane's scroll range).
+      // The field's size is the window's scroll range.
       if (folder != null) folders.fit(folder);
     }
   }
-  // The listing drives which icons exist and where; the workspace and the
-  // window manager's window set drive the open ghosts (windows opening and
-  // closing move them); the folder windows are the roots.
   teardown.push(
     files.subscribe(sync),
     workspace.subscribe(sync),
@@ -491,15 +315,12 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
   );
   sync();
 
-  // --- filing: the drag ----------------------------------------------------------
-  /** What the pointer is over, the travelling icons skipped: a folder icon
-   *  (the recipe's `data-folder`), else the window it is in, else the
-   *  desktop. elementsFromPoint lists every element at the point, topmost
-   *  first, the covered ones too — so the stack is read down to the first
-   *  window and no further: a folder icon or a window behind it is hidden
-   *  there, never a destination. `win` is that window whoever owns it,
-   *  `window` the folder it shows (null for another application's), and
-   *  `desktop` is true only where no window covers it. */
+  // Filing
+  /** What the pointer is over, skipping the dragged icons. elementsFromPoint
+   *  also returns covered elements, so the stack is read only down to the
+   *  first vf-window. `win` is that window, `window` the folder it shows (null
+   *  for another application's), and `desktop` is true where no window covers
+   *  the point. */
   const under = (x, y, skip) => {
     const stack = document.elementsFromPoint(x, y).filter((el) => !skip.includes(el));
     const front = stack.findIndex((el) => el.localName === 'vf-window');
@@ -520,10 +341,8 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
       desktop: !win && stack.includes(desktop),
     };
   };
-  /** Can this set be filed into `folder`? Never the Trash (it is the
-   *  desktop's, and a set that swept it up files nowhere), and never a
-   *  folder into itself or a descendant (the slice refuses both moves;
-   *  this keeps the highlight honest and the drop silent). */
+  /** Whether a set can be filed into `folder`. A set holding the Trash never
+   *  can, and a folder never goes into itself or a descendant. */
   const canFile = (icons, folder) => {
     if (icons.some((icon) => icon.dataset.folder === TRASH)) return false;
     if (folder == null) return true;
@@ -533,7 +352,7 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
       return f == null || (f !== folder && !isInside(st, folder, f));
     });
   };
-  /** @type {any} the folder icon wearing `target`, or null */
+  /** @type {any} the folder icon with `target` set, or null */
   let target = null;
   const highlight = (next) => {
     if (target === next) return;
@@ -542,11 +361,9 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
     if (target) target.target = true;
   };
   /**
-   * Move a set into a container: the landing (or null for the lattice's
-   * next free cell) parked under each key for the reconciler, then the
-   * model — the listing change re-renders each icon in its new root. An
-   * item already there (a document dropped on the icon of the folder it
-   * sits in) moves nothing and forgets its landing.
+   * Move a set into a container. Each key's landing (null: the next free cell)
+   * goes into `pending` for the reconciler, then the model is updated. An item
+   * already in `folder` does not move and its landing is dropped.
    * @param {{icon: any, at: {left:number, top:number}|null}[]} entries
    * @param {string|null} folder
    */
@@ -582,17 +399,16 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
     const { clientX, clientY, x, y, icons } = /** @type {CustomEvent} */ (e).detail;
     const hit = under(clientX, clientY, icons);
     highlight(null);
-    const from = folders.folderOf(leader); // null: the desktop
-    // Where each member's outline was let go: its own box translated by the
-    // delta the leader's x/y carry. Measured before anything moves.
+    const from = folders.folderOf(leader); // null for the desktop
+    // Each member's drop point: its box offset by the leader's delta. Measured
+    // before anything moves.
     const lead = leader.getBoundingClientRect();
     const landings = icons.map((icon) => {
       const r = icon.getBoundingClientRect();
       return { icon, x: r.left + (x - lead.left), y: r.top + (y - lead.top) };
     });
     if (hit.folder != null) {
-      // Onto a folder icon: into that folder at its next free cells — or,
-      // refused, nowhere (the icon stays where it was).
+      // Onto a folder icon: file into its next free cells if allowed.
       e.preventDefault();
       if (canFile(icons, hit.folder)) {
         file(
@@ -603,14 +419,12 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
       return;
     }
     if (hit.win && hit.window == null) {
-      // Over another application's window: no container of the Finder's,
-      // and what it covers is hidden — refused, nothing moves.
+      // Over another application's window: nothing moves.
       e.preventDefault();
       return;
     }
     if (hit.window != null && hit.window !== from) {
-      // Into a folder window from elsewhere: where each outline was let go,
-      // on the window's plane, held at its origin.
+      // Into a folder window from elsewhere: at each drop point on its plane.
       e.preventDefault();
       if (!canFile(icons, hit.window)) return;
       const win = hit.win;
@@ -624,8 +438,7 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
       return;
     }
     if (hit.desktop && from != null) {
-      // Out onto the desktop from a window: where each outline was let go,
-      // in the icons' frame — below the menu bar, on the raster.
+      // From a window onto the desktop: at each drop point, below the menu bar.
       e.preventDefault();
       file(
         landings.map(({ icon, x: lx, y: ly }) => {
@@ -638,37 +451,20 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
         null
       );
     }
-    // Otherwise the drop is in the container the set came from: the kit's
-    // default action moves it, whole; the positions are read off the
-    // elements at the next snapshot.
+    // Otherwise the drop is within the source container and the kit moves it.
   });
 
-  /** Per-icon nine-slice pin across raster resizes: the unrounded pin plus
-   *  the top/left this path last applied (a mismatch there means someone
-   *  dragged the icon — or it is new — so its pin re-derives). The same
-   *  truth-cache discipline as the windows' (the window manager's
-   *  onDesktopResized), for the same reason: re-deriving the pin each event
-   *  from the just-snapped position ratchets. */
+  /** Per-icon nine-slice pin, with the left/top this path last wrote. A
+   *  mismatch means the icon was dragged or is new, so its pin is re-derived.
+   *  Re-deriving from the snapped position on every event would drift. */
   const pins = new WeakMap();
   const CELL = { width: ICON_CELL, height: ICON_CELL };
-  /** The raster changed size — the window manager's raster signal, told in
-   *  the same stroke as the windows' re-pin, per resize event, un-debounced
-   *  (and only on a real change of size). Every DESKTOP icon keeps its
-   *  nine-slice pin (the shell's pinOf/pinTo) in the ICON_FRAME: the
-   *  desktop below the MENU BAR (the options strip is no chrome of theirs),
-   *  uniform bands — no application furniture lives in the Finder's frame.
-   *  The default right-edge column is a far strut (it keeps its 16px from
-   *  the right edge at any width), its rows spring with the middle; an icon
-   *  dragged into a corner stays in that corner. A fixed-size box — the
-   *  64px cell — so its edges resolve through the anchor rule. Deliberately NO clamp, like the windows: the
-   *  same pin always maps back exactly, so growing back returns every icon
-   *  whole. A folder window's icons are in its coordinates and travel with
-   *  it. */
+  /** Re-pin every desktop icon on a raster resize, with the nine-slice pin in
+   *  ICON_FRAME and the 64px cell as a fixed size. No clamp, so resizing back
+   *  restores every position. */
   const repinIcons = (before, after) => {
-    // A Clean Up walking the desktop is finished first — a second walk
-    // finishes the one in flight, synchronously, every icon still to go
-    // landing on the targets read off the OLD raster — so the pins below
-    // are read from where the icons now are, not from a walk half done.
+    // dragIcons([]) finishes a Clean Up walk synchronously, so the pins read
+    // the icons' final positions.
     desktopField.dragIcons([]);
     for (const icon of iconsIn(desktopField)) {
       const cur = { ...posOf(icon), ...CELL };
@@ -685,11 +481,8 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
   teardown.push(windows.onRaster(repinIcons));
 
   return {
-    /** Every position the layer knows, by key — the live icons' (the
-     *  properties ARE the truth after any drag) under the remembered ones
-     *  (a closed window's), and `null` for an item filed away and not yet
-     *  rendered in its new container (its old position is no longer a
-     *  position). desktop-state.js merges it into the blob. */
+    /** Every known position by key: live icons over remembered ones, and null
+     *  for an item filed but not yet rendered. desktop-state.js merges it. */
     positions() {
       /** @type {Record<string, {left:number, top:number}|null>} */
       const out = {};
@@ -698,17 +491,15 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
       for (const icon of allIcons()) out[keyOf(icon)] = posOf(icon);
       return out;
     },
-    /** Select an item's icon and open its rename box — New Folder's
-     *  name-selected-for-typing (the kit's public routes). */
+    /** Select an item's icon and open its rename box. */
     startRename(key) {
       const icon = iconByKey(key);
       if (!icon) return;
       icon.setSelected(true);
       icon.startEditing();
     },
-    /** The selected icons' keys — every container, the Trash left out (it
-     *  is furniture, never copied) — in the listing's order: folders, then
-     *  documents, then text files. What Edit → Copy takes.
+    /** The selected icons' keys, excluding the Trash, in listing order:
+     *  folders, documents, then text files.
      *  @returns {string[]} */
     selection() {
       const lit = new Set(
@@ -723,52 +514,23 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
         ...st.texts.map((t) => `${TEXT}${t.id}`),
       ].filter((key) => lit.has(key));
     },
-    /** Make these keys the selection — each selected, every other icon
-     *  cleared — through the kit's public route, so `vf-select` reports
-     *  it: the Finder's reading of a paste (the pasted icons lit).
+    /** Make `keys` the selection and clear every other icon.
      *  @param {string[]} keys */
     select(keys) {
       const want = new Set(keys);
       for (const icon of allIcons()) icon.setSelected(want.has(keyOf(icon)));
       notifySelection();
     },
-    /** Select every icon in a container's field — the Finder's Select All
-     *  over its front window (`folder` null: the desktop, the Trash's icon
-     *  included — it selects like any icon; Copy and a filing skip it).
+    /** Select every icon in a container's field (null: the desktop, the Trash
+     *  included).
      *  @param {string|null} folder */
     selectAll(folder) {
       const root = rootOf(folder);
       if (!root) return;
       this.select(iconsIn(root).map(keyOf));
     },
-    /** CLEAN UP (docs/clean-up-plan.md): every icon of ONE container onto
-     *  that container's lattice — the Finder's Special → Clean Up Window
-     *  (`folder`: its front folder window) and Clean Up Desktop (null).
-     *  Each icon takes the nearest FREE cell to where it already sits
-     *  (layout.js's cleanUp — an alignment, never a re-flow); the Trash
-     *  cleans up like any icon. WHICH cell is the page's: the kit ships no
-     *  lattice, and its walk takes the targets it is handed.
-     *
-     *  THE WALK is the kit's (vintage-frames 0.10.0, kit ask #16 —
-     *  docs/kit-asks-icon-move.md): the field's dragIcons walks the moves
-     *  one at a time, each icon's dotted outline travelling from where it
-     *  sits to its cell and the icon landing when it arrives, the Finder's
-     *  beat between landings, at once under prefers-reduced-motion. The
-     *  cells go over as they are: the kit resolves each landing as a drop's
-     *  (clamped whole in the container, snapped) before the outline sets
-     *  off, and the one rule of this app's the kit cannot know — never
-     *  above the menu bar — the lattice already keeps, its first row
-     *  starting below the bar. The
-     *  ORDER is ours — the lattice's fill order (layout.js fillOrder): down
-     *  the desktop's right-edge column and on leftward, across a window's
-     *  rows — and the cadence the kit's. An icon already on its cell takes
-     *  no beat, so a tidy container resolves at once. A press anywhere, or
-     *  Escape, finishes the walk (every icon still to go lands); so does a
-     *  second Clean Up of the same container, and a browser resize
-     *  (repinIcons below). When the last icon has landed a window's field
-     *  re-fits (an icon gathered back in from past the viewport shrinks the
-     *  scroll range) and onMoved tells the desktop state, since no gesture
-     *  ended the move for its pointerup to be heard.
+    /** Move every icon of one container (null: the desktop) to the nearest
+     *  free cell of its lattice. The kit's dragIcons walks them in fill order.
      *  @param {string|null} folder
      *  @returns {Promise<void>} */
     async cleanUp(folder) {
@@ -784,9 +546,7 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
       if (folder != null) folders.fit(folder);
       for (const fn of movedListeners) fn();
     },
-    /** Icons moved with no gesture to end the move — a Clean Up's walk
-     *  landing its last icon. The desktop state's cue to snapshot (main.js),
-     *  where a drag's pointerup is the cue for a drag. Returns the
+    /** Icons moved without a pointer gesture (a finished Clean Up). Returns the
      *  unsubscribe. @param {() => void} fn */
     onMoved(fn) {
       movedListeners.add(fn);
@@ -794,9 +554,9 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
         movedListeners.delete(fn);
       };
     },
-    /** The selection changed — a press, the band, a paste's select, the
-     *  activation's clear, the chrome bridge's re-select. Returns the
-     *  unsubscribe. @param {() => void} fn */
+    /** The selection changed. Also fires for the activation's clear and the
+     *  chrome workaround's re-select, which come after the kit's vf-select.
+     *  Returns the unsubscribe. @param {() => void} fn */
     onSelectionChange(fn) {
       selectionListeners.add(fn);
       return () => {
@@ -808,9 +568,8 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
       selectionListeners.clear();
       movedListeners.clear();
       highlight(null);
-      // Remove the rendered icons so an HMR re-init rebuilds them with fresh
-      // listeners instead of stacking stale ones (the folder windows' go
-      // with their windows — folders.dispose).
+      // Remove the icons so an HMR re-init starts without stale listeners.
+      // Folder windows' icons go with folders.dispose().
       desktopField.replaceChildren();
     },
   };

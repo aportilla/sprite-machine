@@ -1,28 +1,19 @@
-// ---------------------------------------------------------------------------
-// A STORE-ONLY ZIP — the container File → Export Sprite Atlas… hands over,
-// because a browser gives one download per gesture and the export is a pair
-// (the sheet PNG and its TexturePacker JSON, siblings by name the way
-// TexturePacker itself ships them). Method 0, no compression: the PNG is
-// already deflated and the JSON is tiny, so deflate would buy nothing and
-// cost a dependency. Pure — bytes in, bytes out — and Node-tested against
-// zlib's own CRC-32 and its own reader.
+// Store-only ZIP writer and reader. File → Export Sprite Atlas… uses it to
+// download the sheet PNG and its TexturePacker JSON as one file.
 //
-// The layout (PKWARE APPNOTE, little-endian throughout): one local file
-// header + the bytes per entry, then the central directory (one header per
-// entry naming its local header's offset), then the end-of-central-directory
-// record. No data descriptors (the sizes and CRC are known up front), no
-// extra fields, no comments, no ZIP64 (a sheet is at most a few megabytes).
-// Names are the export's ASCII slugs, so the UTF-8 flag stays clear.
-// ---------------------------------------------------------------------------
+// Layout (PKWARE APPNOTE, little-endian): a local header and data per entry,
+// the central directory, then the end-of-central-directory record. Method 0
+// (stored), with no data descriptors, extra fields, comments or ZIP64. Names are
+// ASCII, so the UTF-8 flag stays clear.
 
 /** @typedef {{name: string, bytes: Uint8Array}} ZipEntry */
 
 const SIG_LOCAL = 0x04034b50;
 const SIG_CENTRAL = 0x02014b50;
 const SIG_END = 0x06054b50;
-const VERSION = 20; // 2.0 — the floor every reader accepts for a stored entry
+const VERSION = 20; // 2.0, the minimum version for a stored entry
 
-// The IEEE 802.3 table, built once (zlib's polynomial, reflected).
+// CRC-32 table (IEEE 802.3 polynomial, reflected).
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -33,7 +24,7 @@ const CRC_TABLE = (() => {
   return t;
 })();
 
-/** CRC-32 of a byte string — zlib's crc32, the checksum every ZIP entry carries.
+/** CRC-32 of a byte string, as zlib computes it.
  *  @param {Uint8Array} bytes  @returns {number} unsigned 32-bit */
 export function crc32(bytes) {
   let c = 0xffffffff;
@@ -41,8 +32,8 @@ export function crc32(bytes) {
   return (c ^ 0xffffffff) >>> 0;
 }
 
-/** A Date as the MS-DOS time and date words a ZIP header carries (two-second
- *  resolution, years from 1980 — anything earlier clamps to the epoch's floor).
+/** A Date as MS-DOS time and date words: two-second resolution, years before
+ *  1980 clamped to 1980.
  *  @param {Date} d  @returns {{time: number, date: number}} */
 function dosDateTime(d) {
   const y = Math.max(d.getFullYear(), 1980);
@@ -65,8 +56,8 @@ const ascii = (s) => {
 /**
  * Pack entries into one stored ZIP, in the order given.
  * @param {ZipEntry[]} entries
- * @param {{date?: Date}} [opts]  the modification stamp every entry wears
- *   (the export's moment; a fixed one makes the bytes reproducible)
+ * @param {{date?: Date}} [opts]  modification time for every entry. A fixed date
+ *   makes the output reproducible.
  * @returns {Uint8Array}
  */
 export function zipStore(entries, opts = {}) {
@@ -112,7 +103,7 @@ export function zipStore(entries, opts = {}) {
     cv.setUint16(34, 0, true); // disk
     cv.setUint16(36, 0, true); // internal attrs
     cv.setUint32(38, 0, true); // external attrs
-    cv.setUint32(42, offset, true); // the local header
+    cv.setUint32(42, offset, true); // local header offset
     central.set(nameBytes, 46);
     centrals.push(central);
 
@@ -123,11 +114,11 @@ export function zipStore(entries, opts = {}) {
   const ev = new DataView(end.buffer);
   ev.setUint32(0, SIG_END, true);
   ev.setUint16(4, 0, true); // this disk
-  ev.setUint16(6, 0, true); // the directory's disk
+  ev.setUint16(6, 0, true); // central directory disk
   ev.setUint16(8, entries.length, true);
   ev.setUint16(10, entries.length, true);
   ev.setUint32(12, cdSize, true);
-  ev.setUint32(16, offset, true); // the directory starts after the last entry
+  ev.setUint32(16, offset, true); // central directory offset
   ev.setUint16(20, 0, true); // comment
 
   const out = new Uint8Array(offset + cdSize + 22);
@@ -140,17 +131,15 @@ export function zipStore(entries, opts = {}) {
 }
 
 /**
- * Read a stored ZIP back: every entry in directory order, with the CRC the
- * header claims for it (a reader checks it against `crc32(bytes)`). The
- * writer's mirror — the tests read the export through it. Throws on
- * anything but a stored, single-part archive.
+ * Read a stored ZIP: every entry in directory order, with the CRC from its
+ * header. Throws on anything but a stored, single-part archive.
  * @param {Uint8Array} zip
  * @returns {(ZipEntry & {crc: number})[]}
  */
 export function zipEntries(zip) {
   const v = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
-  // The end record is the last 22 bytes when there is no comment; scan back
-  // for its signature so a commented archive still reads.
+  // The end record is the last 22 bytes unless the archive has a comment, so
+  // scan back for its signature.
   let end = zip.length - 22;
   while (end >= 0 && v.getUint32(end, true) !== SIG_END) end--;
   if (end < 0) throw new Error('not a zip: no end-of-central-directory record');

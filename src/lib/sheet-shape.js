@@ -1,16 +1,5 @@
-// ---------------------------------------------------------------------------
-// The document format's SHAPE rule, as a pure reading of a picture's
-// dimensions: a sprite sheet is a 3×2 atlas of SQUARE tiles — `W = 3·t`,
-// `H = 2·t`, `t` a whole number from TILE_MIN to TILE_MAX — the shape every
-// editor-authored document has (README §Tile size: tiles are locked square,
-// the only registering shape) and the one the catalog takes at a paste
-// (docs/clipboard-plan.md §2.5). Deliberately STRICTER than the drop's
-// validateSheet (the engine's atlas.js), which checks only that a buffer is
-// well-formed and lets deriveTileSize divide whatever it gets: a drop is
-// "open this" and the pipeline warns; a paste is "file this", and a file in
-// the catalog is a document. Pure, Node-tested; the alert's copy is the
-// wire's, never this module's — a `reason` is for the code.
-// ---------------------------------------------------------------------------
+// The document shape rule: a 3×2 atlas of square tiles between TILE_MIN and
+// TILE_MAX px. Stricter than the engine's validateSheet; a paste must pass it.
 
 import { TILE_MIN, TILE_MAX } from 'sprite-machine';
 

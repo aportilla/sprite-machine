@@ -1,26 +1,16 @@
-// ---------------------------------------------------------------------------
-// `doc` slice — the canonical document: the sprite sheet (`atlasImage`), the
-// face views sliced from it, per-view transforms, and the rounded tile geometry
-// from the last slice (the editor writes tiles back using these, so they must
-// never be re-derived from dimensions). Everything is held BY REFERENCE —
-// identity is the contract (`views[face]` may literally be the editor's working
-// buffer), so this slice never clones pixel data.
+// Doc slice: one open document's sprite sheet, the face views sliced from it,
+// per-view transforms and the tile geometry of the last slice. Tile edits are
+// written back with that geometry, so it is never re-derived from the image
+// size. Pixel data is held by reference and never cloned. views[face] may be
+// the editor's working buffer.
 //
-// TWO CHANNELS — the formalization of the app's two-speed state system:
-//   - `subscribe` (change; structural, low-frequency): a new atlas, a tile
-//     resize, an all-tiles replace. Drives templates and view-model
-//     recomputation.
-//   - `onLive` (live; stroke-rate, coalesced to one blit per animation frame):
-//     blit-then-notify. Its only subscriber is the mesh rebuilder.
-// `applyTileEdit` mutates `views[face]` SILENTLY on the change channel — the
-// same staleness contract as before: the onion-skin recomputes only on a
-// face switch or structural change, never mid-stroke.
+// Two channels:
+//   - subscribe: structural changes (a new atlas, a tile resize, replace all).
+//   - onLive: stroke-rate edits, coalesced to one blit per animation frame.
+// applyTileEdit mutates views[face] without a change notification, so the
+// onion skin recomputes only on a face switch or a structural change.
 //
-// DRAIN-BEFORE-CONSUME has exactly one owner: every canonical-atlas consumer
-// (download snapshot, tile resize, all-tiles replace) calls `drain()` first so
-// the pending live stroke is folded in — never dropped, never blitted at the
-// wrong scale. The frame scheduler is injectable so Node tests drive it by hand.
-// ---------------------------------------------------------------------------
+// Every consumer of the canonical atlas calls drain() first.
 
 import { createStore } from './store.js';
 import {
@@ -35,14 +25,14 @@ import { replaceColorInRect } from '../lib/fill.js';
 
 /**
  * @param {{schedule?: (fn: () => void) => any, cancel?: (id: any) => void}} [scheduler]
- *   Frame scheduler; defaults to requestAnimationFrame. Injectable for tests.
+ *   Frame scheduler. Defaults to requestAnimationFrame.
  */
 export function createDoc(scheduler = {}) {
   const schedule = scheduler.schedule ?? ((fn) => requestAnimationFrame(fn));
   const cancel = scheduler.cancel ?? ((id) => cancelAnimationFrame(id));
 
   const store = createStore({
-    /** @type {{width:number,height:number,data:Uint8ClampedArray}|null} the canonical sheet */
+    /** @type {{width:number,height:number,data:Uint8ClampedArray}|null} */
     atlasImage: null,
     /** @type {Record<string, {width:number,height:number,data:Uint8ClampedArray}|null>} */
     views: {},
@@ -54,9 +44,7 @@ export function createDoc(scheduler = {}) {
     tileH: 0,
     cols: 0,
     rows: 0,
-    // Sheet GENERATION: bumped only by a wholesale load, never by a resize or
-    // replace — "is this still the same document?" for consumers that behave
-    // differently on a fresh sheet (the rebuilder frames the camera on one).
+    // Sheet generation, incremented only by loadAtlas. A change means a new document.
     sheet: 0,
   });
 
@@ -65,8 +53,7 @@ export function createDoc(scheduler = {}) {
   let liveId = /** @type {any} */ (0);
   let livePending = null; // { face, tile } awaiting the frame blit
 
-  // Blit the coalesced pending edit into the canonical sheet and notify the
-  // live channel. At most one of these per animation frame.
+  // Blit the pending edit into the sheet and notify the live listeners.
   function flushLive() {
     liveId = 0;
     const p = livePending;
@@ -80,9 +67,8 @@ export function createDoc(scheduler = {}) {
     for (const fn of liveListeners) fn(s);
   }
 
-  // Slice the (already stored or incoming) sheet and return the patch that
-  // makes the store reflect it — callers fold it into ONE patch so a structural
-  // change is a single change notification.
+  // Slice a sheet into a store patch. Callers merge it into a single patch so
+  // a structural change notifies once.
   function slicedPatch(atlasImage) {
     const sliced = sliceAtlas(atlasImage);
     return {
@@ -98,9 +84,9 @@ export function createDoc(scheduler = {}) {
   return {
     store,
     get: store.get,
-    subscribe: store.subscribe, // the CHANGE channel (structural)
+    subscribe: store.subscribe, // structural changes
 
-    /** The LIVE channel (stroke-rate, rAF-coalesced). @param {(s: object) => void} fn */
+    /** Stroke-rate changes, one per animation frame. @param {(s: object) => void} fn */
     onLive(fn) {
       liveListeners.add(fn);
       return () => {
@@ -108,9 +94,8 @@ export function createDoc(scheduler = {}) {
       };
     },
 
-    // Load a NEW sheet wholesale. Any pending live stroke belongs to the old
-    // sheet (possibly at another tile size) — drop it rather than blit it into
-    // the fresh atlas on the next frame.
+    // Load a new sheet. A pending live stroke belongs to the old sheet and is
+    // dropped.
     /** @param {object} imageData  @param {Record<string, object>} [transforms] */
     loadAtlas(imageData, transforms = {}) {
       this.dropLive();
@@ -122,10 +107,10 @@ export function createDoc(scheduler = {}) {
       });
     },
 
-    // One live/committed tile edit from the editor. The face's view becomes the
-    // working buffer BY REFERENCE (or null again if fully erased — reverting a
-    // face to mirror-derived), silently on the change channel; the sheet blit +
-    // live notification are coalesced to the next frame.
+    // A tile edit from the editor. views[face] becomes the working buffer by
+    // reference, or null when the tile is blank (the face reverts to
+    // mirror-derived). The sheet blit and the live notification run on the
+    // next frame.
     /** @param {string} face  @param {{width:number,height:number,data:Uint8ClampedArray}} tile */
     applyTileEdit(face, tile) {
       store.get().views[face] = isBlank(tile) ? null : tile;
@@ -133,8 +118,7 @@ export function createDoc(scheduler = {}) {
       if (!liveId) liveId = schedule(flushLive);
     },
 
-    // Fold any un-flushed live stroke into the canonical sheet NOW. The one
-    // owner of the drain-before-consume guard.
+    // Blit any pending live stroke into the sheet now.
     drain() {
       if (liveId) {
         cancel(liveId);
@@ -151,9 +135,8 @@ export function createDoc(scheduler = {}) {
       livePending = null;
     },
 
-    // Resize every tile (the whole atlas moves together, then re-slice). Tiles
-    // are clamped to [TILE_MIN, TILE_MAX]; a same-size call is a no-op (e.g. ±
-    // at a bound). Returns whether anything changed.
+    // Resize every tile and re-slice. Sizes clamp to [TILE_MIN, TILE_MAX].
+    // Returns whether anything changed.
     /** @param {number} newW  @param {number} newH  @param {'origin'|'center'} [anchor] */
     resizeTiles(newW, newH, anchor = 'center') {
       const s = store.get();
@@ -161,19 +144,16 @@ export function createDoc(scheduler = {}) {
       const w = clampTile(newW);
       const h = clampTile(newH);
       if (w === s.tileW && h === s.tileH) return false;
-      // Fold the pending stroke in BEFORE rebuilding at a new size, so the last
-      // edit isn't dropped or blitted at the wrong scale.
+      // Drain first so the pending stroke blits at the old tile size.
       this.drain();
       const atlasImage = resizeAtlas(store.get().atlasImage, w, h, { anchor });
       store.patch({ atlasImage, ...slicedPatch(atlasImage) });
       return true;
     },
 
-    // Restore ONE face's art wholesale (the undo/redo path): blit the tile —
-    // or transparency for a blank/null one — into the canonical sheet and
-    // re-slice, so the change is STRUCTURAL (templates re-derive, the canvas
-    // resets its working buffer, the rebuilder rebuilds). The tile's data is
-    // COPIED in by the blit; callers may keep their snapshot.
+    // Restore one face's art (undo/redo). Blits the tile, or transparency for
+    // null, into the sheet and re-slices, so the change is structural. The
+    // tile's data is copied.
     /** @param {string} face  @param {{width:number,height:number,data:Uint8ClampedArray}|null} tile */
     restoreTile(face, tile) {
       const s = store.get();
@@ -189,23 +169,24 @@ export function createDoc(scheduler = {}) {
       store.patch(slicedPatch(s.atlasImage));
     },
 
-    // Restore the WHOLE sheet (the undo/redo path for resize / replace-all).
-    // The image is adopted BY REFERENCE — pass a copy if the snapshot must
-    // survive later edits. No sheet bump: this is the same document.
+    // Restore the whole sheet (undo/redo of a resize or replace all). The
+    // image is adopted by reference. The sheet generation does not change.
     /** @param {{width:number,height:number,data:Uint8ClampedArray}} image */
     restoreAtlas(image) {
       this.dropLive();
       store.patch({ atlasImage: image, ...slicedPatch(image) });
     },
 
-    // Replace every `target` texel with `fill` across all six tiles. Scoped to
-    // the tiled region (the top-left cols*tileW × rows*tileH block) so a
-    // non-divisible sheet's remainder pixels are left untouched. Returns whether
-    // anything changed (an unchanged sheet notifies nobody).
-    /** @param {object} target  @param {object} fill — color keys ({transparent:true} | {r,g,b}) */
+    // Replace every target texel with fill across all six tiles, within the
+    // tiled region (cols*tileW × rows*tileH from the top left). Returns whether
+    // anything changed.
+    /**
+     * @param {object} target  a color key: {transparent:true} or {r,g,b}
+     * @param {object} fill  a color key
+     */
     replaceAllTiles(target, fill) {
       if (!store.get().atlasImage) return false;
-      // Fold the pending stroke in first so the replace sees the latest pixels.
+      // Drain first so the replace sees the latest pixels.
       this.drain();
       const s = store.get();
       const { data, width, height } = s.atlasImage;
@@ -226,6 +207,3 @@ export function createDoc(scheduler = {}) {
     },
   };
 }
-
-// No singleton: every document context (state/workspace.js) owns its own
-// createDoc() instance — one canonical doc per open document window.

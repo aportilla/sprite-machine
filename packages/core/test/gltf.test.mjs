@@ -1,7 +1,3 @@
-// The glb writer (gltf.js): the header and padded chunks, one primitive
-// over 4-aligned views with the PNG verbatim, positions scaled with their
-// bounds, the NEAREST sampler, the unlit extension on request — and a wedge
-// mesh's own buffers exported whole. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -47,7 +43,7 @@ test('glbFromModel → glbParts: the framing, four aligned views and the PNG ver
   for (const bv of json.bufferViews)
     assert.equal(bv.byteOffset % 4, 0, 'a 4-aligned view');
   assert.equal(json.buffers[0].byteLength, bin.length);
-  // positions: scaled, the accessor's bounds the real extent
+  // Scaled positions and their bounds.
   const pos = json.accessors[prim.attributes.POSITION];
   assert.equal(pos.count, 4);
   assert.deepEqual(pos.min, [0, 0, 0]);
@@ -58,11 +54,11 @@ test('glbFromModel → glbParts: the framing, four aligned views and the PNG ver
     1,
     'x of the second vertex, scaled'
   );
-  // the index: unsigned shorts, six of them
+  // Index: six unsigned shorts.
   const idx = json.accessors[prim.indices];
   assert.equal(idx.componentType, 5123);
   assert.equal(idx.count, 6);
-  // the skin: the PNG bytes as they were, behind a nearest, clamped sampler
+  // The PNG bytes verbatim, with a nearest, clamped sampler.
   assert.deepEqual(glbViewBytes(parts, json.images[0].bufferView), image);
   assert.equal(json.images[0].mimeType, 'image/png');
   assert.deepEqual(json.samplers[0], {
@@ -75,13 +71,13 @@ test('glbFromModel → glbParts: the framing, four aligned views and the PNG ver
   assert.equal(mat.baseColorTexture.index, 0);
   assert.deepEqual([mat.metallicFactor, mat.roughnessFactor], [0, 1]);
   assert.equal(json.extensionsUsed, undefined, 'lit: no extension');
-  // unlit: the extension declared and on the material
+  // Unlit: the extension is declared and set on the material.
   const unlit = glbParts(
     glbFromModel({ ...quad(), image: { bytes: image }, unlit: true })
   ).json;
   assert.deepEqual(unlit.extensionsUsed, ['KHR_materials_unlit']);
   assert.deepEqual(unlit.materials[0].extensions, { KHR_materials_unlit: {} });
-  // no image: a flat base color, no texture
+  // No image: a flat base color and no texture.
   const flat = glbParts(
     glbFromModel({ ...quad(), image: null, color: [0.5, 0.25, 0] })
   ).json;

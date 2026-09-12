@@ -1,10 +1,3 @@
-// Node-runnable tests for the files slice — the document LIBRARY:
-// save/load/rename/remove/export against an in-memory storage stub, the
-// PNG-chunk metadata round-trip, and graceful degradation when storage is
-// absent or broken. Per-document identity and dirty state live in the
-// workspace (workspace.test.mjs); every operation here takes an explicit doc
-// + identity.
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -28,7 +21,7 @@ import {
 import { readTextChunks } from 'sprite-machine';
 import { fakeScheduler, memStorage, encodeAtlas, decodeAtlas } from './helpers.mjs';
 
-// A broken storage (private-mode IndexedDB): every call rejects.
+// A storage whose every call rejects.
 const brokenStorage = () => ({
   list: async () => {
     throw new Error('nope');
@@ -46,7 +39,7 @@ const brokenStorage = () => ({
 
 const sheet = (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) });
 
-// --- harness -----------------------------------------------------------------
+// Harness
 
 function makeWorld({ storage = memStorage(), icon = 'data:icon' } = {}) {
   const frames = fakeScheduler();
@@ -66,13 +59,13 @@ function makeWorld({ storage = memStorage(), icon = 'data:icon' } = {}) {
 }
 
 const stroke = (doc) => {
-  // A live edit: silent tile write (drain folds it in).
+  // A live edit, pending until the next frame or drain.
   const tile = { width: 2, height: 2, data: new Uint8ClampedArray(16) };
   tile.data[3] = 255;
   doc.applyTileEdit('front', tile);
 };
 
-// --- naming --------------------------------------------------------------------
+// Naming
 
 test('docFilename slugifies', () => {
   assert.equal(docFilename('Cargo Ship'), 'cargo-ship.png');
@@ -80,7 +73,7 @@ test('docFilename slugifies', () => {
   assert.equal(docFilename(''), 'untitled.png');
 });
 
-// --- save / load ----------------------------------------------------------------
+// Save and load
 
 test('save persists PNG bytes with the metadata chunks and returns the identity', async () => {
   const { files, storage, doc } = makeWorld();
@@ -108,12 +101,11 @@ test('save persists PNG bytes with the metadata chunks and returns the identity'
 
 test('a save folds the pending live stroke in first (drain-before-consume)', async () => {
   const { files, doc, storage } = makeWorld();
-  stroke(doc); // pending — its frame never cranked
+  stroke(doc); // no frame has run
   await files.save(doc, { name: 'X' });
   const rec = storage.map.get('id-1');
   const img = await decodeAtlas(rec.png);
-  // FRONT is tile (col 1, row 0) of 2×2 tiles: the stroke's texel (0,0) with
-  // alpha 255 lands at sheet (2,0) → index (0*6+2)*4+3.
+  // Front's texel (0,0) is sheet pixel (2,0).
   assert.equal(
     img.data[(0 * 6 + 2) * 4 + 3],
     255,
@@ -194,7 +186,7 @@ test('load hands back pixels, name and transforms; a missing id resolves null', 
   assert.equal(await files.load('nope'), null);
 });
 
-// --- rename / remove -------------------------------------------------------------
+// Rename and remove
 
 test('renameById rewrites the Title chunk and the cache field', async () => {
   const { files, storage, doc } = makeWorld();
@@ -214,7 +206,7 @@ test('remove deletes the record and the listing row', async () => {
   assert.equal(files.get().list.length, 0);
 });
 
-// --- folders ------------------------------------------------------------------
+// Folders
 
 test('folders: created names count up per container, a document files in and out, a rename lands in place', async () => {
   const { files, storage, doc } = makeWorld();
@@ -223,7 +215,7 @@ test('folders: created names count up per container, a document files in and out
   const b = await files.createFolder();
   assert.equal(a.name, UNTITLED_FOLDER);
   assert.equal(b.name, `${UNTITLED_FOLDER} 2`);
-  // A container's count is its own: inside `a` the first name is free again.
+  // Names count per container.
   assert.equal(nextFolderName(files.get(), a.id), UNTITLED_FOLDER);
   await files.renameFolder(a.id, 'Vehicles');
   assert.equal(storage.folders.get(a.id).name, 'Vehicles');
@@ -292,8 +284,7 @@ test('removeFolder lifts its children into its container; an orphaned folder id 
   let st = files.get();
   assert.equal(storage.folders.size, 1, 'B’s record is gone');
   assert.equal(st.list[0].folder, a.id, 'the document lifted into B’s container');
-  // A record pointing at a folder that is gone (a stale write) shows on the
-  // desktop rather than nowhere.
+  // A record whose folder is gone shows on the desktop.
   await storage.put({ ...storage.map.get(id), folder: 'gone' });
   await files.refresh();
   st = files.get();
@@ -304,7 +295,7 @@ test('removeFolder lifts its children into its container; an orphaned folder id 
   assert.deepEqual(folderPath(st, 'gone'), []);
 });
 
-// --- the Trash ----------------------------------------------------------------
+// Trash
 
 test('the Trash is listed without a record, refuses a rename, a move, a removal and a folder made inside it; emptying removes its whole subtree and nothing else', async () => {
   const { files, storage, doc } = makeWorld();
@@ -358,7 +349,7 @@ test('the Trash is listed without a record, refuses a rename, a move, a removal 
   );
 });
 
-// --- text files ------------------------------------------------------------------
+// Text files
 
 test('a text file is its text: it lists, files, renames, copies with the counting, lifts out of a removed folder, travels in a copied folder, and empties with the Trash', async () => {
   const { files, storage } = makeWorld();
@@ -423,7 +414,7 @@ test('a text file is its text: it lists, files, renames, copies with the countin
   assert.equal(await files.textOf(made.id), null);
 });
 
-// --- copies (Copy / Paste, Duplicate) -------------------------------------------
+// Copies
 
 test('copyName: the name as is in an empty container, "copy" beside the original, "copy 2" beside those — counted from the base', async () => {
   const { files, doc } = makeWorld();
@@ -443,7 +434,7 @@ test('copyName: the name as is in an empty container, "copy" beside the original
   );
   await files.save(doc, { name: 'Car copy 2' });
   assert.equal(copyName(files.get(), null, 'Car copy 2'), 'Car copy 3');
-  // Folders count over the container's folders, never its documents.
+  // Folder names count over the container's folders only.
   assert.equal(copyName(files.get(), null, 'Car', 'folder'), 'Car');
   assert.equal(copyName(files.get(), null, 'Vehicles', 'folder'), 'Vehicles copy');
 });
@@ -539,7 +530,7 @@ test('copyFolder copies a folder with a nested folder and documents at both leve
     [deep.id]
   );
 
-  // Into itself: the snapshot precedes the writes, so one copy lands inside.
+  // The copy snapshots the tree before writing, so copying A into A makes one copy.
   const inner = await files.copyFolder(a.id, { parent: a.id });
   st = files.get();
   assert.equal(inner.name, 'A', 'A holds no folder named A');
@@ -576,7 +567,7 @@ test('bytesOf hands back the stored bytes, null for a missing id', async () => {
   assert.equal(await files.bytesOf('nope'), null);
 });
 
-// --- export ------------------------------------------------------------------
+// Export
 
 test('export hands back the saved bytes verbatim when clean', async () => {
   const { files, storage, doc } = makeWorld();
@@ -613,7 +604,7 @@ test('an untitled export encodes fresh with its display name', async () => {
   assert.equal(readTextChunks(bytes).Title, 'Car');
 });
 
-// --- degradation -------------------------------------------------------------
+// Degradation
 
 test('refresh resolves availability: present storage true, broken false, none false', async () => {
   const good = makeWorld();

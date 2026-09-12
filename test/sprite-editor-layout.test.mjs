@@ -1,7 +1,3 @@
-// Node-runnable tests for the Sprite Editor's window arithmetic
-// (apps/sprite-editor/layout.js): a tiny raster's finiteness, and the
-// placement as a FIXED POINT of the resize rule in the frame its bands
-// widen. Never where a window goes. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -16,10 +12,9 @@ import {
   FRAME_BANDS,
 } from '../src/apps/sprite-editor/layout.js';
 
-// The Tools palette's box — its markup's, the one windoid the placement
-// writes a position for alone.
+// The Tools palette's size. initialPlacement gives the palette a position only.
 const TOOLS = TOOLS_BOX;
-// The windows' frame, its top and right bands widened for the rail.
+// The window frame, with its top and right bands widened for the rail.
 const WINDOW_FRAME = windowFrame(FRAME_BANDS);
 // A typical raster (1000×850 CSS at DSF 1, minus the 10px bezel).
 const W = 980;
@@ -34,8 +29,7 @@ test('placement: a tiny raster still yields finite, usable boxes; a zero-sized o
     assert.ok(b.width > 0 && b.height > 0);
     assert.ok(b.left >= 0 && b.top >= TOP_RESERVE);
   }
-  // 0×0: the floors keep the ring finite and at the reserve, and its pin —
-  // read on a raster with no middle at all — maps finitely.
+  // On a 0×0 raster the ring box stays finite and its pin maps finitely.
   const z = initialPlacement(0, 0, { ringShown: true });
   assert.ok(Object.values(z.ring).every(Number.isFinite) && z.ring.top >= TOP_RESERVE);
   const rp = pinTo(
@@ -48,10 +42,8 @@ test('placement: a tiny raster still yields finite, usable boxes; a zero-sized o
 });
 
 test('pin: the placement is a fixed point — a resize lands the windoids where Arrange would', () => {
-  // The window frame's top band runs through the stage's top edge (a GAP of
-  // slack past it) and its right band covers the rail column (the rail's
-  // left edge an inset inside it): the bands hold the rail, so the stage's
-  // top edge and the rail's left edges are struts…
+  // The top band reaches just past the stage's top edge and the right band
+  // covers the rail column, so those edges are struts.
   const home = initialPlacement(W, H);
   const { bands } = WINDOW_FRAME;
   assert.ok(
@@ -59,17 +51,15 @@ test('pin: the placement is a fixed point — a resize lands the windoids where 
       bands.top <= home.stage.top - TOP_RESERVE + 8
   );
   assert.ok(bands.right > W - home.stage.left && bands.right <= W - home.stage.left + 14);
-  // …and every placed windoid re-pins onto any other raster EXACTLY as
-  // initialPlacement puts it there — the test that retires the "untouched
-  // window follows the placement" special case. The document window is
-  // content: its top-left (the cascade slot) is a fixed point too, while
-  // its right and bottom edges spring with the vacancy — inside it, never
-  // into the rail or off the bottom.
+  // Every placed windoid re-pins onto another raster exactly where
+  // initialPlacement puts it. The document window's top-left is a fixed point
+  // too. Its right and bottom edges spring but stay clear of the rail and the
+  // bottom edge.
   const rasters = [
     { width: 980, height: 830 },
     { width: 760, height: 620 },
     { width: 1400, height: 1000 },
-    { width: 1001, height: 831 }, // odd: the slack survives a k = 2 snap (below)
+    { width: 1001, height: 831 }, // odd, for the 2px snap check below
   ];
   const spriteSize = { width: SPRITE_WIDTH, height: spriteHeightFor(SPRITE_WIDTH) };
   const stageMin = { width: 164, height: 160 };
@@ -93,17 +83,10 @@ test('pin: the placement is a fixed point — a resize lands the windoids where 
         p1.stage,
         `stage ${JSON.stringify([r0, r1])}`
       );
-      // The 3D Sprite Atlas strip: bottom-docked at the doc box's left, a
-      // MIXED box — its y axis a fixed size (the bottom edge a far strut,
-      // the top following), its x axis resizable and floored at the strip
-      // (the left edge a near strut; the right edge springs with the
-      // middle, like the document window's) — so its left, top and height
-      // are a fixed point WITHOUT a frame change, at the default four views
-      // and at the widest ring (capped at the vacancy), at two tile sizes,
-      // while its width is content: inside the vacancy, never under the
-      // strip's floor. (A 255 tile on the 620 raster trips the header's
-      // top-band caveat — the near edge wins there, accepted — so the
-      // sizes here stay under it.)
+      // The 3D Sprite Atlas strip has a fixed height and a width floored at
+      // RING_MIN_WIDTH. Its left, top and height are a fixed point. Its width
+      // springs but stays clear of the rail. Tile sizes stay small: at 255 the
+      // strip's top on the 620 raster falls in the top band and pins near.
       for (const views of [4, 16]) {
         for (const size of [64, 128]) {
           const opts = { ringViews: views, ringSize: size };
@@ -133,8 +116,7 @@ test('pin: the placement is a fixed point — a resize lands the windoids where 
       assert.ok(doc.top + doc.height <= r1.height - 8, 'doc runs off the bottom');
     }
   }
-  // The slack: a placed rail edge snapped onto a 2px lattice still reads as
-  // a strut on every side (the boundary is no place to park an edge).
+  // Snapped to a 2px lattice, every stage edge is still a strut.
   const odd = rasters[3];
   const p = initialPlacement(odd.width, odd.height);
   const snap2 = (v) => Math.round(v / 2) * 2;

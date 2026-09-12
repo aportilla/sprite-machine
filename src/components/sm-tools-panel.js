@@ -1,10 +1,5 @@
-// ---------------------------------------------------------------------------
-// <sm-tools-panel> — the floating Tools palette's body: the tool strip alone
-// (the current-ink swatch lives in the options strip now, and the "last used"
-// recency row is gone — the Colors dialog is the one color surface). A
-// CONNECTED chrome component: session drives the strip's props, and its
-// events become session actions.
-// ---------------------------------------------------------------------------
+// <sm-tools-panel>: the Tools palette's body. It binds <sm-tool-strip> to the
+// session.
 
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
@@ -17,11 +12,7 @@ export class SmToolsPanel extends LitElement {
   static styles = [
     baseStyles,
     css`
-      /* No inner padding: the tool cells run to the windoid's frame — the
-       strip's frameless grid shares the window's own black line (the kit's
-       desk-accessory composition: vf-grid[frameless] in a vf-window body,
-       which carries no inset of its own — vintage-frames 0.6.0; the
-       flush attribute that used to say so is retired). */
+      /* No padding: the frameless grid runs to the window's frame. */
       :host {
         display: flex;
         flex-direction: column;

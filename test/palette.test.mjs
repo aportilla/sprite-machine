@@ -1,6 +1,3 @@
-// Node-runnable test for the editor's 168-color palette (pure, no THREE/DOM):
-// a full grid of well-formed, named entries, no color and no name repeated.
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -9,9 +6,7 @@ import { PALETTE_168 } from '../src/lib/palette.js';
 const COLS = 21;
 const ROWS = 8;
 
-// Every cell is a DISTINCT color under a DISTINCT name — the hover readout
-// shows the name as the color's identity, so a repeated name would be two
-// swatches claiming to be the same color (and a repeated hex a wasted cell).
+// The hover readout identifies a swatch by name, so names must be unique too.
 test('PALETTE_168 is a full 21×8 grid of well-formed named entries, every color and every name distinct', () => {
   assert.equal(PALETTE_168.length, COLS * ROWS, '21×8 grid');
   const seenCss = new Map();

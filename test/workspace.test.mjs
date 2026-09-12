@@ -1,10 +1,3 @@
-// Node-runnable tests for the workspace slice — the OPEN documents: contexts
-// (own doc + history + face + selection + identity), untitled naming,
-// per-context dirty tracking off the doc's two channels, the activation
-// mirror, the stored-document flows (openStored / save / duplicate / rename /
-// remove) against the real files slice over an in-memory storage stub, and
-// the followActive primitive.
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -15,7 +8,7 @@ import { fakeScheduler, memStorage, encodeAtlas, decodeAtlas } from './helpers.m
 
 const sheet = (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) });
 
-// --- harness -----------------------------------------------------------------
+// Harness: the real files slice over in-memory storage.
 
 function makeWorld() {
   const storage = memStorage();
@@ -40,7 +33,7 @@ function makeWorld() {
       return doc;
     },
   });
-  /** Crank a context's pending live frame. */
+  /** Run a context's pending live frame. */
   const frame = (ctx) => schedulers.get(ctx.doc).frame();
   return { ws, files, storage, frame };
 }
@@ -58,7 +51,7 @@ const stroke = (ctx) => {
   ctx.doc.applyTileEdit('front', tile);
 };
 
-// --- contexts & naming ---------------------------------------------------------
+// Contexts and naming
 
 test('open creates independent contexts; untitled names count up and refill', () => {
   const { ws } = makeWorld();
@@ -109,7 +102,7 @@ test('setSelection is per-context, on the context’s OWN store; a rect drag rid
   assert.equal(a.selection.get().bounds, null);
 });
 
-// --- dirty tracking --------------------------------------------------------------
+// Dirty tracking
 
 test('the birth load leaves a context clean; strokes and structure dirty it', () => {
   const { ws, frame } = makeWorld();
@@ -145,7 +138,7 @@ test('close disposes the tracker: later doc changes touch nothing', () => {
   assert.equal(ctx.dirty, false, 'the disposed tracker no longer marks');
 });
 
-// --- activation mirror ------------------------------------------------------------
+// Activation
 
 test('setActive mirrors a key or null; closing the active context clears it', () => {
   const { ws } = makeWorld();
@@ -165,7 +158,7 @@ test('setActive mirrors a key or null; closing the active context clears it', ()
   assert.equal(ws.byKey(a.key), a, 'the survivor context remains');
 });
 
-// --- stored flows ------------------------------------------------------------------
+// Stored documents
 
 test('save gives an untitled context its stored identity and cleans it', async () => {
   const { ws, frame, storage } = makeWorld();
@@ -294,7 +287,7 @@ test('emptyTrash removes what the Trash holds and reverts every open context hol
   assert.equal(kept.dirty, false);
 });
 
-// --- followActive -----------------------------------------------------------------
+// followActive
 
 test('followActive wires the active context, tears down across switches', () => {
   const { ws } = makeWorld();
@@ -308,9 +301,9 @@ test('followActive wires the active context, tears down across switches', () => 
   });
   assert.deepEqual(log, ['wire:null'], 'the initial state wires immediately');
   ws.setActive(a.key);
-  ws.setActive(a.key); // idempotent — same key never re-wires
+  ws.setActive(a.key); // same key, no re-wire
   ws.setActive(b.key);
-  ws.close(b.key); // the active close drops the holder
+  ws.close(b.key); // closing the active context wires null
   stop();
   assert.deepEqual(log, [
     'wire:null',

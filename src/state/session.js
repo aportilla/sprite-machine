@@ -1,18 +1,7 @@
-// ---------------------------------------------------------------------------
-// `session` slice — the shared editor UI state that used to trap six UI regions
-// inside one element: the active tool and ink, the per-tool options, and the
-// picker dialog's open flag. APP-LEVEL by design (System 7: one palette, one
-// ink, however many documents are open); the per-window half — which face a
-// document window is editing — lives on its workspace context, not here.
+// Session slice: editor UI state shared by every document window. The face a
+// window edits is on its workspace context.
 //
-// Every action is a named, Node-tested function carrying the exact semantics of
-// the old element methods (`#selectColor`, `#switchTool`, the willUpdate
-// clamps). Pure JS, zero deps beyond the palette it seeds from.
-//
-// Clamp BOUNDS are the caller's job (they derive from the doc's tile geometry,
-// which this slice deliberately doesn't know); the clamping itself lives here so
-// a persisted value can never escape its bounds.
-// ---------------------------------------------------------------------------
+// Setters clamp to bounds the caller derives from the doc's tile geometry.
 
 import { createStore } from './store.js';
 import { PENCIL_PALETTE } from '../lib/palette.js';
@@ -23,30 +12,22 @@ const clampRadius = (n, max) => Math.max(0, Math.min(max, Math.round(Number(n) |
 
 export function createSession() {
   const store = createStore({
-    // The active tool: 'select' | 'pencil' | 'rect' | 'fill' | 'eraser' |
-    // 'eyedropper'. The eraser is a formal tool mode (a pencil that writes
-    // transparency), not an ink: the ink below is always a solid color. The
-    // selection tool's marquee is CANVAS state (per document window), never
-    // the session's — only the mode is app-level.
+    // 'select' | 'pencil' | 'rect' | 'fill' | 'eraser' | 'eyedropper'. The
+    // eraser is a tool that writes transparency, so the ink is always a color.
     tool: 'pencil',
-    // The active color. Seeded from the pencil palette so it is never null.
+    // The active color, seeded from the pencil palette.
     ink: { ...PENCIL_PALETTE[0].rgb },
     pencilSize: 1, // the pencil's N×N tip footprint, in texels
-    // The pencil's tip SHAPE — 'circle' (the disc inscribed in the N×N box,
-    // lib/brush.js brushRows) or 'square' (the whole box), the strip's popup.
-    // Circle every load. A right-button pencil stroke erases with it.
+    // 'circle' (the disc inscribed in the N×N box, lib/brush.js brushRows) or
+    // 'square'. A right-button pencil stroke erases with this shape.
     pencilShape: 'circle',
-    // The eraser's N×N tip footprint — its OWN setting, deliberately
-    // independent of the pencil's (not a DRY slip: the two may diverge).
+    // The eraser's N×N tip and shape, independent of the pencil's.
     eraserSize: 1,
-    // …and its own tip shape, the same two names, the same independence:
-    // the eraser's popup writes this one alone. Circle every load.
     eraserShape: 'circle',
     cornerRadius: 0, // the rect tool's corner radius, in texels (0 = sharp)
-    // The fill tool's two checkboxes: a contiguous 4-connected flood by
-    // default; contiguous OFF recolors every matching texel on the face, and
-    // "on all faces" (meaningful only with contiguous off) extends that
-    // recolor across the whole atlas.
+    // Fill tool options. Contiguous fills a 4-connected region. Otherwise every
+    // matching texel on the face is recolored, or on every face with
+    // fillAllFaces.
     fillContiguous: true,
     fillAllFaces: false,
     pickerOpen: false,
@@ -57,20 +38,12 @@ export function createSession() {
     get: store.get,
     subscribe: store.subscribe,
 
-    // Select a tool — every tool (the eraser, eyedropper and selection
-    // included) is a sticky mode: it stays selected until another tool is
-    // picked. The ink is always set (seeded at boot), so there is nothing to
-    // "ensure".
     /** @param {'select'|'pencil'|'rect'|'fill'|'eraser'|'eyedropper'} tool */
     setTool(tool) {
       store.patch({ tool });
     },
 
-    // The single path every color pick funnels through (picker dialog,
-    // in-sprite eyedrop): make `color` the ink. Picking a color while the
-    // ERASER is held means "paint with this" — it returns to the pencil; any
-    // other tool is untouched, so an eyedrop leaves the eyedropper selected
-    // and a pick leaves the selection tool selected (sticky modality).
+    // Every color pick goes through here, from the picker and the eyedropper.
     /** @param {{r:number,g:number,b:number}} color */
     pickColor(color) {
       const patch = { ink: { r: color.r, g: color.g, b: color.b } };
@@ -83,9 +56,6 @@ export function createSession() {
       store.patch({ pencilSize: clampBrush(n, max) });
     },
 
-    // The pencil's tip shape: one of PENCIL_SHAPES, anything else a no-op
-    // (the ring slice's paper setter's discipline — a stray value can never
-    // land in the store; the store itself is silent on an unchanged one).
     /** @param {string} shape */
     setPencilShape(shape) {
       if (!PENCIL_SHAPES.includes(/** @type {any} */ (shape))) return;
@@ -97,7 +67,6 @@ export function createSession() {
       store.patch({ eraserSize: clampBrush(n, max) });
     },
 
-    // The eraser's tip shape — its own code path, the size setters' idiom.
     /** @param {string} shape */
     setEraserShape(shape) {
       if (!PENCIL_SHAPES.includes(/** @type {any} */ (shape))) return;
@@ -109,9 +78,7 @@ export function createSession() {
       store.patch({ cornerRadius: clampRadius(n, max) });
     },
 
-    // A tile resize can leave the persisted pencil / eraser size or corner
-    // radius past the new bounds — re-clamp them (the old willUpdate clamp,
-    // relocated).
+    // Re-clamp the tip sizes and corner radius after a tile resize.
     /** @param {number} brushMax  @param {number} radiusMax */
     clampTools(brushMax, radiusMax) {
       const s = store.get();
@@ -142,6 +109,4 @@ export function createSession() {
   };
 }
 
-// The app-wide singleton: ONE editor session per page, and it outlives every
-// element — session state can no longer die with a DOM node.
 export const session = createSession();

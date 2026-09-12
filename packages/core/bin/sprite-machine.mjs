@@ -1,14 +1,6 @@
 #!/usr/bin/env node
-// ---------------------------------------------------------------------------
-// The CLI: sprite sheets in, glb files out.
-//
-//   sprite-machine build <sheet.png>... --out <dir> [--voxels-per-meter N] [--unlit]
-//
-// One <name>.glb per sheet under --out — the Title chunk's name, else the
-// file's — and a line per file naming it, its triangles and its bytes. The
-// first failure exits non-zero. A thin shell over `sprite-machine/node`:
-// nothing here builds anything.
-// ---------------------------------------------------------------------------
+// CLI over sprite-machine/node: writes one glb per sprite sheet (see USAGE)
+// and prints each file's path, name and size. Exits 1 on the first failure.
 
 import { parseArgs } from 'node:util';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';

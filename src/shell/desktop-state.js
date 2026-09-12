@@ -1,87 +1,25 @@
-// ---------------------------------------------------------------------------
-// Desktop state in localStorage — tiny, synchronous at boot, exactly what
-// it's good at (the documents themselves — and the folders they sit in —
-// live in IndexedDB). One versioned JSON key, v3: per-icon position (by
-// item — "doc:<id>", "folder:<id>" — in its CURRENT container's
-// coordinates: the desktop's raster or a folder window's plane; which
-// container is the library's business) and per-open-SAVED-document edited
-// face (untitled windows are deliberately absent — no autosave, explicit
-// Save is the contract) plus which document was active, and the DESKTOP PATTERN
-// (the Desktop Patterns panel's setting — System 7 kept it in the System
-// file; here one of the two desktop settings that persist), the GREET flag
-// (the other: whether a load with no document to open greets with the
-// About box — the box's own Show at startup checkbox) — and the SEEDED
-// flag: whether the profile's first-ever boot has stored the built-in
-// defaults (Car, Cube). An older v3 blob may still carry the retired
-// `showGrid` flag (it parses fine and drops on the next write) or lack
-// `pattern` (it reads null — the dither).
+// Desktop state in localStorage: one versioned JSON key. Documents, folders and
+// text files live in IndexedDB.
 //
-// THE SEEDED FLAG (Sep 5 2026) is the seeding's transaction record. The
-// first-boot seeding used to be gated on "no desktop-state blob exists" —
-// but this module writes a blob on its own schedule (a debounced snapshot
-// on any store change, a synchronous one on beforeunload), so a reload that
-// landed DURING the seeding's IndexedDB round-trips (a crash, a reload
-// mid-boot) wrote a blob first, and the
-// next boot read "prior state", never seeded, and left a profile with no
-// Car and no Cube for good. Now the gate is `seeded`, which main.js sets —
-// through markSeeded(), written at once, not debounced — only after every
-// built-in is stored: an interrupted first boot carries `seeded: false` and
-// completes on the next boot (the loader skips the built-ins already
-// stored, by name, so nothing doubles), and deleting or emptying later still
-// never resurrects them (the flag stays true). A blob from before the flag
-// reads as seeded (migrate — under the old rule its very existence had
-// already decided that), as do v1 / v2 blobs. The built-in TEXT FILES (Sep
-// 10 2026, src/texts/) keep a record of their own, `seededTexts`, on the
-// same terms — written only after the last one is stored — because they
-// arrived after the documents' flag was already true on every profile: a
-// blob without it reads unseeded, so an existing profile gets the read-me
-// files on its next boot, once.
+// - icons: positions by item key ("doc:<id>", "folder:<id>"), in the
+//   coordinates of the item's current container (the desktop or a folder
+//   window).
+// - windows: folder window boxes as nine-slice pins (layout.js pinOf), keyed
+//   like icons, so they stay on screen after a browser resize.
+// - docs, activeFileId: each open saved document's edited face, and the active
+//   one. Documents are not reopened at boot. An entry restores the face when
+//   its document opens.
+// - pattern: the desktop pattern.
+// - greet: whether a load with no document to open shows the About box.
+//   A blob without it reads true.
+// - seeded, seededTexts: whether the built-in documents and text files have
+//   been stored. main.js marks each only after the last item is stored, so an
+//   interrupted first boot completes on the next one. A blob without seeded
+//   reads as seeded. One without seededTexts reads unseeded.
 //
-// THE GREET FLAG (Sep 12 2026) is the About box's Show at startup — the
-// one preference the app has, and the splash's own checkbox its only
-// control: unchecked, a load the URL gives no document parks on the bare
-// desktop instead of the box (main.js bootDocuments), and Sprite Machine →
-// About… still opens it, the same checkbox there the way back on. A blob
-// without it reads TRUE — the greeting is the default, and every profile
-// from before the flag keeps it — so only a stated false silences the
-// splash. Written at once on the toggle, like the seeding records: the
-// box is light-dismiss, and a click-away right after the uncheck must
-// still find it recorded.
-//
-// AN APPLICATION WINDOW'S GEOMETRY IS NOT HERE — not the windoids', not the
-// document windows'. A browser is resized and reopened on another monitor
-// all the time, so a prior session's top/left is no truth worth
-// re-asserting over a raster that may be nothing like the one it was
-// dragged on: every boot places the windoids from the live raster and every
-// document open lands its window on the doc box, cascaded (the Sprite
-// Editor's layout.js and windows.js). The FINDER'S furniture is different —
-// arranged by hand and expected to stay put: the icons (the Finder's icon
-// layer pulls a saved position on-raster at boot and re-pins it across
-// browser resizes)
-// and, since Sep 8 2026, the FOLDER WINDOWS' boxes — `windows`, keyed like
-// their icons (`folder:<id>`) — stored not as boxes but as their nine-slice
-// PINS (layout.js pinOf: relative terms — each edge a strut's offset from
-// the raster's edge or a spring's fraction of its middle), read from the
-// live window at every snapshot (the Finder's pins(), merged over the
-// map last written like the icons, so a closed window's stays) and
-// re-expressed by the next open on the raster it has then (the Finder's
-// folder windows, through the window manager's adopt), so a folder window
-// comes back on screen even when
-// the browser changed shape between opens. A v3 blob from before them
-// reads none; a record that is not a pin reads as none (layout.js isPin).
-//
-// Restore happens at boot before first paint (main.js reads `saved`; the
-// Finder's icon layer applies positions). The `docs` entries are NOT reopened at boot —
-// what a load shows is the URL's call (?file=<name>, else the About box;
-// main.js) — they hand a saved doc its remembered edited face when
-// it IS opened. Writes are snapshot-on-exit plus a debounce on any store
-// change, desktop gesture or gestureless move of the furniture (a Clean
-// Up's walk) — snapshotting is cheap and loses nothing that
-// matters. `?fresh=1` disables BOTH directions, so a ?fresh boot neither
-// reads nor clobbers a real session's state. Older blobs migrate shallowly: icons
-// carry over (v1's `lastDocId` becomes the one docs entry), and the window
-// geometry v1/v2 persisted is simply dropped.
-// ---------------------------------------------------------------------------
+// markSeeded, markSeededTexts and setGreet write at once, so an immediate
+// reload still finds them. Other changes write after a debounce, and hiding or
+// leaving the page writes at once. ?fresh=1 neither reads nor writes.
 
 import { files } from '../state/files.js';
 import { shell } from '../state/shell.js';
@@ -92,16 +30,12 @@ const KEY = 'sprite-machine:desktop';
 const VERSION = 3;
 const WRITE_DEBOUNCE_MS = 400;
 
-/** A docs entry carries identity + edited face only — never geometry. */
 function docEntry(d) {
   return { fileId: d.fileId, face: d.face ?? null };
 }
 
 /**
- * A parsed blob of any version → the current shape, or null for nothing
- * usable. Exported for its Node test: the `seeded` reading is the seeding's
- * transaction record (header) — a blob that states the flag keeps it, a
- * blob from before the flag (any version) reads as seeded.
+ * Migrates a parsed blob of any version to the current shape, or returns null.
  * @param {any} parsed
  */
 export function migrateDesktopState(parsed) {
@@ -109,8 +43,7 @@ export function migrateDesktopState(parsed) {
     return {
       ...parsed,
       seeded: parsed.seeded !== false,
-      // The text files' record is younger than the flag: only a stated
-      // true counts, so a blob from before them seeds them once.
+      // Only a stated true counts, so older blobs seed the text files once.
       seededTexts: parsed.seededTexts === true,
     };
   }
@@ -145,67 +78,56 @@ function load() {
   }
 }
 
-/** @param {boolean} fresh  ?fresh=1 — neither restore nor persist */
+/** @param {boolean} fresh  ?fresh=1: neither restore nor persist */
 export function createDesktopState(fresh) {
   const saved = fresh ? null : load();
-  // The seeding's record (header): false on a brand-new profile, or one
-  // whose first boot was interrupted; true once main.js marks it — or on a
-  // blob from before the flag.
   let seeded = saved?.seeded === true;
-  // The text files' record (header), on the same terms.
   let seededTexts = saved?.seededTexts === true;
-  // The greeting's switch (header): true unless a blob states false.
   let greet = saved?.greet !== false;
-  /** The synchronous writer, once start() has wired one. */
+  /** The synchronous writer, once start() has set one. */
   let writeNow = () => {};
 
   return {
-    /** The restored state, or null (fresh boot / nothing stored / ?fresh). */
+    /** The restored state, or null. */
     saved,
 
-    /** Has this profile's first-ever boot stored the built-in defaults? */
+    /** Whether the built-in documents have been stored. */
     seeded: () => seeded,
 
-    /** Record that it has — written at once, so a reload a beat later finds
-     *  the record and does not seed again. */
+    /** Marks the built-in documents stored and writes at once. */
     markSeeded() {
       seeded = true;
       writeNow();
     },
 
-    /** Has this profile stored the built-in text files (src/texts/)? */
+    /** Whether the built-in text files (src/texts/) have been stored. */
     seededTexts: () => seededTexts,
 
-    /** Record that it has — markSeeded's terms. */
+    /** Marks the built-in text files stored and writes at once. */
     markSeededTexts() {
       seededTexts = true;
       writeNow();
     },
 
-    /** Does a load with no document to open greet with the About box? */
+    /** Whether a load with no document to open shows the About box. */
     greet: () => greet,
 
-    /** The About box's Show at startup — written at once, the seeding
-     *  records' terms.
+    /** Sets the About box's Show at startup and writes at once.
      *  @param {boolean} on */
     setGreet(on) {
       greet = !!on;
       writeNow();
     },
 
-    /** A saved icon position by key ("doc:<id>", "folder:<id>"), in the
-     *  item's container's coordinates, or null. (A stale blob may still
-     *  carry retired "sample:*" entries; they simply never match an icon
-     *  again.) */
+    /** A saved icon position by key ("doc:<id>", "folder:<id>"), in its
+     *  container's coordinates, or null. */
     iconPos(key) {
       const p = saved?.icons?.[key];
       return Number.isFinite(p?.left) && Number.isFinite(p?.top) ? p : null;
     },
 
-    /** A saved folder window's nine-slice pin by key ("folder:<id>"), or
-     *  null — a blob from before them, or a record that is not a pin (a
-     *  garbled one reads as none, so the open takes the fresh placement
-     *  rather than throwing in pinTo).
+    /** A saved folder window's pin by key ("folder:<id>"), or null when
+     *  missing or not a valid pin.
      *  @param {string} key
      *  @returns {import('./layout.js').Pin | null} */
     windowPin(key) {
@@ -213,34 +135,19 @@ export function createDesktopState(fresh) {
       return isPin(p) ? p : null;
     },
 
-    /** The saved desktop pattern (a kit name or sixteen hex digits, as the
-     *  panel set it), or null — a blob from before the setting, or a
-     *  fresh boot. Validated by the wire (shell/desktop-pattern.js), not
-     *  here. */
+    /** The saved desktop pattern, or null. shell/desktop-pattern.js validates
+     *  it. */
     desktopPattern() {
       const p = saved?.pattern;
       return typeof p === 'string' && p.trim() ? p : null;
     },
 
     /**
-     * Start persisting. `readIcons` is the icon layer's reading of every
-     * position it knows, by key (the Finder's positions(): the live
-     * elements' — the properties ARE the truth after any drag — under the
-     * ones it remembers for a closed folder window's icons, and `null` for
-     * an item filed away and not yet rendered in its new container). The
-     * snapshot MERGES it over the map last written — an icon in a closed
-     * folder window is not live, and a closed folder must not forget its
-     * arrangement on the next write — so the blob keeps a position for
-     * every item it has ever seen, each in its container's own
-     * coordinates. `readWindows` is the folder windows' reading of every
-     * pin it knows, by the same keys (the Finder's pins(): the open
-     * windows' read live, the closed ones' as remembered), merged the same
-     * way — the header's THE FINDER'S furniture. The application's windows
-     * are deliberately not an input: nothing about them persists.
-     * `onMoved` subscribes to the furniture moving with no gesture to end
-     * the move — the Finder's Clean Up, whose icons land over a walk the
-     * kit paces, well after the menu pick's pointerup scheduled its write —
-     * and schedules one more.
+     * Starts persisting and returns a stop function. readIcons and readWindows
+     * are merged over the last written maps, so items in closed folder windows
+     * keep their entries. A null position (an item filed away and not yet
+     * rendered in its new container) removes its entry. onMoved subscribes to
+     * moves that end without a pointerup, such as Clean Up.
      * @param {{readIcons: () => Record<string, {left:number, top:number}|null>,
      *          readWindows?: () => Record<string, import('./layout.js').Pin>,
      *          onMoved?: (fn: () => void) => () => void}} inputs
@@ -253,8 +160,6 @@ export function createDesktopState(fresh) {
       let knownWindows = { ...(saved?.windows ?? {}) };
 
       function snapshot() {
-        // Open SAVED documents only: the edited face off each context.
-        // Untitleds have nothing to reopen.
         const docs = [];
         for (const ctx of workspace.get().contexts) {
           if (!ctx.fileId) continue;
@@ -286,7 +191,7 @@ export function createDesktopState(fresh) {
         try {
           localStorage.setItem(KEY, JSON.stringify(snapshot()));
         } catch {
-          // Quota/private-mode failures cost only icon memory.
+          // Ignore quota and private-mode failures.
         }
       };
       writeNow = write;
@@ -297,12 +202,6 @@ export function createDesktopState(fresh) {
         timer = setTimeout(write, WRITE_DEBOUNCE_MS);
       };
 
-      // Store changes (the open set, faces, the desktop pattern — the shell
-      // slice's other flips schedule a harmless extra snapshot), desktop
-      // gestures (icon drags end in a pointerup), browser resizes (every
-      // icon re-pins to the new raster) and a move no gesture ended
-      // (onMoved) all schedule a write; leaving the page flushes one
-      // synchronously.
       const unsubs = [
         files.subscribe(writeSoon),
         workspace.subscribe(writeSoon),

@@ -1,18 +1,14 @@
-// ---------------------------------------------------------------------------
-// The THREE stage: renderer, scene, camera + orbit controls, lights, ground,
-// camera framing, resize plumbing, and the on-demand render loop. Knows
-// nothing about the voxel pipeline or the document — the rebuilder adds and
-// removes meshes through the returned surface, and the loop's only slice read
-// is `prefs.autoRotate` (a plain per-frame read).
-// ---------------------------------------------------------------------------
+// THREE stage for the 3D View: renderer, scene, orbit camera, lights, ground,
+// framing, resize handling and the on-demand render loop. The rebuilder adds and
+// removes meshes.
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { prefs } from '../state/prefs.js';
 
-const RENDER_SCALE = 0.5; // low-res render, crisply upscaled by CSS
+const RENDER_SCALE = 0.5; // half-resolution render, upscaled by CSS
 
-// Camera direction presets for the ?cam= dev hook (default: three-quarter iso).
+// Camera direction presets for the ?cam= dev flag (default: three-quarter iso).
 const CAM_DIRS = {
   top: [0.001, 1, 0.001],
   front: [0, 0.2, 1],
@@ -22,15 +18,11 @@ const CAM_DIRS = {
 
 /**
  * @param {HTMLCanvasElement} canvas
- * @param {{cam?: string|null}} [opts]  camera preset name (?cam= dev hook)
+ * @param {{cam?: string|null}} [opts]  camera preset name (?cam= dev flag)
  */
 export function createStage(canvas, { cam = null } = {}) {
-  // An alpha context with a fully transparent clear: the scene paints NO
-  // backdrop of its own, so the model (and the ground's shadow, a
-  // ShadowMaterial — shadow-only, transparent) composites over whatever the
-  // page puts behind the canvas — the 3D View's kit pattern well
-  // (the Sprite Editor's windows.html #stage-well, a vf-container with a
-  // 1-bit pattern).
+  // Transparent clear. The model and the ground's ShadowMaterial composite over
+  // the pattern behind the canvas (#stage-well in apps/sprite-editor/windows.html).
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true });
   renderer.setPixelRatio(1);
   renderer.setClearColor(0x000000, 0);
@@ -48,11 +40,8 @@ export function createStage(canvas, { cam = null } = {}) {
   controls.enableDamping = true;
   controls.target.set(0, 0.9, 0);
 
-  // Render on demand: redraw only when something actually changed (a control
-  // move, a rebuild, a resize, or an autoRotate tick) instead of re-rendering
-  // the full scene — 2048² shadow maps + PCF — at 60fps forever while idle.
-  // OrbitControls emits 'change' throughout a drag AND the damping tail, so
-  // motion stays smooth.
+  // Render on demand: the 2048² PCF shadow map is too costly to redraw every
+  // frame while idle. OrbitControls emits 'change' through drags and damping.
   let needsRender = true;
   const requestRender = () => {
     needsRender = true;
@@ -93,7 +82,7 @@ export function createStage(canvas, { cam = null } = {}) {
     controls.update();
   }
 
-  // What auto-rotate spins: the rebuilder's current mesh (null when empty).
+  // The mesh auto-rotate spins, or null.
   let spinTarget = null;
 
   function resize() {
@@ -106,8 +95,8 @@ export function createStage(canvas, { cam = null } = {}) {
       renderer.setSize(rw, rh, false);
       changed = true;
     }
-    // Track CSS aspect independently of the (rounded) render-buffer size so an
-    // odd one-pixel resize can't leave the projection matrix stale.
+    // Compare the CSS aspect, not the rounded buffer size, so a one-pixel
+    // resize still updates the projection.
     const aspect = w / h;
     if (camera.aspect !== aspect) {
       camera.aspect = aspect;
@@ -117,9 +106,7 @@ export function createStage(canvas, { cam = null } = {}) {
     if (changed) requestRender();
   }
   window.addEventListener('resize', resize);
-  // The viewport fills the 50% stage, which can change width (e.g. a window
-  // resize). Observe its box directly so the render buffer + camera aspect stay
-  // correct without waiting on a window resize event.
+  // The canvas can change size without a window resize event.
   const resizeObs =
     typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => resize()) : null;
   resizeObs?.observe(canvas);
@@ -130,7 +117,7 @@ export function createStage(canvas, { cam = null } = {}) {
       spinTarget.rotation.y += 0.006;
       needsRender = true;
     }
-    controls.update(); // advance damping every frame; it emits 'change' while moving
+    controls.update(); // advances damping. Emits 'change' while moving.
     if (needsRender) {
       renderer.render(scene, camera);
       needsRender = false;
@@ -148,7 +135,7 @@ export function createStage(canvas, { cam = null } = {}) {
     setSpinTarget(obj) {
       spinTarget = obj;
     },
-    // HMR teardown: drop everything this stage wired onto the page/loop.
+    // HMR teardown.
     dispose() {
       window.removeEventListener('resize', resize);
       resizeObs?.disconnect();

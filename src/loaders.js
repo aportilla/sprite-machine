@@ -1,32 +1,5 @@
-// ---------------------------------------------------------------------------
-// Atlas loaders: every way a sheet enters the app (a built-in sample, a picked
-// or dropped file, a blank canvas) funnels through here — decode, validate,
-// then OPEN A CONTEXT (state/workspace.js) and load the sheet into its doc,
-// or `build.setError` on failure. One document = one window: a load never
-// replaces an open document — the window layer reconciles a fresh document
-// window into existence from the workspace change, and the caller activates
-// it. Validation runs BEFORE the context opens, so a malformed sheet never
-// leaves an empty window behind.
-//
-// A dropped PNG may BE an exported document (the format is one .png with
-// metadata text chunks — the engine's png-chunks.js), so `loadFile` reads the bytes
-// first: a `Title` chunk restores the document's name, a
-// `sprite-machine:transforms` chunk its per-view reorientation, and a
-// `sprite-machine:ring` chunk its 3D Sprite Atlas settings — the lossless
-// round-trip that makes Download ↔ drop a real save path. Non-PNG images
-// (and PNGs with no chunks) fall back to the file's own name and the
-// defaults.
-//
-// Two loaders write instead of opening: `seedDefaultDocs` saves the
-// built-in samples into the library as ordinary stored documents — a
-// truly-virgin-boot one-shot (see its doc comment) — and `seedDefaultTexts`
-// stores the built-in text files (src/texts/) the same way, on their own
-// record. `restoreDefaultFiles` runs the two over whatever the library is
-// MISSING (`missingDefaults`, the reading its menu item's gate shares): the
-// seeding keeps its one-shot records, and the Finder's Special → Restore
-// Default Files is how a profile that has already booted gets a built-in
-// added since — or one it deleted.
-// ---------------------------------------------------------------------------
+// Atlas loaders: validate a sheet, then open it as a new workspace context.
+// Validation runs first, so a bad sheet leaves no empty window.
 
 import { validateSheet, clampTile, isPng, readTextChunks } from 'sprite-machine';
 import { urlToImageData, bytesToImageData } from './image-io.js';
@@ -36,13 +9,8 @@ import { files } from './state/files.js';
 import { build } from './state/build.js';
 import { RING_CHUNK_KEY, parseRingChunk } from './state/ring-settings.js';
 
-// Validate + open a decoded sheet as a fresh context. The single trunk under
-// the loaders below. Returns the new context, or null (with the error
-// recorded on the build slice) on a malformed sheet. `face` seeds the
-// context's starting face at open (the ?edit boot hook), and `ring` its 3D
-// Sprite Atlas settings (a document's own chunk): at open, before any
-// tracker or follower, so the seed is the document's birth state, not a
-// change that dirties it.
+// Returns the new context, or null with the error on the build slice. face and
+// ring seed the context at open, so they don't mark the document dirty.
 /** @param {ImageData} imageData
  *  @param {{transforms?: Record<string, object>, name?: string, face?: string,
  *           ring?: Partial<import('./state/ring-settings.js').RingSettings>|null}} [opts] */
@@ -59,8 +27,7 @@ export function openSheet(imageData, { transforms = {}, name, face, ring = null 
 
 /** @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}} sample
  *  @param {{name?: string, face?: string}} [opts]
- *    the copy's name (the New dialog's; the sample's own by default) and its
- *    starting face (the ?edit boot hook) */
+ *    the copy's name (default: the sample's) and starting face */
 export async function loadSample(sample, { name = sample.name, face } = {}) {
   let image;
   try {
@@ -74,8 +41,6 @@ export async function loadSample(sample, { name = sample.name, face } = {}) {
     build.setError(`Sample "${sample.name}" is unusable: ${bad}`);
     return null;
   }
-  // A sample opens as a fresh unsaved copy wearing the sample's name, or
-  // the one the New dialog gave it.
   return openSheet(image, {
     transforms: { ...(sample.transforms || {}) },
     name,
@@ -84,13 +49,9 @@ export async function loadSample(sample, { name = sample.name, face } = {}) {
 }
 
 /**
- * The document chunks a PNG's bytes carry — the `Title`, the per-view
- * `sprite-machine:transforms`, the `sprite-machine:ring` settings — read
- * BEST-EFFORT: a non-PNG, a torn chunk list or a garbled transforms chunk
- * costs only what it garbles (a name, the transforms), never the pixels.
- * The drop's reading (loadFile) and the paste's (apps/finder, a PNG off
- * the system clipboard — very likely chunkless, the browser having
- * re-encoded it) share it.
+ * Read the document chunks from PNG bytes: Title, sprite-machine:transforms and
+ * sprite-machine:ring. Best-effort: a non-PNG or a bad chunk loses only that
+ * metadata, never the pixels. Used by loadFile and the Finder's paste.
  * @param {Uint8Array} bytes
  * @returns {{title: string|null, transforms: Record<string, object>,
  *   ring: Partial<import('./state/ring-settings.js').RingSettings>|null}}
@@ -114,10 +75,8 @@ export function readSheetMeta(bytes) {
   return { title, transforms, ring };
 }
 
-// Decode a dropped/picked file, surfacing failures instead of swallowing them
-// as an unhandled promise rejection (bad/corrupt images just no-op otherwise).
-// Returns the opened context (null on failure), so the drop target can
-// surface the new document window on success only.
+// Decode and open a dropped file. Returns the context, or null with the error on
+// the build slice.
 /** @param {File} f */
 export async function loadFile(f) {
   try {
@@ -134,11 +93,8 @@ export async function loadFile(f) {
   }
 }
 
-// A fresh 3x2 sheet of empty (transparent) square tiles to draw from
-// scratch — every face reads empty until you paint it. `tile` is the
-// square tile size the New… dialog chose (clamped to the stepper's range)
-// and `name` the name it captured; with none, the name counts up over the
-// open untitleds ("untitled", "untitled 2", …).
+// Open an empty 3x2 sheet of square tiles. Without a name, the workspace picks
+// the next untitled name.
 /** @param {number} [tile]  @param {string} [name] */
 export const loadBlank = (tile = 40, name) => {
   const t = clampTile(tile);
@@ -146,17 +102,9 @@ export const loadBlank = (tile = 40, name) => {
 };
 
 /**
- * Seed the document library with the built-in defaults — one ORDINARY stored
- * document per sample, through the same files.save path a user's ⌘S takes
- * (real PNG bytes, metadata chunks, generated icon). Run only while the
- * profile has no record of having seeded (main.js, the desktop state's
- * `seeded` flag — shell/desktop-state.js header), so the seeds are created
- * exactly once and live as normal mutable documents from then on — edited,
- * renamed or deleted, they never come back. A first boot interrupted
- * mid-seeding (a reload) runs this again on the next boot: `existing` — the
- * names already in the library — skips the built-ins that did land, so
- * nothing doubles. Resolves the first seeded doc's id (the boot document),
- * or null when nothing could be seeded.
+ * Save each built-in sample to the library as an ordinary document. Names in
+ * existing are skipped, so an interrupted seeding completes without duplicates.
+ * Resolves the first seeded document's id, or null.
  * @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}[]} samples
  * @param {Set<string>} [existing]  document names already stored
  */
@@ -172,23 +120,17 @@ export async function seedDefaultDocs(samples, existing = new Set()) {
       const res = await files.save(doc, { fileId: null, name: sample.name });
       if (res && firstId == null) firstId = res.id;
     } catch {
-      // A failed seed costs only that default document.
+      // A failed seed skips only that document.
     }
-    // createdAt is the listing's sort key; a same-millisecond pair would
-    // tie-break on random ids and shuffle the icon order between machines.
+    // Distinct createdAt values keep the listing order stable. Ties break on
+    // random ids.
     await new Promise((r) => setTimeout(r, 2));
   }
   return firstId;
 }
 
 /**
- * Seed the library with the built-in TEXT FILES — one ordinary stored text
- * file per entry (files.createText, on the desktop), seedDefaultDocs's
- * terms exactly: run while the profile carries no record of having seeded
- * them (main.js, the desktop state's `seededTexts` flag), `existing` — the
- * text file names already stored — skipping the ones that did land, so an
- * interrupted seeding completes and nothing doubles; from then on they are
- * normal files, and renamed, filed or trashed they never come back.
+ * Store each built-in text file on the desktop, skipping names in existing.
  * @param {{name: string, text: string}[]} texts
  * @param {Set<string>} [existing]  text file names already stored
  */
@@ -198,21 +140,15 @@ export async function seedDefaultTexts(texts, existing = new Set()) {
     try {
       await files.createText({ name: t.name, text: t.text });
     } catch {
-      // A failed seed costs only that text file.
+      // A failed seed skips only that text file.
     }
-    await new Promise((r) => setTimeout(r, 2)); // the listing's sort key, as above
+    await new Promise((r) => setTimeout(r, 2)); // distinct createdAt, as above
   }
 }
 
 /**
- * The built-in files this profile is MISSING — every sample document and
- * every built-in text file whose name is nowhere in the library, the Trash
- * INCLUDED: a trashed Read Me is still a Read Me, and restoring beside it
- * would make a second file of that name where the way back is to drag the
- * first one out. Pure over the passed state, so the menu can ask it on
- * every listing change; it is the one reading under both halves of
- * Restore Default Files — what the command stores, and whether the item is
- * live at all.
+ * The built-in documents and text files whose names are not in the library.
+ * Trashed files count as present, so a restore never duplicates a name. Pure.
  * @param {import('./state/files.js').FilesState} state
  * @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}[]} samples
  * @param {{name: string, text: string}[]} texts
@@ -227,20 +163,8 @@ export function missingDefaults(state, samples, texts) {
 }
 
 /**
- * Restore the built-in files — the Finder's Special → Restore Default
- * Files, and the ONE route by which an existing profile gets a built-in.
- * The seeding proper stays a one-shot on its two records (`seeded`,
- * `seededTexts`): a profile takes the built-ins at its first boot and never
- * again, so a read-me added to src/texts/ after that profile existed, and
- * a Car its owner deleted, both reach it only from here.
- *
- * ADDITIVE AND BY NAME, which is what makes it safe to pick twice: the two
- * seeders run over the missing entries alone, so a built-in already in the
- * library is left exactly as it stands — a renamed Cube, a Read Me dragged
- * into a folder, a Car painted over are all somebody's file now, never
- * this command's to overwrite, and no name is ever doubled. What it stores
- * is stored the way the first boot stores it: ordinary new files on the
- * desktop, from then on the user's.
+ * Special → Restore Default Files: store the built-in files missing from the
+ * library. A file that already has a built-in's name is left alone.
  * @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}[]} samples
  * @param {{name: string, text: string}[]} texts
  */

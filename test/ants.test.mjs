@@ -1,19 +1,11 @@
-// Node-runnable tests for the marching ants' raster (pure, no DOM): the
-// rectangle ring's runs pinned as the run-length encoding of an independently
-// stated clockwise walk (which implies the coverage, the dash cycle, the march
-// and the phase's period), the seam, one concrete case — and the OUTLINE ring
-// around a row-convex shape (a circle tip's disc), whose walk is the
-// rectangle's exact generalization. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { antsRuns, antsOutlineRuns, ANTS_DASH, ANTS_PERIOD } from '../src/lib/ants.js';
 import { brushSpans } from '../src/lib/brush.js';
 
-// An independent statement of the walk: the ring's pixels in clockwise order
-// from the top-left corner, as its four straight segments — top row →, right
-// column ↓, bottom row ←, left column ↑ — each pixel once, degenerate 1-wide
-// / 1-tall frames included (an empty segment is dropped).
+// The ring's pixels clockwise from the top-left corner, as four segments: top
+// row, right column, bottom row, left column. Empty segments are dropped.
 function segments({ x, y, w, h }) {
   const top = [];
   const right = [];
@@ -26,13 +18,11 @@ function segments({ x, y, w, h }) {
   return [top, right, bottom, left].filter((s) => s.length);
 }
 
-// The ink of walk pixel i at `phase`: four black, four white, the dashes
-// advancing one px along the walk per phase step.
+// Whether walk pixel i is black at `phase`. The dashes advance one px per step.
 const blackAt = (i, phase) =>
   (((i - phase) % ANTS_PERIOD) + ANTS_PERIOD) % ANTS_PERIOD < ANTS_DASH;
 
-// The runs the walk implies, built the slow way: ink every pixel, then
-// run-length encode each segment by ink — a run's rect spans its pixels.
+// Inks every walk pixel, then run-length encodes each segment by ink.
 function expectedRuns(f, phase) {
   const runs = [];
   let i = 0;
@@ -60,10 +50,9 @@ function expectedRuns(f, phase) {
   }));
 }
 
-// Flatten runs into per-pixel [x, y, black] in WALK order: a run on the
-// bottom row was walked leftward and one on the left column upward, so those
-// expand backward (a 1-tall / 1-wide frame has only its top row / right
-// column, walked forward).
+// Expands runs into per-pixel [x, y, black] in walk order. Bottom-row and
+// left-column runs expand backward. A 1-tall or 1-wide frame has only its top
+// row or right column.
 function pixels(runs, f) {
   const out = [];
   for (const r of runs) {
@@ -86,22 +75,19 @@ function pixels(runs, f) {
 }
 
 const FRAMES = [
-  { x: 0, y: 0, w: 5, h: 5 }, // a 16-px ring: two whole cycles, no seam
-  { x: 3, y: 2, w: 12, h: 7 }, // a 34-px ring: a seam two px into a dash
-  { x: 0, y: 0, w: 8, h: 8 }, // a 28-px ring: a seam mid-cycle
+  { x: 0, y: 0, w: 5, h: 5 }, // 16-px ring: two whole cycles, no seam
+  { x: 3, y: 2, w: 12, h: 7 }, // 34-px ring: seam two px into a dash
+  { x: 0, y: 0, w: 8, h: 8 }, // 28-px ring: seam mid-cycle
   { x: 40, y: 12, w: 9, h: 3 },
-  { x: -6, y: -2, w: 10, h: 10 }, // hanging off the tile: negative coordinates
-  { x: 1, y: 1, w: 1, h: 6 }, // a single column
-  { x: 1, y: 1, w: 6, h: 1 }, // a single row
-  { x: 4, y: 4, w: 2, h: 2 }, // the whole ring is four corners
+  { x: -6, y: -2, w: 10, h: 10 }, // negative coordinates
+  { x: 1, y: 1, w: 1, h: 6 }, // single column
+  { x: 1, y: 1, w: 6, h: 1 }, // single row
+  { x: 4, y: 4, w: 2, h: 2 }, // four corners only
   { x: 0, y: 0, w: 1, h: 1 }, // one pixel
 ];
 
-// The whole contract in one pin: the arithmetic runs equal the run-length
-// encoding of the inked walk, segment by segment — so every run is maximal
-// within its segment (a corner pixel's run and the column below it may share
-// an ink: they are different segments), and nothing is split or merged. The
-// phases run past a period either way, so the cycle is pinned with it.
+// Runs never cross a segment, so a corner's run and the next segment's first
+// run may share an ink.
 test('the runs ARE the run-length encoding of the inked walk, per segment', () => {
   for (const f of FRAMES) {
     for (let phase = -ANTS_PERIOD; phase <= 2 * ANTS_PERIOD; phase++) {
@@ -115,10 +101,9 @@ test('the runs ARE the run-length encoding of the inked walk, per segment', () =
 });
 
 test('the seam: the walk starts a fresh cycle at the top-left corner', () => {
-  // A 5×5 frame has a 16-px ring — two full cycles, so the last dash meets
-  // the first exactly. A 6×6 frame's 20-px ring ends four px into a cycle:
-  // at phase 0 its last four px (the left column, bottom to top) are the
-  // start of a black dash that the top-left corner cuts off — the seam.
+  // A 5×5 frame's 16-px ring is two whole cycles. A 6×6 frame's 20-px ring
+  // ends four px into a cycle, so at phase 0 the left column's last four px
+  // start a black dash that the top-left corner cuts off.
   const five = { x: 0, y: 0, w: 5, h: 5 };
   const even = pixels(antsRuns(five, 0), five);
   assert.deepEqual(
@@ -131,8 +116,8 @@ test('the seam: the walk starts a fresh cycle at the top-left corner', () => {
     seam.map(([, , b]) => (b ? 1 : 0)),
     [1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1]
   );
-  // …and it walks INTO the corner: the seam's black run is the left column's
-  // top four px, the corner pixel (0,0) itself belonging to the first run.
+  // The seam's black run is the left column's top four px. The corner (0,0)
+  // belongs to the first run.
   assert.deepEqual(
     seam.slice(16).map(([x, y]) => [x, y]),
     [
@@ -144,34 +129,29 @@ test('the seam: the walk starts a fresh cycle at the top-left corner', () => {
   );
 });
 
-// The concrete runs of the 5×5 case at phase 0, in emission order — a pin a
-// reader can check against the header's walk by hand. Every run lies on
-// whole pixels: there is nothing here a rasterizer could anti-alias.
 test('5×5 at phase 0: the concrete runs; a frame under 1×1 emits nothing', () => {
   assert.deepEqual(antsRuns({ x: 0, y: 0, w: 5, h: 5 }, 0), [
-    { x: 0, y: 0, w: 4, h: 1, black: true }, // top row: the first dash
-    { x: 4, y: 0, w: 1, h: 1, black: false }, // the top-right corner
-    { x: 4, y: 1, w: 1, h: 3, black: false }, // right column, down
-    { x: 4, y: 4, w: 1, h: 1, black: true }, // the bottom-right corner
+    { x: 0, y: 0, w: 4, h: 1, black: true }, // top row
+    { x: 4, y: 0, w: 1, h: 1, black: false }, // top-right corner
+    { x: 4, y: 1, w: 1, h: 3, black: false }, // right column
+    { x: 4, y: 4, w: 1, h: 1, black: true }, // bottom-right corner
     { x: 1, y: 4, w: 3, h: 1, black: true }, // bottom row, walked leftward
-    { x: 0, y: 4, w: 1, h: 1, black: false }, // the bottom-left corner
+    { x: 0, y: 4, w: 1, h: 1, black: false }, // bottom-left corner
     { x: 0, y: 1, w: 1, h: 3, black: false }, // left column, walked upward
   ]);
-  // Phase 1: everything one px on. The corner pixel (4,0) is now the black
-  // dash's tail; the first run is one px shorter, a white px leads.
+  // Phase 1: a white px leads, and the corner (4,0) ends the black dash.
   assert.deepEqual(antsRuns({ x: 0, y: 0, w: 5, h: 5 }, 1).slice(0, 3), [
     { x: 0, y: 0, w: 1, h: 1, black: false },
     { x: 1, y: 0, w: 4, h: 1, black: true },
     { x: 4, y: 1, w: 1, h: 4, black: false },
   ]);
-  // A frame with no extent on either axis has no ring.
   assert.deepEqual(antsRuns({ x: 0, y: 0, w: 0, h: 5 }, 0), []);
   assert.deepEqual(antsRuns({ x: 0, y: 0, w: 5, h: 0 }, 3), []);
 });
 
-// --- the outline ring ---------------------------------------------------------
+// Outline ring
 
-// A box as spans — the outline walk's special case.
+// A box as spans.
 const boxSpans = ({ x, y, w, h }) =>
   Array.from({ length: h }, (_, r) => ({ y: y + r, x0: x, x1: x + w - 1 }));
 
@@ -188,8 +168,7 @@ test('antsOutlineRuns: a box’s spans give antsRuns’ runs exactly, run for ru
   assert.deepEqual(antsOutlineRuns([], 0), [], 'no spans, no ring');
 });
 
-// The independent statement of the outline: the shape's THIN boundary — every
-// px of it with a 4-neighbour outside — as a set of keys.
+// The shape's thin boundary as sorted keys: every px with a 4-neighbour outside.
 const key = (x, y) => `${x},${y}`;
 function thinBoundary(spans) {
   const shape = new Set();
@@ -210,10 +189,9 @@ function thinBoundary(spans) {
 }
 const cheb = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]));
 
-// Expand outline runs into per-pixel [x, y, black] in WALK order. A run
-// carries no direction, but the walk is a chain: a run of two or more px
-// joins the pixel before it at exactly one of its ends, and that end comes
-// first (the first run is the top row, walked left → right).
+// Expands outline runs into per-pixel [x, y, black] in walk order. A run of two
+// or more px starts at the end that touches the previous pixel. The first run
+// is the top row, walked left to right.
 function outlineWalk(runs) {
   const out = [];
   let prev = null;
@@ -243,9 +221,7 @@ function outlineWalk(runs) {
   return out;
 }
 
-// The whole outline contract on one shape: the walk is exactly the thin
-// boundary, each px once, 8-connected and closed, clockwise from the top
-// row's left end, inked by the dash cycle at every phase.
+// Checks the outline walk at every phase. Returns its length.
 function checkOutline(spans, label) {
   const boundary = thinBoundary(spans);
   for (let phase = 0; phase < ANTS_PERIOD; phase++) {
@@ -255,8 +231,7 @@ function checkOutline(spans, label) {
     assert.deepEqual([...keys].sort(), boundary, `${label}: exactly the thin boundary`);
     for (let i = 1; i < walk.length; i++)
       assert.ok(cheb(walk[i], walk[i - 1]) <= 1, `${label}: 8-connected at px ${i}`);
-    // A ring closes; a shape one px wide or tall degenerates to a line walked
-    // once, the box's own rule (its last px is the line's far end).
+    // A shape one px wide or tall is a line walked once, so it does not close.
     const line = spans.length === 1 || spans.every((s) => s.x0 === s.x1);
     if (walk.length > 1 && !line)
       assert.ok(cheb(walk[0], walk[walk.length - 1]) <= 1, `${label}: closed`);
@@ -279,8 +254,7 @@ function checkOutline(spans, label) {
 }
 
 test('antsOutlineRuns: a circle tip’s disc — the thin boundary, once, 8-connected, closed, clockwise, inked', () => {
-  // Every tip size the editor allows at 1 system px per texel, and the
-  // small sizes at 2 and 3 (a texel several px wide makes every step a run).
+  // Every tip size at 1 px per texel, and the small sizes at 2 and 3.
   for (let n = 1; n <= 64; n++)
     checkOutline(brushSpans(70, 70, n, 'circle', 200, 200), `disc ${n}`);
   for (let n = 1; n <= 9; n++) {
@@ -290,8 +264,7 @@ test('antsOutlineRuns: a circle tip’s disc — the thin boundary, once, 8-conn
 });
 
 test('antsOutlineRuns: the plus is a four-px diamond; a box’s ring is the frame’s', () => {
-  // The 3 px disc at 1 px per texel is the plus: its center has every
-  // neighbour inside, so the ring is its four arm tips — one seam, a diamond.
+  // The 3 px disc at 1 px per texel is a plus. Its ring is the four arm tips.
   const plus = brushSpans(5, 5, 3, 'circle', 10, 10);
   assert.deepEqual(
     outlineWalk(antsOutlineRuns(plus, 0)).map(([x, y]) => [x, y]),
@@ -302,24 +275,22 @@ test('antsOutlineRuns: the plus is a four-px diamond; a box’s ring is the fram
       [4, 5],
     ]
   );
-  // The 4 px disc at 2 px per texel: a 6×6 box less its 2×2 corners — a
-  // 24-px ring where the box's would be 28.
+  // At 2 px per texel, the 4 px disc's ring is 24 px and the square's is 28.
   assert.equal(checkOutline(brushSpans(5, 5, 4, 'circle', 12, 12, 2), 'disc 4 ×2'), 24);
   assert.equal(checkOutline(brushSpans(5, 5, 4, 'square', 12, 12, 2), 'box 4 ×2'), 28);
 });
 
 test('antsOutlineRuns: a disc clipped at the tile’s edge rings the clipped shape, closing along the edge', () => {
-  // A 7 px disc on the tile's top-left corner: rows above and columns left of
-  // the tile are gone, and the ring runs along the tile edge.
+  // A 7 px disc clipped at the tile's top-left corner. The ring runs along the
+  // tile edge.
   const clipped = brushSpans(0, 0, 7, 'circle', 10, 10, 2);
   assert.ok(clipped.length < 14, 'rows off the tile are dropped');
   assert.ok(clipped.every((s) => s.x0 >= 0 && s.y >= 0));
   checkOutline(clipped, 'corner-clipped disc');
-  // A disc clipped to a single column at the right edge — the degenerate
-  // 1-wide shape a box handles as its own column.
+  // A disc clipped to a single column at the right edge.
   const column = brushSpans(11, 5, 5, 'circle', 10, 10);
   assert.ok(column.length > 0 && column.every((s) => s.x0 === 9 && s.x1 === 9));
   assert.equal(checkOutline(column, 'one-column disc'), column.length);
-  // Wholly off the tile: nothing.
+  // Wholly off the tile.
   assert.deepEqual(antsOutlineRuns(brushSpans(30, 30, 5, 'circle', 10, 10), 0), []);
 });

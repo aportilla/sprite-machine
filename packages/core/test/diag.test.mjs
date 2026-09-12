@@ -1,18 +1,10 @@
-// computeDiag — the geometry self-check behind ?diag=1 and the watertightness
-// asserts. It reads position-based edge parity (a closed surface uses every
-// undirected edge an even number of times; boundary/odd edges are a hole in a
-// mesh that should be closed) plus a per-face normal histogram bucketed by
-// dominant axis + sign. It is pure and duck-types the geometry, so THREE is
-// never needed — plain stubs suffice. Pinned on the two ends: a closed
-// surface and an open one. Run: node --test test/diag.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { computeDiag } from '../src/diag.js';
 
-// A geometry-like stub: computeDiag only reads geo.attributes.position.array,
-// geo.attributes.normal.array, and geo.index (null => non-indexed geometry,
-// so triCount = position.length / 9 and triangle t uses verts t*3, t*3+1, t*3+2).
+// A geometry stub with the fields computeDiag reads. A null index means
+// non-indexed geometry.
 function stub(position, normal, index = null) {
   return {
     attributes: {
@@ -24,8 +16,7 @@ function stub(position, normal, index = null) {
 }
 
 test('closed surface (tetrahedron) — no boundary or odd edges', () => {
-  // 4 vertices, 4 triangular faces. Every undirected edge is shared by exactly
-  // two triangles, so a welded tetrahedron is watertight.
+  // A tetrahedron has 6 edges, each shared by two of its 4 faces.
   const V = [
     [0, 0, 0],
     [1, 0, 0],
@@ -43,7 +34,7 @@ test('closed surface (tetrahedron) — no boundary or odd edges', () => {
   for (const f of faces) {
     for (const vi of f) {
       pos.push(...V[vi]);
-      nrm.push(0, 1, 0); // first-vertex axis of every tri -> py
+      nrm.push(0, 1, 0); // every normal buckets to py
     }
   }
 
@@ -51,7 +42,6 @@ test('closed surface (tetrahedron) — no boundary or odd edges', () => {
   assert.equal(d.triCount, 4, 'four triangles');
   assert.equal(d.boundaryEdges, 0, 'a closed surface has no boundary edges');
   assert.equal(d.oddEdges, 0, 'every edge is used an even number of times');
-  // A tetrahedron has 6 distinct undirected edges, each shared by two faces.
   assert.equal(d.uniqueEdges, 6, 'six shared edges');
   assert.deepEqual(
     d.hist,

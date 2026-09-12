@@ -17,8 +17,15 @@ Read `README.md` first; it is the spec. The testing policy is
   every Pages deploy. No one-off verification scripts.
 - Commit messages and comments never report test or check counts, and
   never claim a test pins something unless it does.
+- Comments and docs are short, dry and direct. Let the code speak for
+  itself; comment only to label a section or state a non-obvious
+  constraint (an ordering rule, a browser or kit workaround, a unit, an
+  invariant) in a sentence or two. No justification or roads not taken,
+  no history or dates, no plan or ask references, no ALL-CAPS emphasis,
+  no em-dash chains, and no cute or figurative phrasing. A module header
+  is a line or a few. JSDoc descriptions are a sentence at most.
 - Never edit `~/MyProjects/vintage-frames` from here. A kit behavior that
-  needs changing or pinning is a kit ask (`docs/kit-asks-*.md`).
+  needs changing or pinning is a kit ask for the user.
 - The engine (pipeline, mesher, file formats) is `packages/core`, published
   to npm as `sprite-machine`; the app imports it by that name through the
   workspace link, and the package typechecks with no DOM lib. Engine code
@@ -57,15 +64,11 @@ one shell. Keep them apart:
 - **Cross-application calls** go through `deps.apps`, read at pick time,
   never at wire-up, so the order the applications initialize in never
   matters.
-- The move that put every window in its application is
-  `docs/app-windows-plan.md` (built 2026-09-11); its follow-ups — the scene
-  beside its windoids, the components beside their application — take the
-  same direction.
+- Follow-ups take the same direction: the scene beside its windoids, the
+  components beside their application.
 
-A larger change starts as a plan in `docs/<topic>-plan.md`, on the shape
-the recent plans share (`folders-plan.md`, `trash-plan.md`,
-`clipboard-plan.md`, `apps-plan.md`): a status line quoting the ask, the
-System 7 model it copies, the design, steps that each land green, kit
+A larger change starts as a plan in `docs/<topic>-plan.md`: a status line
+quoting the ask, the System 7 model it copies, the design, steps that each land green, kit
 asks, numbered decisions for the user with a recommendation each, tests
 by the rules, follow-ups and files touched. The decisions are the user's:
 record each in the plan, dated, when it is made, and keep the status line

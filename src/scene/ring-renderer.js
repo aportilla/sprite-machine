@@ -1,40 +1,14 @@
-// ---------------------------------------------------------------------------
-// The 3D Sprite Atlas's renderer: its own THREE world on an OFFSCREEN canvas
-// that never enters the DOM, rendering the rebuilder's mesh orthographically
-// from a ring of yaws into one SHEET canvas — `views` square frames side by
-// side — that is both the windoid's picture and the export's file (the
-// strip's cells are drawImage slices of it; Export encodes it). Knows
-// nothing about stores or documents: scene/ring.js (the follower) feeds it
-// the subject and asks for renders; lib/ring.js is the geometry.
+// 3D Sprite Atlas renderer. Renders a clone of the rebuilder's mesh
+// orthographically from a ring of yaws into one sheet canvas of `views` square
+// frames. The sheet is both the windoid's picture and the exported file.
+// scene/ring.js drives it and lib/ring.js has the geometry.
 //
-// THE SUBJECT is a clone of the mesh the rebuilder put on the stage —
-// mesh.clone() shares geometry + material (the rebuilder's dispose() on a
-// rebuild releases THIS renderer's GPU copy too, through THREE's dispose
-// event; the follower drops the clone before the dispose) — with its
-// rotation reset (the stage's auto-rotate never leaks in) and shadows off
-// (no ground plane, no shadow in a sprite: the ground is the 3D View's
-// furniture). Two GL contexts on the page, the stage's and this one — fine.
-//
-// THE FRAME is lib/ring.js's: the tile — a square of `size` px — with the
-// whole lattice's envelope fit to it at every yaw (the orthographic
-// half-extent is the envelope's larger half in voxel units, so px per voxel
-// is a derived fraction), the camera looking at the lattice center from
-// `dist` out along the pose's direction with the pose's TRUE up vector
-// (e = 90, straight down, is well defined). No antialiasing and no
-// smoothing in the copy chain: every px is a hard sample of the mesh, never
-// a blend. The clear is transparent (alpha: true) — the frame's margin is
-// paper in the windoid and transparency in the file — and outputColorSpace
-// is the stage's SRGB, so the sprites' colors agree with the 3D View's.
-//
-// THE LIGHTS RIDE WITH THE CAMERA — the rig is scene/rig.js's, shared with
-// the desktop icon's renderer and re-posed per yaw, so every angle of the
-// ring is lit exactly as an engine's fixed sun would light a turning object.
-//
-// The copy out of the GL canvas (sheet.drawImage) runs in the same task as
-// the renders, and the context keeps its drawing buffer besides
-// (preserveDrawingBuffer) — an offscreen canvas is never composited, so
-// nothing is left to the browser's clear timing. The buffer is small.
-// ---------------------------------------------------------------------------
+// - The clone shares geometry and material with the rebuilder's mesh.
+// - Each frame fits the whole lattice at every yaw. The camera uses the pose's
+//   own up vector, so elevation 90 is well defined.
+// - No antialiasing or smoothing: every pixel is a hard sample of the mesh.
+// - The offscreen canvas is never composited, so the 2D copy runs in the same
+//   task as the renders, with preserveDrawingBuffer set.
 
 import * as THREE from 'three';
 import { DEFAULT_WORLD_SIZE } from 'sprite-machine';
@@ -72,7 +46,7 @@ export function createRingRenderer() {
   scene.add(camera);
   const rig = createRig(scene);
 
-  // The 2D copy — the durable pixels the windoid and the export read.
+  // The 2D copy read by the windoid and the export.
   const sheet = document.createElement('canvas');
 
   /** @type {{clone: THREE.Object3D, dims: {nx: number, ny: number, nz: number}}|null} */
@@ -82,9 +56,8 @@ export function createRingRenderer() {
 
   return {
     /**
-     * Adopt the rebuilder's mesh (a shared-geometry clone) or drop the
-     * current one (null) — called BEFORE the rebuilder disposes the
-     * geometry the clone shares.
+     * Clones the rebuilder's mesh, or drops the clone on null. Called before the
+     * rebuilder disposes the shared geometry.
      * @param {{mesh: THREE.Object3D, dims: {nx: number, ny: number, nz: number}}|null} sub
      */
     setSubject(sub) {
@@ -105,9 +78,8 @@ export function createRingRenderer() {
     },
 
     /**
-     * Render the whole strip now, synchronously: `views` frames of the
-     * subject at `ringYaws(views, offset)`, each a `size` px tile, at
-     * `elevation` — returned as the sheet (null with no subject).
+     * Renders the strip synchronously: `views` frames of `size` px at
+     * `elevation`, at the yaws from ringYaws(views, offset). Null with no subject.
      * @param {RingSettings} settings
      * @returns {RingSheet|null}
      */
@@ -115,8 +87,7 @@ export function createRingRenderer() {
       if (!subject) return null;
       const { dims } = subject;
       const n = Math.max(1, Math.floor(views));
-      // World units per voxel — the exact expression wedgeMesh scales by
-      // (its default worldSize; thread it here if it ever moves).
+      // World units per voxel, as wedgeMesh scales with its default worldSize.
       const s = DEFAULT_WORLD_SIZE / Math.max(dims.nx, dims.ny, dims.nz);
       const { px: F, half } = ringFrame(dims, elevation, size);
       const { width, height } = ringSheet(n, F);
@@ -124,8 +95,7 @@ export function createRingRenderer() {
         renderer.setSize(width, height, false);
 
       center.set(...ringCenter(dims)).multiplyScalar(s);
-      // Anything clear of the box — orthographic, so the distance only has
-      // to keep the near plane in front of it.
+      // Orthographic: the distance only has to keep the box past the near plane.
       const dist = 2 * Math.hypot(dims.nx, dims.ny, dims.nz) * s;
       camera.left = -half * s;
       camera.right = half * s;
@@ -144,15 +114,15 @@ export function createRingRenderer() {
         camera.position.copy(center).addScaledVector(dir, dist);
         camera.lookAt(center);
         camera.updateMatrixWorld();
-        rig.pose(camera, center, dist); // the lights ride with the camera
+        rig.pose(camera, center, dist);
         renderer.setViewport(i * F, 0, F, F);
         renderer.setScissor(i * F, 0, F, F);
         renderer.render(scene, camera);
       }
       renderer.setScissorTest(false);
 
-      // The copy, in the same task as the renders. A size write clears the
-      // 2D canvas; at an unchanged size the whole surface is redrawn anyway.
+      // Copy out in the same task as the renders. Setting the size clears the
+      // 2D canvas.
       sheet.width = width;
       sheet.height = height;
       const g = sheet.getContext('2d');

@@ -1,6 +1,3 @@
-// Node-runnable tests for the stored-zip primitive (lib/zip.js): the CRC
-// against zlib's own, and a write → read round trip that also checks the
-// archive's framing. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { crc32 as zlibCrc32 } from 'node:zlib';
@@ -41,8 +38,7 @@ test('zipStore → zipEntries round-trips names, bytes and CRCs in order, framed
     'the end record closes, no comment'
   );
   assert.equal(v.getUint16(zip.length - 12, true), 2, 'two entries');
-  // stored: every entry's compressed size is its size, and the archive is
-  // exactly the headers plus the bytes.
+  // Entries are stored uncompressed, so the archive is the headers plus the bytes.
   const overhead = (name) => 30 + name.length + 46 + name.length;
   assert.equal(
     zip.length,
@@ -56,10 +52,10 @@ test('zipStore → zipEntries round-trips names, bytes and CRCs in order, framed
   assert.deepEqual(entries[0].bytes, png);
   assert.deepEqual(entries[1].bytes, json);
   for (const e of entries) assert.equal(e.crc, crc32(e.bytes));
-  // The stamp lands as DOS time/date (2-second resolution).
+  // The date is stored as DOS time and date, at 2-second resolution.
   assert.equal(v.getUint16(10, true), (12 << 11) | (30 << 5) | (10 >> 1));
   assert.equal(v.getUint16(12, true), ((2026 - 1980) << 9) | (9 << 5) | 7);
-  // The same input at the same stamp is the same bytes (a reproducible export).
+  // The same entries and date give the same bytes.
   assert.deepEqual(
     zipStore([{ name: 'a', bytes: png }], { date: new Date(2026, 0, 1) }),
     zipStore([{ name: 'a', bytes: png }], { date: new Date(2026, 0, 1) })

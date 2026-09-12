@@ -1,5 +1,4 @@
-// Browser image decoding helpers -> ImageData (the {width,height,data} shape the
-// pipeline consumes). Standalone so the loaders and the topbar's download share it.
+// Browser image helpers: decode to ImageData, encode to PNG and download files.
 
 async function bitmapToImageData(bmp) {
   const c = document.createElement('canvas');
@@ -21,9 +20,7 @@ export async function urlToImageData(url) {
   return bitmapToImageData(await createImageBitmap(await res.blob()));
 }
 
-// Encode an ImageData (or plain {width,height,data}) to a PNG Blob. The
-// wrap-if-plain guard means a pipeline tile object (e.g. a resized atlas sheet)
-// works as well as a real ImageData.
+// Encode an ImageData, or a plain {width, height, data} object, to a PNG Blob.
 export function imageDataToBlob(imageData) {
   const id =
     imageData instanceof ImageData
@@ -45,8 +42,7 @@ export function imageDataToBlob(imageData) {
   });
 }
 
-// The document format's byte-level pair: an atlas as finished PNG bytes (ready
-// for the engine's png-chunks.js surgery), and PNG/image bytes back to ImageData.
+// ImageData to PNG bytes, and image bytes back to ImageData.
 export async function imageDataToPngBytes(imageData) {
   const blob = await imageDataToBlob(imageData);
   return new Uint8Array(await blob.arrayBuffer());
@@ -56,8 +52,6 @@ export async function bytesToImageData(bytes) {
   return bitmapToImageData(await createImageBitmap(new Blob([bytes])));
 }
 
-// A canvas's pixels as finished PNG bytes (the 3D Sprite Atlas export: the
-// rendered sheet canvas straight to a file, ready for chunk surgery).
 export function canvasToPngBytes(canvas) {
   return new Promise((resolve, reject) => {
     canvas.toBlob(async (blob) => {
@@ -73,17 +67,9 @@ export function canvasToPngBytes(canvas) {
 export const downloadPngBytes = (bytes, filename) =>
   downloadBlob(new Blob([bytes], { type: 'image/png' }), filename);
 
-// --- desktop icon art --------------------------------------------------------
-// A document's desktop icon is generated from the document itself — a render
-// of its MODEL, made once per save and cached on the record
-// (scene/icon-renderer.js; the seeded defaults get theirs the same way, since
-// seeding IS a save). The flat FRONT-tile thumbnail that stood here until
-// Sep 11 2026 went with it: an icon shows the object, not the sheet.
-//
-// This is what stands in where there is no model to draw — a document with
-// nothing painted, or a browser with no WebGL: a generic System 7 document
-// glyph (white page, 1px black border, folded corner), drawn once and cached
-// — deterministic, no asset to ship.
+// Generic 32×32 document icon: a page with a folded corner, drawn once and
+// cached. Used when a document has no model to render or WebGL is unavailable
+// (see scene/icon-renderer.js).
 let genericDocIcon = null;
 export function genericDocIconDataUri() {
   if (genericDocIcon) return genericDocIcon;
@@ -92,8 +78,7 @@ export function genericDocIconDataUri() {
   c.height = 32;
   const g = c.getContext('2d');
   const FOLD = 8;
-  // Page (inset 5/1 to a classic 22×30 doc shape), fold clipped off the
-  // top-right corner.
+  // A 22×30 page at (5, 1), with the top-right corner cut off for the fold.
   g.fillStyle = '#000';
   g.beginPath();
   g.moveTo(5, 1);
@@ -112,7 +97,7 @@ export function genericDocIconDataUri() {
   g.lineTo(6, 30);
   g.closePath();
   g.fill();
-  // The folded-back corner.
+  // Folded corner.
   g.fillStyle = '#000';
   g.beginPath();
   g.moveTo(27 - FOLD, 1);
@@ -127,8 +112,7 @@ export function genericDocIconDataUri() {
   return genericDocIcon;
 }
 
-// Trigger a browser download of a Blob under the given filename via a transient
-// <a download>, revoking the object URL afterwards so nothing leaks.
+// Download a Blob as filename through a temporary <a download>.
 export function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

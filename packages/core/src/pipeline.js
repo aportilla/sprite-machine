@@ -1,8 +1,6 @@
-// ---------------------------------------------------------------------------
-// The pure sprite -> voxel pipeline. No THREE, no DOM: fully testable in Node.
-// Input: a map of view name -> ImageData-like { width, height, data(RGBA) }.
-// Output: the voxel grid, surface, and per-face colors, ready for meshing.
-// ---------------------------------------------------------------------------
+// The sprite-to-voxel pipeline. No THREE or DOM.
+// Input: view name -> ImageData-like { width, height, data (RGBA) }.
+// Output: the voxel grid, surface and per-face colors for meshing.
 
 import { ingestSprite, applyTransform } from './ingest.js';
 import { reconcileDims, gridViews, carve, extractSurface } from './carve.js';
@@ -32,8 +30,6 @@ export function buildVoxels(rawViews, opts = {}) {
   }
   const gviews = gridViews(ingested, dims);
   const solid = carve(gviews, dims);
-  // extractSurface already visits + gates every voxel on `solid`, so it returns
-  // solidCount too (no separate full-grid pass needed here).
   const { surfaceMask, count, solidCount } = extractSurface(solid, dims);
   const { faceColor, palette } = colorize(solid, surfaceMask, gviews, dims, opts);
   if (palette.length === 0 && Object.keys(ingested).length > 0) {

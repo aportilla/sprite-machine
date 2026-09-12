@@ -1,43 +1,22 @@
-// ---------------------------------------------------------------------------
-// The 3D Sprite Atlas's geometry — PURE (no THREE, no DOM, Node-tested): the
-// numbers scene/ring-renderer.js poses its camera by, components read out,
-// and the export writes into its metadata chunk. "Ring" is the feature's code
-// name: the model rendered orthographically from a RING of evenly stepped yaw
-// angles at one elevation — the rotation set an engine consumes.
+// 3D Sprite Atlas geometry (pure): the camera pose, frame and anchor for
+// rendering the model orthographically from a ring of evenly spaced yaws at
+// one elevation. Used by scene/ring-renderer.js, the atlas components and the
+// export metadata.
 //
-// Voxel units throughout: the renderer multiplies by `s` (world units per
-// voxel, the mesh builders' own expression) exactly once. Angles are degrees
-// at the API, radians inside.
+// Units are voxels. The renderer multiplies by `s` (world units per voxel)
+// once. Angles are degrees at the API and radians inside.
 //
-// THE FRAME IS THE TILE — a square of `size` px, the one size setting — and
-// what fills it is THE LATTICE'S ENVELOPE, NOT THE CONTENT'S: the whole
-// nx×ny×nz voxel box at EVERY yaw and this elevation. The box's XZ footprint
-// turns inside its bounding circle (r = hypot(nx, nz) / 2), so the projected
-// envelope is the same at every yaw — that circle swept up the box's height
-// — and its larger extent spans the tile exactly, which makes px per voxel a
-// DERIVED fraction (size / that extent), not a setting. The frame therefore
-// never changes size between angles, between strokes, or with the
-// first-angle offset: a sprite can't jitter in an animation, and one setting
-// change is one predictable re-layout. It is loose at yaw 0 (a cube uses 40
-// of its 56.57 width) — accepted: the sprite stays centered and the margin
-// is transparent. A tight per-frame bound would breathe with the angle.
+// The frame is a square tile of `size` px that fits the whole nx×ny×nz lattice
+// at every yaw, so the sprite keeps the same scale and center across angles.
+// Px per voxel is derived from that fit.
 //
-// THE YAW CONVENTION: yaw 0 puts the camera on +z (the FRONT face toward
-// it); positive yaw walks the camera toward +x, so the second of four views
-// shows the RIGHT face — front → right → back → left. A sign flip in
-// ringCameraDir reverses it.
-//
-// THE ANCHOR: the lattice floor's center (0, 0, 0) projects to the same
-// point in every frame — x at the frame's center, y a fixed distance below
-// it — the feet-row an engine aligns a rotation set by. Yaw-independent by
-// construction (the API takes no yaw).
-// ---------------------------------------------------------------------------
+// Yaw 0 puts the camera on +z, facing the front. Positive yaw moves it toward
+// +x, so four views show front, right, back, left.
 
 const RAD = Math.PI / 180;
 
 /**
- * The n yaws of a ring: offset + i·(360/n), i = 0..n−1, unwrapped (an offset
- * of 45 with four views is [45, 135, 225, 315]).
+ * The yaws of a ring: offset + i·(360/n) for i = 0..n−1, unwrapped.
  * @param {number} views
  * @param {number} offset  degrees
  * @returns {number[]}
@@ -51,13 +30,11 @@ export function ringYaws(views, offset) {
 }
 
 /**
- * The lattice's projected envelope at an elevation, in voxel units: the
- * nx×nz footprint's bounding CIRCLE (radius r = hypot(nx, nz) / 2 — the box
- * turns inside it, so the envelope is the same at every yaw) swept up the
- * height:
+ * The lattice's projected envelope at an elevation, in voxel units. The nx×nz
+ * footprint turns inside a circle of radius r = hypot(nx, nz) / 2, so at every
+ * yaw:
  *   width  = 2r
  *   height = ny·cos e + 2r·sin e
- * (e = 0: the side elevation, ny tall; e = 90: the plan, 2r tall.)
  * @param {{nx: number, ny: number, nz: number}} dims
  * @param {number} elevation  degrees above the horizon, 0..90
  * @returns {{width: number, height: number}}
@@ -69,13 +46,8 @@ export function ringEnvelope(dims, elevation) {
 }
 
 /**
- * The frame: the tile itself — a SQUARE of `size` px — with the orthographic
- * half-extent that fits the envelope's larger extent to it exactly, half =
- * max(width, height) / 2 voxel units (the box fits at every yaw, centered,
- * the smaller extent's margin transparent), and the px per voxel that
- * implies, scale = size / max(width, height) — DERIVED, a fraction (a 40³
- * lattice at 45° in a 64 tile is 0.937 px per voxel). The same for every
- * yaw and every first-angle offset (the API takes neither).
+ * The square frame of `size` px. half = max(width, height) / 2 voxel units and
+ * scale = size / max(width, height) px per voxel, the same for every yaw.
  * @param {{nx: number, ny: number, nz: number}} dims
  * @param {number} elevation  degrees
  * @param {number} size  the tile's edge, px
@@ -89,7 +61,7 @@ export function ringFrame(dims, elevation, size) {
 }
 
 /**
- * The sheet: `views` frames side by side, one row.
+ * The sheet size: `views` frames in one row.
  * @param {number} views
  * @param {number} framePx
  * @returns {{width: number, height: number}}
@@ -99,9 +71,9 @@ export function ringSheet(views, framePx) {
 }
 
 /**
- * Unit camera direction — from the lattice center OUT to the camera:
- * [sin yaw · cos e, sin e, cos yaw · cos e]. Yaw 0 → +z (FRONT faces the
- * camera), yaw 90 → +x (RIGHT), elevation → up.
+ * Unit direction from the lattice center to the camera:
+ * [sin yaw · cos e, sin e, cos yaw · cos e]. Yaw 0 is +z (front), yaw 90 is +x
+ * (right).
  * @param {number} yaw  degrees
  * @param {number} elevation  degrees
  * @returns {[number, number, number]}
@@ -113,10 +85,9 @@ export function ringCameraDir(yaw, elevation) {
 }
 
 /**
- * The camera's screen-up vector for that pose — the TRUE one, so e = 90
- * (straight down, where lookAt's default +y up degenerates) is well
- * defined: [−sin e · sin yaw, cos e, −sin e · cos yaw]. Unit, and
- * perpendicular to ringCameraDir; at e = 0 it is world +y.
+ * The camera's unit screen-up vector, perpendicular to ringCameraDir:
+ * [−sin e · sin yaw, cos e, −sin e · cos yaw]. It stays defined at e = 90,
+ * where lookAt's default +y up degenerates.
  * @param {number} yaw  degrees
  * @param {number} elevation  degrees
  * @returns {[number, number, number]}
@@ -128,9 +99,8 @@ export function ringCameraUp(yaw, elevation) {
 }
 
 /**
- * The lattice center the camera looks at and every frame centers on, in
- * voxel units: [0, ny / 2, 0] — X/Z are centered by the mesh builders
- * (finishVoxelMesh), Y runs from 0.
+ * The lattice center the camera looks at, in voxel units. The mesh builders
+ * center X and Z (finishVoxelMesh). Y starts at 0.
  * @param {{nx: number, ny: number, nz: number}} dims
  * @returns {[number, number, number]}
  */
@@ -139,11 +109,8 @@ export function ringCenter(dims) {
 }
 
 /**
- * Where the lattice floor's center (0, 0, 0) lands in EVERY frame, in px from
- * the frame's top-left: x = F/2, y = F/2 + (ny/2)·cos e·scale — the floor
- * point sits ny/2 below the center along world −y, whose screen-up component
- * is cos e, at the frame's derived px per voxel (ringFrame). The engine
- * anchor (feet-row), yaw-independent by construction.
+ * Where the lattice floor's center (0, 0, 0) lands in every frame, in px from
+ * the top-left: x = F/2, y = F/2 + (ny/2)·cos e·scale. The same for every yaw.
  * @param {{nx: number, ny: number, nz: number}} dims
  * @param {number} elevation  degrees
  * @param {number} size  the tile's edge, px

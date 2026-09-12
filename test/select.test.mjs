@@ -1,7 +1,3 @@
-// Node-runnable tests for the selection tool's primitives (pure, no DOM):
-// the bounds helpers and the axis lock in one pass, then the lift / clear /
-// composite trio with the transparency rule and the no-wrap clip.
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -15,9 +11,8 @@ import {
   compositeFloat,
 } from '../src/lib/select.js';
 
-// A w×h RGBA buffer painted from a map of "x,y" → [r,g,b] (everything else
-// transparent), and the inverse: the set of "x,y" keys holding an opaque
-// texel, for shape assertions.
+// buffer: a transparent w×h RGBA buffer painted from a map of "x,y" → [r,g,b].
+// opaqueKeys: the "x,y" keys of the opaque texels.
 function buffer(w, h, paint = {}) {
   const d = new Uint8ClampedArray(w * h * 4);
   for (const [key, rgb] of Object.entries(paint)) {
@@ -77,12 +72,11 @@ test('the bounds helpers: normalize orders any corner pair, contain is inclusive
   ])
     assert.ok(!boundsContain(b, x, y), `${x},${y} outside`);
 
-  // A shift may leave the tile; the input is untouched.
+  // A shift may leave the tile.
   assert.deepEqual(translateBounds(b, 5, -4), { x0: 7, y0: -1, x1: 12, y1: 5 });
   assert.deepEqual(b, { x0: 2, y0: 3, x1: 7, y1: 9 }, 'the input is untouched');
   assert.deepEqual(translateBounds(b, 0, 0), b);
 
-  // The dominant axis wins, a tie keeps dx, zero stays zero.
   assert.deepEqual(constrainAxis(5, 2), { dx: 5, dy: 0 }, 'wider wins');
   assert.deepEqual(constrainAxis(-5, 2), { dx: -5, dy: 0 }, 'sign kept');
   assert.deepEqual(constrainAxis(1, -6), { dx: 0, dy: -6 }, 'taller wins');
@@ -106,8 +100,7 @@ test('liftRect copies exactly the rect and counts its opaque texels; stray RGB u
   assert.equal(f.opaque, 2, 'two painted texels inside the rect; (6,4) is outside');
   assert.deepEqual(src, before, 'the source is untouched');
 
-  // Over empty space the count is 0 — stray RGB under alpha 0 is not a pixel
-  // (the hard-pixel rule).
+  // Stray RGB under alpha 0 does not count as opaque.
   const V = 5;
   const empty = buffer(V, 5);
   empty[(2 * V + 2) * 4] = 200;
@@ -124,7 +117,7 @@ test('liftRect copies exactly the rect and counts its opaque texels; stray RGB u
 test('clearRect zeroes all four bytes of the rect and reports whether anything changed', () => {
   const W = 6;
   const d = buffer(W, 6, { '1,1': RED, '2,2': BLUE, '5,5': RED });
-  // Stray RGB under alpha 0 inside the rect — counts as a change to clear.
+  // Stray RGB under alpha 0 inside the rect counts as a change.
   d[(3 * W + 3) * 4] = 77;
   assert.equal(clearRect(d, W, { x0: 1, y0: 1, x1: 3, y1: 3 }), true);
   for (let y = 1; y <= 3; y++)
@@ -156,20 +149,20 @@ test('identity: lift → clear → composite at the origin reproduces the buffer
   const out = new Uint8ClampedArray(src.length);
   compositeFloat(out, base, W, H, float, sel.x0, sel.y0);
   assert.deepEqual(out, original);
-  // And the base really is the hole: nothing of the selection remains in it.
+  // The cleared base holds nothing of the selection.
   assert.deepEqual([...opaqueKeys(base, W)].sort(), ['0,0', '8,7']);
 });
 
 test('the rule: a transparent float texel leaves the base art under it; an opaque one overwrites', () => {
   const W = 10;
   const H = 6;
-  // The selection at (1,1)-(2,2) holds one painted texel (1,1) and three empty.
+  // The selection (1,1)-(2,2) holds one painted texel, (1,1), and three empty ones.
   const src = buffer(W, H, { '1,1': RED, '6,1': BLUE, '7,2': BLUE });
   const sel = { x0: 1, y0: 1, x1: 2, y1: 2 };
   const float = liftRect(src, W, sel);
   const base = src.slice();
   clearRect(base, W, sel);
-  // Move it by (+5, 0): the float now covers (6,1)-(7,2).
+  // At an offset of (+5, 0) the float covers (6,1)-(7,2).
   const out = new Uint8ClampedArray(src.length);
   compositeFloat(out, base, W, H, float, sel.x0 + 5, sel.y0);
   assert.deepEqual(
@@ -200,10 +193,10 @@ test('clipping, no wrap: a float past the right edge never lands on the next row
   });
   const sel = { x0: 0, y0: 0, x1: 2, y1: 1 };
   const float = liftRect(src, W, sel);
-  const base = buffer(W, H); // an empty base makes every landing visible
+  const base = buffer(W, H); // empty, so every composited texel shows
   const out = new Uint8ClampedArray(src.length);
-  // ox = 6: the float spans x = 6..8 — 8 is off the tile, and a linear-index
-  // wrap would land it at (0, y+1).
+  // At ox = 6 the float spans x = 6..8. x = 8 is off the tile, and a
+  // linear-index wrap would write it at (0, y+1).
   compositeFloat(out, base, W, H, float, 6, 0);
   assert.deepEqual([...opaqueKeys(out, W)].sort(), ['6,0', '6,1', '7,0', '7,1']);
   assert.deepEqual(texel(out, W, 0, 1), [0, 0, 0, 0], 'nothing wrapped onto row 1');
@@ -221,11 +214,11 @@ test('clipping: past the bottom writes nothing past h; a negative offset clips l
   compositeFloat(out, base, W, H, float, 2, 4); // rows 4 and 5; 5 is off
   assert.deepEqual([...opaqueKeys(out, W)].sort(), ['2,4', '3,4']);
   assert.equal(out.length, W * H * 4, 'the buffer never grew');
-  compositeFloat(out, base, W, H, float, -1, -1); // only (1,1) of the float lands, at (0,0)
+  compositeFloat(out, base, W, H, float, -1, -1); // only float (1,1) is written, at (0,0)
   assert.deepEqual([...opaqueKeys(out, W)], ['0,0']);
-  compositeFloat(out, base, W, H, float, -2, 0); // wholly off the left: nothing lands
+  compositeFloat(out, base, W, H, float, -2, 0); // fully off the left
   assert.deepEqual([...opaqueKeys(out, W)], []);
-  compositeFloat(out, base, W, H, float, 0, H); // wholly off the bottom: nothing lands
+  compositeFloat(out, base, W, H, float, 0, H); // fully off the bottom
   assert.deepEqual([...opaqueKeys(out, W)], []);
 });
 
@@ -239,11 +232,11 @@ test('reversible: partially off-tile then back on-tile reproduces the full float
   const base = src.slice();
   clearRect(base, W, sel);
   const out = new Uint8ClampedArray(src.length);
-  compositeFloat(out, base, W, H, float, 7, 7); // only (3,3)'s texel lands, at (7,7)
+  compositeFloat(out, base, W, H, float, 7, 7); // only (3,3) is written, at (7,7)
   assert.deepEqual([...opaqueKeys(out, W)], ['7,7']);
-  compositeFloat(out, base, W, H, float, -1, -1); // only (4,4)'s texel lands, at (0,0)
+  compositeFloat(out, base, W, H, float, -1, -1); // only (4,4) is written, at (0,0)
   assert.deepEqual([...opaqueKeys(out, W)], ['0,0']);
-  compositeFloat(out, base, W, H, float, sel.x0, sel.y0); // home again
+  compositeFloat(out, base, W, H, float, sel.x0, sel.y0); // back at the origin
   assert.deepEqual(
     out,
     original,

@@ -1,38 +1,21 @@
-// ---------------------------------------------------------------------------
 // T-junction elimination for lattice meshes.
 //
-// Greedy-merging faces into large rectangles introduces T-junctions: a vertex
-// that lands in the MIDDLE of a longer triangle's edge — e.g. where a merged
-// base rectangle meets a unit-scale wedge edge, or two faces merged to different
-// extents meet at an object corner. It's invisible for opaque flat-shaded
-// geometry, but it makes the surface NON-manifold (edges no longer paired),
-// which breaks the watertight weld and clean glTF export.
+// Merged faces leave T-junctions: a vertex in the middle of another triangle's
+// edge. They make the surface non-manifold, which breaks the watertight weld
+// and glTF export. Every vertex is on the integer lattice, so the repair is
+// exact: split each triangle edge at every mesh vertex strictly inside it, then
+// re-triangulate the convex result with its own vertices.
 //
-// Every vertex here sits on the integer lattice, so repair is exact — no
-// floating-point tolerance. Collect all vertex positions, then split each
-// triangle edge at any vertex lying strictly on its interior, re-triangulating
-// the (convex) result with lattice-only vertices. Pure integer geometry: no
-// THREE, Node-testable.
+// Only axis-aligned and 45° diagonal edges can carry interior vertices. Any
+// other edge is a triangulation chord across a region or slope, where a valid
+// surface has no vertex, so it is skipped.
 //
-// Two kinds of edge can carry interior lattice points here: an AXIS-ALIGNED
-// one (a region polygon's, a slope's ridge edge) and a 45° DIAGONAL (a slope
-// block's staircase edge, a region's cut beside it — both long since the
-// merges of Sep 7 2026). Any other segment is a triangulation chord across a
-// region's or a slope's interior, where a valid surface never has a vertex,
-// so it is left alone.
-//
-// A triangle is an opaque record beyond its three vertices: every other field
-// (the normal, and the mesher's paint — a chart and its rect, or a swatch
-// color) is copied onto each piece a split produces, so the repair never has
-// to know what rides on a triangle. UVs are NOT carried through here: they
-// are a function of position (skin.js uvOfLattice), read after the repair.
-// ---------------------------------------------------------------------------
+// UVs are computed from position after the repair (skin.js uvOfLattice).
 
 const key = (p) => p[0] + ',' + p[1] + ',' + p[2];
 
-// Integer lattice points strictly interior to segment p->q that are in `vset`,
-// ordered p->q. Returns [] unless p->q is axis-aligned or a 45° diagonal (two
-// axes stepping by the same magnitude).
+// Vertices in `vset` strictly inside segment p->q, ordered p->q. Returns []
+// unless p->q is axis-aligned or a 45° diagonal.
 function interiorPointsOnEdge(p, q, vset) {
   const d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
   const axes = [];
@@ -49,10 +32,10 @@ function interiorPointsOnEdge(p, q, vset) {
   return out;
 }
 
-// Triangulate a convex polygon (wound CCW wrt `normal`) using only its own
-// vertices, tolerating collinear boundary points. Clip only a strictly-convex
-// corner whose EAR EDGE (prev->next) carries no other vertex — otherwise the ear
-// would span a subdivided edge and re-introduce the T-junction we're removing.
+// Triangulate a convex polygon, wound CCW about `normal`, using only its own
+// vertices. Collinear boundary points are allowed. Only a strictly convex
+// corner whose edge prev->next contains no other vertex is clipped. Otherwise
+// the ear would span a split edge and reintroduce a T-junction.
 function triangulateConvex(ring, normal, emit) {
   const turn = (o, a, b) => {
     const ux = a[0] - o[0],
@@ -67,7 +50,7 @@ function triangulateConvex(ring, normal, emit) {
       (ux * vy - uy * vx) * normal[2]
     );
   };
-  // v strictly interior to segment p->q (collinear + between the endpoints).
+  // v lies strictly inside segment p->q.
   const onSeg = (p, q, v) => {
     const dx = q[0] - p[0],
       dy = q[1] - p[1],
@@ -104,8 +87,8 @@ function triangulateConvex(ring, normal, emit) {
       break;
     }
     if (!clipped) {
-      // Defensive: fan from a strictly-convex vertex (clean-ear clipping should
-      // always progress for a convex polygon, so this is a safety net only).
+      // Fallback: fan from a strictly convex vertex. Ear clipping should always
+      // progress on a convex polygon.
       let ai = 0;
       for (let i = 0; i < poly.length; i++) {
         const prev = poly[(i - 1 + poly.length) % poly.length];
@@ -130,11 +113,10 @@ function triangulateConvex(ring, normal, emit) {
 /**
  * @template {{a:number[], b:number[], c:number[], normal:number[]}} T
  * @param {T[]} tris
- *   triangles with INTEGER-lattice vertex coords, wound CCW wrt `normal`.
+ *   triangles with integer lattice vertices, wound CCW about `normal`.
  * @returns {T[]}
- *   an equivalent surface with no T-junctions (every edge split at interior
- *   verts); a split triangle's pieces carry every field of their source but
- *   the three vertices.
+ *   the same surface with no T-junctions. Pieces of a split triangle keep its
+ *   other fields.
  */
 export function eliminateTJunctions(tris) {
   const vset = new Set();

@@ -5,15 +5,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# GITHUB_TOKEN needs to write a Pages deployment and mint the OIDC token
-# deploy-pages authenticates with. Everything else stays read-only.
+# deploy-pages needs to write a Pages deployment and mint an OIDC token.
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# One deployment at a time. Unlike CI, an in-flight run is not cancelled: a
-# half-finished deploy is worse than a superseded one, so a newer push queues.
+# One deployment at a time. A newer push queues behind an in-flight deploy.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -33,24 +31,19 @@ jobs:
 
       - run: npm ci
 
-      # The gates, all Node — a failing test, format check or typecheck (and
-      # the build below) stops the run here, so a broken push never deploys.
+      # The gates. A failure here or in the build stops the deploy.
       - run: npm test
       - run: npm run lint
       - run: npm run typecheck
 
-      # Enables Pages on the repo, with Actions as the source, the first time
-      # this runs — no Settings click. The base path it reports is not needed:
-      # vite.config.js builds with `base: './'`, every emitted URL relative, so
-      # the same bundle serves from /sprite-machine/ as from /.
+      # Enables Pages with Actions as the source on the first run. The base path
+      # it reports is unused: vite.config.js builds with relative URLs.
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
           enablement: true
 
-      # The app's ordinary build. The About box's date is HEAD's commit date
-      # (vite.config.js, `git log -1`), which the default shallow checkout
-      # carries, so a deploy says what a local build of that commit says.
+      # The About box date is HEAD's commit date, which the shallow checkout has.
       - run: npm run build
 
       - uses: actions/upload-pages-artifact@v3

@@ -1,7 +1,3 @@
-// Node-runnable tests for the document icon's rules (lib/icon.js — pure,
-// no THREE/DOM): the orthographic fit that frames a model in its 32×32 icon,
-// the supersample's box filter and the outline's ink.
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -38,22 +34,20 @@ test('orthoFit: the screen basis is lookAt’s, and the frame is the projection�
   // Looking down +z with +y up: the screen plane is world x/y, depth is z.
   const fit = orthoFit(boxCloud(-2, -1, -5, 2, 1, 5), [0, 0, 1], [0, 1, 0]);
   assert.ok(fit);
-  assert.ok(near(fit.half, 2), `half ${fit.half}`); // the x span, the larger
+  assert.ok(near(fit.half, 2), `half ${fit.half}`); // x, the larger span
   assert.ok(near(fit.depth, 10), `depth ${fit.depth}`);
   assert.ok(
     fit.center.every((v) => near(v, 0)),
     fit.center.join(',')
   );
 
-  // Turned on its side, the other span wins — the frame stays SQUARE and the
-  // smaller axis is what takes the margin.
+  // With y the larger span, y sets the half. The frame is square.
   const tall = orthoFit(boxCloud(-1, -3, -5, 1, 3, 5), [0, 0, 1], [0, 1, 0]);
   assert.ok(near(tall.half, 3), `half ${tall.half}`);
 });
 
 test('orthoFit: the center is the projected box’s, not the cloud’s centroid', () => {
-  // Ten points bunched at one end and one lone point at the other: the frame
-  // centers on the EXTREMES, so nothing hangs outside it.
+  // Ten points at one end and one at the other.
   const cloud = [];
   for (let i = 0; i < 10; i++) cloud.push(0, 0, 0);
   cloud.push(4, 0, 0);
@@ -61,7 +55,7 @@ test('orthoFit: the center is the projected box’s, not the cloud’s centroid'
   assert.ok(near(fit.center[0], 2), `center.x ${fit.center[0]}`);
   assert.ok(near(fit.half, 2), `half ${fit.half}`);
 
-  // Moving the whole cloud moves the frame with it, the same size.
+  // Translating the cloud translates the frame at the same size.
   const moved = cloud.map((v, i) => v + [7, -3, 11][i % 3]);
   const after = orthoFit(moved, [0, 0, 1], [0, 1, 0]);
   assert.ok(near(after.half, fit.half));
@@ -71,12 +65,12 @@ test('orthoFit: the center is the projected box’s, not the cloud’s centroid'
 });
 
 test('orthoFit: the frame holds every point, and is tight on its larger axis', () => {
-  // A lattice-ish cloud: a 5×3×7 box of points, off-center in every axis.
+  // A 5×3×7 grid of points, off-center on every axis.
   const cloud = [];
   for (let x = 0; x < 5; x++)
     for (let y = 0; y < 3; y++)
       for (let z = 0; z < 7; z++) cloud.push(x - 1, y + 2, z - 4);
-  // Several poses, the icon's 35°/45° among them.
+  // Several poses, including the icon's 35°/45°.
   for (const [yaw, elev] of [
     [0, 0],
     [35, 45],
@@ -100,7 +94,7 @@ test('orthoFit: the frame holds every point, and is tight on its larger axis', (
       );
       widest = Math.max(widest, u, v);
     }
-    // Tight: something touches the frame's edge — the model fills its icon.
+    // Tight: some point touches the frame's edge.
     assert.ok(
       near(widest, fit.half, 1e-9),
       `${yaw}/${elev}: widest ${widest} of ${fit.half}`
@@ -112,8 +106,8 @@ test('orthoFit: nothing to frame, and nothing to divide by', () => {
   assert.equal(orthoFit([], [0, 0, 1], [0, 1, 0]), null);
   assert.equal(orthoFit([1, 2], [0, 0, 1], [0, 1, 0]), null);
   assert.equal(orthoFit(null, [0, 0, 1], [0, 1, 0]), null);
-  // One point has no extent: the half is floored off zero, so the camera it
-  // poses still has a frustum.
+  // A single point has no extent. The half is floored above zero so the
+  // camera still has a frustum.
   const dot0 = orthoFit([3, 4, 5], [0, 0, 1], [0, 1, 0]);
   assert.ok(dot0.half > 0);
   assert.ok(near(dot0.depth, 0));
@@ -121,8 +115,6 @@ test('orthoFit: nothing to frame, and nothing to divide by', () => {
 });
 
 test('framedHalf: the model spans the icon less the outline on each side', () => {
-  // A model of half-extent h in a frustum of framedHalf(h) covers this many
-  // of the icon's pixels — the outline's margin left on both sides.
   for (const h of [1, 7.5, 32, 1e-6])
     assert.ok(
       near((h / framedHalf(h)) * ICON_SIZE, ICON_SIZE - 2 * ICON_OUTLINE),
@@ -140,9 +132,9 @@ const px = (buf, w, x, y) =>
   Array.from(buf.subarray((y * w + x) * 4, (y * w + x) * 4 + 4));
 
 test('downsample: premultiplied — an edge takes the model’s color, not the clear’s', () => {
-  // A 4×2 raster folded 2:1 into 2×1. The left block: two red samples over
-  // two clear ones → red at half coverage, NOT half-black red. The right
-  // block: red and blue, all opaque → their mean, opaque.
+  // A 4×2 raster downsampled 2:1 to 2×1. Left block: two red and two clear
+  // samples give red at half alpha, not darkened red. Right block: opaque red
+  // and blue give their mean.
   const src = raster(4, 2, [
     [0, 0, 255, 0, 0, 255],
     [1, 1, 255, 0, 0, 255],
@@ -156,8 +148,8 @@ test('downsample: premultiplied — an edge takes the model’s color, not the c
   assert.deepEqual(px(out, 2, 0, 0), [255, 0, 0, 128]);
   assert.deepEqual(px(out, 2, 1, 0), [128, 0, 128, 255]);
 
-  // Coverage weights the color: three red opaque + one blue at quarter alpha
-  // → mostly red, the alpha the block's mean.
+  // Alpha weights the color: three opaque red and one quarter-alpha blue give
+  // mostly red, with the mean alpha.
   const weighted = downsample(
     raster(2, 2, [
       [0, 0, 255, 0, 0, 255],
@@ -179,9 +171,8 @@ test('downsample: premultiplied — an edge takes the model’s color, not the c
 });
 
 test('inkOutline: covered goes opaque, its four neighbors go black, the rest clear', () => {
-  // One pixel covered by half, in the middle of a 3×3 raster: it keeps its
-  // color and goes opaque; the four beside it are the ring; the diagonals
-  // are not — the thin line, not the block.
+  // A half-alpha pixel in the middle of a 3×3 raster keeps its color and goes
+  // opaque. Its four orthogonal neighbors turn black. The diagonals stay clear.
   const one = inkOutline(raster(3, 3, [[1, 1, 200, 100, 50, 128]]), 3, 3);
   assert.deepEqual(px(one, 3, 1, 1), [200, 100, 50, 255]);
   for (const [x, y] of [
@@ -199,12 +190,12 @@ test('inkOutline: covered goes opaque, its four neighbors go black, the rest cle
   ])
     assert.deepEqual(px(one, 3, x, y), [0, 0, 0, 0], `${x},${y}`);
 
-  // Under half coverage is a sliver: dropped, and nothing ringed around it.
+  // Under half alpha the pixel is dropped, with no outline.
   const sliver = inkOutline(raster(3, 3, [[1, 1, 200, 100, 50, 127]]), 3, 3);
   assert.ok(sliver.every((v) => v === 0));
 
-  // A pixel on the raster's edge rings inward only — no wrap to the far
-  // side, and the output is never a partial pixel.
+  // A corner pixel is outlined inward only, with no wrap. Output alpha is 0
+  // or 255.
   const corner = inkOutline(raster(3, 3, [[0, 0, 9, 9, 9, 255]]), 3, 3);
   assert.deepEqual(px(corner, 3, 0, 0), [9, 9, 9, 255]);
   assert.deepEqual(px(corner, 3, 1, 0), [0, 0, 0, 255]);

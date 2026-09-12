@@ -1,10 +1,8 @@
-// Shared stubs for the app's Node suites — the pieces several files used to
-// carry a copy of (the engine's suites have their own, in the package). Not a
-// test: `node --test test/*.test.mjs` matches *.test.mjs alone, so this
-// module is only ever imported.
+// Shared stubs for the app's test suites. Not a test file: node --test runs
+// *.test.mjs only.
 import { crc32 } from 'sprite-machine';
 
-/** A hand-cranked frame scheduler standing in for requestAnimationFrame: `frame()` runs every pending callback once, `size` counts them. */
+/** A manual requestAnimationFrame stand-in. frame() runs the pending callbacks. */
 export function fakeScheduler() {
   let next = 1;
   const pending = new Map();
@@ -26,7 +24,7 @@ export function fakeScheduler() {
   };
 }
 
-/** An in-memory stand-in for storage/db.js — the same async surface over three Maps (the docs as `map`, the folders as `folders`, the text files as `texts`), exposed for the assertions. */
+/** An in-memory storage/db.js. Its maps are exposed for assertions. */
 export function memStorage() {
   const map = new Map();
   const folders = new Map();
@@ -52,7 +50,7 @@ export function memStorage() {
 /** The PNG signature bytes. */
 export const SIG = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
 
-/** One PNG chunk — length, type, data, CRC — as bytes. */
+/** One PNG chunk as bytes: length, type, data, CRC. */
 export function chunk(type, data) {
   const out = new Uint8Array(8 + data.length + 4);
   const dv = new DataView(out.buffer);
@@ -63,7 +61,10 @@ export function chunk(type, data) {
   return out;
 }
 
-/** The codec stub's encoder: wraps an atlas as a minimal synthetic PNG whose IDAT carries the raw pixels + dims, so the slices' real chunk-splicing runs against real chunk structure. */
+/**
+ * Codec stub encoder. Writes a minimal PNG whose IDAT holds the width, height
+ * and raw pixels.
+ */
 export async function encodeAtlas(img) {
   const payload = new Uint8Array(8 + img.data.length);
   new DataView(payload.buffer).setUint32(0, img.width);
@@ -86,7 +87,10 @@ export async function encodeAtlas(img) {
   return out;
 }
 
-/** The codec stub's decoder — the exact inverse of encodeAtlas, walking the chunk list for IDAT (its offset moves once text chunks are in). */
+/**
+ * Codec stub decoder, the inverse of encodeAtlas. Walks the chunks for IDAT,
+ * whose offset moves once text chunks are added.
+ */
 export async function decodeAtlas(bytes) {
   let i = SIG.length;
   while (i < bytes.length) {

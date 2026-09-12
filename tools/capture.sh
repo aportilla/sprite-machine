@@ -1,18 +1,13 @@
 #!/usr/bin/env bash
-# Headless-Chrome capture helper for the sprite-machine dev app.
+# Headless Chrome capture helper for the dev app.
 #
-# The dev app runs an infinite requestAnimationFrame loop and, under
-# --headless=new, Chrome does not reliably exit on its own — so cleanup is
-# defence-in-depth. An agent harness may background this script and then SIGKILL
-# it, and SIGKILL cannot be trapped, so a plain `trap ... EXIT` is not enough (it
-# used to leak dozens of Chrome processes + /tmp temp dirs). The layers:
-#   1. shot mode kills Chrome the instant the screenshot lands — fast, no hang;
-#   2. a DETACHED watchdog reaps THIS run's Chrome + temp dir after a deadline;
-#      being a separate process, it survives even a SIGKILL of this script;
-#   3. an EXIT/INT/TERM trap cleans up on the normal / soft-kill path;
-#   4. every run first REAPS stale prior runs (age-gated, so concurrent runs are
-#      safe) — self-healing any leak an earlier hard-killed run left behind;
-#   5. `capture.sh clean` reaps everything on demand.
+# Headless Chrome does not reliably exit while the app's rAF loop runs, and this
+# script may be SIGKILLed, which no trap catches. Cleanup has five layers:
+#   1. shot mode kills Chrome as soon as the screenshot is written.
+#   2. A detached watchdog reaps this run's Chrome and temp dir after a deadline.
+#   3. An EXIT/INT/TERM trap cleans up on a normal exit.
+#   4. Each run first reaps stale runs left by earlier ones (age-gated).
+#   5. `capture.sh clean` reaps everything.
 #
 # Usage:
 #   tools/capture.sh shot <url> <out.png>   # screenshot -> out.png
@@ -22,25 +17,23 @@
 # Examples:
 #   tools/capture.sh shot 'http://localhost:5173/?sample=car' /tmp/shot.png
 #   tools/capture.sh dom  'http://localhost:5173/?sample=car&diag=1'
-# (No ?rotate=0: auto-rotate is off every load, so a shot's model is at rest.)
 set -euo pipefail
 
 CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
-ROOT="/tmp/cr-cap"                 # one root for all runs, so a sweep is trivial
-DEADLINE="${CAPTURE_DEADLINE:-25}" # hard seconds before a run's Chrome is SIGKILLed
-STALE_MIN=2                        # a run dir untouched this long (min) is orphaned
+ROOT="/tmp/cr-cap"                 # one root for all runs
+DEADLINE="${CAPTURE_DEADLINE:-25}" # seconds before a run's Chrome is SIGKILLed
+STALE_MIN=2                        # minutes untouched before a run dir is orphaned
 mkdir -p "$ROOT"
 
-# Kill every process whose command line references this run dir (main browser +
-# any crashpad/helper carrying the path) and remove the dir. Idempotent.
+# Kill every process whose command line contains this run dir, then remove the
+# dir. Idempotent.
 reap_run() {
   pkill -9 -f "$1" 2>/dev/null || true
   rm -rf "$1" 2>/dev/null || true
 }
 
-# Reap runs abandoned by a previous (possibly SIGKILLed) invocation. Age-gated on
-# the dir's mtime so a live or concurrent run (Chrome keeps writing to it) is
-# never clobbered.
+# Reap runs left by earlier invocations. Age-gated on the dir's mtime, so a live
+# run, which Chrome keeps writing to, is skipped.
 reap_orphans() {
   local d
   for d in "$ROOT"/run.*; do
@@ -66,9 +59,8 @@ reap_orphans
 DIR="$(mktemp -d "$ROOT/run.XXXXXX")"
 trap 'reap_run "$DIR"' EXIT INT TERM
 
-# CAPTURE_VTB overrides the virtual-time budget (default 4000): async work that
-# races the dump (e.g. ?diag=1's dynamic import writing document.title) gets
-# more scheduler turns under a bigger budget.
+# CAPTURE_VTB overrides the virtual-time budget (default 4000). Raise it when
+# async work, such as ?diag=1 writing document.title, finishes after the dump.
 COMMON=(--headless=new --disable-gpu --use-gl=angle --use-angle=swiftshader
   --hide-scrollbars --window-size=1000,850 --virtual-time-budget="${CAPTURE_VTB:-4000}"
   --force-device-scale-factor="${CAPTURE_DSF:-1}"
@@ -79,9 +71,8 @@ case "$MODE" in
   shot)
     OUT="${3:?missing out.png}"
     mkdir -p "$(dirname "$OUT")"
-    # A stale file at the target would satisfy the "did the shot land?" wait
-    # below at once and get Chrome killed before it wrote — a re-shoot onto
-    # an existing path would silently keep the old file.
+    # Remove a stale file, or the wait below would see it and kill Chrome
+    # before it writes.
     rm -f "$OUT"
     ARGS+=(--screenshot="$OUT")
     ;;
@@ -95,11 +86,8 @@ case "$MODE" in
 esac
 ARGS+=("$URL")
 
-# Launch Chrome in the background (stderr hushed). `dom` mode's stdout (the DOM)
-# is captured to a file so it can be validated non-empty before we hand it to the
-# caller — a dead dev server or a Chrome failure otherwise prints nothing and still
-# exits 0, a false success. The watchdog is a DETACHED subshell: if THIS script is
-# SIGKILLed it is reparented and still runs, guaranteeing this run is reaped.
+# dom mode writes the DOM to a file so an empty dump can be detected. The
+# watchdog is a detached subshell, so it still runs if this script is SIGKILLed.
 DOMOUT="$DIR/dom.html"
 if [ "$MODE" = "dom" ]; then
   "$CHROME" "${ARGS[@]}" >"$DOMOUT" 2>/dev/null &
@@ -110,8 +98,8 @@ CHROME_PID=$!
 ( sleep "$DEADLINE"; reap_run "$DIR" ) 2>/dev/null &
 WATCHDOG=$!
 
-# shot mode: stop Chrome the moment the file lands rather than waiting out the
-# deadline (Chrome may keep the rAF loop running after the screenshot).
+# shot mode: kill Chrome once the file is written. It may keep running after the
+# screenshot.
 if [ "$MODE" = "shot" ]; then
   for _ in $(seq 1 $((DEADLINE * 2))); do
     if [ -s "$OUT" ]; then break; fi
@@ -122,24 +110,21 @@ if [ "$MODE" = "shot" ]; then
 fi
 
 wait "$CHROME_PID" 2>/dev/null || true
-kill "$WATCHDOG" 2>/dev/null || true # normal path: cancel the watchdog
+kill "$WATCHDOG" 2>/dev/null || true # cancel the watchdog
 
 if [ "$MODE" = "shot" ]; then
   [ -s "$OUT" ] && echo "shot -> $OUT" || { echo "capture failed: no $OUT written" >&2; exit 1; }
 elif [ "$MODE" = "dom" ]; then
-  # Validate before handing the DOM to the caller (the cat runs before the EXIT
-  # trap removes $DIR), so a failed capture is a non-zero exit, not a false success.
+  # Exit non-zero on an empty dump. The cat below runs before the EXIT trap
+  # removes $DIR.
   if [ ! -s "$DOMOUT" ]; then
     echo "capture failed: empty DOM (Chrome produced no output)" >&2
     exit 1
   fi
-  # A failed navigation (dev server down, bad URL) still dumps a DOM — Chrome's
-  # net-error interstitial, identifiable by the stable Chromium error-page id.
-  # Reject it rather than hand back a bogus page that looks like success.
+  # A failed navigation still dumps Chrome's error page. Detect it by its id.
   if grep -q 'id="main-frame-error"' "$DOMOUT"; then
     echo "capture failed: Chrome error page (dev server down or bad URL?)" >&2
     exit 1
   fi
   cat "$DOMOUT"
 fi
-# The EXIT trap reaps this run's Chrome + temp dir.

@@ -1,7 +1,3 @@
-// Node-runnable tests for the atlas's slice / blit inverse, the content trim,
-// the tile and atlas resizes (registration held through a square grow, at the
-// origin and centered; the accepted shear of an asymmetric one), and the
-// sheet's guards. Pure (no THREE/DOM). Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -20,9 +16,7 @@ import { buildVoxels } from '../src/pipeline.js';
 import { voxIndex } from '../src/carve.js';
 import { VIEW_DISPLAY_ORDER, VIEW_NAMES } from '../src/views.js';
 
-// A divisible sheet where every one of the six cells has fully-opaque content,
-// so sliceAtlas returns a non-null tile for each (no blank→null) and the blit
-// round-trip is exact byte-for-byte.
+// A divisible, fully opaque sheet. Every cell slices to a non-null tile.
 function makeSheet(tileW, tileH, cols, rows) {
   const W = tileW * cols;
   const H = tileH * rows;
@@ -33,7 +27,7 @@ function makeSheet(tileW, tileH, cols, rows) {
       data[i] = (x * 7) & 255;
       data[i + 1] = (y * 5) & 255;
       data[i + 2] = ((x + y) * 3) & 255;
-      data[i + 3] = 255; // fully opaque everywhere → no cell slices to null
+      data[i + 3] = 255;
     }
   }
   return { width: W, height: H, data };
@@ -59,7 +53,7 @@ test('round-trip: slice then blit every view reproduces the sheet byte-for-byte'
 test('empty tile blitted in re-slices back to null via isBlank', () => {
   const sheet = makeSheet(4, 3, 3, 2);
   const { tileW, tileH } = sliceAtlas(sheet);
-  // Erase the FRONT cell by blitting a fully-transparent (all-zero) tile.
+  // Erase the front cell with a transparent tile.
   const blank = {
     width: tileW,
     height: tileH,
@@ -73,8 +67,7 @@ test('empty tile blitted in re-slices back to null via isBlank', () => {
 });
 
 test('blitTile only touches its rect (a non-divisible remainder is left alone)', () => {
-  // 3x2 layout on a 7x5 sheet → 2x2 tiles, cols*tileW=6 (< 7), rows*tileH=4 (< 5):
-  // the last column/row are remainder pixels no tile covers.
+  // On a 7x5 sheet, a 3x2 grid of 2x2 tiles leaves the last column and row uncovered.
   const W = 7;
   const H = 5;
   const sheet = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4) };
@@ -111,7 +104,7 @@ test('cellOf returns the correct {r,c} for all six views', () => {
   assert.equal(cellOf('nope'), null, 'unknown view → null');
 });
 
-// --- contentBounds (the icon generator's transparent-margin trim) -----------
+// contentBounds
 
 // A w×h tile with opaque texels only at the given [x,y] coordinates.
 function dottedTile(w, h, dots) {
@@ -121,7 +114,6 @@ function dottedTile(w, h, dots) {
 }
 
 test('contentBounds: a tight box around the content, the whole tile when full, null exactly when isBlank', () => {
-  // Content at (2,1) and (5,4) inside an 8×6 tile → the box spans exactly them.
   const t = dottedTile(8, 6, [
     [2, 1],
     [5, 4],
@@ -134,11 +126,10 @@ test('contentBounds: a tight box around the content, the whole tile when full, n
     width: 1,
     height: 1,
   });
-  // A fully-opaque tile trims nothing.
+  // A fully opaque tile trims nothing.
   const full = { width: 4, height: 3, data: new Uint8ClampedArray(4 * 3 * 4).fill(255) };
   assert.deepEqual(contentBounds(full), { x: 0, y: 0, width: 4, height: 3 });
-  // The shared alpha!==0 rule: all-transparent is null and isBlank agrees; a
-  // single texel of ANY nonzero alpha is content and isBlank agrees.
+  // contentBounds and isBlank share the alpha !== 0 rule. Any nonzero alpha is content.
   const blank = dottedTile(4, 4, []);
   assert.equal(contentBounds(blank), null, 'all-transparent → null');
   assert.ok(isBlank(blank), '…and isBlank agrees');
@@ -148,9 +139,9 @@ test('contentBounds: a tight box around the content, the whole tile when full, n
   assert.ok(!isBlank(faint), '…and isBlank agrees');
 });
 
-// --- tile / atlas resize ----------------------------------------------------
+// Tile and atlas resize
 
-// A 2x2 tile with a single opaque marker at (0,0) so anchoring is observable.
+// A 2x2 tile with one opaque marker texel at (0,0).
 function markerTile() {
   const data = new Uint8ClampedArray(2 * 2 * 4);
   data[0] = 11; // R at texel (0,0)
@@ -161,8 +152,8 @@ function markerTile() {
 }
 const alphaAt = (t, x, y) => t.data[(y * t.width + x) * 4 + 3];
 
-// A hand-painted 3x2 sheet with an asymmetric, distinctly-colored shape per face,
-// so a WRONG resize anchor would shift a silhouette and change the carved solid.
+// A 3x2 sheet with an asymmetric, distinctly colored shape per face, so a wrong
+// resize anchor changes the carved solid.
 const PAL = {
   R: [220, 60, 60],
   G: [80, 190, 90],
@@ -171,7 +162,7 @@ const PAL = {
   C: [100, 200, 210],
   M: [200, 120, 210],
 };
-// Each tile: mostly opaque with one distinct transparent corner notch (asymmetry).
+// Each tile is opaque except for one transparent corner.
 const TILE_ART = {
   left: ['.RRR', 'RRRR', 'RRRR', 'RRRR'],
   front: ['GGG.', 'GGGG', 'GGGG', 'GGGG'],
@@ -205,7 +196,6 @@ function artSheet(tile) {
   return sheet;
 }
 
-// Build voxels straight from a sheet, the way main.js does (slice → buildVoxels).
 function voxelsOf(sheet) {
   const { views } = sliceAtlas(sheet);
   const raw = {};
@@ -213,10 +203,9 @@ function voxelsOf(sheet) {
   return buildVoxels(raw);
 }
 
-// Registration held: `grown`'s lattice is `base`'s plus `delta` on every axis,
-// and every voxel of `base` reappears at (x+off, y+off, z+off) with the same
-// solid bit and the same six face colors. A mis-anchored tile would shear a
-// silhouette and fail here.
+// Asserts that grown's lattice is base's plus delta on each axis, and that every
+// voxel of base reappears at (x+off, y+off, z+off) with the same solid bit and
+// face colors.
 function assertRegistered(base, grown, delta, off) {
   assert.deepEqual(grown.dims, {
     nx: base.dims.nx + delta,
@@ -246,23 +235,19 @@ test('resizeAtlas: a square grow preserves every voxel + face color (registratio
   const base = voxelsOf(artSheet(4));
   assert.ok(base.solidCount > 0, 'the base sheet carves to a non-empty solid');
   const grown = voxelsOf(resizeAtlas(artSheet(4), 6, 6, { anchor: 'origin' }));
-  // The lattice grew by the delta on every axis, the object pinned to the
-  // origin corner.
   assertRegistered(base, grown, 2, 0);
 });
 
 test('resizeAtlas: an asymmetric (non-square) resize falls out of registration — depth shears (accepted, warned)', () => {
-  // The primitive faithfully produces the requested (non-uniform) tiles...
-  const sheet = resizeAtlas(artSheet(4), 6, 4, { anchor: 'origin' }); // W 4→6, H unchanged
+  // The tiles have the requested size.
+  const sheet = resizeAtlas(artSheet(4), 6, 4, { anchor: 'origin' }); // W 4→6
   assert.equal(sheet.width, 6 * 3);
   assert.equal(sheet.height, 4 * 2);
   const { tileW, tileH } = sliceAtlas(sheet);
   assert.equal(tileW, 6);
   assert.equal(tileH, 4);
-  // ...but the carve can't keep registration: nz is the side tile's WIDTH AND the
-  // top tile's HEIGHT at once, so W≠H over-constrains depth. reconcileDims takes
-  // the max and the object shears (voxels drop) with a warning. The editor allows
-  // independent W/H knowing this; pin the behavior so it can't regress silently.
+  // nz is both the side tile's width and the top tile's height, so W ≠ H
+  // over-constrains depth. reconcileDims takes the max.
   const base = voxelsOf(artSheet(4)); // 4×4×4
   const skew = voxelsOf(sheet);
   assert.notEqual(skew.dims.nz, base.dims.nz, 'depth axis is double-booked → shifts');
@@ -276,19 +261,17 @@ test('resizeAtlas: shrinking below the object extent crops without throwing', ()
   assert.ok(small.solidCount <= 8, 'solid is clamped to the smaller lattice');
 });
 
-// --- centered resize (the editor's tile stepper, anchor:'center') ----------
+// Centered resize (anchor: 'center')
 
 test('splitLow: ±1 steps alternate ends; any change divides within one texel', () => {
-  // grow: consecutive single steps put the extra line at alternating ends, so the
-  // art can't drift to one corner over repeated clicks.
+  // Single-step grows pad alternating ends.
   assert.equal(splitLow(4, 5), 1); // old even → pad the low end
   assert.equal(splitLow(5, 6), 0); // old odd  → pad the high end
   assert.equal(splitLow(6, 7), 1);
   assert.equal(splitLow(7, 8), 0);
-  // shrink alternates too (a negative result crops the low end)
+  // Shrinks alternate too. A negative result crops the low end.
   assert.equal(splitLow(5, 4), 0);
   assert.equal(splitLow(4, 3), -1);
-  // an even change always splits evenly; a typed jump divides as evenly as it can.
   for (const [o, n] of [
     [4, 6],
     [4, 7],
@@ -309,11 +292,10 @@ test('resizeTileTo: places a tile at an explicit offset, padding + clipping', ()
   assert.equal(alphaAt(out, 1, 1), 255, 'marker moved to (1,1)');
   assert.equal(out.data[(1 * 4 + 1) * 4], 11, 'RGB carried to the new position');
   assert.equal(alphaAt(out, 0, 0), 0, 'origin padded transparent');
-  // A negative offset crops that edge instead of padding it.
+  // A negative offset crops that edge.
   const crop = resizeTileTo(markerTile(), 2, 2, -1, 0);
   assert.equal(alphaAt(crop, 0, 0), 0, 'the (0,0) marker was cropped from the left');
-  // A zero offset is the top-left anchor: the marker stays at (0,0) and the
-  // far corner pads transparent.
+  // A zero offset anchors top-left.
   const grow = resizeTileTo(markerTile(), 4, 4, 0, 0);
   assert.equal(alphaAt(grow, 0, 0), 255, 'marker stays at top-left');
   assert.equal(grow.data[0], 11, 'RGB carried through');
@@ -323,14 +305,11 @@ test('resizeTileTo: places a tile at an explicit offset, padding + clipping', ()
 test('resizeAtlas center: a square grow keeps the solid intact, just translated to center', () => {
   const base = voxelsOf(artSheet(4));
   const grown = voxelsOf(resizeAtlas(artSheet(4), 6, 6, { anchor: 'center' }));
-  // +2 on every axis; splitLow(4,6) adds one line at the LOW end of each axis, so
-  // the whole solid shifts by that on x, y and z (and gains one padded line
-  // beyond it).
   assertRegistered(base, grown, 2, splitLow(4, 6));
 });
 
 test("resizeAtlas center: a grow keeps the object centered (where 'origin' hugs the corner)", () => {
-  // Empty lattice on the low vs high side of the solid along an axis.
+  // Empty lines below and above the solid along an axis.
   const gaps = ({ dims, solid }, axis) => {
     let lo = Infinity;
     let hi = -1;
@@ -356,8 +335,7 @@ test("resizeAtlas center: a grow keeps the object centered (where 'origin' hugs 
       Math.abs(c.loGap - c.hiGap) <= 1,
       `centered ${axis}: ${c.loGap}/${c.hiGap} balanced around the middle`
     );
-    // splitLow(4,10)=3, so centering pushed the art three lines off the low corner
-    // the origin anchor keeps it pinned to.
+    // splitLow(4, 10) is 3, so centering moves the art three lines off the low corner.
     assert.ok(
       c.loGap > o.loGap,
       `centered ${axis} sits off the low corner (origin loGap ${o.loGap} < ${c.loGap})`
@@ -365,12 +343,10 @@ test("resizeAtlas center: a grow keeps the object centered (where 'origin' hugs 
   }
 });
 
-// --- sliceAtlas warning / guard paths --------------------------------------
+// sliceAtlas warnings and guards
 
 test('sliceAtlas: a sheet too small to split (sub-1px tiles) bails with no views and a warning', () => {
-  // A 1×1 sheet under the 3×2 layout derives tileW = 1/3 → rounds to 0 (< 1), the
-  // fundamentally-unusable guard. It returns before the slice loop, so `views` is
-  // empty (no keys), every value vacuously null, and one warning fires.
+  // A 1×1 sheet gives tileW = round(1/3) = 0.
   const tiny = { width: 1, height: 1, data: new Uint8ClampedArray(1 * 1 * 4) };
   const res = sliceAtlas(tiny);
   assert.equal(res.tileW, 0, 'derived tile width collapses to 0');
@@ -383,14 +359,13 @@ test('sliceAtlas: a sheet too small to split (sub-1px tiles) bails with no views
 });
 
 test('sliceAtlas: a non-divisible sheet warns and still reads tiles from the top-left', () => {
-  // 7×5 under 3×2 → tileW = round(7/3) = 2, tileH = round(5/2) = 3. cols*tileW = 6 ≠ 7
-  // and rows*tileH = 6 ≠ 5, so the mismatch warning fires; tiles are still cut from
-  // the top-left corner. Mark the (0,0) pixel opaque so the left cell reads non-null.
+  // 7×5 gives tileW = round(7/3) = 2 and tileH = round(5/2) = 3, which don't divide
+  // the sheet. The opaque (0,0) pixel makes the left cell non-null.
   const W = 7;
   const H = 5;
   const sheet = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4) };
   sheet.data[0] = 99; // R at (0,0)
-  sheet.data[3] = 255; // A at (0,0) → not blank
+  sheet.data[3] = 255; // A at (0,0)
   const res = sliceAtlas(sheet);
   assert.equal(res.tileW, 2, 'tileW = round(7/3)');
   assert.equal(res.tileH, 3, 'tileH = round(5/2)');
@@ -399,7 +374,7 @@ test('sliceAtlas: a non-divisible sheet warns and still reads tiles from the top
   assert.equal(res.views.left.data[0], 99, 'and it reads the top-left pixel');
 });
 
-// --- validateSheet ---------------------------------------------------------
+// validateSheet
 
 test('validateSheet: rejects null, zero-sized, and short-buffer sheets; accepts a well-formed one', () => {
   assert.ok(validateSheet(null), 'null → an error');

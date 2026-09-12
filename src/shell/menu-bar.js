@@ -1,76 +1,23 @@
-// ---------------------------------------------------------------------------
-// The menu bar's owner (docs/apps-plan.md §3.3): ONE bar, the FRONT
-// APPLICATION's. System 7's bar belonged to the front application — the
-// Apple menu at the left in every application, the application's own menus
-// beside it, and a switch of application replacing them wholesale. Here:
+// Menu bar: the Sprite Machine menu, the front application's menus and the
+// shared dialogs.
 //
-//   THE SPRITE MACHINE MENU is the Apple menu's seat and role — authored in
-//   index.html at the bar's left, live in every application: About Sprite
-//   Machine… (also the boot greeting) and Desktop Patterns (the control
-//   panel, opened through the registry — that application's `open`), the
-//   machine's things rather than an application's. Its handler and the
-//   shared dialogs
-//   live here: the About box (its version and date lines filled from the
-//   build facts, its Show at startup checkbox the boot greeting's switch),
-//   the storage-unavailable notice, and the `modalOpen()`
-//   guard every handler in every application keeps (a key equivalent fires
-//   app-wide, and must not act under an open modal).
-//
-//   THE APPLICATIONS' MENUS come and go. Each application (src/apps/<id>,
-//   the registry in src/apps/index.js) authors its menus as a fragment of
-//   vf-menu elements (menus.html, imported whole), which this controller
-//   parses ONCE at wire-up — into the main document, so the elements
-//   upgrade at once (a detached element's innerHTML; not a <template>,
-//   whose inert document is why the window templates need importNode +
-//   upgrade) — and hands to the application's `init` with the shell's
-//   services (`deps`). The application binds its behavior to those nodes
-//   whether or not they are on the bar: a vf-menu-select listener on each
-//   menu (the item's event bubbles to its menu in a detached tree too), its
-//   item syncs (`disabled`, `checked`, a tail) — ordinary Lit property
-//   writes that hold and render on the next connect.
-//
-//   THE SWAP: the front application's menus sit between the Sprite Machine
-//   menu and the clock (the clock is a slotted vf-label style.css keeps at
-//   the right end), and on every change of shell.frontApp — the desktop's
-//   activation wire's reading of the active window (shell/windows.js): a
-//   document window the Sprite Editor, a text window the Text Viewer, the
-//   control panel Desktop Patterns, a folder window or nothing the Finder
-//   — the outgoing
-//   application's menus are REMOVED and the incoming one's INSERTED. Nodes
-//   moved, never rebuilt, so an item's state survives the trip and a menu
-//   reads on its return exactly as it was left. The kit takes menus coming
-//   and going (vf-menu-bar re-reads its slot on every access and re-syncs
-//   on slotchange; a menu open at the instant its application leaves
-//   closes; an item blinking at that instant cancels), and A DETACHED MENU
-//   CLAIMS NO KEY: an item's key-equivalent ear is a document listener
-//   added on connect and removed on disconnect. So the Sprite Editor's ⌘S,
-//   off the bar, is inert in the Finder with no `disabled` written anywhere
-//   — the Finder's own ⌘S doing nothing — which is what retired the old
-//   role gating (the sixteen DOC_SCOPED items, the Finder-role clauses).
-//   Detach, never hide: a hidden menu's items would stay connected and keep
-//   claiming. The bar's `label` follows — Finder, Sprite Editor, Text
-//   Viewer, Desktop Patterns — so the menubar announces whose it is.
-//
-//   THE BOOT: nothing is active at wire-up, shell.frontApp reads the
-//   Finder, and the first sync slots the Finder's menus — synchronous, at
-//   main.js's top level, so the first paint already shows the right bar and
-//   the About box greets over it.
-//
-//   CROSS-APPLICATION CALLS go through `deps.apps` — the registry's
-//   actions by id, filled as each `init` returns, read at pick time (never
-//   at wire-up, so the order of initialization cannot bite): the Finder's
-//   New… calls the Sprite Editor's newDocument(), and its icon layer the
-//   Sprite Editor's openDoc(id) and the Text Viewer's open(id); main.js
-//   reads the Finder's positions() and pins() through the same record for
-//   the desktop state's snapshot (returned as `apps`).
-// ---------------------------------------------------------------------------
+// - The Sprite Machine menu (index.html) stays on the bar in every application.
+//   Key equivalents fire app-wide, so every menu handler checks modalOpen().
+// - Each application's menus.html is parsed once with innerHTML in this
+//   document, so its vf-menu elements upgrade at once. The nodes go to the
+//   application's init, which binds to them whether or not they are on the bar.
+// - On each shell.frontApp change, the outgoing application's menus are
+//   removed and the incoming ones inserted before the clock. The same nodes
+//   are reused, so item state persists. Menus must be detached, not hidden. An
+//   item's key equivalent stays active while it is connected.
+// - The first sync runs at wire-up, so the first paint shows the Finder's menus.
+// - Cross-application calls go through deps.apps, read at pick time.
 
 import { session } from '../state/session.js';
 import { shell, DESKTOP_PATTERNS } from '../state/shell.js';
 
 /**
- * What the controller hands every application's `init`: the shell's
- * services, the shared dialogs, and the registry's actions by id.
+ * The deps passed to each application's init.
  * @typedef {{
  *   desktop: import('vintage-frames').VfDesktop,
  *   windows: ReturnType<typeof import('./windows.js').initWindows>,
@@ -88,18 +35,12 @@ import { shell, DESKTOP_PATTERNS } from '../state/shell.js';
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
  * @param {{apps: import('../apps/index.js').App[], defaultApp: import('../state/shell.js').AppId}} registry
- *   The applications in the bar's order, and the one whose menus the bar
- *   holds for an id no application claims.
+ *   The applications in bar order, and the fallback when no application
+ *   matches shell.frontApp.
  * @param {Omit<AppDeps, 'desktop'|'showAbout'|'showStorage'|'modalOpen'|'apps'>
  *   & {greet(): boolean, setGreet(on: boolean): void}} services
- *   The shell's services the applications wire to: the window manager, the
- *   3D Sprite Atlas's renderer follower (Export Sprite Atlas… renders
- *   through it), the 3D model export's subject (Export 3D Model… writes its
- *   glb through it), and the desktop state's two readers the Finder
- *   restores its furniture from (a saved icon position and a saved folder
- *   window's pin, by the item's key — desktop-state.js) — plus, for this
- *   controller alone (no application sees them), the desktop state's
- *   greeting flag, read and written by the About box's Show at startup.
+ *   Shared services for the applications. greet and setGreet are used only by
+ *   the About box.
  */
 export function initMenuBar(
   desktop,
@@ -122,33 +63,19 @@ export function initMenuBar(
   const bar = $('vf-menu-bar');
   const clock = $('#clock');
 
-  // A shortcut-triggered action must not fire under an open modal (the
-  // Colors picker lives in shadow DOM, so it's checked via its session flag).
+  // The Colors picker is in shadow DOM, so its open state comes from session.
   const modalOpen = () =>
     session.get().pickerOpen || !!desktop.querySelector('vf-dialog[open]');
 
-  // --- the shared dialogs -------------------------------------------------------
-  // The About box — Sprite Machine → About…, and the BOOT GREETING (main.js
-  // parks a load with no document to open on it: the classic launch splash;
-  // OK, Escape, or a click anywhere outside the box leaves the bare desktop,
-  // nothing activates). The click-away is the kit's own `light-dismiss` —
-  // the markup's attribute on this one dialog, so nothing here listens for
-  // it (its vf-close arrives with reason 'outside', should a click-away ever
-  // need telling from OK; the box holds no pending state). The copy is
-  // the markup's; the version and date lines are BUILD facts (vite.config.js
-  // `define`: package.json's version, HEAD's commit date), written once here
-  // so the markup never carries a stale number.
+  // Shared dialogs
+  // About box: Sprite Machine → About… and the boot greeting. The version and
+  // date come from vite.config.js `define`.
   const dlgAbout = $('#dlg-about');
   const dlgStorage = $('#dlg-storage');
   $('#about-version').textContent = `version ${__APP_VERSION__}`;
   $('#about-date').textContent = __APP_DATE__;
-  // Show at startup — the greeting's switch, the desktop state's `greet`
-  // flag (checked by default: the box greets every load until it is
-  // unchecked; Sprite Machine → About… still opens it, and this same box
-  // is the way back on). It binds LIVE — written at the toggle, never
-  // committed by OK — because the splash is light-dismiss: a click-away
-  // must not silently discard the uncheck. Read again at every show, so
-  // the box always says the flag as it stands.
+  // Show at startup saves on each toggle, because a click outside closes the box
+  // without OK.
   const chkGreet = $('#about-greet');
   const showAbout = () => {
     chkGreet.checked = greet();
@@ -157,13 +84,12 @@ export function initMenuBar(
   on(chkGreet, 'vf-change', (e) =>
     setGreet(!!(/** @type {CustomEvent} */ (e).detail.checked))
   );
-  // The storage-unavailable notice: what Save, Duplicate, New Folder and a
-  // paste raise where IndexedDB is broken (a private window).
+  // Storage-unavailable notice, shown when IndexedDB fails (a private window).
   const showStorage = () => dlgStorage.show();
   on($('#btn-about-ok'), 'click', () => dlgAbout.close());
   on($('#btn-storage-ok'), 'click', () => dlgStorage.close());
 
-  // --- the Sprite Machine menu ----------------------------------------------------
+  // Sprite Machine menu
   on($('#menu-app'), 'vf-menu-select', (e) => {
     if (modalOpen()) return;
     switch (/** @type {CustomEvent} */ (e).detail.value) {
@@ -171,18 +97,13 @@ export function initMenuBar(
         showAbout();
         break;
       case 'desktop-patterns':
-        // The Desktop Patterns control panel: a window, opened from here in
-        // every application — the Apple menu's Control Panels — through the
-        // registry (that application's `open`, read at the pick). Opening it
-        // brings Desktop Patterns forward: the panel is that application's
-        // own window (apps/desktop-patterns).
         actionsById[DESKTOP_PATTERNS]?.open();
         break;
     }
   });
 
-  // --- the applications -----------------------------------------------------------
-  /** The registry's actions by id, filled as each init returns. */
+  // Applications
+  /** Each application's actions by id, filled as its init returns. */
   /** @type {AppDeps['apps']} */
   const actionsById = {};
   /** @type {AppDeps} */
@@ -194,8 +115,7 @@ export function initMenuBar(
     modalOpen,
     apps: actionsById,
   };
-  /** The fragment's vf-menu elements as live nodes of THIS document (the
-   *  header's parse): upgraded at once, attached to nothing yet. */
+  /** Parses a menus fragment into detached vf-menu elements of this document. */
   const parseMenus = (html) => {
     const host = document.createElement('div');
     host.innerHTML = html;
@@ -212,7 +132,7 @@ export function initMenuBar(
     return instance;
   });
 
-  // --- the swap ---------------------------------------------------------------------
+  // Menu swap
   /** @type {(typeof entries)[number] | null} the application on the bar */
   let slotted = null;
   const sync = () => {
@@ -231,13 +151,9 @@ export function initMenuBar(
   sync();
 
   return {
-    /** The boot greeting (main.js): a load with no ?file=<name> to open
-     *  parks at the About box. */
+    /** Shows the About box. main.js calls it as the boot greeting. */
     showAbout,
-    /** Every application's public verbs by id — main.js reads the Finder's
-     *  positions and pins through it for the desktop state's snapshot, and
-     *  surfaces a dropped file's window through the Sprite Editor's
-     *  showDocument. */
+    /** Each application's actions by id. */
     apps: actionsById,
     dispose() {
       for (const instance of instances) instance.dispose();

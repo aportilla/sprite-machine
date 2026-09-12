@@ -1,42 +1,21 @@
-// ---------------------------------------------------------------------------
-// Pure canvas painters for <sm-draw-canvas>'s system-res layers: the pencil's
-// filled hover-footprint preview, the rect tool's live drag preview, and the
-// marching ants — the selection's ring, and the same ring around a footprint
-// (the erase treatment's, the eyedropper's sample target). Stateless — everything arrives as
-// arguments — so the component keeps only gesture state and these stay
-// trivially readable.
-// All draw in SYSTEM-px space — the kit's virtual pixel grid: the backings are
-// tileW·k × tileH·k for a k-system-px texel, CSS-magnified nearest-neighbor in
-// lockstep with the art, so their 1px hairlines are exactly one system px (the
-// kit's own hairline unit), crisp at any display density or browser zoom. The
-// canvas is 1-BIT BUT FOR THE ART: the paper under it is the kit's 12% dither
-// (`gray-12`, a sparse dot field — the transparency indicator; the stack
-// container's own pattern, not a painter here) and everything here is black
-// or white (the ink previews are the one exception — they preview the art
-// itself; every other mark is the ants ring, nothing translucent), so the
-// sprite is the only color on the page.
-// ---------------------------------------------------------------------------
+// Stateless canvas painters for <sm-draw-canvas>'s overlay layers: the pencil
+// preview, the rect drag preview and the marching ants. They draw in system px,
+// so a 1px mark is one system px. Every mark is opaque black or white except the
+// ink previews.
 
 import { brushRows, brushSpans } from '../lib/brush.js';
 import { roundedRectRows } from '../lib/rect.js';
 import { antsRuns, antsOutlineRuns } from '../lib/ants.js';
 
-/** `scale` is whole system px per texel; `sysW`/`sysH` the layer in system px.
+/** `scale` is whole system px per texel. `sysW`/`sysH` are the layer size in system px.
  *  @typedef {{tileW:number, tileH:number, scale:number, sysW:number, sysH:number}} OverlayView */
 
-// There are no lines over the art — no texel lattice: the dotted paper alone
-// shows through unpainted texels.
-
-// Filled preview of the footprint the pencil would stamp: the exact texels in
-// the active ink at full opacity, so the hover shows precisely what a click
-// would leave behind (the OS crosshair marks the position — no outline) —
-// the N×N box, or with a `'circle'` tip the disc inscribed in it, row by row
-// through the same brushRows the stamp reads (lib/brush.js), clipped to the
-// tile. An erasing footprint is drawFootprintAnts's. `t` null clears.
+// The pencil's hover preview: the texels a stamp would paint, in the ink, clipped
+// to the tile. It uses brushRows, as the stamp does. `t` null clears.
 /** @param {CanvasRenderingContext2D} g @param {OverlayView} v
  *  @param {{px:number,py:number}|null} t @param {number} size
  *  @param {{r:number,g:number,b:number}} ink
- *  @param {string} [shape]  one of PENCIL_SHAPES; the square when omitted */
+ *  @param {string} [shape]  one of PENCIL_SHAPES */
 export function drawPencilPreview(g, v, t, size, ink, shape = 'square') {
   g.clearRect(0, 0, v.sysW, v.sysH);
   if (!t) return;
@@ -51,28 +30,13 @@ export function drawPencilPreview(g, v, t, size, ink, shape = 'square') {
   });
 }
 
-// The ants around a FOOTPRINT: the selection's own 1-bit ring (whole-px black
-// and white runs, marching as `phase` grows) around the texels a tip covers
-// — the tip's OWN outline: a circle tip's disc is ringed as a disc
-// (lib/ants.js antsOutlineRuns walks the thin boundary of the clipped px
-// spans lib/brush.js brushSpans states, the square's spans giving the
-// selection's rectangle walk exactly) — no fill inside it, no halo around
-// it, nothing translucent. Two wearers:
-//   - THE ERASE TREATMENT: transparency can't be previewed on an overlay, so
-//     an erase shows the ring around the texels it would clear (a translucent
-//     red block under a red-lined haloed hairline said "something happens
-//     here" where the ring says "this goes"; it went Sep 5 2026) — the
-//     eraser's footprint under the pointer (hover and stroke), a right-button
-//     pencil stroke's, and, through drawRectPreview, a rect drag erasing (a
-//     box — drawMarchingAnts);
-//   - the EYEDROPPER's sample target: the one texel a click would read (a
-//     haloed hairline — a 45% black halo under a 95% white line, the last
-//     translucent mark on the canvas — went the same day).
-// `t` null clears; a footprint wholly off the tile draws nothing.
+// Marching ants around the texels a tip covers, following the tip's outline, so
+// a circle tip is ringed as a disc. Used for the erase preview and the
+// eyedropper's target. `t` null clears.
 /** @param {CanvasRenderingContext2D} g @param {OverlayView} v
  *  @param {{px:number,py:number}|null} t @param {number} size
- *  @param {number} phase  the ants' phase — the canvas's one ticker's
- *  @param {string} [shape]  one of PENCIL_SHAPES; the square when omitted */
+ *  @param {number} phase  the ants' phase
+ *  @param {string} [shape]  one of PENCIL_SHAPES */
 export function drawFootprintAnts(g, v, t, size, phase, shape = 'square') {
   g.clearRect(0, 0, v.sysW, v.sysH);
   if (!t) return;
@@ -82,16 +46,8 @@ export function drawFootprintAnts(g, v, t, size, phase, shape = 'square') {
   );
 }
 
-// Live preview of a rect drag: the exact texels a commit will fill (via the
-// shared roundedRectRows — so rounded corners show precisely) in the active
-// ink at FULL opacity — the box exactly as the release will paint it and
-// nothing else: no tint, no outline (a 50% ink tint under a haloed hairline of
-// the drag bounding box went Sep 5 2026 — the paint itself reads the extent,
-// the pencil's hover idiom). Erasing (a right-drag) wears the erase treatment
-// (drawFootprintAnts above): the ants around the drag's bounding box — the
-// rectangle walk the selection's ring is, so the corner texels a radius
-// spares sit inside the ring rather than traced. `bounds` null clears the
-// layer.
+// The rect drag preview: the texels the release will fill, in the ink. An erasing
+// drag shows marching ants around the bounding box instead. `bounds` null clears.
 /** @param {CanvasRenderingContext2D} g @param {OverlayView} v
  *  @param {{x0:number,y0:number,x1:number,y1:number}|null} bounds
  *  @param {number} radius @param {{r:number,g:number,b:number}} ink
@@ -112,22 +68,13 @@ export function drawRectPreview(g, v, bounds, radius, ink, erasing, phase) {
   });
 }
 
-// The marching ants — the selection's ring, and the footprint ring's wearers
-// (drawFootprintAnts above) — MacPaint's 1-bit border: black and
-// white dashes alternating along a 1-system-px ring on the bounds'
-// outermost texel rows/columns, readable on any art, walking the perimeter
-// continuously as `phase` grows (the classic seam at the start corner). The
-// ring is FILLED, never stroked: `antsRuns` (src/lib/ants.js, pure) emits the
-// clockwise walk as same-ink runs on whole system px, and a rect on whole
-// coordinates cannot be anti-aliased — a dashed stroke sits its dash
-// boundaries on half pixels and grays every dash's end px. A bounds hanging
-// off the tile clips at the canvas edge.
-
+// Marching ants: black and white dashes on a 1 system px ring along the bounds'
+// outermost texels, advancing with `phase`. The ring is filled as whole-px rects
+// from antsRuns, not stroked, so dash ends never anti-alias. Bounds off the tile
+// clip at the canvas edge.
 /** @param {CanvasRenderingContext2D} g @param {OverlayView} v
- *  @param {{x0:number,y0:number,x1:number,y1:number}|null} bounds  the CURRENT
- *    (translated) selection, or the texels an erase would clear; null clears
- *    the layer
- *  @param {number} phase  0..ANTS_PERIOD−1, advanced by the canvas's ticker */
+ *  @param {{x0:number,y0:number,x1:number,y1:number}|null} bounds  null clears
+ *  @param {number} phase  0..ANTS_PERIOD−1 */
 export function drawMarchingAnts(g, v, bounds, phase) {
   g.clearRect(0, 0, v.sysW, v.sysH);
   if (!bounds) return;
@@ -146,8 +93,6 @@ export function drawMarchingAnts(g, v, bounds, phase) {
   );
 }
 
-// The ring's runs onto the layer: every white run in one fill, every black
-// run in another — whole-px rects, so nothing can anti-alias.
 /** @param {CanvasRenderingContext2D} g
  *  @param {import('../lib/ants.js').AntsRun[]} runs */
 function fillRuns(g, runs) {

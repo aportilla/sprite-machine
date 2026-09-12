@@ -1,22 +1,13 @@
-// ---------------------------------------------------------------------------
-// `history` slice — bounded undo/redo over the document's pixels. Two entry
-// kinds, matching the two ways the doc changes:
-//   - `tile`: one gesture's effect on one face ({face, before, after} — tile
-//     buffer snapshots, ≤16KB each at tile 64), pushed by the editor when the
-//     canvas commits a gesture;
-//   - `atlas`: a whole-sheet snapshot pair, for the ops that move every tile
-//     at once (resize, all-tiles replace) — captured via `withAtlasSnapshot`.
+// History slice: one document's bounded undo/redo over its pixels. Entry kinds:
+//   - `tile`: one gesture on one face ({face, before, after} tile snapshots),
+//     pushed by the editor when the canvas commits a gesture.
+//   - `atlas`: a whole-sheet snapshot pair for resize and replace all,
+//     recorded by withAtlasSnapshot.
 //
-// Undo/redo apply through the doc's restore actions (restoreTile /
-// restoreAtlas), which are STRUCTURAL — templates re-derive, the canvas
-// resets, the rebuilder rebuilds — so an undo behaves like any other document
-// change. Snapshots are copied IN on push and copied OUT on atlas-apply, so
-// no live buffer can mutate an entry after the fact.
-//
-// A wholesale load (the doc's sheet generation moved) CLEARS both stacks: the
-// history belongs to the document, and undoing across a load would resurrect
-// pixels from a different one.
-// ---------------------------------------------------------------------------
+// Entries apply through doc.restoreTile and doc.restoreAtlas, which are
+// structural changes. Snapshots are copied on push and on apply, so no live
+// buffer can alter an entry. A wholesale load (a new doc sheet generation)
+// clears both stacks.
 
 import { createStore } from './store.js';
 
@@ -32,8 +23,6 @@ const copyTile = (t) =>
  * @param {{limit?: number}} [opts]
  */
 export function createHistory(doc, { limit = HISTORY_LIMIT } = {}) {
-  // Only the menu-facing booleans live in the store; the stacks are plain
-  // fields (nobody renders them, and entries are big).
   const store = createStore({ canUndo: false, canRedo: false });
 
   /** @type {object[]} */
@@ -52,9 +41,8 @@ export function createHistory(doc, { limit = HISTORY_LIMIT } = {}) {
     sync();
   }
 
-  // Apply one entry's chosen side. Restores go through COPIES so the stacks'
-  // snapshots survive the edits that follow (restoreAtlas adopts by
-  // reference; restoreTile's blit copies anyway, but symmetry is cheap).
+  // Apply one side of an entry. Restores take copies because restoreAtlas
+  // adopts its image by reference.
   function apply(entry, direction) {
     const art = direction === 'undo' ? entry.before : entry.after;
     if (entry.kind === 'tile') doc.restoreTile(entry.face, copyTile(art));
@@ -75,9 +63,9 @@ export function createHistory(doc, { limit = HISTORY_LIMIT } = {}) {
     get: store.get,
     subscribe: store.subscribe,
 
-    /** One committed gesture on one face. Buffers are snapshotted here —
-     *  callers may hand in their live working tile. A no-op pair (identical
-     *  bytes) is dropped rather than recorded.
+    /** One committed gesture on one face. The buffers are copied, so callers
+     *  may pass their live working tile. A pair with identical bytes is not
+     *  recorded.
      *  @param {string} face
      *  @param {{width:number,height:number,data:Uint8ClampedArray}|null} before
      *  @param {{width:number,height:number,data:Uint8ClampedArray}|null} after */
@@ -93,9 +81,8 @@ export function createHistory(doc, { limit = HISTORY_LIMIT } = {}) {
       push({ kind: 'tile', face, before: copyTile(before), after: copyTile(after) });
     },
 
-    /** Run a whole-atlas mutation under snapshot: drain, snapshot, run `fn`
-     *  (which returns whether anything changed), and record the pair only on
-     *  a real change. Returns `fn`'s result. */
+    /** Run a whole-atlas mutation. `fn` returns whether anything changed, and
+     *  the before/after pair is recorded only if it did. Returns `fn`'s result. */
     withAtlasSnapshot(fn) {
       doc.drain();
       const image = doc.get().atlasImage;
@@ -133,12 +120,8 @@ export function createHistory(doc, { limit = HISTORY_LIMIT } = {}) {
       sync();
     },
 
-    /** HMR teardown. */
     dispose() {
       unsub();
     },
   };
 }
-
-// No singleton: every document context (state/workspace.js) wires its own
-// createHistory(doc) — one bounded undo history per open document.

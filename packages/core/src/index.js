@@ -1,12 +1,6 @@
-// ---------------------------------------------------------------------------
-// The engine's public surface — what `import … from 'sprite-machine'` gives:
-// the pipeline (ingest → carve → colorize), the mesher (regions, wedges, the
-// T-junction repair, the skin), the atlas's slicing and resizing, the file
-// formats (PNG chunks, the PNG encoder, glb) and the vocabularies. Explicit
-// names, never `export *`: two modules re-exporting one name through a star
-// would silently export neither. The headless entry is model.js; the Node
-// adapter (a PNG's pixels in, a glb file out) is `sprite-machine/node`.
-// ---------------------------------------------------------------------------
+// Public API of the sprite-machine package. Exports are listed by name: with
+// export *, a name exported by two modules is silently dropped. The Node adapter
+// is sprite-machine/node.
 
 export {
   packRGBA,

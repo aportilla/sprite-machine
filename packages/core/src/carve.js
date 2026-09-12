@@ -1,24 +1,13 @@
-// ---------------------------------------------------------------------------
-// Carve: reconcile grid dimensions from the ingested views, then compute the
-// visual hull = intersection of every provided view's extruded silhouette.
-//
-// Insight that keeps this simple: each view projects onto ONE of three planes
-//   FRONT/BACK -> X-Y,  LEFT/RIGHT -> Z-Y,  TOP/BOTTOM -> X-Z.
-// The two views of a pair produce the same silhouette (mirror images), so for
-// CARVING a single view per plane fully constrains that axis. Mirroring is only
-// needed for COLOR (see colorize.js). So carving is: UNION the views within
-// each plane (opposite silhouettes are identical in theory, so this is robust
-// to a 1-texel registration slip between hand-drawn opposite sprites — see
-// carve()), then AND across the planes. No camera math, no CSG.
-// ---------------------------------------------------------------------------
+// Carve: reconcile the grid dimensions from the views, then compute the visual
+// hull, the intersection of every view's extruded silhouette. Each view projects
+// onto one plane: front/back X-Y, left/right Z-Y, top/bottom X-Z.
 
 import { placeView } from './ingest.js';
 import { VIEWS, VIEW_AXES, FACE_KEYS, FACE_NORMAL } from './views.js';
 
 export const voxIndex = (x, y, z, d) => x + d.nx * (y + d.ny * z);
 
-/** Inverse of voxIndex: linear grid index -> {x,y,z}. Kept next to voxIndex so
- * the forward and inverse packing can't drift. */
+/** Inverse of voxIndex: a linear grid index to {x, y, z}. */
 export const unvoxIndex = (idx, d) => {
   const z = (idx / (d.nx * d.ny)) | 0;
   const rem = idx - z * d.nx * d.ny;
@@ -27,11 +16,8 @@ export const unvoxIndex = (idx, d) => {
 };
 
 /**
- * Reconcile one integer resolution per axis from the (uncropped) tile sizes.
- * For a well-formed sheet every view is the same size, so each axis has a single
- * candidate and the grid is exactly the tile size. Unequal sizes (a malformed
- * sheet, or non-square tiles whose depth differs between side-width and
- * top-height) take the max and warn — the shorter view under-constrains the tail.
+ * One integer resolution per axis from the view sizes. When views disagree on an
+ * axis, the largest wins and a warning is added.
  * @param {Record<string, {w:number,h:number}>} views  provided views by name
  * @returns {{dims:{nx:number,ny:number,nz:number}, warnings:string[]}}
  */
@@ -70,14 +56,8 @@ export function reconcileDims(views) {
 }
 
 /**
- * Place each provided view into the reconciled (imgW,imgH) grid at NATIVE scale
- * and IDENTITY position (offX=offY=0) — strict registration: a tile's texel
- * (u,v) is a fixed lattice line, so it is NOT re-centered or bottom-anchored.
- * For a well-formed (uniform-tile) sheet each view already equals the grid on
- * the axes it constrains, so this is a 1:1 copy. There is no auto ground-rest:
- * where the object sits in Y is wherever the artist painted it (paint at the
- * tile's bottom rows to rest on y=0). A malformed sheet with unequal-size views
- * lands each at the origin and warns (reconcileDims).
+ * Place each view into its imgW × imgH grid at native scale and offset 0. A texel
+ * is a fixed lattice line, so views are not re-centered or ground-rested.
  * @returns {Record<string,{occ:Uint8Array,rgb:Uint32Array,imgW:number,imgH:number}>}
  */
 export function gridViews(views, dims) {
@@ -104,32 +84,21 @@ export function carve(gviews, dims) {
   const { nx, ny, nz } = dims;
   const solid = new Uint8Array(nx * ny * nz).fill(1);
   const active = Object.entries(gviews);
-  // Contract: with no views, nothing carves — the grid stays filled to its
-  // bounding box. reconcileDims defaults every unconstrained axis to 1, so a
-  // fully empty input yields a single solid voxel (pipeline.js warns about it).
+  // No views: nothing carves and the grid stays full.
   if (active.length === 0) return solid;
 
-  // Group the provided views by the projection PLANE they constrain
-  // (front/back -> X-Y, left/right -> Z-Y, top/bottom -> X-Z). A real solid's
-  // two opposite silhouettes are identical, so WITHIN a plane we UNION the
-  // views — a voxel is covered if ANY view on that plane sees it. This is what
-  // the header means by "a single view per plane fully constrains that axis":
-  // the opposite view is redundant for carving, not an extra constraint.
-  // ANDing the pair instead lets a 1-texel registration slip between two
-  // hand-drawn opposite sprites erode thin protrusions — e.g. a car's side
-  // mirror that survives in the top sprite but sits one row over in the bottom
-  // sprite has an empty top∧bottom intersection, so its outer column vanishes.
-  // We then intersect ACROSS the (up to three) planes to get the visual hull.
+  // Views are unioned within a plane, then intersected across planes. The union
+  // keeps a 1-texel slip between opposite hand-drawn sprites from eroding thin
+  // parts.
   const planes = new Map(); // planeKey -> [{spec, occ, imgW}, ...]
   for (const [name, gv] of active) {
-    const key = VIEW_AXES[name].join(); // e.g. 'nx,ny' — one key per plane
+    const key = VIEW_AXES[name].join(); // e.g. 'nx,ny'
     const group = planes.get(key) || planes.set(key, []).get(key);
     group.push({ spec: VIEWS[name], occ: gv.occ, imgW: gv.imgW });
   }
   const planeList = [...planes.values()];
 
-  // One reused scratch for the projection (projectInto mutates it) so the hot
-  // triple loop below allocates nothing per voxel × view.
+  // Reused scratch for projectInto, so the hot loop allocates nothing.
   const p = { u: 0, v: 0 };
   for (let z = 0; z < nz; z++) {
     for (let y = 0; y < ny; y++) {
@@ -155,17 +124,15 @@ export function carve(gviews, dims) {
   return solid;
 }
 
-// 6 axis-neighbor offsets in FACE_KEYS order — the outward normals themselves.
-// Derived from FACE_NORMAL so they can't drift from the face convention.
+// Axis-neighbor offsets in FACE_KEYS order (the outward normals).
 const NEIGHBORS = FACE_KEYS.map((k) => FACE_NORMAL[k]);
 
 /**
- * Extract surface voxels: a solid voxel with >=1 empty/out-of-bounds neighbor.
- * Also tallies the total solid count in the same pass (every voxel is visited and
- * gated on solid here), so the pipeline needn't re-walk the grid a third time.
+ * Surface voxels: solid voxels with at least one empty or out-of-bounds neighbor.
+ * Also counts all solid voxels in the same pass.
  * @returns {{surfaceMask:Uint8Array, count:number, solidCount:number}}
  *   surfaceMask[idx] holds a 6-bit exposure mask (bit i => FACE_KEYS[i] exposed);
- *   count = surface voxels; solidCount = all solid voxels (surface + interior).
+ *   count = surface voxels; solidCount = all solid voxels.
  */
 export function extractSurface(solid, dims) {
   const { nx, ny, nz } = dims;

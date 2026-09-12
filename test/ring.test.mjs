@@ -1,6 +1,3 @@
-// Node-runnable tests for the 3D Sprite Atlas's geometry (lib/ring.js — pure,
-// no THREE/DOM): the yaw ring, the lattice envelope, the square frame, the
-// camera pose, and the engine anchor. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -19,41 +16,39 @@ const nearVec = (a, b, eps = 1e-9) =>
 const len = (v) => Math.hypot(...v);
 const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
 
-// The Car at its shipped 40px tile.
+// The Car sample at its 40px tile.
 const CAR = { nx: 40, ny: 40, nz: 40 };
 
 test('ringYaws: offset + i·(360/n), unwrapped', () => {
   assert.deepEqual(ringYaws(4, 0), [0, 90, 180, 270]);
   assert.deepEqual(ringYaws(4, 45), [45, 135, 225, 315]);
   assert.deepEqual(ringYaws(1, 30), [30]);
-  // Non-integer steps come out exact to the step, not rounded.
+  // Non-integer steps are not rounded.
   const three = ringYaws(3, 0);
   assert.equal(three.length, 3);
   assert.ok(near(three[1], 120) && near(three[2], 240));
   const seven = ringYaws(7, 10);
   assert.equal(seven.length, 7);
   for (let i = 1; i < 7; i++) assert.ok(near(seven[i] - seven[i - 1], 360 / 7));
-  // A yaw past 360 is left unwrapped — the renderer's trig doesn't care, and
-  // the export's metadata lists exactly what was rendered.
+  // Yaws past 360 are not wrapped.
   assert.deepEqual(ringYaws(2, 350), [350, 530]);
 });
 
 test('ringEnvelope: the footprint circle swept up the height', () => {
   const r = Math.hypot(CAR.nx, CAR.nz) / 2;
-  // e = 0: the side elevation — the circle's width, the box's own height.
+  // e = 0 (side view): the circle's width and the box's height.
   let env = ringEnvelope(CAR, 0);
   assert.ok(near(env.width, 2 * r) && near(env.height, CAR.ny));
-  // e = 90: the plan — the circle both ways.
+  // e = 90 (top view): the circle on both axes.
   env = ringEnvelope(CAR, 90);
   assert.ok(near(env.width, 2 * r) && near(env.height, 2 * r));
-  // The worked numbers: dims 40³ at 45° ≈ 56.57 × 68.28.
+  // 40³ at 45° ≈ 56.57 × 68.28.
   env = ringEnvelope(CAR, 45);
   assert.ok(near(env.width, 56.5685, 1e-3), `width ${env.width}`);
   assert.ok(near(env.height, 68.2843, 1e-3), `height ${env.height}`);
-  // Between the endpoints the height is a sinusoid (ny·cos e + 2r·sin e): it
-  // peaks somewhere in the middle — a box is tallest on screen when its
-  // diagonal stands up — never past the bounding SPHERE's diameter, and
-  // never under the smaller endpoint. Tall and flat boxes alike.
+  // Between the endpoints the height is ny·cos e + 2r·sin e. It stays within
+  // the bounding sphere's diameter and above the smaller endpoint, for tall
+  // and flat boxes.
   for (const d of [{ nx: 10, ny: 100, nz: 10 }, { nx: 100, ny: 4, nz: 100 }, CAR]) {
     const two = Math.hypot(d.nx, d.nz);
     const sphere = Math.hypot(two, d.ny);
@@ -88,12 +83,11 @@ test("ringFrame: the tile IS the frame; the envelope's larger extent fills it, t
       'the box fits'
     );
   }
-  // The worked numbers: the Car's envelope is 68.28 tall at 45°, so a 64
-  // tile holds it at 0.937 px per voxel, and a 137 tile at just over 2 (the
-  // old "scale 2" frame).
+  // The Car's envelope is 68.28 tall at 45°. A 64 tile gives 0.937 px per
+  // voxel, a 137 tile just over 2.
   assert.ok(near(ringFrame(CAR, 45, 64).scale, 64 / 68.2843, 1e-4));
   assert.ok(ringFrame(CAR, 45, 137).scale > 2);
-  // Never a zero frame (the slice clamps first; this is the last guard).
+  // A size of 0 still gives a 1px frame.
   assert.equal(ringFrame(CAR, 45, 0).px, 1);
 });
 
@@ -113,7 +107,7 @@ test('ringCameraDir / ringCameraUp: unit, perpendicular, the stated poses', () =
       assert.ok(near(len(d), 1), `dir unit at ${yaw}/${e}`);
       assert.ok(near(len(u), 1), `up unit at ${yaw}/${e}`);
       assert.ok(near(dot(d, u), 0), `dir ⟂ up at ${yaw}/${e}`);
-      // Up never points below the horizon: the frame's top is the far side.
+      // Up never points below the horizon.
       assert.ok(u[1] >= -1e-9, `up has no downward component at ${yaw}/${e}`);
     }
   }
@@ -121,16 +115,15 @@ test('ringCameraDir / ringCameraUp: unit, perpendicular, the stated poses', () =
 
 test('ringAnchor: the floor center', () => {
   const S = 64;
-  // e = 0: the feet sit ny/2 voxels straight below the center, at the
-  // frame's derived scale (the envelope's larger extent spans the tile).
+  // e = 0: the floor center is ny/2 voxels below the frame center, at the
+  // frame's scale.
   const { scale: s0 } = ringFrame(CAR, 0, S);
   const a0 = ringAnchor(CAR, 0, S);
   assert.ok(near(a0.x, S / 2) && near(a0.y, S / 2 + (CAR.ny / 2) * s0));
-  // e = 90: looking straight down, the floor center IS the frame center.
+  // e = 90: the floor center is the frame center.
   const a90 = ringAnchor(CAR, 90, S);
   assert.ok(near(a90.x, S / 2) && near(a90.y, S / 2, 1e-9));
-  // The worked number: 45° in a 69 tile (the old 1-px-per-voxel frame, now
-  // 69 / 68.28 px per voxel) → 34.5 + 14.14 × that.
+  // 45° in a 69 tile: y = 34.5 + 14.14 × scale.
   const a45 = ringAnchor(CAR, 45, 69);
   const { scale: s45 } = ringFrame(CAR, 45, 69);
   assert.ok(near(a45.x, 34.5) && near(a45.y, 34.5 + 20 * Math.SQRT1_2 * s45, 1e-9));

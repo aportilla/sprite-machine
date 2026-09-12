@@ -1,66 +1,29 @@
-// ---------------------------------------------------------------------------
-// The document store: a small promise wrapper over IndexedDB, in the project's
-// zero-dependency spirit. One database (`sprite-machine`), three object
-// stores:
+// Document storage: a promise wrapper over IndexedDB. Database `sprite-machine`,
+// object stores keyed by `id`:
 //
-//   `docs` (keyPath `id`): a record is `{id, png}` — the PNG bytes ARE the
-//   document (the engine's png-chunks.js) — plus rebuildable listing caches (name,
-//   timestamps, icon data-URI, atlas dims) denormalized for a fast boot
-//   listing; on any disagreement the chunk wins. And ONE field that is
-//   neither chunk nor cache: `folder` — the id of the folder the document
-//   sits in, or null/absent for the desktop. Where a file SITS is the
-//   catalog's business, not the document's (a downloaded PNG carries none
-//   of it), which is why it lives here and never in a chunk.
+// - `docs`: `{id, png}`, where the PNG bytes are the document (png-chunks.js),
+//   plus listing caches (name, timestamps, icon, atlas dims). The PNG chunks win
+//   on disagreement. `folder` is the containing folder's id, or null or absent
+//   for the desktop.
+// - `folders`: `{id, name, parent, createdAt, modifiedAt}`. `parent` is a folder
+//   id, or null for the desktop.
+// - `texts`: `{id, name, text, createdAt, modifiedAt, folder}`.
 //
-//   `folders` (keyPath `id`, version 2 — Sep 7 2026): the catalog's
-//   structure, a record `{id, name, parent, createdAt, modifiedAt}`,
-//   `parent` a folder id or null — the desktop is the root and has no
-//   record. A v1 database upgrades in place: the store is created, the docs
-//   store untouched, its records' missing `folder` reading as the desktop.
+// The schema is STORES, with no fixed version number. The database opens at the
+// profile's current version. If a store is missing, it reopens one version up and
+// the upgrade handler creates it. Opening at a fixed version throws VersionError
+// on a profile that is already higher.
 //
-//   `texts` (keyPath `id`, Sep 10 2026): the TEXT FILES — the read-me
-//   documents on the desktop — a record `{id, name, text, createdAt,
-//   modifiedAt, folder}`: the text IS the file, the way a document's PNG is,
-//   and `folder` files it exactly as a document's does.
-//
-// THE SCHEMA IS THE LIST OF STORES, NOT A VERSION NUMBER (Sep 10 2026). The
-// open asks for no version — a profile opens at whatever it holds (a fresh
-// one is created at 1, the upgrade creating every store) — and then checks
-// that every store exists; a missing one (a profile from before that store,
-// or a PARTIAL upgrade) is added by reopening ONE VERSION UP, where the same
-// upgrade handler creates whatever is missing. So the number only ever
-// climbs by what a profile needs, no code ever asks a profile for a version
-// lower than it holds (VersionError — what a tab running older code did to a
-// freshly bumped profile), and a store missing for any reason is repaired at
-// the next open rather than failing every listing. The case that taught it:
-// the texts store's edit landed in two saves a moment apart while the user's
-// tab was hot-reloading, and the tab upgraded to "version 3" with a handler
-// that did not yet create the store — every open then succeeded and every
-// listing failed on `transaction('texts')`, silently, as "Save unavailable"
-// with no files.
-//
-// This module is a LEAF the `files` slice takes by injection, so the slice
-// stays Node-testable against an in-memory stub. Every method returns a
-// promise and rejects on IndexedDB failure (Safari private mode included) —
-// the slice degrades to `available: false` and the app runs on without Save.
-// An upgrade with another tab still open on the old schema raises `blocked`
-// on this one — a NOTICE, not a failure (the spec's reading): the other
-// tab's connection closes itself on `versionchange` (below), the upgrade
-// then proceeds and this same request succeeds, so the open WAITS through
-// it (rejecting there latched the session on "Save unavailable" over a block
-// that had cleared a moment later). A tab that never answers (frozen) keeps
-// the open pending until it is closed or reloaded; the console names the
-// wait. And THIS connection closes itself on `versionchange`, so a tab on a
-// newer schema is never blocked by this one — the next call reopens. A
-// failed open and a repair both name themselves on the console (the slice
-// swallows a rejection into `available: false`).
-// ---------------------------------------------------------------------------
+// Every method rejects on IndexedDB failure, and the files slice then reports
+// available: false. A blocked open waits for the other tab to close its
+// connection. Each connection closes itself on versionchange, and the next call
+// reopens.
 
 const DB_NAME = 'sprite-machine';
 const DOCS = 'docs';
 const FOLDERS = 'folders';
 const TEXTS = 'texts';
-/** Every store the app needs — the schema (header). */
+/** Every store the app needs. */
 const STORES = [DOCS, FOLDERS, TEXTS];
 
 /** @typedef {{id: string, png: Uint8Array, name: string, createdAt: number,
@@ -80,10 +43,8 @@ const reqToPromise = (req) =>
 /** The stores a connection lacks. @param {IDBDatabase} db */
 const missingStores = (db) => STORES.filter((s) => !db.objectStoreNames.contains(s));
 
-/** One open request as a promise — at the profile's own version when
- *  `version` is undefined, else at that version (an upgrade); the upgrade
- *  handler creates every store that is missing. The connection closes
- *  itself when another wants a newer schema (`onVersionChange`).
+/** Opens the database at `version`, or at the profile's own version when
+ *  undefined. The upgrade handler creates any missing store.
  *  @param {number|undefined} version @param {() => void} onVersionChange
  *  @returns {Promise<IDBDatabase>} */
 function openAt(version, onVersionChange) {
@@ -107,8 +68,8 @@ function openAt(version, onVersionChange) {
       console.warn('sprite-machine: IndexedDB open failed —', err);
       reject(err);
     };
-    // Another connection holds the old schema (header): wait for it to
-    // close on its versionchange; this request completes after it.
+    // Another connection holds the old version. The request completes once it
+    // closes.
     req.onblocked = () => {
       console.warn(
         'sprite-machine: waiting for another tab of the app to let go of the old database schema — close or reload it'
@@ -117,11 +78,9 @@ function openAt(version, onVersionChange) {
   });
 }
 
-/** Open the database at whatever version the profile holds, then REPAIR
- *  it if a store is missing — reopened one version up, where the upgrade
- *  creates what is missing (header: the schema is the list of stores).
- *  @param {() => void} onVersionChange  Called when another connection
- *  wants a newer schema: the caller drops its handle, this one closes. */
+/** Opens the database, reopening one version up if a store is missing.
+ *  @param {() => void} onVersionChange  called before this connection closes
+ *  for another connection's upgrade */
 async function openDb(onVersionChange) {
   let db = await openAt(undefined, onVersionChange);
   const missing = missingStores(db);
@@ -137,19 +96,18 @@ async function openDb(onVersionChange) {
 }
 
 /**
- * The storage surface the `files` slice consumes (its Node tests stub this
- * exact shape with three Maps — test/helpers.mjs memStorage). Lazy: the DB
- * opens on first use, and a failed open is retried on the next call rather
- * than latched.
+ * The storage surface the files slice consumes (test/helpers.mjs memStorage
+ * mirrors it). The database opens on first use. A failed open is retried on the
+ * next call.
  */
 export function createDocStorage() {
   /** @type {Promise<IDBDatabase>|null} */
   let dbPromise = null;
   const db = () => {
     dbPromise ??= openDb(() => {
-      dbPromise = null; // a newer schema elsewhere: reopen on the next call
+      dbPromise = null; // reopen on the next call
     }).catch((err) => {
-      dbPromise = null; // don't latch a transient failure
+      dbPromise = null; // retry on the next call
       throw err;
     });
     return dbPromise;
@@ -186,9 +144,8 @@ export function createDocStorage() {
   };
 }
 
-/** The real storage, or null where IndexedDB doesn't even exist. (A present
- *  but broken IndexedDB — private modes — surfaces as rejections instead,
- *  which the files slice degrades on.) */
+/** The IndexedDB storage, or null where IndexedDB is undefined. A broken
+ *  IndexedDB (private modes) rejects per call instead. */
 export function createStorageIfAvailable() {
   try {
     return typeof indexedDB === 'undefined' ? null : createDocStorage();

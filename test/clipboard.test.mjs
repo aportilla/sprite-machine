@@ -1,7 +1,3 @@
-// Node-runnable tests for the clipboard slice — the in-app half of Copy /
-// Paste, and the one selector that decides what a paste pastes off a read
-// of the system clipboard.
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

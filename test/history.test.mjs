@@ -1,7 +1,3 @@
-// Node-runnable tests for the history slice: tile-gesture entries, whole-atlas
-// snapshot entries, the bound, redo clearing, load-boundary clearing, and that
-// restores are structural doc changes with intact snapshots.
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -24,8 +20,8 @@ const RED = [255, 0, 0, 255];
 const GREEN = [0, 255, 0, 255];
 
 const frontAlphaAt = (doc) => {
-  // FRONT is tile (col 1, row 0) in a 3×2 sheet of 2×2 tiles; texel (0,0) of
-  // it lands at sheet (2,0).
+  // The front tile is column 1, row 0 of a 3×2 sheet of 2×2 tiles. Its texel
+  // (0,0) is sheet (2,0).
   const s = doc.get();
   return s.atlasImage.data[(0 * s.atlasImage.width + 2) * 4 + 3];
 };
@@ -85,7 +81,7 @@ test('snapshots are copies — mutating the pushed buffer later changes nothing'
   doc.applyTileEdit('front', work);
   frames.frame();
   history.pushTile('front', tile(null), work);
-  work.data.set(GREEN, 0); // the live buffer moves on (next gesture)
+  work.data.set(GREEN, 0);
   history.undo();
   history.redo();
   const f = doc.get().views.front;
@@ -118,7 +114,7 @@ test('withAtlasSnapshot drops a no-op (nothing changed, nothing recorded)', () =
 
 test('withAtlasSnapshot folds a pending live stroke into the BEFORE side', () => {
   const { doc, history, frames } = makeWorld();
-  doc.applyTileEdit('front', tile([0, 0, RED])); // pending — frame never cranked
+  doc.applyTileEdit('front', tile([0, 0, RED])); // pending: no frame has run
   history.withAtlasSnapshot(() => doc.resizeTiles(3, 3));
   history.undo();
   assert.equal(doc.get().tileW, 2);
@@ -129,8 +125,8 @@ test('an atlas undo does not disturb the stored snapshot (copy-out)', () => {
   const { doc, history, frames } = makeWorld();
   history.withAtlasSnapshot(() => doc.resizeTiles(3, 3));
   history.undo();
-  // Edit the restored sheet, then redo/undo again: the entry must still hold
-  // the clean 2px sheet, not the edited one.
+  // Edit the restored sheet, then redo and undo. The entry still holds the
+  // unedited 2px sheet.
   doc.applyTileEdit('front', tile([0, 0, RED]));
   frames.frame();
   history.redo();
@@ -171,7 +167,7 @@ test('undoing a tile entry for a NON-current face still lands on the sheet', () 
   doc.applyTileEdit('top', tile([1, 1, RED]));
   frames.frame();
   history.pushTile('top', tile(null), tile([1, 1, RED]));
-  // TOP is tile (col 2, row 0): texel (1,1) → sheet (5,1).
+  // The top tile is column 2, row 0. Its texel (1,1) is sheet (5,1).
   const topAlpha = () => doc.get().atlasImage.data[(1 * 6 + 5) * 4 + 3];
   assert.equal(topAlpha(), 255);
   history.undo();

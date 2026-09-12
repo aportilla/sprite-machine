@@ -1,5 +1,3 @@
-// Node-runnable test for the boot-param parser (boot/params.js): the boot
-// document request, the one user-facing param. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

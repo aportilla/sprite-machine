@@ -1,35 +1,21 @@
-/* ---------------------------------------------------------------------------
-   Sprite Machine — a System 7 virtual desktop via the `vintage-frames` kit.
-
-   The kit's components carry their own styles, and every sm-* component
-   carries ITS own (standard Lit `static styles`, scoped to its shadow root).
-   This sheet supplies only the PAGE's share: the shared palette tokens
-   (custom properties inherit into every shadow tree), the reset, the
-   light-DOM Colors dialog's page share
-   (host display, the hover readout's color chip), the 3D View body's
-   column + viewport fill rules, the desktop-icon column width, the About
-   box's link ink, and the drop overlay
-   drop-target.js renders into the page. If a rule here paints a border or a
-   color on kit chrome, it's a bug — the kit draws everything.
-   --------------------------------------------------------------------------- */
+/* Page styles: palette tokens, the reset and light-DOM rules. The kit and the
+   sm-* components carry their own styles. Nothing here paints kit chrome. */
 
 :root {
   --sm-black: #000;
   --sm-white: #fff;
-  --sm-artwork: #fff; /* the paper behind the pixel canvas — white: the canvas is 1-bit but for the art */
-  /* Clear the 20px menu bar (+4px reserve) for the kit's clipped popup panels. */
+  --sm-artwork: #fff; /* paper behind the pixel canvas */
+  /* Keeps the kit's popup panels below the 20px menu bar, plus 4px. */
   --vf-popup-inset-top: 24px;
 }
 
 * {
   box-sizing: border-box;
 }
-/* The page's box and the black ground behind the desktop bezel are NOT here:
-   they are inline in index.html, the page's first frame (see that file's
-   comment and src/boot/curtain.js — this sheet arrives with main.js). */
+/* The html/body box and the black ground are inline in index.html. */
 body {
   color: var(--sm-black);
-  /* Fallback for stray page text; real captions are vf-label / vf-paragraph. */
+  /* Fallback for stray page text. */
   font-family: 'VF Display', 'Chicago', 'Geneva', 'Helvetica Neue', Helvetica, Arial,
     sans-serif;
   font-size: 16px;
@@ -37,28 +23,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* The menu bar clock: a kit vf-label slotted at the END of the vf-menu-bar
-   (index.html; shell/clock.js writes it). The bar is a flex row with an
-   unfiltered slot, so the auto start margin lands the label at the right
-   end, its inset from the raster's edge mirroring the 9px the first title
-   plate keeps from the left. The label's line box is pinned to the bar's
-   own 20px (whole and even — the label's rule for the token) so the 16px
-   em centers on the same rows as the menu titles: the clock's baseline IS
-   the titles' (row 14 of the bar), with no measured nudge. */
+/* Menu bar clock. The auto start margin pushes it to the bar's right end, 9px
+   in to match the first title's inset. The 20px line height matches the bar,
+   so the clock's baseline lines up with the menu titles. */
 #clock {
   margin-inline-start: auto;
   margin-inline-end: calc(var(--vf-scale, 1) * 9px);
   --vf-label-line-height: 20px;
 }
 
-/* The About box's one hyperlink (index.html — "Vintage Frames", the kit's
-   npm page): page copy, not kit chrome, so the page inks it. The UA's blue
-   would be the only color on a 1-bit dialog — it takes the paragraph's own
-   ink with the underline as the link's whole affordance (System 7 had no
-   links; the underline is the one mark everyone reads), and the kit's
-   dotted ring when keyboard-focused (the convention for a control that
-   can't carry the buttons' dashed underline — it already wears one). No
-   cursor claim: the kit ships no pointing hand, and System 7 had none. */
+/* The About box link: paragraph ink, an underline and a dotted focus ring. */
 #dlg-about a {
   color: inherit;
   text-decoration: underline;
@@ -70,28 +44,20 @@ body {
   outline-offset: calc(var(--vf-scale, 1) * 1px);
 }
 
-/* A text window's body (apps/text-viewer/windows.html #tpl-text-window): the
-   file's text in one kit paragraph, kept VERBATIM — its line breaks and
-   blank lines stand, its long lines wrap at the window's width, and a word
-   longer than the window breaks rather than widening the scroll plane
-   sideways (TextEdit broke a long word at the edge). Text flow, not
-   aesthetics: the face, the line and the ink are the kit's; this states
-   only how the file's own characters lay out. `white-space` inherits
-   through the paragraph's shadow tree to the slotted text. */
+/* Text window body (apps/text-viewer/windows.html). Keeps the file's line
+   breaks, wraps long lines and breaks words wider than the window.
+   white-space inherits through the paragraph's shadow tree. */
 .text-body {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-/* The Colors dialog's host — the one LIGHT-DOM component (its vf-dialog must
-   sit where the kit cursor's observer can see it open): no box of its own. */
+/* Light-DOM host of the Colors dialog, with no box of its own. */
 sm-color-picker {
   display: contents;
 }
 
-/* The readout line's color chip: a plain bordered well (not a vf-swatch — the
-   kit swatch is a button, and this line only reports). 16px square to sit on
-   vf-label's own 16px line beside it. */
+/* Color chip in the picker's readout line, 16px to match vf-label's line. */
 .picker-readout-chip {
   flex: none;
   width: calc(var(--vf-scale, 1) * 16px);
@@ -99,26 +65,19 @@ sm-color-picker {
   border: calc(var(--vf-scale, 1) * 1px) solid var(--sm-black);
 }
 
-/* The 3D View's pattern well (a kit vf-container, its `pattern` the
-   backdrop) fills the window body by its own `fill-width fill-height` —
-   the one size the kit can't state for it, since the windoid's grow box
-   sets it; the kit measures the undeclared box for its raster. The
-   controls strip above it is the window's header (the Sprite Editor's
-   windows.html). The THREE
-   canvas fills the well. No background of its own: the renderer clears
-   transparent (scene/stage.js), so the well's pattern shows through
-   behind the model. */
+/* 3D View canvas. It fills the pattern well. The renderer clears transparent
+   (scene/stage.js), so the well's pattern shows behind the model. */
 #viewport {
   width: 100%;
   height: 100%;
   display: block;
-  /* Low-res render buffer upscaled crisply by CSS (the kit's pattern fill
-     hands `auto` back to slotted content; this declaration wins). */
+  /* Upscales the low-res buffer crisply. Overrides the auto value the kit's
+     pattern fill sets on slotted content. */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 
-/* ---- whole-app drop overlay (rendered into <body> by drop-target.js) ---- */
+/* Drop overlay (drop-target.js). */
 .drop-overlay {
   position: fixed;
   inset: 0;
@@ -127,7 +86,7 @@ sm-color-picker {
   justify-content: center;
   background: rgba(255, 255, 255, 0.75);
   z-index: 1000;
-  pointer-events: none; /* let the drop event fall through to the page */
+  pointer-events: none; /* drop events reach the body */
 }
 body.app-drag .drop-overlay {
   display: flex;

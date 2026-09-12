@@ -1,26 +1,11 @@
-// ---------------------------------------------------------------------------
-// The URL ⇄ active-document mirror: the address bar's fragment names the
-// ACTIVE SAVED document (#Cube — the same name the ?file=/#fragment boot
-// accepts), so a plain browser reload restores what you were looking at
-// (its window geometry + edited face ride desktop-state). Opening, saving
-// (an untitled's first ⌘S mints its identity), renaming and window switches
-// all land here through the one workspace subscription; an untitled active
-// document or the bare desktop CLEARS the fragment — a reload then greets
-// with the About box, the no-autosave contract.
-//
-// replaceState only — flipping between documents must not grow browser
-// history. The fragment is the written canonical form: any ?file= search
-// param is dropped on write, so a stale one can never shadow the fragment
-// at the next boot (?file wins over the fragment in boot/params.js). The
-// other search params (?sample and friends, the dev hooks) pass through
-// untouched — an explicit ?sample outranks ?file/#fragment at boot anyway,
-// so a reload of a ?sample page reopens the sample.
-// ---------------------------------------------------------------------------
+// Mirrors the active saved document's name into location.hash (#Cube), so a
+// reload reopens it. An untitled document or the bare desktop clears the hash.
+// replaceState keeps document switches out of history. A write drops ?file=,
+// which boot/params.js would prefer over the hash.
 
 import { workspace } from '../state/workspace.js';
 
-/** Mirror the active saved document's name into location.hash. Returns the
- *  unsubscribe (the HMR teardown). */
+/** Starts the mirror. Returns the unsubscribe. */
 export function initUrlState() {
   const sync = () => {
     const ctx = workspace.active();
@@ -31,10 +16,8 @@ export function initUrlState() {
     if (url.href !== location.href) history.replaceState(null, '', url.href);
   };
   const off = workspace.subscribe(sync);
-  // No eager sync on an empty workspace: the boot's ?file= must survive in
-  // the bar until its open lands (canonicalized then), and an unresolvable
-  // request stays as typed — a reload retries it. The immediate sync is for
-  // the HMR re-wire, where a document is already active.
+  // No initial sync on an empty workspace, so the boot's ?file= stays in the URL
+  // until its document opens. A document is already active on an HMR re-run.
   if (workspace.active()) sync();
   return off;
 }

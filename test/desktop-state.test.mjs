@@ -1,9 +1,3 @@
-// Node-runnable tests for the desktop-state blob's migration — in particular
-// the SEEDED flag, the first-boot seeding's transaction record (the module
-// header): a blob that states it keeps it, a blob from before it reads as
-// seeded, only an explicit `false` — the mark an interrupted first boot
-// leaves — asks the next boot to seed, and nothing usable is null.
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -74,7 +68,6 @@ test('v1 and v2 blobs migrate shallowly and read as seeded (their window geometr
     seeded: true,
     seededTexts: false,
   });
-  // A brand-new profile: unseeded, no state.
   assert.equal(migrateDesktopState(null), null);
   assert.equal(migrateDesktopState({}), null);
   assert.equal(migrateDesktopState({ v: 99 }), null);

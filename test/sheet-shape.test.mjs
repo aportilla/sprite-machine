@@ -1,6 +1,3 @@
-// Node-runnable tests for the sheet-shape rule — the document format's
-// shape as a reading of a picture's dimensions (a paste's validation).
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -19,7 +16,7 @@ test('anything else is refused with a reason and no tile', () => {
     assert.equal(r.tile, undefined, `${w}×${h} has no tile`);
     assert.ok(typeof r.reason === 'string' && r.reason.length, `${w}×${h} says why`);
   };
-  refused(195, 130); // square tiles, but 65 is past the ceiling
+  refused(195, 130); // square 65 px tiles, above TILE_MAX
   refused(120, 81); // not 3:2
   refused(121, 80); // not divisible
   refused(640, 480); // a photo

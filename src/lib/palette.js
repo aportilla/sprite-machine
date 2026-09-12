@@ -1,28 +1,10 @@
-// ---------------------------------------------------------------------------
-// The editor's two palettes — the pencil's authoring ramp and the Colors
-// dialog's 168 named swatches. Editor vocabulary, not the engine's: the
-// pipeline's defaults (DEFAULT_MIRROR, DEFAULT_WORLD_SIZE) that shared this
-// file live in the engine package now.
-// ---------------------------------------------------------------------------
+// The editor's palettes: the pencil ramp and the Colors dialog's named swatches.
 
 import { packRGBA } from 'sprite-machine';
 import { hexToRgb } from './color.js';
 
-// ---------------------------------------------------------------------------
-// PENCIL_PALETTE — the fixed DB16 (DawnBringer 16) ramp used only by the in-app
-// tile editor's brush. This is an AUTHORING palette, distinct from the per-sprite
-// RENDER palette derived by colorize.js (buildPalette). Drawn pixels are already
-// exact palette colors, so the render-time palette snap is a no-op on them.
-//
-// Why DB16 is safe against the low-poly wedge merge: `sameMat` fuses two faces
-// whose colors are within ~12 Euclidean units (wedge-mesh.js). DB16's minimum
-// pairwise distance is ~47 (between #442434 and #4e4a4e), so no two distinct
-// swatches can ever false-merge into a smooth wedge. Its neutral grays also keep
-// palette[0] body-color fallbacks
-// sensible. Each entry is { packed:uint32 (a=255), css:'#rrggbb', rgb:{r,g,b} };
-// `css` is the source of truth and `packed`/`rgb` are derived from it so they
-// can't drift (and the editor reads `rgb` directly instead of re-parsing css).
-// ---------------------------------------------------------------------------
+// PENCIL_PALETTE: the DB16 (DawnBringer 16) ramp. No two swatches are within the
+// wedge merge tolerance (sameMat in wedge-mesh.js).
 const DB16_HEX = [
   '#140c1c',
   '#442434',
@@ -47,43 +29,18 @@ export const PENCIL_PALETTE = DB16_HEX.map((css) => {
   return { packed: packRGBA(rgb.r, rgb.g, rgb.b, 255), css, rgb };
 });
 
-// ---------------------------------------------------------------------------
-// PALETTE_168 — the full color palette shown in the tile editor's Colors dialog
-// as a 21x8 grid: 168 DISTINCT NAMED colors, laid out as value-banded hue rows.
-// Row 1 is the grayscale ramp (White and Black up front, then a 21-step
-// dark-to-light run); rows 2-8 each sweep the hue wheel red -> yellow -> green
-// -> cyan -> blue -> violet -> magenta at one value band, ordered darkest
-// ("darkest", "dark", "deep", "strong", "vivid") down to "light" and "palest" —
-// so a column reads roughly as one hue across seven values. This is a fixed,
-// hand-verified arrangement, so it's spelled out literally below — one source
-// row per grid row (PALETTE_168_ROWS). The array order is display-only: swatch
-// identity never depends on the index. Each entry is { packed, css, rgb, name }
-// — `css` is the source of truth, `packed`/`rgb` derive from it, and `name` is
-// the human color name the dialog's hover readout shows.
+// PALETTE_168: the Colors dialog's 21×8 grid of named colors, one array per
+// grid row. Rows 2-8 each sweep the hue wheel at one value band, darkest to
+// palest. Order is display only.
 //
-// WEDGE-SAFETY: the low-poly wedge gate (wedge-mesh.js sameMat, TOL2 = 12*12
-// squared-L2 on RGB) fuses two faces whose colors sit within ~12 Euclidean
-// units, so palette neighbors closer than that can auto-smooth a staircase the
-// author meant to keep stepped. Recomputed against the real PALETTE_168 with
-// the real TOL2 there are 8 within-tolerance pairs — all same-hue neighbors in
-// the darkest and palest rows (the grayscale ramp steps ~10-13/channel, so
-// unlike the old xterm-256 set NO gray pair merges):
+// Pairs within the wedge merge tolerance (sameMat in wedge-mesh.js):
 //   #625700/#625f00 (Dark Olive/Olive)    #006865/#005e67 (Deep Teal/Petrol)
 //   #009a96/#00a39c (Teal/Persian Green)  #ffc9c9/#ffd2ca (Blush/Peach)
 //   #fff2c5/#fffbc2 (Vanilla/Cream)       #bef5f9/#bdefff (Ice Blue/Pale Sky)
 //   #c8fdff/#cef6ff (Celeste/Pale Cyan)   #bce4f7/#badcf1 (Frost/Glacier)
-// So an author CAN place two of these on adjacent staircase voxels and get an
-// unintended (near-imperceptible — the pairs are near-identical shades) wedge.
-// test/palette.test.mjs pins the exact within-tolerance set, so any future
-// palette edit that introduces a new near-duplicate must be consciously
-// accepted. The minimum pairwise distance overall is 8 units (Dark Olive vs
-// Olive); every other row keeps its neighbors comfortably outside the gate.
-// ---------------------------------------------------------------------------
-// One [hex, name] entry per line, grouped into one array per grid row, keeps
-// the source mirroring the layout.
 const PALETTE_168_ROWS = [
   [
-    // Row 1 — grayscale ramp
+    // Row 1: grayscale
     ['#ffffff', 'White'],
     ['#000000', 'Black'],
     ['#222222', 'Ink'],
@@ -107,7 +64,7 @@ const PALETTE_168_ROWS = [
     ['#f0f0f0', 'Porcelain'],
   ],
   [
-    // Row 2 — darkest
+    // Row 2: darkest
     ['#7f0004', 'Oxblood'],
     ['#6b0002', 'Maroon'],
     ['#5d1f00', 'Chocolate'],
@@ -131,7 +88,7 @@ const PALETTE_168_ROWS = [
     ['#780028', 'Burgundy'],
   ],
   [
-    // Row 3 — dark
+    // Row 3: dark
     ['#bb0001', 'Brick Red'],
     ['#a90004', 'Carmine'],
     ['#a53400', 'Burnt Orange'],
@@ -155,7 +112,7 @@ const PALETTE_168_ROWS = [
     ['#bb003f', 'Ruby'],
   ],
   [
-    // Row 4 — deep
+    // Row 4: deep
     ['#e51c00', 'Crimson'],
     ['#ff0000', 'Red'],
     ['#e85800', 'Persimmon'],
@@ -179,7 +136,7 @@ const PALETTE_168_ROWS = [
     ['#ed004e', 'Cherry'],
   ],
   [
-    // Row 5 — strong
+    // Row 5: strong
     ['#f11632', 'Scarlet'],
     ['#f43d00', 'Vermilion'],
     ['#ff7f00', 'Orange'],
@@ -203,7 +160,7 @@ const PALETTE_168_ROWS = [
     ['#ee1565', 'Amaranth'],
   ],
   [
-    // Row 6 — vivid
+    // Row 6: vivid
     ['#fb2f41', 'Poppy'],
     ['#ff5e00', 'Tangerine'],
     ['#ff9a00', 'Orange Peel'],
@@ -227,7 +184,7 @@ const PALETTE_168_ROWS = [
     ['#ff1b9a', 'Neon Pink'],
   ],
   [
-    // Row 7 — light
+    // Row 7: light
     ['#ff868e', 'Salmon'],
     ['#ffa489', 'Coral'],
     ['#ffc586', 'Apricot'],
@@ -251,7 +208,7 @@ const PALETTE_168_ROWS = [
     ['#ff81c4', 'Carnation'],
   ],
   [
-    // Row 8 — palest
+    // Row 8: palest
     ['#ffc9c9', 'Blush'],
     ['#ffd2ca', 'Peach'],
     ['#ffe5c7', 'Champagne'],

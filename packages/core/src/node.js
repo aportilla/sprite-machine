@@ -1,13 +1,7 @@
-// ---------------------------------------------------------------------------
-// The Node adapter (`sprite-machine/node`): a document PNG's bytes in, the
-// pixels and the metadata the app would read from it out — and, in one
-// call, the glb. The engine itself takes pixels and never decodes a file
-// (index.js is environment-free); this is the one place a decoder lives,
-// `pngjs`, which reads every PNG a sprite editor exports — indexed, 16-bit,
-// interlaced — as 8-bit RGBA, the ImageData shape the pipeline consumes.
-// The chunks are read best-effort, as the app's loader reads them: a torn
-// chunk list costs the name and the transforms, never the pixels.
-// ---------------------------------------------------------------------------
+// Node adapter (sprite-machine/node): decodes a document PNG to RGBA pixels
+// and its metadata, or straight to a glb. The only PNG decoder in the engine
+// (pngjs). Text chunks are read best-effort: a malformed chunk list loses the
+// name and transforms but not the pixels.
 
 import { PNG } from 'pngjs';
 import { isPng, readTextChunks } from './png-chunks.js';
@@ -23,9 +17,8 @@ const TRANSFORMS_CHUNK = 'sprite-machine:transforms';
  *   name: string|null,
  *   transforms: Record<string, {rot?:number, flipX?:boolean, flipY?:boolean}>,
  *   chunks: Record<string, string>,
- * }}  the pixels; the Title chunk's name; the transforms chunk, parsed; and
- *   every text chunk verbatim (the ring settings ride here, unparsed — a
- *   viewing choice, the app's business)
+ * }}  the pixels, the Title chunk, the parsed transforms chunk, and every
+ *   text chunk verbatim
  * @throws when the bytes are not a PNG, or pngjs cannot decode them
  */
 export function readSheet(bytes) {
@@ -58,10 +51,10 @@ export function readSheet(bytes) {
 }
 
 /**
- * A document PNG's bytes → its glb: `readSheet`, `buildModel`, `modelToGlb`.
+ * Convert a document PNG to a glb: readSheet, buildModel, then modelToGlb.
  * @param {Uint8Array} bytes
  * @param {{name?: string, voxelsPerMeter?: number, unlit?: boolean, generator?: string}} [opts]
- *   `name` overrides the Title chunk's; with neither, the model is 'sprite'
+ *   `name` overrides the Title chunk; with neither, the name is 'sprite'
  * @returns {Uint8Array}  the .glb file
  */
 export function sheetToGlb(bytes, { name, voxelsPerMeter, unlit, generator } = {}) {

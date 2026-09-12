@@ -1,9 +1,3 @@
-// The coplanar regions (regions.js — pure, no THREE): a plane's
-// pieces traced into loops with every collinear run merged, outers and holes
-// told apart and paired, two cells meeting at a corner two regions while a
-// bay open at a corner rides one loop through it twice, and a staircase wall
-// with its gable caps folded in as ONE region with one straight diagonal edge
-// — the reason the module exists. Run: node --test test/regions.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -90,9 +84,8 @@ test('a ring is one region with a hole; two cells on a corner are two regions', 
 });
 
 test('a bay that opens onto the outside at a corner is no hole: one outer loop through the pinch twice', () => {
-  // the ring less its bottom-left cell: the centre and the outside touch at
-  // (1, 1), so the boundary is ONE curve visiting that corner twice — the
-  // self-touching ring earcut builds itself when it bridges a hole
+  // The ring without its bottom-left cell. The centre and the outside touch at
+  // (1, 1), so the outer loop visits that corner twice.
   const regions = traceRegions(cellsOf(['###', '#.#', '.##']), []);
   assert.equal(regions.length, 1);
   const [r] = regions;
@@ -108,7 +101,7 @@ test('a bay that opens onto the outside at a corner is no hole: one outer loop t
 
 test('a staircase wall and its gable caps are one region with ONE straight diagonal edge', () => {
   const wall = cellsOf(['#...', '##..', '###.', '####'], 9);
-  // the notch above each step's last cell, its right angle at the lower-left
+  // the notch above each step, right angle at the lower left
   const caps = [1, 2, 3].map((b) => ({ a: 4 - b, b, hiA: false, hiB: false, color: 9 }));
   const [r] = traceRegions(wall, caps);
   assert.ok(
@@ -122,7 +115,7 @@ test('a staircase wall and its gable caps are one region with ONE straight diago
     `the sawtooth is one diagonal: ${JSON.stringify(r.outer)}`
   );
   assert.deepEqual([r.holes.length, r.uniform, r.area2], [0, 9, 2 * 10 + 3]);
-  // a cap of another colour keeps the shape, charts the region and paints its cell
+  // caps of another colour keep the shape and paint their own cells
   const two = traceRegions(
     wall,
     caps.map((c) => ({ ...c, color: 5 }))

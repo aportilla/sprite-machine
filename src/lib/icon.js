@@ -1,59 +1,27 @@
-// ---------------------------------------------------------------------------
-// The document icon's rules — PURE (no THREE, no DOM, Node-tested): the pose
-// a document's 32×32 desktop art is rendered from, the ORTHOGRAPHIC FIT that
-// sizes it, and the two raster passes that make the render an icon — the
-// supersample's box filter and the outline's ink. scene/icon-renderer.js is
-// the consumer.
+// Document icon rules (pure): the camera pose, the orthographic fit, and the
+// raster passes that turn a render into a 32×32 icon. Used by
+// scene/icon-renderer.js.
 //
-// THE FRAME IS THE MODEL'S, NOT THE LATTICE'S — the one place this parts
-// company with the 3D Sprite Atlas (lib/ring.js), and deliberately. A ring
-// frame fits the whole voxel box at every yaw, because a sprite must not
-// jitter through an animation; an icon is one still of one document, and what
-// it owes is legibility at 32 px. So the fit is the TIGHT projected bounding
-// box of the geometry the mesher actually produced: a two-voxel cube painted
-// in the middle of a 64 tile fills its icon exactly as a 64-voxel ship does,
-// and the tile size never enters it.
-//
-// THE POSE is a three-quarter view from higher up — 35° round from the
-// front, so the FRONT, RIGHT and TOP faces all show with the front the
-// larger (the user's call, Sep 11 2026, over the 3D View's own 45°, where
-// the two flanks came out even), and 45° above the horizon (the stage's
-// default framing is 29.5° up). The direction and up vectors themselves are
-// the ring's (ringCameraDir / ringCameraUp): one orthographic camera
-// convention on the machine.
-//
-// SMOOTH INSIDE, INKED OUTSIDE (the user's call, Sep 11 2026, over the hard
-// point-sampled buffer of the same day). The model is rendered SUPERSAMPLED
-// — ICON_SUPERSAMPLE px per icon px on each axis — and box-filtered down, so
-// the geometry's own edges (face against face, a wedge's slope, a one-voxel
-// detail) land as coverage rather than as a point sample's hit or miss. Then
-// the silhouette is inked as a System 7 icon's is: every pixel the model
-// covers by half or more is OPAQUE in its own color — the edge is hard, an
-// icon's idiom — and a one-pixel BLACK ring runs around that coverage, so
-// the art reads as an object on any desktop pattern. The ring lies OUTSIDE
-// the model, so the fit leaves it room: the model spans the icon less
-// ICON_OUTLINE on every side (framedHalf).
-// ---------------------------------------------------------------------------
+// orthoFit bounds the meshed geometry tightly, so the tile size does not affect
+// the framing. The view direction and up vectors come from lib/ring.js
+// (ringCameraDir, ringCameraUp). The render is supersampled and box-filtered,
+// then inkOutline makes each pixel opaque or clear and draws a 1px black
+// outline outside the model. framedHalf leaves room for that outline.
 
-/** The icon resource's edge in px — the kit's `large` vf-icon cell. */
+/** Icon edge in px, the kit's `large` vf-icon cell. */
 export const ICON_SIZE = 32;
-/** The pose, in degrees: 35° round from the front, 45° above the horizon. */
+/** Pose in degrees: yaw from the front, elevation above the horizon. */
 export const ICON_YAW = 35;
 export const ICON_ELEV = 45;
-/** Samples per icon px on each axis: the render is this many times the
- * icon's size, and `downsample` folds every ICON_SUPERSAMPLE² block into
- * one pixel. */
+/** Render samples per icon px on each axis. */
 export const ICON_SUPERSAMPLE = 3;
-/** The outline's width in icon px — the margin the fit leaves outside the
- * model on every side, since the ring `inkOutline` draws lies outside the
- * model's coverage and has to land inside the icon. */
+/** Outline width in icon px. The fit leaves this margin on every side. */
 export const ICON_OUTLINE = 1;
 
 /**
- * The half-extent the camera frames for a model whose tight fit is `half`:
- * the model spans the icon less its outline margin on each side, and the
- * margin is what the ring is drawn into.
- * @param {number} half  the model's projected half-extent (orthoFit's)
+ * The camera half-extent for a model fit of `half`, leaving ICON_OUTLINE px on
+ * each side for the outline.
+ * @param {number} half  the model's half-extent from orthoFit
  * @returns {number}
  */
 export const framedHalf = (half) => (half * ICON_SIZE) / (ICON_SIZE - 2 * ICON_OUTLINE);
@@ -74,23 +42,15 @@ const unit = (v) => {
 };
 
 /**
- * The tight orthographic fit of a point cloud for a camera pose: where the
- * camera looks, the half-extent that SQUARES the projected bounding box
- * around it (the larger of the two spans, so the frame stays square and the
- * smaller axis takes the margin), and the cloud's depth along the view axis,
- * which the caller brackets its near and far planes by.
+ * The tight orthographic fit of a point cloud: the center to look at, the
+ * half-extent of the square frame (the larger projected span), and the depth
+ * along the view axis for the near and far planes. The screen basis matches
+ * lookAt: right = up × dir, screen-up = dir × right.
  *
- * The screen basis is the one `lookAt` builds from the same two vectors —
- * right = up × dir, screen-up = dir × right — so a camera posed at the
- * returned center with this `dir` and `up`, and a frustum of ±half, frames
- * exactly these points.
- *
- * @param {ArrayLike<number>} positions  xyz triples (a geometry's position
- *   attribute, in world coordinates)
- * @param {Vec3} dir  unit, from the subject OUT to the camera
+ * @param {ArrayLike<number>} positions  xyz triples in world coordinates
+ * @param {Vec3} dir  unit, from the subject to the camera
  * @param {Vec3} up  unit, the camera's screen-up (perpendicular to `dir`)
- * @returns {{center: Vec3, half: number, depth: number}|null}  null for an
- *   empty cloud (no point to frame)
+ * @returns {{center: Vec3, half: number, depth: number}|null}  null for an empty cloud
  */
 export function orthoFit(positions, dir, up) {
   const n = positions?.length ?? 0;
@@ -126,20 +86,16 @@ export function orthoFit(positions, dir, up) {
       cu * right[1] + cv * sup[1] + cw * dir[1],
       cu * right[2] + cv * sup[2] + cw * dir[2],
     ],
-    // Floored off zero: a degenerate cloud (one point, a flat plane seen
-    // edge-on) would otherwise hand the camera an empty frustum.
+    // Floored above zero so a degenerate cloud still gives a non-empty frustum.
     half: Math.max((maxU - minU) / 2, (maxV - minV) / 2, 1e-6),
     depth: maxW - minW,
   };
 }
 
 /**
- * Box-filter an RGBA raster down by an integer factor: each output pixel is
- * its factor×factor block of samples folded into one, PREMULTIPLIED — the
- * color is the mean of the covered samples' colors alone, weighted by their
- * alpha (a clear sample has no color to lend, only its absence), and the
- * alpha is the block's mean coverage. A straight mean would drag every edge
- * toward the clear samples' black.
+ * Box-filter an RGBA raster down by an integer factor. Color is weighted by
+ * alpha (premultiplied), so clear samples don't darken edges. Alpha is the
+ * block's mean.
  *
  * @param {ArrayLike<number>} src  RGBA bytes, straight alpha, row-major
  * @param {number} width  of `src`, a multiple of `factor`
@@ -170,7 +126,7 @@ export function downsample(src, width, height, factor) {
           a += sa;
         }
       }
-      if (!a) continue; // clear, as the buffer came
+      if (!a) continue; // stays clear
       const o = (y * w + x) * 4;
       out[o] = r / a;
       out[o + 1] = g / a;
@@ -181,17 +137,13 @@ export function downsample(src, width, height, factor) {
   return out;
 }
 
-/** The coverage a pixel needs to count as the model's: half. */
+/** Minimum alpha for a pixel to count as covered by the model. */
 const COVERED = 128;
 
 /**
- * Ink the icon's outline. Every pixel the model covers by half or more goes
- * OPAQUE in its own color — the silhouette is hard, as an icon's is; every
- * clear pixel with a covered one beside it (four-connected, so a diagonal
- * edge is the thin line a 1-bit icon draws, not a stair of blocks) goes
- * BLACK — the ring; and everything else goes clear, including a sliver the
- * model covers by less than half, which no ring is drawn around either. The
- * result is a raster with no partial pixel: opaque or clear.
+ * Harden the silhouette and draw its outline. A pixel with alpha >= COVERED
+ * becomes opaque in its own color. An uncovered pixel with a 4-connected
+ * covered neighbour becomes black. Every other pixel becomes clear.
  *
  * @param {ArrayLike<number>} rgba  RGBA bytes, straight alpha, row-major
  * @param {number} width
@@ -220,7 +172,7 @@ export function inkOutline(rgba, width, height) {
         covered(x, y - 1) ||
         covered(x, y + 1)
       ) {
-        out[o + 3] = 255; // the ring: black, the color bytes already zero
+        out[o + 3] = 255; // outline: black, the color bytes are already zero
       }
     }
   }

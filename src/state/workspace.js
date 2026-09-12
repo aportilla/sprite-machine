@@ -1,54 +1,15 @@
-// ---------------------------------------------------------------------------
-// `workspace` slice — the OPEN documents. Each open document is a
-// DocContext: its own canonical doc (state/doc.js, the two-channel
-// contract), its own bounded undo history, its stored identity
-// (fileId/name/dirty), and its per-window view state (which face the editor
-// shows). The slice holds the contexts BY REFERENCE (store idiom) plus
-// `activeKey` — which document window is the desktop's active one.
+// Workspace slice: the open documents, one DocContext each. activeKey names
+// the active document window's context.
 //
-// ONE DOCUMENT = ONE WINDOW: contexts are created by the open paths (File →
-// New, a sample or stored doc, a dropped PNG — loaders.js / openStored) and
-// disposed by close. Opening an already-open stored doc never makes a second
-// context — the caller activates the existing window instead (System 7: one
-// window per document).
-//
-// ACTIVATION MIRRORS THE KIT: the desktop's vf-activate event is the truth,
-// and the Sprite Editor's windows write it here via setActive, from the
-// window manager's beforeFront (apps/sprite-editor/windows.js) — nothing
-// else does. Programmatic activation goes through the kit (bringToFront),
-// so the event remains the single writer and the mirror can never
-// disagree with the pixels.
-//
-// DIRTY TRACKING rides each context's doc channels (the wiring the files
-// slice used to own): any live stroke or structural change marks the
-// context dirty; a wholesale load — the context's birth, or a stored open —
-// marks it clean. Identity never auto-resets: a context is born from
-// exactly one load, so "a new sheet arrived in an existing doc" stopped
-// being a thing the tracker has to disambiguate.
-//
-// THE SELECTION is a per-context STORE of its own (`ctx.selection`: `bounds`,
-// the marquee's outline or null), not a field published through the
-// workspace store: the canvas reports its marquee at pointer-move rate
-// during a drag, and a `touch()` per move would re-render every workspace
-// subscriber (windows, menus, the atlas view) for a value only the options
-// strip's readout — and, coming, the Edit menu's Cut/Copy gating — reads.
-// Its subscribers follow the active context like everything else
-// (followActive). The pixels are never here: the selection's float and base
-// are the canvas's own; this is its OUTLINE. The same store carries the
-// canvas's OTHER live outline, `rect` — the rect tool's drag in flight (the
-// box as the release would paint it), null between drags — for the same
-// reader at the same rate: the strip's rect readout (Sep 5 2026), and
-// nothing else will ever read it (a drag is no selection).
-//
-// THE 3D SPRITE ATLAS'S SETTINGS are a per-context store too (`ctx.ring`,
-// state/ring-settings.js): a document's atlas configuration is the
-// document's — born from its PNG's `sprite-machine:ring` chunk (or the
-// defaults), written back by every save, and a change dirties the context
-// like a stroke (the tracker below subscribes to it). The windoid, the
-// dialog and the renderer read the ACTIVE one's through state/ring.js's
-// façade; nothing here reads the settings — the workspace only carries
-// them between the open paths and the files slice.
-// ---------------------------------------------------------------------------
+// - One context per stored document (openStored).
+// - activeKey mirrors the desktop's vf-activate. Only setActive writes it,
+//   from apps/sprite-editor/windows.js. Programmatic activation goes through
+//   the kit's bringToFront.
+// - Dirty tracking: a live stroke, a structural doc change or a ring setting
+//   change marks a context dirty. A wholesale load marks it clean.
+// - ctx.selection is its own store for the marquee (`bounds`) and the rect
+//   tool's drag box (`rect`). Both change at pointer-move rate, so they stay
+//   out of the workspace store.
 
 import { createStore } from './store.js';
 import { createDoc } from './doc.js';
@@ -69,9 +30,8 @@ import { files as filesSingleton, UNTITLED, copyName } from './files.js';
  *   ring: ReturnType<typeof createRingSettings>,
  * }} DocContext
  */
-/** The canvas's CURRENT selection rectangle in tile texels, inclusive — it
- *  may hang off the tile (a float pushed past the edge). The rect tool's
- *  drag box is the same shape (always on the tile: the drag clamps).
+/** A selection rectangle in tile texels, inclusive. It may extend past the
+ *  tile. The rect tool's drag box has the same shape.
  *  @typedef {{x0:number,y0:number,x1:number,y1:number}} SelectionBounds */
 
 const sameBounds = (a, b) =>
@@ -85,8 +45,7 @@ const copyBounds = (b) => (b ? { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 } : null
  *   files?: ReturnType<typeof import('./files.js').createFiles>,
  *   createDoc?: () => ReturnType<typeof createDoc>,
  *   createHistory?: (doc: any) => ReturnType<typeof createHistory>,
- * }} [deps]  Injectable for Node tests (a files stub, a doc with a fake
- *   frame scheduler); the app singleton takes the real ones.
+ * }} [deps]  Overrides for tests.
  */
 export function createWorkspace(deps = {}) {
   const files = deps.files ?? filesSingleton;
@@ -94,10 +53,9 @@ export function createWorkspace(deps = {}) {
   const makeHistory = deps.createHistory ?? ((doc) => createHistory(doc));
 
   const store = createStore({
-    /** @type {DocContext[]} in creation order (the stagger index) */
+    /** @type {DocContext[]} in creation order */
     contexts: [],
-    /** @type {string|null} the active document window's context, or null =
-     *  the desktop is focused ("the Finder") */
+    /** @type {string|null} the active document window's context key, or null */
     activeKey: null,
   });
 
@@ -105,8 +63,8 @@ export function createWorkspace(deps = {}) {
   /** @type {Map<string, () => void>} per-context tracker teardowns */
   const untrack = new Map();
 
-  // Contexts are mutated in place (by-reference store idiom); a touch
-  // publishes the mutation by replacing the array identity.
+  // Contexts are mutated in place. touch publishes a mutation by replacing the
+  // array.
   const touch = () => store.patch({ contexts: [...store.get().contexts] });
 
   const byKey = (key) => store.get().contexts.find((c) => c.key === key) ?? null;
@@ -117,11 +75,8 @@ export function createWorkspace(deps = {}) {
     touch();
   };
 
-  /** Stored documents that are gone (a delete, an emptied Trash): every
-   *  open context holding one keeps its pixels and its display name but
-   *  loses its stored identity — the state a dropped PNG opens in — and
-   *  reads dirty, since nothing stored backs it any more: a Close asks, a
-   *  reload warns, a Save stores it afresh. One touch for the batch.
+  /** Clear the stored identity of every open context holding one of `ids`.
+   *  Each keeps its pixels and name and is marked dirty.
    *  @param {string[]} ids */
   const forgetStored = (ids) => {
     const gone = new Set(ids);
@@ -153,13 +108,12 @@ export function createWorkspace(deps = {}) {
       return activeKey == null ? null : byKey(activeKey);
     },
 
-    /** Any open document with unsaved changes (the beforeunload guard). */
+    /** Whether any open document has unsaved changes. */
     anyDirty() {
       return store.get().contexts.some((c) => c.dirty);
     },
 
-    /** The next free untitled name: "untitled", "untitled 2", … over the
-     *  names currently open. */
+    /** The first name not open among "untitled", "untitled 2", … */
     nextUntitledName() {
       const used = new Set(store.get().contexts.map((c) => c.name));
       if (!used.has(UNTITLED)) return UNTITLED;
@@ -170,14 +124,10 @@ export function createWorkspace(deps = {}) {
     },
 
     /**
-     * Create a context (doc + history + dirty tracker). The caller loads
-     * pixels into `ctx.doc` right after — the load's sheet bump is what
-     * leaves the newborn context clean. The window layer reconciles a
-     * document window into existence from the store change.
-     * `ring` seeds the context's 3D Sprite Atlas settings at birth (a stored
-     * document's chunk, a dropped PNG's) — before the tracker wires, so the
-     * seed is no change: the context is born with them the way it is born
-     * with its pixels.
+     * Create a context with its doc, history and dirty tracker. The caller
+     * loads pixels into `ctx.doc` next, and that load's sheet change leaves the
+     * context clean. `ring` seeds the atlas settings before the tracker is
+     * wired, so seeding does not mark the context dirty.
      * @param {{name?: string, fileId?: string|null, face?: string,
      *          ring?: Partial<import('./ring-settings.js').RingSettings>|null}} [init]
      * @returns {DocContext}
@@ -210,7 +160,6 @@ export function createWorkspace(deps = {}) {
           }
         }),
         doc.onLive(() => setDirty(ctx, true)),
-        // An atlas setting is document content: it goes into the file.
         ctx.ring.subscribe(() => setDirty(ctx, true)),
       ];
       untrack.set(ctx.key, () => unsubs.forEach((u) => u()));
@@ -219,10 +168,9 @@ export function createWorkspace(deps = {}) {
     },
 
     /**
-     * Open a stored document: the existing context if one already holds it
-     * (one window per document), else a fresh context loaded from storage.
-     * Resolves `{ctx, existed}`, or null when the id is gone; throws on a
-     * decode failure (the caller surfaces it).
+     * Open a stored document: the existing context if one holds it, else a new
+     * context loaded from storage. Resolves `{ctx, existed}`, or null when the
+     * id is gone. Throws on a decode failure.
      * @param {string} id
      */
     async openStored(id) {
@@ -235,9 +183,8 @@ export function createWorkspace(deps = {}) {
       return { ctx, existed: false };
     },
 
-    /** Dispose a context: tracker + history down, window layer reconciles
-     *  the window away. An active close leaves activeKey null until the
-     *  desktop promotes a survivor (vf-activate writes the mirror back). */
+    /** Dispose a context. Closing the active context leaves activeKey null
+     *  until vf-activate reports the next active window. */
     close(key) {
       const ctx = byKey(key);
       if (!ctx) return;
@@ -251,9 +198,8 @@ export function createWorkspace(deps = {}) {
       });
     },
 
-    /** The activation mirror — written ONLY from the desktop's vf-activate
-     *  wire (the Sprite Editor's beforeFront mirror,
-     *  apps/sprite-editor/windows.js). Null = no document window active. */
+    /** Called only by the beforeFront listener in apps/sprite-editor/windows.js.
+     *  Null means no document window is active. */
     setActive(key) {
       store.patch({ activeKey: key != null && byKey(key) ? key : null });
     },
@@ -267,11 +213,8 @@ export function createWorkspace(deps = {}) {
     },
 
     /**
-     * The canvas's current selection outline for a window — bounds, or null
-     * for none. Written by the window's editor from the canvas's
-     * `sm-selection` event; published on the CONTEXT's own selection store
-     * (never the workspace store — see the header), and silently when the
-     * value hasn't changed (a same-texel move reports nothing).
+     * Set a window's selection outline from the canvas's `sm-selection` event,
+     * or null for none.
      * @param {string} key  @param {SelectionBounds|null} bounds
      */
     setSelection(key, bounds) {
@@ -282,11 +225,8 @@ export function createWorkspace(deps = {}) {
     },
 
     /**
-     * The canvas's rect drag in flight for a window — the box as the release
-     * would paint it, or null between drags. Written by the window's editor
-     * from the canvas's `sm-rect-drag` event; the selection's discipline
-     * exactly (the context's own store, silent on an unchanged value),
-     * sharing its store — the strip's other readout, nothing else's.
+     * Set a window's rect tool drag box from the canvas's `sm-rect-drag` event,
+     * or null between drags.
      * @param {string} key  @param {SelectionBounds|null} bounds
      */
     setRectDrag(key, bounds) {
@@ -297,9 +237,8 @@ export function createWorkspace(deps = {}) {
     },
 
     /**
-     * Persist a context. An untitled context takes `name` (the UI prompts
-     * first) and becomes saved; a saved one saves silently in place.
-     * Resolves the stored id (null when the doc holds nothing).
+     * Save a context. An untitled context takes `name`. A saved one saves in
+     * place. Resolves the stored id, or null when the doc holds nothing.
      * @param {string} key  @param {string} [name]
      */
     async save(key, name) {
@@ -318,12 +257,9 @@ export function createWorkspace(deps = {}) {
       return res.id;
     },
 
-    /** Save a copy as "«name» copy" (the context itself is untouched) —
-     *  beside the original, in its folder (the Finder's Duplicate); an
-     *  untitled's copy lands on the desktop. The name counts the Mac's way
-     *  (files.js copyName): a second Duplicate of the Car is "Car copy 2",
-     *  never a second "Car copy". Resolves the copy's stored id — the
-     *  caller opens it in a new window. */
+    /** Save a copy in the original's folder, or on the desktop for an untitled
+     *  context, named by files.js copyName ("Car copy", "Car copy 2"). The
+     *  context is unchanged. Resolves the copy's stored id. */
     async duplicate(key) {
       const ctx = byKey(key);
       if (!ctx) return null;
@@ -339,9 +275,8 @@ export function createWorkspace(deps = {}) {
       return res ? res.id : null;
     },
 
-    /** Rename a context. A saved one rewrites its stored Title chunk (and
-     *  every open context of that doc follows); an untitled one just takes
-     *  the display name. */
+    /** Rename a context. A saved one renames its stored doc (renameStored). An
+     *  untitled one takes the display name. */
     async rename(key, name) {
       const ctx = byKey(key);
       if (!ctx) return;
@@ -353,8 +288,7 @@ export function createWorkspace(deps = {}) {
       }
     },
 
-    /** Rename a STORED doc by id (the desktop-icon path converges here);
-     *  open contexts holding it follow along. */
+    /** Rename a stored doc by id. Open contexts holding it follow. */
     async renameStored(id, name) {
       await files.renameById(id, name);
       let moved = false;
@@ -367,19 +301,15 @@ export function createWorkspace(deps = {}) {
       if (moved) touch();
     },
 
-    /** Delete a stored doc. An open context holding it reverts to an
-     *  untitled identity (its pixels stay open — only the stored copy is
-     *  gone) and reads DIRTY: the window's copy is the only one now, so
-     *  Close asks and the beforeunload guard holds (forgetStored). */
+    /** Delete a stored doc. An open context holding it keeps its pixels, loses
+     *  its stored identity and is marked dirty (forgetStored). */
     async removeStored(id) {
       await files.remove(id);
       forgetStored([id]);
     },
 
-    /** Empty the Trash (files.emptyTrash — every document and folder in
-     *  it, however deep); every open context holding one of the removed
-     *  documents reverts the way removeStored's does, dirty. Resolves what
-     *  was removed. */
+    /** Empty the Trash (files.emptyTrash). Open contexts holding a removed
+     *  document are handled as in removeStored. Resolves what was removed. */
     async emptyTrash() {
       const removed = await files.emptyTrash();
       forgetStored(removed.docs);
@@ -402,18 +332,15 @@ export function createWorkspace(deps = {}) {
 }
 
 /**
- * Follow the ACTIVE document across activation changes: `wire(ctx|null)` runs
- * for the current active context now and again on every change of activeKey,
- * with the previous wiring's returned teardown run first. The primitive
- * behind every follow-the-active-document consumer (the rebuilder, the
- * Sprite View, the status readouts, the Edit-menu sync).
+ * Call `wire` with the active context now and on every activeKey change,
+ * running the previous wiring's teardown first.
  *
  * @param {ReturnType<typeof createWorkspace>} workspace
  * @param {(ctx: DocContext|null) => (void | (() => void))} wire
  * @returns {() => void} stop following (tears the current wiring down too)
  */
 export function followActive(workspace, wire) {
-  let key; // undefined ≠ null, so the initial apply always wires
+  let key; // undefined ≠ null, so the first apply always wires
   let teardown = null;
   const apply = () => {
     const k = workspace.get().activeKey;
@@ -431,5 +358,4 @@ export function followActive(workspace, wire) {
   };
 }
 
-// The app-wide singleton (one desktop per page).
 export const workspace = createWorkspace();

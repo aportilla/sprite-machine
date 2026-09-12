@@ -1,6 +1,3 @@
-// The Node adapter (node.js): a document PNG decodes to the pixels the
-// encoder was given, its Title chunk to the name and its transforms chunk to
-// the object — and sheetToGlb names the model from the chunk. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

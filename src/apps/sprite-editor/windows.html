@@ -1,51 +1,17 @@
-<!-- The SPRITE EDITOR's windows (docs/app-windows-plan.md §3.7) — the
-     application's WIND resources, its windows' anatomy: a fragment
-     windows.js beside this file imports whole (?raw) and parses once at the
-     application's init (shell/windows.js parseWindows). The four windoids
-     are authored bare and appended to the desktop HIDDEN at init, before
-     the first frame — a boot shows the Finder's bar and no windoid; the
-     document window is a template, cloned per open document (cloneWindow).
-     Every window is appended as a DIRECT child of the desktop (the kit's
-     stacking manager only sees direct vf-window children). Everything
-     aesthetic is the kit's; this markup is layout only. -->
-<!-- ======================= The utility windoids =================== -->
-<!-- Three are permanent chrome: always on screen while the application is
-     front — no close box (windows.js sets closable=false; markup can't
-     express a boolean attribute's off state) and no menu toggle. The
-     fourth, the 3D Sprite Atlas (#win-ring), is the one TOGGLEABLE
-     windoid: View → 3D Sprite Atlas shows it (off every load) and its
-     close box — the kit's, kept — hides it again. Geometry is NOT authored
-     here: windows.js computes the smart arrangement from the live raster
-     at boot (the Tools palette top-left, the sprite/stage rail right, the
-     atlas strip docked at the bottom — layout.js) and clamps; a browser
-     resize re-pins every window proportionally. All four are utility
-     windoids: they float above the document tier, never take the active
-     state, and hide with the application when another comes forward
-     (windows.js gates their hidden on the Sprite Editor being front — and,
-     for the atlas strip, on prefs.showRing too). A windoid bar shows no
-     title text (the kit's 11px bar has no title patch); the heading still
-     names the window for assistive tech. The DOCUMENT windows' template
-     follows the windoids: one clone per open document, by windows.js's
-     reconciler. -->
-<!-- Every windoid's controls strip is the window's HEADER (vintage-frames
-     0.6.1 — `slot="header"`: the Finder window's header line, a white band
-     over a 1px rule between the title bar and the body across the whole
-     window, a positioning anchor for what is placed in it; `header-height`
-     counts its rule and is AUTHORED here, the kit's grammar — the same
-     number as layout.js's arithmetic (STAGE_STRIP, SPRITE_STRIP,
-     RING_STRIP): change one, change the other). The body below it runs to
-     the frame: a vf-window body carries no inset of its own (vintage-frames
-     0.6.0 — an inset is the content's, stated with a vf-stack pad; the
-     `flush` attribute the windows used to set is retired). -->
-<!-- The Full Sprite View: the FACE PICKER (the six cube-view radios,
-     serving the ACTIVE document) in the header — sm-atlas-controls places
-     the picker block at the DITL's rectangle, SPRITE_PICKER_AT — over the
-     live whole-atlas grid, the body (sm-atlas-view). The windoid is
-     FIXED-size — movable but not resizable (no grow box): windows.js sizes
-     it to the atlas grid block's width and derives its height from the
-     active atlas's ratio plus the chrome, the header included, so the atlas
-     exactly fills the body (fitSprite — SPRITE_WIDTH / SPRITE_STRIP /
-     SPRITE_CHROME in layout.js). -->
+<!-- Sprite Editor windows, parsed by windows.js at init. The four windoids are
+     appended hidden. The document window is a template cloned per open
+     document. Every window must be a direct child of the desktop: the kit's
+     stacking manager sees only direct vf-window children. -->
+<!-- Utility windoids -->
+<!-- Windoid geometry comes from layout.js. Only the Tools palette's size is
+     authored here. windows.js sets closable=false on every windoid but the 3D
+     Sprite Atlas. A windoid bar shows no title, so the heading only names the
+     window for assistive tech. -->
+<!-- Each windoid's controls go in slot="header". header-height includes the
+     header's 1px rule and matches layout.js (STAGE_STRIP, SPRITE_STRIP,
+     RING_STRIP). -->
+<!-- Full Sprite View: fixed size, set by windows.js from layout.js (SPRITE_WIDTH,
+     spriteHeightFor). -->
 <vf-window
   id="win-sprite"
   variant="utility"
@@ -54,28 +20,14 @@
   header-height="62"
 >
   <sm-atlas-controls slot="header"></sm-atlas-controls>
-  <!-- No status strip: an empty status slot draws no bottom bar (the kit's
-       .status.empty), so the atlas runs down to the frame. `pattern` paints
-       a kit 1-bit pattern behind each face tile (a library name or sixteen
-       hex digits — vintage-frames docs/PATTERNS.md), so a tile's
-       transparent texels read against paper; drop the attribute for plain
-       white cells. -->
+  <!-- No status slot, so the kit draws no bottom bar. pattern paints behind each
+       tile so transparent pixels show against it. -->
   <sm-atlas-view pattern="gray-12"></sm-atlas-view>
 </vf-window>
 
-<!-- The 3D View: the controls strip (the one render toggle — rotate, off
-     every load, in a kit row stack in sm-stage-controls; the low-poly
-     "smooth" pass is always on, no box for it) in the header, STAGE_STRIP
-     tall, over the THREE canvas in a kit vf-container that fills the body
-     (`fill-width fill-height`) and paints a 1-bit pattern as its
-     background: the THREE scene renders with a TRANSPARENT clear
-     (scene/stage.js), so the model — and its shadow — composite over the
-     kit's pattern, not a flat gray. `pattern` is the kit grammar (a library
-     name or sixteen hex digits); drop it for a bare white well. windows.js
-     floors this windoid's size at its chrome plus a canvas that still reads
-     as a view (layout.js STAGE_MIN_WIDTH / STAGE_MIN_HEIGHT), the strip's
-     one checkbox well inside it. main.js builds the scene on #viewport once
-     the application has appended this window. -->
+<!-- 3D View: the scene renders with a transparent clear over the container's
+     pattern. main.js builds the scene on #viewport after this window is
+     appended. -->
 <vf-window
   id="win-stage"
   variant="utility"
@@ -91,55 +43,11 @@
   <sm-status-line kind="build" slot="status"></sm-status-line>
 </vf-window>
 
-<!-- The 3D Sprite Atlas: the active document's model rendered
-     ORTHOGRAPHICALLY from a ring of evenly stepped yaw angles at one
-     elevation — the rotation set an engine consumes — as a row of tiles,
-     one cell per view at the TILE SIZE (1:1 — the `size` setting is the
-     tile's edge in px, 2–255, the model's envelope fit to it), butted — no
-     rules between — on ONE sheet of kit paper running across the whole
-     body: white — the ring slice's `paper` setting, which nothing writes
-     today (white / black / gray are the values it admits, each a kit
-     pattern by name in state/ring.js, gray the `dots` dither; a control for
-     it was built and retired, the choice being meant for the app to make
-     from the sheet's content one day); the grid draws no rules and a cell
-     paints nothing, so a frame's transparent margin reads as the unbroken
-     paper, which runs on past the last tile (sm-ring-view.js), under a
-     two-row controls strip (views / elev / from / size — the same settings
-     File → Export Sprite Atlas… edits, live). Toggleable: View → 3D Sprite
-     Atlas shows it (hidden every load), the close box hides it — the ONE
-     windoid that keeps the kit's close box. The classic scrolling document
-     window turned windoid: `scrollbars="horizontal"` puts the kit's rail on
-     the frame's bottom edge where a status strip would be (none here — the
-     empty status slot is what lets the kit reserve the rail's corner cell
-     for the grow box), the body runs to the frame and the rail (a window
-     body and a scroll viewport carry no inset of their own — vintage-frames
-     0.6.0 retired `flush`), and `resizable` gives it the grow box — on the
-     HORIZONTAL axis alone, through the kit's size rect (the Patterns
-     strip's idiom: min-height = max-height locks the axis), declared from
-     windows.js rather than authored here because the bound moves:
-     min-height = max-height = ringHeightFor(size) (the chrome over one row
-     of cells, re-declared as the size changes) and min-width = the
-     controls' RING_MIN_WIDTH; the row scrolls under the rail past it. The
-     placement seeds the width with the natural row (capped at the vacant
-     middle), docks it on the bottom margin, left-aligned with the document
-     window, and shortens the doc box to clear it only while it is shown
-     (layout.js). The controls strip is the window's HEADER (vintage-frames
-     0.6.1 — `slot="header"`: the Finder window's header line, a white band
-     over a 1px rule between the title bar and the body, outside the scroll
-     area, so the controls hold while the row scrolls under them;
-     `header-height` authored below = RING_STRIP, the DITL's 62 over the
-     rule in layout.js), its four captions and fields placed at the DITL's
-     rectangles against the header's corner (sm-ring-controls.js). The body
-     is the row alone (sm-ring-view.js): the paper — a vf-container pattern
-     filling the body's width (fill-width: as wide as the scroll plane, so
-     the paper runs past the last tile and under a scrolled row), the tile
-     tall, its pattern the slice's paper setting — in flow at the plane's
-     origin (the kit sizes its plane to the grid inside it), holding a
-     rules="none" vf-grid whose surface is cleared so the paper shows
-     through, each cell a vf-stack at the tile's declared size (a kit box
-     that paints nothing). The paper under the grid is the app-side bridge
-     for kit ask #11, a window body's paper as a kit pattern
-     (docs/kit-asks-body-pattern.md). -->
+<!-- 3D Sprite Atlas: orthographic renders of the active document's model, one
+     tile-size cell per yaw step. The empty status slot leaves the rail's corner
+     cell for the grow box. windows.js sets the size rect, since the height follows
+     the tile size. sm-ring-view.js paints the body's paper with a vf-container,
+     since vf-window has no body pattern. -->
 <vf-window
   id="win-ring"
   variant="utility"
@@ -153,16 +61,8 @@
   <sm-ring-view></sm-ring-view>
 </vf-window>
 
-<!-- The floating Tools palette: utility tier — floats above the document
-     windows and never deactivates them. Its SIZE stays authored: hugging
-     the tool strip with NO inner padding — the frameless grid of 22×19
-     cells, each cell exactly one tool icon (6×19 + 5 rules = 119 tall, 22
-     wide), sits flush against the windoid's own frame (the desk-accessory
-     composition), + the chrome (1px borders, 12px bar) = 24 × 133 —
-     TOOLS_BOX in layout.js, the same arithmetic: change one, change the
-     other. It floats in the band left of the desktop's WINDOW_ORIGIN, so
-     the placement writes its position alone. Last in this markup, so it
-     tops the windoid band. -->
+<!-- Tools palette. Its size matches TOOLS_BOX in layout.js. Last in the markup,
+     so it is on top of the other windoids. -->
 <vf-window
   id="win-tools"
   variant="utility"
@@ -174,14 +74,7 @@
   <sm-tools-panel></sm-tools-panel>
 </vf-window>
 
-<!-- ================== The document-window template ================== -->
-<!-- One clone per open document (windows.js reconciles them from the
-     workspace slice): the reconciler assigns the id, the heading and the
-     geometry (the doc box, cascaded) and hands the editor and the tile
-     readout their DocContext BEFORE appending the clone to the desktop.
-     Inert markup — a <template> renders nothing. Its zoom box (`zoomable`)
-     is this application's: the vacancy from the held top-left, and back
-     (windows.js). -->
+<!-- Document window template -->
 <template id="tpl-document-window">
   <vf-window heading="untitled" movable resizable zoomable>
     <sm-editor></sm-editor>

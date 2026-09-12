@@ -1,48 +1,12 @@
-// ---------------------------------------------------------------------------
-// <sm-tool-options> — the draw box's per-tool options bar: the pencil's
-// TIP-SHAPE POPUP (`circle` / `square` — the kit's vf-select, System 7's
-// popup menu, in the two options' order with circle the boot value) and its
-// tip-size slider (with a live readout; the slider half the width it had —
-// 130 system px at most, 260 before the popup joined it, Sep 5 2026), the
-// eraser's OWN popup and slider (independent settings, both, and a
-// deliberately separate branch — not a DRY slip; the two tools' options may
-// diverge), the rect's corner-radius field beside a
-// READOUT of the drag in flight (its box's width × height in texels, live
-// through the drag, `0 × 0` at rest), the fill's two checkboxes, or the
-// selection's READOUT alone — a tool with no settings: its strip states the
-// active window's marquee as width × height in texels, live through a drag,
-// `0 × 0` for none — and nothing for the eyedropper (its strip is just the
-// ink swatch). A readout is the SIZE alone, never the position (the
-// `left, top ·` prefix went Sep 5 2026: "just the width and height"). And
-// every label in the strip is plain ink — no `dim` on a caption or a readout
-// (they went the same day: a readout is a value and a caption names a live
-// control, and the kit's dim is the disabled look; the strip has nothing
-// disabled in it). THE STRIP'S CELLS ARE WALLED by the kit's own rule —
-// `<vf-separator vertical>`, a 1-system-px line that stretches itself to its
-// flex row's height (`align-self: stretch` is the kit's, so the wall runs
-// from the band's top to its bottom rule) — and a rule stands between
-// DIFFERENT things only: the bar puts one between the ink swatch and the
-// tool's options whenever both are up (sm-options-bar), and the rect's
-// branch here puts one between the radius stepper (a setting) and the
-// readout (a value); never between a control and its own readout — the
-// pencil's popup, its slider and its `N px` are one cell (two settings of
-// one tool, the fill's idiom — the eraser's the same), the fill's two boxes
-// one group. For a wall in this leaf to reach the band the host itself
-// stretches to the row's height (its own `align-self: stretch` below — the
-// bar centers its children, which would otherwise shrink-wrap the host to
-// its tallest control). A presentational LEAF: props down (`tool`, values +
-// clamp BOUNDS — the clamping itself lives in the session actions the
-// container calls — and the two outlines, `selection` / `rectDrag`),
-// bubbling `sm-set-pencil-size {n}` / `sm-set-pencil-shape {shape}` /
-// `sm-set-eraser-size {n}` / `sm-set-eraser-shape {shape}` /
-// `sm-set-corner-radius {n}` / `sm-set-fill-opts {contiguous?|allFaces?}`
-// events up. `live()` bindings throughout, so a re-render can't skip a
-// re-sync after typing (or a popup pick the session rejects).
+// <sm-tool-options>: the per-tool controls in the options strip. Props carry
+// the clamp bounds, and the session actions do the clamping. Emits
+// sm-set-pencil-size {n}, sm-set-pencil-shape {shape}, sm-set-eraser-size {n},
+// sm-set-eraser-shape {shape}, sm-set-corner-radius {n} and
+// sm-set-fill-opts {contiguous?, allFaces?}.
 //
-// This element IS the options area (`:host` carries the box — it fills the
-// desktop's options strip beside the current-ink swatch); its shadow root
-// holds the bare controls.
-// ---------------------------------------------------------------------------
+// live() bindings re-sync the controls after typing or a rejected pick.
+// A vertical separator goes only between different things, such as the rect's
+// radius field and its readout.
 
 import 'vintage-frames';
 import { css, LitElement, html, nothing } from 'lit';
@@ -51,32 +15,20 @@ import { PENCIL_SHAPES } from '../lib/brush.js';
 import { baseStyles } from './base-styles.js';
 
 export class SmToolOptions extends LitElement {
-  // The one sm-* host with a REAL box (no `display: contents`): this element
-  // IS the options area, so `:host` carries its flex-row layout. The strip
-  // around it (sm-options-bar) paints the white band; this host stays
-  // chromeless and just lays its controls out.
   static styles = [
     baseStyles,
     css`
-      /* Kit-scaled metrics: the strip band is drawn in system px (a kit
-       vf-container band), so the lengths in it ride the same --vf-scale. */
       :host {
         flex: 1;
         min-width: 0;
-        /* The band's full height (the bar's row centers its children, which
-           would shrink-wrap this box to its tallest control): a vertical rule
-           in here stretches to THIS box, and the wall must run from the
-           band's top to its bottom rule. The controls still center inside. */
+        /* The parent row centers its children. Stretch so a vertical
+           separator in here spans the band's full height. */
         align-self: stretch;
         display: flex;
         align-items: center;
         gap: calc(var(--vf-scale, 1) * 12px);
       }
-      /* The tip slider: half the width it had (260 → 130, Sep 5 2026 — "much
-         less wide, say about half") now that the shape popup shares its
-         cell; the eraser's rides the same class so the two strips match.
-         Still flex: 1 under the cap, so a tiny raster shrinks it rather
-         than overflowing the band. */
+      /* flex: 1 under the cap lets the slider shrink on a small raster. */
       .editor-size-slider {
         flex: 1;
         max-width: calc(var(--vf-scale, 1) * 130px);
@@ -90,19 +42,18 @@ export class SmToolOptions extends LitElement {
     /** The pencil's tip shape: one of lib/brush.js PENCIL_SHAPES. */
     pencilShape: {},
     eraserSize: { type: Number },
-    /** The eraser's own tip shape, the same two names. */
+    /** The eraser's tip shape, also one of PENCIL_SHAPES. */
     eraserShape: {},
     brushMax: { type: Number },
     cornerRadius: { type: Number },
     radiusMax: { type: Number },
     fillContiguous: { type: Boolean },
     fillAllFaces: { type: Boolean },
-    /** The selection tool's readout: the active window's current marquee
-     *  {x0,y0,x1,y1} in texels (may hang off the tile), or null for none. */
+    /** The active window's marquee {x0,y0,x1,y1} in texels, or null. It may
+     *  extend past the tile. */
     selection: { attribute: false },
-    /** The rect tool's readout: the active window's drag in flight
-     *  {x0,y0,x1,y1} in texels (the box as the release would paint it, the
-     *  Shift square-lock applied), or null between drags. */
+    /** The active window's rect drag {x0,y0,x1,y1} in texels, with the Shift
+     *  square-lock applied, or null between drags. */
     rectDrag: { attribute: false },
   };
 
@@ -122,24 +73,18 @@ export class SmToolOptions extends LitElement {
     this.rectDrag = null;
   }
 
-  /** A box's size as the readouts state it — `width × height` in texels,
-   *  inclusive bounds; `0 × 0` for none (the resting readout, so the strip
-   *  always carries the same label in the same place). */
+  /** A box's size as `width × height` in texels (inclusive bounds), or
+   *  `0 × 0` for null. */
   static size(b) {
     return b ? `${b.x1 - b.x0 + 1} × ${b.y1 - b.y0 + 1}` : '0 × 0';
   }
 
-  /** Does this tool put anything in the options area? The eyedropper alone
-   *  does not (render's final `nothing`) — the bar asks before walling the
-   *  ink swatch off from an options cell that would be empty. */
+  /** Whether the tool shows any options. Only the eyedropper has none. */
   static hasOptions(tool) {
     return tool !== 'eyedropper';
   }
 
-  // The tip-shape popup — the kit's popup menu over the two names, in
-  // PENCIL_SHAPES' order; it hugs its widest option, so the pill holds one
-  // width whichever is picked. Both tip tools open their cell with it, each
-  // bound to its own setting; the popup commits on the pick (vf-change).
+  // The tip-shape popup for the pencil and the eraser.
   #shapePopup(value, label, event) {
     return html`
       <vf-select
@@ -155,9 +100,8 @@ export class SmToolOptions extends LitElement {
 
   render() {
     if (this.tool === 'pencil') {
-      // The tip's shape first, then its size. vf-input fires on every drag
-      // move / key change, so the hover footprint tracks the slider in real
-      // time.
+      // vf-input fires on every drag move, so the hover footprint tracks the
+      // slider.
       return html`
         ${this.#shapePopup(this.pencilShape, 'pencil tip shape', 'sm-set-pencil-shape')}
         <vf-slider
@@ -173,8 +117,7 @@ export class SmToolOptions extends LitElement {
       `;
     }
     if (this.tool === 'eraser') {
-      // Mirrors the pencil's cell but binds the eraser's own shape and size —
-      // kept as its own branch on purpose (see the header note).
+      // The pencil's controls, bound to the eraser's own settings.
       return html`
         ${this.#shapePopup(this.eraserShape, 'eraser tip shape', 'sm-set-eraser-shape')}
         <vf-slider
@@ -190,11 +133,7 @@ export class SmToolOptions extends LitElement {
       `;
     }
     if (this.tool === 'rect') {
-      // The radius stepper, a rule, then the readout: the box being dragged
-      // as width × height (the square-locked box, the one the release
-      // paints), `0 × 0` between drags — the label always there, so nothing
-      // shifts when a drag begins. The rule walls a setting off from a value
-      // (the header's grammar), the kit's own vertical separator.
+      // The readout always renders, so nothing shifts when a drag begins.
       return html`
         <vf-label>radius</vf-label>
         <vf-number-field
@@ -213,9 +152,6 @@ export class SmToolOptions extends LitElement {
       `;
     }
     if (this.tool === 'fill') {
-      // "contiguous" (the default) keeps the click a 4-connected flood; off, it
-      // recolors every matching texel on the face — and "on all faces" (only
-      // meaningful with contiguous off) extends that recolor across the atlas.
       return html`
         <vf-checkbox
           .checked=${live(this.fillContiguous)}
@@ -235,10 +171,7 @@ export class SmToolOptions extends LitElement {
       `;
     }
     if (this.tool === 'select') {
-      // A readout, not a setting: the marquee's size in texels — the whole
-      // float's, so a move holds it steady and a float pushed off the tile
-      // still reads its full size — and `0 × 0` with nothing selected (a
-      // "no selection" caption stood here until Sep 5 2026).
+      // The full marquee size, including any part moved off the tile.
       return html`
         <vf-label title="selection: width × height (texels)"
           >${SmToolOptions.size(this.selection)}</vf-label

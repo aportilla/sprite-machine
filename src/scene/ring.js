@@ -1,32 +1,17 @@
-// ---------------------------------------------------------------------------
-// The 3D Sprite Atlas's FOLLOWER — the cadence, gating and publishing around
-// scene/ring-renderer.js: it takes the rebuilder's mesh through the one
-// `onMesh` seam (the rebuilder stays the pipeline's only consumer; this
-// never runs buildVoxels), re-renders on any setting change, and publishes
-// the sheet on the ring slice's sheet channel for the windoid's cells.
+// 3D Sprite Atlas follower. Receives the rebuilder's mesh through onMesh,
+// re-renders on setting changes and publishes the sheet on the ring slice.
 //
-// NEVER RENDER WHILE HIDDEN: the rebuilder fires per stroke frame at the
-// live channel's rAF rate, and rendering N frames + a canvas copy per
-// stroke frame behind a hidden windoid would be pure waste — so a change
-// while hidden only marks the sheet DIRTY, and the show (prefs.showRing
-// flipping true) renders it at once. Shown, at most ONE render per animation
-// frame, whatever fired (a setting, a rebuild, both) — the Sprite View's
-// per-frame blit is the same cost class. Export's renderSheet() is the one
-// deliberate exception: it renders now, shown or not — the file must be the
-// strip's exact pixels, so it publishes what it rendered too.
-//
-// THE RENDERER IS MADE LAZILY, on the first render: the windoid boots
-// hidden, and a GL context (a second one on the page, SwiftShader in a
-// headless capture) is nothing to pay for at boot on a strip that may never
-// be shown. The subject is held here meanwhile and handed over at creation.
-// ---------------------------------------------------------------------------
+// While the windoid is hidden (prefs.showRing false) a change only marks the
+// sheet dirty, and showing it renders at once. While shown, renders are
+// coalesced to one per animation frame. renderSheet() renders immediately in
+// either case, for export. The renderer and its GL context are created on the
+// first render.
 
 import { prefs } from '../state/prefs.js';
 import { ring } from '../state/ring.js';
 
 /**
  * @param {() => ReturnType<typeof import('./ring-renderer.js').createRingRenderer>} createRenderer
- *   the renderer factory (scene/ring-renderer.js createRingRenderer),
  *   called once, on the first render
  */
 export function initRing(createRenderer) {
@@ -52,29 +37,27 @@ export function initRing(createRenderer) {
   };
   const schedule = () => {
     dirty = true;
-    if (!prefs.get().showRing) return; // hidden: remember, don't render
+    if (!prefs.get().showRing) return; // hidden: stay dirty
     if (!raf) raf = requestAnimationFrame(flush);
   };
 
   const unsubs = [
-    // Any setting change re-renders (shown) or dirties (hidden).
     ring.subscribe(schedule),
-    // A show with a dirty sheet renders at once.
+    // Showing the windoid renders a dirty sheet.
     prefs.subscribe((p) => {
       if (p.showRing && dirty && !raf) raf = requestAnimationFrame(flush);
     }),
   ];
 
   return {
-    /** The rebuilder's onMesh: a new mesh (the renderer takes a
-     *  shared-geometry clone) or null (the old one is about to be disposed). */
+    /** onMesh target: a new mesh, or null before the old one is disposed. */
     setSubject(sub) {
       subject = sub;
       renderer?.setSubject(sub);
       schedule();
     },
-    /** Export: render the strip now regardless of showRing, publish it, and
-     *  return the sheet canvas (null with no model). */
+    /** For export: renders and publishes the strip now, shown or not. Returns
+     *  the sheet canvas, or null with no model. */
     renderSheet() {
       if (raf) {
         cancelAnimationFrame(raf);

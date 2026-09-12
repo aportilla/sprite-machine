@@ -1,37 +1,25 @@
-// ---------------------------------------------------------------------------
-// Pure selectors over the doc slice — derivations components need but nobody
-// stores. Chiefly `editorViewModel`: everything the editor needs to show one
-// face (the old `showFace()` derivation, now Node-testable).
-// ---------------------------------------------------------------------------
+// Pure selectors over the doc slice.
 
 import { VIEW_OPPOSITE, MIRROR_AXIS, flip } from 'sprite-machine';
 import { edgeHintFrame } from '../lib/edges.js';
 
-// Mirror a tile for display (an axis-flip in image space), so a mirror-derived
-// face shows the way we actually render it. A thin wrapper over the pipeline's
-// `flip` blit so there is one mirror implementation. (In practice MIRROR_AXIS
-// is always 'x'.)
+// Mirror a tile for display, the way a mirror-derived face renders.
 /** @param {{width:number,height:number,data:ArrayLike<number>}} img  @param {'x'|'y'} axis */
 export function mirrorImage(img, axis) {
   return flip(img, axis === 'x', axis === 'y');
 }
 
 /**
- * The editor's per-face view model:
- *   - `tile`: the face's own art BY REFERENCE (identity tells the canvas not to
- *     reset its working buffer), or a fresh transparent tile when the face has
- *     none of its own.
- *   - `wasDerived`: the face had no independent art — it opens with an empty
- *     canvas and stays derived unless the user actually changes a pixel.
- *   - `mirrorBehind`: the opposite face's OWN art, mirrored, for the faded
- *     onion-skin — null when the opposite has no independent art (a derived
- *     opposite is just this face's own mirror; it would overlay identically).
- *   - `edgeHints`: the EDGE HINT frame (lib/edges.js) — the four neighbouring
- *     faces' seam lines, one texel deep around the tile, which the canvas
- *     draws just outside its own edges. A stroke on this face can never move
- *     one: its four neighbours are the four faces other than it and its
- *     opposite, and that set is closed under VIEW_OPPOSITE — so this rides the
- *     same memo as the onion-skin and recomputes only on a structural change.
+ * The editor's view model for one face:
+ *   - `tile`: the face's own art by reference, or a fresh transparent tile.
+ *     The canvas resets its working buffer only when the identity changes.
+ *   - `wasDerived`: the face has no art of its own. It stays derived until a
+ *     pixel changes.
+ *   - `mirrorBehind`: the opposite face's own art, mirrored, for the onion
+ *     skin. Null when the opposite face has none.
+ *   - `edgeHints`: the four neighbouring faces' edge texels, one texel deep
+ *     around the tile (lib/edges.js). A stroke on this face cannot change
+ *     them, so they recompute only on a structural change.
  *
  * @param {{views: Record<string, {width:number,height:number,data:Uint8ClampedArray}|null>,
  *          tileW: number, tileH: number}} docState

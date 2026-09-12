@@ -1,28 +1,18 @@
-// ---------------------------------------------------------------------------
-// A PNG ENCODER from bytes — 8-bit RGBA, non-interlaced, every row filter 0,
-// the pixel stream in a zlib container of STORED deflate blocks (no
-// compression) — so an image the app already holds as bytes becomes a file
-// without a canvas. File → Export 3D Model… embeds the skin texture this
-// way: a privacy browser's canvas farble (the readback perturbation that
-// once tripped the wedge gate) never sees it, and the file's texels are the
-// skin's, verbatim. Pure, zero deps, Node-tested against node:zlib's own
-// inflate. (The document PNGs still go through the canvas codec in
-// image-io.js — a document is the canvas's pixels; this is for bytes.)
+// PNG encoder from bytes: 8-bit RGBA, non-interlaced, filter 0 on every row,
+// the pixel stream in stored (uncompressed) deflate blocks. It encodes the
+// skin for glb export without a canvas, because privacy browsers perturb
+// canvas readback.
 //
-// Stored blocks cost nothing but size: a skin is a few kilobytes (64 × 64 ×
-// 4 is sixteen), and the glb it lands in is not a network asset. The zlib
-// framing: the two-byte header (CMF 0x78, FLG 0x01 — deflate, a 32K window,
-// no dictionary, "fastest" flagged; the pair's check passes), then up to
-// 65535 bytes per block behind a five-byte block header (BFINAL on the
-// last, BTYPE 00, LEN, then NLEN its one's complement), then the Adler-32
-// of the raw stream, big-endian.
-// ---------------------------------------------------------------------------
+// zlib framing: the header CMF 0x78, FLG 0x01 (a pair that passes the header
+// check), then blocks of up to 65535 bytes, each behind a 5-byte header
+// (BFINAL, BTYPE 00, LEN, NLEN = ~LEN), then the Adler-32 of the raw stream,
+// big-endian.
 
 import { PNG_SIGNATURE, buildChunk } from './png-chunks.js';
 
 const BLOCK = 65535;
 
-/** Adler-32 of a byte string — the zlib trailer. @param {Uint8Array} bytes */
+/** Adler-32 checksum, the zlib trailer. @param {Uint8Array} bytes */
 export function adler32(bytes) {
   let a = 1;
   let b = 0;
@@ -56,7 +46,7 @@ export function zlibStored(raw) {
 }
 
 /**
- * Encode an RGBA image as a PNG file: row 0 the top row, four bytes a texel.
+ * Encode an RGBA image as a PNG file. Row 0 is the top row.
  * @param {{width:number, height:number, data:Uint8Array|Uint8ClampedArray}} img
  * @returns {Uint8Array}
  */
@@ -70,7 +60,7 @@ export function encodePng({ width, height, data }) {
   const stride = width * 4;
   const raw = new Uint8Array((stride + 1) * height);
   for (let y = 0; y < height; y++) {
-    raw[y * (stride + 1)] = 0; // the row's filter: none
+    raw[y * (stride + 1)] = 0; // filter type: none
     raw.set(data.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
   }
   const ihdr = new Uint8Array(13);
@@ -79,7 +69,7 @@ export function encodePng({ width, height, data }) {
   iv.setUint32(4, height);
   ihdr[8] = 8; // bit depth
   ihdr[9] = 6; // color type: RGBA
-  // compression 0, filter 0, interlace 0 — the zeros the array was born with
+  // compression, filter and interlace stay 0
   const parts = [
     PNG_SIGNATURE,
     buildChunk('IHDR', ihdr),

@@ -4,27 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sprite Machine — pixel sprites → 3D</title>
-    <!-- The startup screen, and the ground under it. These rules are INLINE
-         on purpose — they are the only styles the page has on its first
-         frame: src/style.css is imported by main.js (in dev it arrives with
-         the module, and in the build the sheet is a blocking <link> but the
-         vf-* / sm-* elements below are still undefined until that module
-         registers them, so the markup's text would lay out as plain prose
-         for as long as the JS takes). So the document states its own black
-         screen and the boot lifts it once the desktop is composed —
-         src/boot/curtain.js, which is the other half of this. One below the
-         kit's page-drawn pointer (2147483647): the curtain is the screen,
-         and the kit still owns the topmost layer. -->
+    <!-- Inline so the startup curtain paints on the first frame, before main.js
+         loads style.css and defines the custom elements. Its z-index is one
+         below the kit's page-drawn pointer (2147483647). -->
     <style>
       html,
       body {
         height: 100%;
         margin: 0;
-        /* The desktop is the viewport; a space-consuming scrollbar would
-           shrink the fitWithin measurement it derives the raster from. */
+        /* A scrollbar would shrink the viewport fitWithin measures. */
         overflow: hidden;
-        /* The ground behind the desktop bezel: the sub-system-pixel slack
-           fitWithin leaves stays invisible against black. */
+        /* Hides the slack fitWithin leaves around the raster. */
         background: #000;
       }
       #curtain {
@@ -36,115 +26,42 @@
     </style>
   </head>
   <body>
-    <!-- The black screen the page boots behind (the <style> above), removed
-         by the boot the moment the desktop is composed. -->
+    <!-- Startup curtain, removed by src/boot/curtain.js. -->
     <div id="curtain"></div>
 
-    <!-- The System 7 virtual desktop. The raster's width/height are set by
-         main.js: the page measures the viewport and fitWithin() derives the
-         largest whole raster on resize and scale changes; the black page body
-         shows behind the bezel. Windows MUST be direct children of the
-         desktop (its stacking manager only sees direct vf-window children).
-         Everything aesthetic is the kit's; this markup is layout only. -->
-    <!-- Deactivation is the PAGE's decision (the kit's position: only the
-         page knows which presses mean "the Finder"): shell/windows.js routes
-         a press on the desktop's own dither — and the Finder's icon layer
-         (apps/finder/icons.js) a press in the icon field — through
-         desktop.clearActive(), which clears the document tier. Reactivation
-         is any press into a document window. -->
+    <!-- main.js sets the raster size with fitWithin(). Windows must be direct
+         children of vf-desktop: its stacking manager only sees direct
+         vf-window children. A press on the desktop (shell/windows.js) or the
+         icon field (apps/finder/icons.js) calls desktop.clearActive(). -->
     <vf-desktop id="desktop" bezel="10">
-      <!-- ============================== Menu bar ======================== -->
-      <!-- ONE bar, the FRONT APPLICATION's (docs/apps-plan.md): System 7's
-           menu bar belonged to whichever application was front, the Apple
-           menu at its left in every one. Here the bar holds the Sprite
-           Machine menu — the Apple menu's seat and role, authored below and
-           live in every application — and, between it and the clock, the
-           front application's menus and no other's: the Finder's File /
-           Edit / View / Special, the Sprite Editor's File / Edit / Tools /
-           View, the Text Viewer's File / Edit / View, Desktop Patterns'
-           File / View. Those are NOT here: each application authors its
-           menus as a fragment in its own directory
-           (src/apps/<id>/menus.html), and shell/menu-bar.js parses them
-           once and slots the front application's in — the outgoing
-           application's lifted out, the incoming one's inserted — on every
-           change of shell.frontApp: a document window active is the Sprite
-           Editor, a text window the Text Viewer, the control panel Desktop
-           Patterns, a folder window or nothing the Finder. A
-           detached menu's items claim no key (the kit's contract), so the
-           Sprite Editor's ⌘S does nothing in the Finder with no `disabled`
-           written anywhere. `shortcuts` grants every slotted item's
-           `shortcut` attribute its live app-wide key equivalent (Ctrl
-           stands in for ⌘ off-Mac). The two System 7 staples ⌘N/⌘W stay
-           unassigned on purpose: the browser owns them before the page
-           ever sees them. New and Close answer ⌃N and ⌃W instead, the
-           Control key alone (see the fragments). -->
+      <!-- Menu bar. shell/menu-bar.js inserts the front application's menus
+           (src/apps/<id>/menus.html) after the Sprite Machine menu and removes
+           the previous application's. A detached menu has no shortcuts.
+           `shortcuts` turns each item's shortcut attribute into a key
+           equivalent (Ctrl for ⌘ off-Mac). -->
       <vf-menu-bar shortcuts>
-        <!-- The Sprite Machine menu (shell/menu-bar.js): the machine's
-             things rather than an application's — About… (also the boot
-             greeting) and the control panel — in every application. Its
-             title is the text for now; the kit's `label` slot takes a
-             16×16 glyph the day one is drawn, the Apple menu's picture,
-             with this attribute kept as the accessible name. -->
+        <!-- The Sprite Machine menu, present in every application. -->
         <vf-menu id="menu-app" label="Sprite Machine">
           <vf-menu-item value="about">About Sprite Machine…</vf-menu-item>
           <vf-separator></vf-separator>
-          <!-- The Desktop Patterns control panel (apps/desktop-patterns — its
-               window, opened through the registry): a window, not a dialog,
-               so no ellipsis — the Apple menu's
-               Control Panels listed it bare. Opened from here in every
-               application, like About; the panel is an application of its
-               own (src/apps/desktop-patterns — a desk accessory's seat),
-               so opening it brings Desktop Patterns forward and its File /
-               View onto the bar. (Empty Trash… sat here from Sep 9 to Sep 11 2026,
-               while the bar was every role's; it is the Finder's Special
-               menu's now — src/apps/finder/menus.html.) -->
+          <!-- Opens the Desktop Patterns application. No ellipsis: it opens a
+               window, not a dialog. -->
           <vf-menu-item value="desktop-patterns">Desktop Patterns</vf-menu-item>
         </vf-menu>
-        <!-- The front application's menus land here, before the clock. -->
-        <!-- The menu bar clock (System 7.5's Date & Time clock): a kit
-             vf-label at the bar's right end. The bar's slot is unfiltered
-             and its row is flex, so style.css's margin-inline-start: auto
-             lands it there, clear of the menu coordination (the bar
-             hit-tests titles by coordinate and ignores the rest), and the
-             swap inserts the menus before it, so it holds the right end
-             through every change of application. Boots empty — the text
-             and the press-to-date flip are shell/clock.js's, so markup
-             never carries a stale time. -->
+        <!-- The front application's menus are inserted here. -->
+        <!-- Menu bar clock. style.css puts it at the bar's right end;
+             shell/clock.js writes the time. -->
         <vf-label id="clock"></vf-label>
       </vf-menu-bar>
 
-      <!-- The options strip: the current-ink swatch (every tool but the
-           eraser) and the tool's options — no tool-name caption, the Tools
-           palette and the Tools menu already name the live tool — a fixed
-           full-width band under the menu bar (persistent in-flow controls,
-           not a window), drawn as a kit vf-container band (white paper over
-           a bottom rule — the menu bar's anatomy, no shadow) so its edge
-           scales with the raster. Like the utility windoids it belongs to the
-           Sprite Editor: the whole band hides while another application is
-           front (the component gates on shell.appActive) and returns with
-           it. It stays in this skeleton — an in-flow band of the desktop,
-           not a window (every window is its application's: src/apps/<id>/
-           windows.html); its height is shell/layout.js's TOP_RESERVE. -->
+      <!-- Sprite Editor options strip: the ink swatch and the current tool's
+           options, in a band under the menu bar. It hides while another
+           application is front. Its height is shell/layout.js TOP_RESERVE. -->
       <sm-options-bar></sm-options-bar>
 
-      <!-- ======================= Desktop file icons ===================== -->
-      <!-- The desktop's field of icons — the kit's own container for them
-           (vintage-frames 0.7.0: the listbox owner, so a selection is
-           announceable; the Finder's rubber band on a press-drag across its
-           background; `size` for a small-icon view one day). FILLED, not
-           placed: the field stays static, so its icons keep anchoring to
-           the desktop's raster and a saved position means what it meant
-           (a placed field would move the origin under the menu bar); filled
-           it has a surface to press, which is what the band needs. It sits
-           after the options strip and before the dialogs — every window is
-           out of flow (the applications append theirs), the dialogs in the
-           top layer — so its box is the raster
-           below the menu bar and the options strip, clipped by the screen.
-           The Finder's icon layer (apps/finder/icons.js) renders one icon
-           per saved document and per folder whose container is the desktop
-           into it (the open folder windows' fields hold the rest); a press
-           anywhere in it is a press on the Finder (icons.js routes it
-           through clearActive()). -->
+      <!-- Desktop icon field. Filled, not placed, so icon positions stay relative
+           to the desktop raster and the rubber band has a surface to press.
+           apps/finder/icons.js renders the desktop's icons into it. -->
       <vf-icon-field
         id="desktop-icons"
         label="Desktop"
@@ -152,52 +69,13 @@
         fill-height
       ></vf-icon-field>
 
-      <!-- ============================ Dialogs =========================== -->
-      <!-- The About box: the classic launch splash, and Sprite Machine →
-           About… — one dialog, and the BOOT GREETING (main.js parks a load
-           with no document to open on it; OK, Escape, or a click anywhere
-           OUTSIDE the box leaves the bare desktop). The click-away is the
-           kit's own `light-dismiss` (vintage-frames 0.5.3), opted into on
-           this one dialog: a splash dismisses on a click away, while System
-           7's modal boxes refused an outside click — and the question
-           dialogs below still do (a stray click must never answer "Save
-           changes?"). The kit consumes the click, so nothing beneath
-           reacts: an icon under the pointer neither selects nor opens, and
-           a Finder selection survives (the Finder's chrome-press bridge,
-           apps/finder/icons.js, already covers a press on any vf-dialog).
-           The plain dBoxProc
-           frame (no bar, no close box —
-           `label` names it for assistive tech), the application's 32×32 icon
-           (src/assets/sprite-machine-icon.png, shown through vf-img at 1:1 —
-           a plain <img src> Vite resolves: served as-is in dev, inlined as a
-           data URI at build, being under its asset inline limit) beside the
-           name / version /
-           date / author block (the name in the display face — Chicago for
-           the title alone — the two lines under it and the two-paragraph
-           blurb in the body face, Geneva for the reading) — its "Vintage
-           Frames" a real link to the kit's npm page, opened in a NEW tab so
-           the app (and any unsaved document) stays put; the arrow stays the
-           arrow over it, System 7 having no pointing hand (style.css inks
-           it) — and OK bottom right. The version and date lines are BUILD
-           facts, so the markup boots them empty and shell/menu-bar.js fills
-           them (package.json's version, HEAD's commit date — vite.config.js
-           `define`); the markup never carries a stale number. The dialog's
-           anatomy (vintage-frames 0.8.0): the body is the frame's inner
-           edge — 5px inside every edge of the plain frame, no inset of its
-           own — and the placement anchor, so the copy is a stack placed 16
-           in from its corner (the DITL's inset, the content's to state) and
-           the buttons are a group placed by its bottom-right corner
-           (`origin`) 16 in from the body's. Arithmetic: 464 wide is a 454
-           body, the group's corner at 438; 198 high is a 188 body, the
-           corner at 172 — 16 + [40 header (a 16px display line over two
-           12px body lines, beside the 32px icon) + 8 + two 2-line paragraphs
-           at 12px body lines with 16 between (64)] + 16 + the ringed 28px
-           default button + 16. The greeting's switch — Show at startup —
-           shares the button row at the left, its box centered on OK's 20px
-           face (the ring's 4px inside 172 puts the face at 148–168, so
-           158), and it binds LIVE, never on OK: the splash is light-dismiss,
-           and a click-away must not discard an uncheck (shell/menu-bar.js;
-           the flag is the desktop state's `greet`). -->
+      <!-- Dialogs. The body is width − 10 by height − 25 (height − 10 for
+           frame="plain"). Content sits 16 in from the body's top-left, and a
+           button group's origin corner 16 in from the matching body corner. -->
+      <!-- About box, also the boot greeting (main.js). shell/menu-bar.js fills
+           the version and date. Show at startup saves on change, not on OK, so
+           a light-dismiss click keeps it. Its top of 158 centers it on OK's
+           face. -->
       <vf-dialog
         id="dlg-about"
         frame="plain"
@@ -244,33 +122,7 @@
         </vf-button-group>
       </vf-dialog>
 
-      <!-- The New dialog (File → New…): classic Photoshop's New box — the
-           Name field across the top, a group box of what the document is
-           made of under it, OK over Cancel as a vertical group at the
-           right (the Save As box's corner: placed by its own top-right
-           corner, `origin`, 16 in from the body's, so it stays flush
-           however wide its labels measure). The name
-           seeds with the next untitled name and follows the template popup
-           until typed in (apps/sprite-editor — the Finder's New… raises the
-           same box through it), so a copy of the Car still opens
-           as "Car"; the document opens UNSAVED under whatever it says, and
-           its first Save prompts with it. OK is greyed while the name is
-           blank, the Save As prompt's rule; Return anywhere is OK by the
-           dialog grammar. The group: the template popup (Empty Document +
-           the built-ins, options built once from SAMPLES) over the square
-           tile size, live for Empty Document only — a template's art has a
-           native tile size, and a retile crops/pads rather than scales, so
-           a template shows its own size disabled. No atlas readout: the
-           tile edge is the one number. Each row is a plain row stack, its
-           caption centred on the control by the stack's row default. The
-           body (the frame's inner edge, 20 below the top under the bar and
-           5 inside the other edges — no inset of its own) is the anchor:
-           the form is placed 16 in from its corner. Arithmetic, for the
-           eye: 184 high is a 159 body — 16 + [the 22 name row + 12 + the
-           group: 8 legend room + 1 + 14 + an 18 popup row + 12 + a 25 field
-           row + 10 + 1 = 89] + slack; 436 wide is a 426 body — 16 + 288
-           (an 80 caption, 8, a 200 field) + the button column's room, its
-           corner at 410 (16 in). -->
+      <!-- New dialog (File → New…), wired in apps/sprite-editor. -->
       <vf-dialog id="dlg-new" heading="New" width="436" height="184">
         <vf-stack gap="12" left="16" top="16">
           <vf-stack direction="row" gap="8">
@@ -307,19 +159,8 @@
         </vf-button-group>
       </vf-dialog>
 
-      <!-- One name-prompt dialog, two uses (first save / rename): the
-           name-and-buttons corner of the classic Save As box (MacPaint's —
-           no volume list, no format radios), on the same plain dBoxProc
-           frame as the Save-changes box: the caption over the field at the
-           left, Save (the default) over Cancel as a vertical group at the
-           right — placed by its own top-right corner (`origin`) 16 in from
-           the body's, whatever the button's word measures; Save stays
-           DISABLED until the field holds a name (apps/sprite-editor keeps it in
-           step with the text, and swaps the caption, the accessible label
-           and the default button's text per use). Escape reads as Cancel;
-           no bar, no close box. Placed from the body's corner (the frame's
-           inner edge, 5 in), the DITL's 16 inset stated on each item: 340
-           wide is a 330 body, the group's corner at 314. -->
+      <!-- Name prompt for first save and rename. apps/sprite-editor sets the
+           caption, label and button text per use. -->
       <vf-dialog id="dlg-name" frame="plain" label="Save" width="340" height="96">
         <vf-label id="name-caption" for="name-field" left="16" top="16"
           >Save document as:</vf-label
@@ -343,18 +184,8 @@
         </vf-button-group>
       </vf-dialog>
 
-      <!-- The Tile Size dialog (Edit → Tile Size…): one field over Cancel /
-           OK, the Colors dialog's pending model — the field is seeded from
-           the active document at show and READ AT OK (apps/sprite-editor), so
-           a step or a typed value moves nothing behind the modal; Return is
-           OK by the kit's dialog grammar, Escape reads as Cancel. The
-           retired Properties… retiled live on every change. The form is
-           placed 16 in from the body's corner and the buttons are a group
-           placed by its bottom-right corner (`origin`) 16 in from the
-           body's — the footer every form dialog here shares. Arithmetic:
-           130 high is a 105 body (20 under the bar, 5 above the bottom),
-           the corner at 89 — 16 + one 25px row + slack + the ringed 28px
-           group + 16; 340 wide is a 330 body, the corner at 314. -->
+      <!-- Tile Size dialog (Edit → Tile Size…). apps/sprite-editor applies the
+           field on OK only. -->
       <vf-dialog id="dlg-tile" heading="Tile Size" width="340" height="130">
         <vf-stack width="292" gap="12" left="16" top="16">
           <vf-stack fill-width direction="row" gap="8" place="start">
@@ -370,17 +201,8 @@
         </vf-button-group>
       </vf-dialog>
 
-      <!-- The unsaved-changes alert: the classic "Save changes before
-           closing?" modal dialog box, laid out from a System 7 capture the
-           way a DITL stated its items — the kit's own reference composition
-           (vintage-frames index.html, ex-dialog-save): the plain dBoxProc
-           frame (no bar, immovable, no close box — a choice is required;
-           Escape reads as Cancel), the question wrapping across the top,
-           Yes (the default) over No as a vertical button group at the left,
-           Cancel alone at the bottom right. Every item placed by top/left
-           from the body's corner — the frame's inner edge, 5 in, since
-           vintage-frames 0.8.0 (the numbers are the kit's own, traced from
-           the capture); the ids are the wiring (apps/sprite-editor). -->
+      <!-- Unsaved-changes alert, wired in apps/sprite-editor. Its positions are
+           the kit's reference layout (vintage-frames ex-dialog-save). -->
       <vf-dialog
         id="dlg-unsaved"
         frame="plain"
@@ -402,23 +224,7 @@
         <vf-button id="btn-unsaved-cancel" left="202" top="101">Cancel</vf-button>
       </vf-dialog>
 
-      <!-- The Empty Trash alert (apps/finder, its Special menu): the Finder's — "The Trash
-           contains N items, which use XK of disk space. Are you sure you
-           want to permanently remove these items?" — in the unsaved box's
-           anatomy: the plain dBoxProc frame, the question in the display
-           face across the top (written at show: the count of everything
-           in the Trash, folders' contents included, and the K the trashed
-           documents' bytes use), Cancel and OK at the bottom right, OK the
-           default (Return; Escape reads as Cancel). No caution icon yet:
-           the kit ships no alert, its recipe is a row stack with a 32×32
-           vf-img at the left, and the unsaved box carries none either —
-           the day the user draws one, both take it. The question is placed
-           from the body's corner at the unsaved box's inset; the buttons
-           are one group (equal widths, faces on a line) placed by its
-           bottom-right corner (`origin`) 16 in from the body's — 360 wide
-           is a 350 body, the corner at 334; 150 high a 140 body, the
-           corner at 124 — so however the words measure, nothing runs
-           under the frame. -->
+      <!-- Empty Trash alert (apps/finder). The message is written at show. -->
       <vf-dialog
         id="dlg-empty-trash"
         frame="plain"
@@ -439,17 +245,8 @@
         </vf-button-group>
       </vf-dialog>
 
-      <!-- The paste alert (apps/finder, docs/clipboard-plan.md §2.5): a
-           picture pasted from outside that is NOT a sprite sheet — a 3×2
-           atlas of square tiles, 1–64 px a tile — raises this and nothing
-           lands. The Empty Trash box's anatomy: the plain dBoxProc frame,
-           the message in the display face across the top (written at show:
-           the rule and the picture's own dimensions; an image that will not
-           decode gets the first sentence alone), one OK group placed by its
-           bottom-right corner 16 in from the body's, OK the default (Return;
-           Escape reads the same — one button). No caution icon yet, with the
-           Empty Trash box (the trash plan's open item). 360 wide is a 350
-           body, the corner at 334; 150 high a 140 body, the corner at 124. -->
+      <!-- Paste alert (apps/finder) for a pasted image that is not a valid sprite
+           sheet. The message is written at show. -->
       <vf-dialog id="dlg-paste" frame="plain" label="Paste" width="360" height="150">
         <vf-paragraph
           face="display"
@@ -463,9 +260,6 @@
         </vf-button-group>
       </vf-dialog>
 
-      <!-- The copy placed 16 in from the body's corner, OK a group placed by
-           its bottom-right corner 16 in from the body's: 380 wide is a 370
-           body, the corner at 354; 170 high a 145 body, the corner at 129. -->
       <vf-dialog
         id="dlg-storage"
         heading="Storage Unavailable"
@@ -485,25 +279,7 @@
         </vf-button-group>
       </vf-dialog>
 
-      <!-- The export configurators. Unlike Download (the document .png
-           verbatim — the source), both DERIVE artifacts from the built
-           model. Export 3D Model…: the model as ONE glTF 2.0 binary,
-           «slug».glb (lib/gltf.js, the app's own writer), its skin texture
-           embedded from bytes with NEAREST samplers — a scale field
-           (voxels per meter: glTF is in meters, and ten a meter makes the
-           forty-voxel Car four meters long), a lighting popup (lit — the 3D
-           View's flat-shaded metallic-roughness material — or unlit, the
-           KHR_materials_unlit extension: the paint exact under no light),
-           and two readouts, the model (its triangles and skin) and its
-           extent in meters at the scale typed, live. The fields are the
-           dialog's own for the session (ten and lit every load); Export is
-           enabled whenever a model exists, like the atlas's. The form is
-           placed 16 in from the body's corner, the buttons a group placed
-           by its bottom-right corner (`origin`) 16 in from the body's: 360
-           wide is a 350 body, the corner at 334; 220 high is a 195 body
-           (20 under the bar, 5 above the bottom), the corner at 179 — the
-           rows from 16 down, the ringed 28px group up from there, for the
-           eye. -->
+      <!-- Export 3D Model dialog (a .glb). Unlit uses KHR_materials_unlit. -->
       <vf-dialog id="dlg-export-model" heading="Export 3D Model" width="360" height="220">
         <vf-stack width="312" gap="12" left="16" top="16">
           <vf-stack fill-width direction="row" gap="8" place="start">
@@ -555,25 +331,8 @@
         </vf-button-group>
       </vf-dialog>
 
-      <!-- Export Sprite Atlas: the 3D Sprite Atlas windoid's settings as a
-           form — the view count (any n is a 360/n step; the readout beside
-           it says the step), the camera's elevation, the first view's
-           offset angle, and the tile size (the frame's edge in px, the
-           model's envelope fit to it) — over a readout of the sheet the
-           settings produce. The fields are bound LIVE
-           to the ring slice (apps/sprite-editor): a change here moves the
-           windoid's strip behind the modal at once, and Cancel doesn't
-           revert — the settings are non-destructive and the strip IS the
-           preview (not the Colors dialog's pending model). Export saves
-           exactly the pixels the strip shows (the same rendered sheet) as
-           «slug»-atlas.zip — the sheet PNG with a sprite-machine:ring text
-           chunk beside its TexturePacker JSON; it's enabled whenever a
-           model exists. The form is placed 16 in from the body's corner
-           (the kit's stepper-tall number field sets the row pitch; the
-           readout row matches), the buttons a group placed by its
-           bottom-right corner (`origin`) 16 in from the body's: 360 wide
-           is a 350 body, the corner at 334; 266 high is a 241 body, the
-           corner at 225. -->
+      <!-- Export Sprite Atlas dialog. The fields bind live to the ring slice
+           (apps/sprite-editor), so Cancel does not revert them. -->
       <vf-dialog
         id="dlg-export-atlas"
         heading="Export Sprite Atlas"
@@ -644,11 +403,9 @@
         </vf-button-group>
       </vf-dialog>
 
-      <!-- The Colors dialog (the 168-color picker): connected chrome driven by
-           session.pickerOpen, rendered into its LIGHT DOM on purpose — the
-           kit's page-drawn cursor stays above a modal only when it can observe
-           the vf-dialog's `open` attribute flip, and its observer sees the
-           light DOM alone (a shadow-rooted dialog opens above the cursor). -->
+      <!-- Colors dialog, rendered into light DOM: the kit's page-drawn cursor
+           stays above a modal only if it observes the vf-dialog's open
+           attribute, and its observer only sees light DOM. -->
       <sm-color-picker></sm-color-picker>
     </vf-desktop>
 

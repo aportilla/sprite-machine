@@ -1,12 +1,3 @@
-// The low-poly wedge mesh (THREE is loaded here, unlike pipeline.test.mjs):
-// the welded surface is watertight with and without wedges; the wedge gate is
-// STRICT (riser and tread the same material, nothing else consulted) and
-// robust to a ±1 canvas farble (the Helium bug: privacy browsers perturb
-// getImageData, and strict RGB equality dropped wedges only there); the shared
-// finish (finishVoxelMesh) centers X/Z and leaves Y exactly as authored; and
-// the mesh carries its skin — a uv per vertex, a one-material triangle at one
-// texel, a charted one across several, the texture on the material.
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -17,17 +8,12 @@ import { img, fill, oddEdges } from './helpers.mjs';
 const wedgeCount = (views) => wedgeMesh(buildVoxels(views)).userData.wedges;
 const EPS = 1e-4;
 
-// A coherent 45° ramp: a staircase of one material -> should produce wedges.
+// A 45° ramp of one material.
 const ramp = () => ({
   front: fill(4, 4, 'T'),
   right: img(['...T', '..TT', '.TTT', 'TTTT']),
   top: fill(4, 4, 'T'),
 });
-
-// --- watertight welding -----------------------------------------------------
-// Guards the region merge + T-junction repair: a region's edge meeting a
-// slope's, or another plane's, to a different extent would leave boundary
-// edges without the repair.
 
 test('wedge mesh is watertight — solid cube (no wedges)', () => {
   const mesh = wedgeMesh(
@@ -45,13 +31,6 @@ test('wedge mesh is watertight — staircase (base faces + wedges)', () => {
   assert.ok(mesh.userData.wedges > 0, 'the ramp must produce wedges');
   assert.equal(oddEdges(mesh), 0, 'base faces + wedges must weld with no boundary edges');
 });
-
-// --- a slope is one quad ---------------------------------------------------------
-// The wedge cells of one 45° plane are emitted as one block, and the walls
-// beside it fold the gable caps in with one straight diagonal edge, so a
-// ramp's slope is two triangles at any width and any number of steps — the
-// whole mesh costs the same 1 wide and 4 wide, and a colour change along the
-// ridge splits the block into two that meet inside the surface, still welded.
 
 test('a slope is one quad: a ramp costs the same triangles 1 wide and 4 wide; a ridge colour seam still welds', () => {
   const tris = (m) => m.userData.triangles;
@@ -71,9 +50,8 @@ test('a slope is one quad: a ramp costs the same triangles 1 wide and 4 wide; a 
     tris(narrow),
     'the same triangles: the cells merged into one slope'
   );
-  // the closed ramp: a floor, a back, the toe riser, the top tread, the slope
-  // and two sides — the sides five-cornered (the diagonal one edge), the rest
-  // quads, every shared edge the same extent on both planes (no repair split)
+  // Floor, back, toe riser, top tread and slope are quads. The two sides are
+  // pentagons with the diagonal as one edge.
   assert.equal(tris(wide), 2 + 2 + 2 + 2 + 2 + 3 + 3);
   assert.equal(oddEdges(wide), 0);
 
@@ -89,17 +67,9 @@ test('a slope is one quad: a ramp costs the same triangles 1 wide and 4 wide; a 
   assert.equal(oddEdges(seam), 0, 'two colours of slope abut with no boundary edges');
 });
 
-// --- a boundary that touches itself ----------------------------------------------
-// The region tracer hands earcut a self-touching ring where a plane's
-// boundary meets itself at a corner: a bay open to the outside through a
-// corner rides the outer loop twice, two holes meeting at a corner ride one
-// hole loop twice. Both must triangulate to the region's full area (the
-// mesher asserts it) and weld watertight.
-
 test('a self-touching boundary triangulates whole and welds: a bay open at a corner, two holes meeting at one', () => {
-  // a one-deep slab: the front's mask is the plate. The corner notch's riser
-  // (the right view's tan) and tread (the top's teal) differ, so no wedge
-  // fills it and the corner stays a pinch.
+  // A one-deep slab. The corner notch's riser (N) and tread (T) differ, so no
+  // wedge fills it.
   const bay = wedgeMesh(
     buildVoxels({
       front: img(['MMM', 'M.M', '.MM']),
@@ -124,10 +94,8 @@ test('a self-touching boundary triangulates whole and welds: a bay open at a cor
   assert.equal(oddEdges(holes), 0);
 });
 
-// --- the farble ---------------------------------------------------------------
-
-// Deterministic per-pixel ±1 RGB perturbation on every opaque pixel — the exact
-// shape of Helium's farble (measured: max channel delta = 1, ~25% of pixels).
+// A deterministic ±1 RGB perturbation of opaque pixels, like the canvas
+// farbling privacy browsers such as Helium apply to getImageData.
 function farble(views) {
   const clamp = (v) => Math.max(0, Math.min(255, v));
   for (const v of Object.values(views)) {
@@ -152,9 +120,8 @@ test('wedge gate is invariant under ±1 source RGB farble', () => {
 });
 
 test('a real material seam still gates wedges (tolerance is not too loose)', () => {
-  // Same ramp, but the facing (front) view carries a red/blue seam mid-height.
-  // Distinct materials are ~180 apart, far above the ~12 tolerance, so the seam
-  // must gate strictly more wedges than the all-one-material ramp.
+  // The ramp with a red/blue seam on the front view. The two colors are ~180
+  // apart, far above the ~12 tolerance.
   const seam = () => ({
     front: img(['RRRR', 'RRRR', 'BBBB', 'BBBB']),
     right: img(['...T', '..TT', '.TTT', 'TTTT']),
@@ -166,21 +133,14 @@ test('a real material seam still gates wedges (tolerance is not too loose)', () 
   );
 });
 
-// --- the strict gate ------------------------------------------------------------
-// A wedge fires iff the two faces it covers — the riser and the tread — are the
-// same material. It consults nothing else (no profile/facing view, no
-// elevation). These two staircases prove both directions of that contract,
-// which hands the sprite author exact control over which corners round.
+// A wedge fires iff the riser and tread it covers are the same material. The gate
+// reads nothing else.
 
-// (1) All step faces one material (white), with a stray pink band elsewhere in
-// the FRONT elevation. Every step's riser AND tread are white, so all 9 notch
-// cells wedge regardless of where the band sits — the projection is irrelevant
-// because only the covered faces are read. (An earlier heuristic that sampled the
-// facing-view elevation dropped a step at each band edge: white-cap 6/9, band 3/9.)
+// Every riser and tread is white. A pink band elsewhere on the front does not
+// change the count.
 const WP = { '#': [255, 255, 255], O: [233, 23, 241] }; // white body + pink band
 const stair = (frontRows, topRows) => ({
-  // Side profile in LEFT (its projection matches the z-order the topRows below
-  // were authored against); all-white step profile.
+  // The profile is the left view, whose projection matches the z order of topRows.
   left: img(['   ###', '  ####', ' #####', '######'], WP),
   front: img(frontRows, WP),
   top: img(topRows, WP),
@@ -208,14 +168,11 @@ test('monochrome staircase wedges every step regardless of an elevation colour b
 });
 
 test('strict gate: a corner whose riser and tread differ never wedges (author control)', () => {
-  // (2) A geometrically perfect ramp, but the TOP view paints the treads a
-  // different colour than the FRONT view paints the risers. The artist has said
-  // "these two faces are different materials", so every corner stays a crisp step
-  // — zero wedges — even though the identical geometry in one colour wedges freely.
+  // The ramp's geometry with treads and risers in different colors.
   const twoColour = () => ({
     front: fill(4, 4, 'T'), // risers -> teal
     right: img(['...T', '..TT', '.TTT', 'TTTT']),
-    top: fill(4, 4, 'R'), // treads -> red  =>  riser != tread at every step
+    top: fill(4, 4, 'R'), // treads -> red
   });
   assert.ok(wedgeCount(ramp()) > 0, 'the one-colour ramp must wedge');
   assert.equal(
@@ -225,9 +182,7 @@ test('strict gate: a corner whose riser and tread differ never wedges (author co
   );
 });
 
-// --- the shared finish: X/Z centered, Y as authored ------------------------------
-// finishVoxelMesh (mesh-util.js) translates X and Z to center the grid and Y by
-// a hard 0 — where the object sits vertically is wherever the artist painted it.
+// finishVoxelMesh (mesh-util.js) centers X and Z and leaves Y as authored.
 
 test('the mesh centers on X and Z (bbox center ~0)', () => {
   // A 4x4x4 cube at worldSize 2.5 spans [-1.25, 1.25] on the centered axes.
@@ -242,7 +197,7 @@ test('the mesh centers on X and Z (bbox center ~0)', () => {
   assert.ok(Math.abs((bb.min.z + bb.max.z) / 2) < EPS, 'Z center must be ~0');
   assert.ok(Math.abs(bb.min.x - -1.25) < EPS);
   assert.ok(Math.abs(bb.max.x - 1.25) < EPS);
-  // A cube cannot tell nx from nz; a 3x1x2 box holds the center on both axes.
+  // A cube can't tell nx from nz, so check a 3x1x2 box too.
   const box = buildVoxels(
     { front: fill(3, 1, 'T'), right: fill(2, 1, 'T'), top: fill(3, 2, 'T') },
     { mirror: { x: true, y: true, z: true } }
@@ -254,32 +209,26 @@ test('the mesh centers on X and Z (bbox center ~0)', () => {
 });
 
 test('the mesh leaves Y as authored — a floating object does not rest on y=0', () => {
-  // Paint only the TOP image row so the solid sits high in the tile and floats.
   const mesh = wedgeMesh(
     buildVoxels(
       {
         front: img(['MM', '..', '..']), // content only in the top row
-        right: fill(1, 3, 'N'), // full-height side so Y agrees (3 tall)
+        right: fill(1, 3, 'N'), // full height, so Y agrees
       },
       { mirror: { x: false, y: false, z: false } }
     )
   );
   const bb = mesh.geometry.boundingBox;
-  // The object occupies world y=2 in a 3-tall grid (s = 2.5/3): its base sits
-  // at 2s = 5/3, well above the ground plane, and its top at the full 2.5.
+  // The solid is at grid y=2 of 3 with s = 2.5/3. Base at 2s = 5/3, top at 2.5.
   assert.ok(bb.min.y > 1.5, `floating base must stay above y=0 (got ${bb.min.y})`);
   assert.ok(Math.abs(bb.min.y - 5 / 3) < EPS, 'base sits at world y = 2 * (2.5/3)');
   assert.ok(Math.abs(bb.max.y - 2.5) < EPS, 'top reaches the full world height');
 });
 
-// --- the skin on the mesh -------------------------------------------------------------
-// The color rides a texture (skin.js), not the vertices: every vertex has a uv
-// in [0,1]; a one-material triangle — a uniform rect's, a wedge's slope, a cap
-// — has its three at one texel (the swatch's center), and a rect that crosses
-// a color boundary has triangles that span texels (a chart).
+// Color comes from the skin texture (skin.js).
 
 test('the mesh carries its skin: uvs in [0,1]; one material samples one texel, a two-color wall a chart', () => {
-  // Each triangle's three uv pairs, off the welded, indexed geometry.
+  // Each triangle's three uv pairs from the indexed geometry.
   const triUVs = (geo) => {
     const uv = geo.attributes.uv;
     const idx = geo.index.array;
@@ -290,8 +239,7 @@ test('the mesh carries its skin: uvs in [0,1]; one material samples one texel, a
   };
   const oneTexel = (tri) => tri.every(([u, v]) => u === tri[0][0] && v === tri[0][1]);
 
-  // The ramp is one material end to end: every rect uniform, every wedge a
-  // swatch — so every triangle sits at one texel.
+  // The ramp is one material, so every triangle samples one texel.
   const mesh = wedgeMesh(buildVoxels(ramp()));
   const geo = mesh.geometry;
   assert.equal(geo.attributes.uv.count, geo.attributes.position.count, 'a uv per vertex');
@@ -304,8 +252,7 @@ test('the mesh carries its skin: uvs in [0,1]; one material samples one texel, a
     [mesh.userData.skin.width, mesh.userData.skin.height]
   );
 
-  // A wall painted in two colors merges to one +z rect on occupancy — a
-  // chart, whose triangles read across texels.
+  // A two-color wall merges to one charted +z rect.
   const wall = wedgeMesh(
     buildVoxels({
       front: img(['RRRR', 'RRRR', 'BBBB', 'BBBB']),

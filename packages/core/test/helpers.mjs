@@ -1,9 +1,7 @@
-// Shared stubs for the engine's Node suites: the sprite builders and the mesh
-// probes. Not a test: `node --test test/*.test.mjs` matches *.test.mjs alone,
-// so this module is only ever imported.
+// Sprite builders and mesh probes shared by the engine's tests.
 import { blitTile, DEFAULT_ATLAS_LAYOUT } from '../src/atlas.js';
 
-/** The sprite builders' palette: one letter per color; '.' or ' ' in a row is transparent. */
+/** Palette letters for the sprite builders. '.' or ' ' in a row is transparent. */
 export const C = {
   R: [220, 60, 60], // red
   B: [70, 90, 200], // blue
@@ -13,7 +11,7 @@ export const C = {
   N: [201, 184, 120], // tan
 };
 
-/** Rows of palette letters -> an ImageData-like {width, height, data}, every painted texel opaque. */
+/** An ImageData-like image from rows of palette letters. Painted texels are opaque. */
 export function img(rows, pal = C) {
   const h = rows.length;
   const w = rows[0].length;
@@ -36,7 +34,7 @@ export function img(rows, pal = C) {
 /** A w×h sprite of one palette letter. */
 export const fill = (w, h, ch) => img(Array.from({ length: h }, () => ch.repeat(w)));
 
-/** A 3×2 sheet of t×t tiles holding the views given by name (the rest transparent). */
+/** A 3×2 sheet of t×t tiles with the named views. Missing views are transparent. */
 export function sheet(t, tiles) {
   const out = {
     width: 3 * t,
@@ -51,7 +49,7 @@ export function sheet(t, tiles) {
   return out;
 }
 
-/** Count a THREE mesh's undirected edges used an ODD number of times — a closed (watertight) welded surface uses every edge an even number of times, so 0 means watertight. */
+/** Counts a mesh's undirected edges used an odd number of times. 0 means watertight. */
 export function oddEdges(mesh) {
   const geo = mesh.geometry;
   const pos = geo.attributes.position.array;
@@ -80,7 +78,7 @@ export function oddEdges(mesh) {
   return odd;
 }
 
-/** Whether any vertex of `tris` lies strictly interior to some triangle's edge — a T-junction. */
+/** Whether any vertex of tris lies strictly inside a triangle edge (a T-junction). */
 export function hasTJunction(tris) {
   const seen = new Set(),
     verts = [];

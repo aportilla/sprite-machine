@@ -1,19 +1,10 @@
-// ---------------------------------------------------------------------------
-// The 3D model export's SUBJECT: the rebuilder's current mesh, held through
-// the onMesh seam (main.js fans the seam out to the 3D Sprite Atlas's
-// follower and to this), and the glb made from it on demand (File → Export
-// 3D Model…, apps/sprite-editor). Nothing here runs the pipeline or renders,
-// and nothing here writes: the engine's `modelToGlb` does — the mesh's own
-// buffers ARE the export, the skin encoded from bytes and never through a
-// canvas — so this path and a headless build are one function.
+// 3D model export. Holds the rebuilder's current mesh (set through onMesh) and
+// encodes it as glb with the engine's modelToGlb for File → Export 3D Model….
 //
-// The scale: the stage's world units are DEFAULT_WORLD_SIZE over the
-// lattice's longest side (wedge-mesh.js), so a position over that unit is
-// voxels, and voxels over the dialog's voxels-per-meter is glTF's meters.
-// The origin needs no work — the mesh is centered on X and Z with Y as
-// authored, so it sits at the lattice floor's center, the atlas export's
-// anchor: a model and its sprite sheet share an origin.
-// ---------------------------------------------------------------------------
+// World units are DEFAULT_WORLD_SIZE over the lattice's longest side, so a
+// position divided by unitsPerVoxel is in voxels. The mesh is centered on X and
+// Z with Y as authored, so its origin is the lattice floor's center, the same
+// anchor as the sprite atlas export.
 
 import { DEFAULT_WORLD_SIZE, modelToGlb } from 'sprite-machine';
 
@@ -26,13 +17,13 @@ export function initModelExport() {
     DEFAULT_WORLD_SIZE / Math.max(dims.nx, dims.ny, dims.nz);
 
   return {
-    /** The rebuilder's onMesh: the new mesh, or null before the old one's dispose. */
+    /** onMesh target: the new mesh, or null before the old one is disposed. */
     setSubject(sub) {
       subject = /** @type {Subject|null} */ (sub);
     },
     /**
-     * The dialog's readout: the triangle count, the skin's size, and the
-     * model's extent — its bounding box, in voxels — or null with no model.
+     * The export dialog's readout: triangle count, skin size and bounding-box
+     * extent in voxels. Null with no model.
      * @returns {{triangles:number, skin:{width:number,height:number}|null, extent:number[]|null}|null}
      */
     stats() {
@@ -53,8 +44,8 @@ export function initModelExport() {
       };
     },
     /**
-     * The model as a glb: the mesh's buffers at the given scale, its skin
-     * embedded (or, with no map — flat mode — the material's color).
+     * The model as glb bytes. Embeds the skin texture, or the material color
+     * in flat mode.
      * @param {{name:string, voxelsPerMeter:number, unlit:boolean, generator:string}} opts
      * @returns {Uint8Array|null}  null with no model
      */

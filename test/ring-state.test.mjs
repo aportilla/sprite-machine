@@ -1,9 +1,3 @@
-// Node-runnable tests for the 3D Sprite Atlas's state: the per-document
-// settings store (state/ring-settings.js — every setter's range, the
-// paper's name gate, the document chunk's round-trip), the façade over the
-// active document's (state/ring.js — what it serves across activations,
-// where its setters land) with the sheet channel, and the export's metadata
-// chunks. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -30,8 +24,8 @@ import { fakeScheduler } from './helpers.mjs';
 const createRing = () => createRingSettings();
 
 test('the setters: an integer inside its range, clamped at either bound (the offset wrapped into [0, 360)); NaN a no-op; the paper a name or a no-op', () => {
-  // [setter, key, input, expected]: per setter an in-range value, then one
-  // case per bound — or, for the offset, either side of the wrap.
+  // [setter, key, input, expected]: an in-range value, then each bound. The
+  // offset wraps instead.
   const rows = [
     ['setViews', 'views', 7.6, 8],
     ['setViews', 'views', 0, 1],
@@ -106,8 +100,8 @@ test('the façade serves the active document’s settings: a switch notifies (on
   ws.setActive(a.key);
   ws.setActive(null);
   ws.setActive(a.key);
-  // a → (the size change on a) → b → a; the close of b (defaults → defaults)
-  // and the null ↔ a trips read the same, so they say nothing.
+  // Notified: a, setSize on a, b, a. Closing b and the switches through null
+  // serve equal settings, so they notify nothing.
   assert.deepEqual(seen, [6, 6, 4, 6], 'a switch to the same reading is silent');
   ring.dispose();
 });
@@ -135,16 +129,15 @@ test('the sheet channel: by reference, every listener, unsubscribe stops', () =>
 
 test('ringMetaChunks: Title, Software, and a JSON that round-trips — the paper never in it', () => {
   const settings = { views: 8, elevation: 30, offset: 45, size: 123 };
-  // The frame equals the size (kept for importers reading `frame`); the
-  // scale is the derived px per voxel, a float.
+  // frame equals size and is kept for importers that read it. scale is px per
+  // voxel.
   const geometry = {
     frame: 123,
     scale: 1.8014,
     anchor: { x: 61.5, y: 96.1 },
     yaws: [45, 90, 135],
   };
-  // The slice's whole snapshot goes in (the exporter passes ring.get()); the
-  // paper is a viewing choice and stays out of the file.
+  // The exporter passes the whole ring.get() snapshot, paper included.
   const chunks = ringMetaChunks('Car', { ...settings, paper: 'black' }, geometry);
   assert.deepEqual(Object.keys(chunks), ['Title', 'Software', RING_CHUNK_KEY]);
   assert.equal(chunks.Title, 'Car atlas');
@@ -160,8 +153,7 @@ test('ringMetaChunks: Title, Software, and a JSON that round-trips — the paper
 
 test('texturePackerJson: one untrimmed frame per yaw at its column with the anchor as a normalized pivot, the ring as one animation, and meta naming the sibling PNG plus the same record the chunk carries', () => {
   const settings = { views: 3, elevation: 30, offset: 45, size: 100, paper: 'gray' };
-  // The anchor is a projection, so its row is a long float; the pivot it
-  // becomes is rounded to four places, the record keeping it exact.
+  // The pivot rounds the anchor to four places. The record keeps it exact.
   const geometry = {
     frame: 100,
     scale: 1.25,

@@ -1,44 +1,9 @@
-<!-- The FINDER's window (docs/app-windows-plan.md §3.7) — the application's
-     WIND resource, its window's anatomy: a fragment windows.js beside this
-     file imports whole (?raw) and parses once at the application's init
-     (shell/windows.js parseWindows), cloning the template per open
-     (cloneWindow). The desktop's own icon field is no window: it stays in
-     the skeleton (index.html #desktop-icons). -->
-<!-- One clone per OPEN folder (windows.js), removed by its close box —
-     existence IS visibility. The Finder's window: a DOCUMENT-TIER window
-     (the striped bar, a close box), movable and resizable, its rails on
-     both edges (scrollbars="both" — the corner cell holds the grow box),
-     adopted by the window manager (shell/windows.js) with its placement, so
-     Arrange and a browser resize move it like every window; and, holding
-     the desktop's active state, it IS the Finder's turn — the Sprite Editor
-     deactivates (windoids and strip hide) while it is front. The header is
-     the Finder's item-count line over the Finder's DOUBLE RULE — black,
-     white, black — from two kit rules and no stylesheet: the count line is
-     a `vf-container fill-width height="18" pattern="white" rule="bottom"`
-     (the options strip's anatomy: 17 rows of white paper over one row of
-     ink, its own bottom rule — the divider's first line), holding one
-     body-face label placed at FOLDER_COUNT_AT against its corner (the
-     header's own: the container sits at the header's origin in flow) —
-     and, for the Trash's window and every trashed folder's, the Finder's
-     "in the Trash" mark ahead of it: a vf-img of the user's 12×12 trash
-     glyph, made and placed by windows.js (layout.js FOLDER_TRASH_MARK_AT)
-     with the count stepped right (FOLDER_COUNT_AT_TRASHED), present exactly
-     while the folder is trashed — nothing of it in this markup; under it
-     the header's white shows for one row, then the header's own rule,
-     which `header-height` counts: 18 + 1 + 1 = 20 = FOLDER_STRIP in
-     layout.js (the container's 18 is FOLDER_COUNT_LINE there), System 7's
-     header measured off the real Finder. `pattern="white"` because a BARE
-     vf-container paints the desktop pattern's ink (kit ask #6). The body is
-     one PLACED vf-icon-field at the plane's origin (top/left 0 — so the
-     window's placementAt() and the field's coordinates agree), its
-     width/height the folder's EXTENT (windows.js fit: the viewport at
-     least, grown to hold every icon), which IS the scroll range. The SIZE
-     is authored here, the one box the placement takes as input (the
-     shell's cascadedBox steps it from the desktop's WINDOW_ORIGIN): 320
-     wide — the plane (303 inside the borders and the vertical rail) holds
-     three lattice columns — and 223 tall: the borders (2), the 18px bar,
-     the header (20), two rows of 64px cells at the 72 pitch inside 16px
-     insets (168), the 15px rail. -->
+<!-- Finder folder window template. windows.js clones it per open folder. -->
+<!-- header-height and the count line's height match layout.js FOLDER_STRIP and
+     FOLDER_COUNT_LINE. pattern="white" works around a bare vf-container painting
+     the desktop pattern. The field sits at
+     top/left 0 so its coordinates match placementAt(). 320 × 223 fits three
+     lattice columns and two rows of icons. -->
 <template id="tpl-folder-window">
   <vf-window
     heading="untitled folder"

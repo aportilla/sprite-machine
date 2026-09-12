@@ -1,13 +1,10 @@
-// Node-runnable tests for the editor's fill-tool primitives (pure, no DOM):
-// the 4-connected flood, the global recolor, and the rect-scoped recolor.
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { floodFill, replaceColor, replaceColorInRect } from '../src/lib/fill.js';
 
-// Build a w×h RGBA buffer from a grid of single-char color codes. ' ' or '.' is
-// transparent; any other char maps to a distinct opaque color via CODES.
+// A w×h RGBA buffer from rows of color codes. ' ' and '.' are transparent,
+// other chars are looked up in CODES.
 const CODES = {
   r: [255, 0, 0],
   g: [0, 255, 0],
@@ -23,7 +20,7 @@ function grid(rows) {
     for (let x = 0; x < w; x++) {
       const ch = rows[y][x];
       const i = (y * w + x) * 4;
-      if (ch === ' ' || ch === '.') continue; // transparent (alpha 0)
+      if (ch === ' ' || ch === '.') continue;
       const [r, g, b] = CODES[ch];
       data[i] = r;
       data[i + 1] = g;
@@ -33,7 +30,7 @@ function grid(rows) {
   }
   return { w, h, data };
 }
-// Serialize back to char rows so a whole-buffer shape can be asserted at a glance.
+// The buffer as rows of color codes.
 function show({ w, h, data }) {
   const rev = Object.entries(CODES); // [char,[r,g,b]]
   const out = [];
@@ -59,19 +56,18 @@ const GREEN = { r: 0, g: 255, b: 0 };
 const CLEAR = { transparent: true };
 
 test('floodFill: fills only the contiguous region touching the seed; an out-of-bounds seed changes nothing', () => {
-  // Two separate red blobs split by a green wall; seeding the left one leaves the right.
+  // Two red blocks split by a green column. Seeding the left leaves the right.
   const im = grid(['rrgrr', 'rrgrr', 'rrgrr']);
   const n = floodFill(im.data, im.w, im.h, 0, 0, GREEN);
   assert.equal(n, 6); // only the left 2×3 block
   assert.deepEqual(show(im), ['gggrr', 'gggrr', 'gggrr']);
-  // A seed off the tile on either side touches nothing.
   assert.equal(floodFill(im.data, im.w, im.h, -1, 0, GREEN), 0);
   assert.equal(floodFill(im.data, im.w, im.h, 5, 3, GREEN), 0);
   assert.deepEqual(show(im), ['gggrr', 'gggrr', 'gggrr'], 'the buffer is untouched');
 });
 
 test('floodFill: 4-connected — diagonal-only neighbors are NOT reached', () => {
-  // A red checker: the top-left red touches no other red orthogonally.
+  // The top-left red has no orthogonal red neighbor.
   const im = grid(['rg', 'gr']);
   const n = floodFill(im.data, im.w, im.h, 0, 0, GREEN);
   assert.equal(n, 1);
@@ -79,13 +75,11 @@ test('floodFill: 4-connected — diagonal-only neighbors are NOT reached', () =>
 });
 
 test('floodFill: flows around a concave barrier (not a naive rectangle)', () => {
-  // A U-shaped green wall open at the top; a red seed inside must not leak out the
-  // sealed sides/bottom but fills the whole interior + the open top row.
+  // A green ring separates the outer red ring from a red pocket at (2,2).
   const im = grid(['rrrrr', 'rgggr', 'rgrgr', 'rgggr', 'rrrrr']);
-  // Seed the outer red ring — it wraps the U but can't enter the sealed pocket (2,2).
-  const n = floodFill(im.data, im.w, im.h, 0, 0, RED); // already red → no-op guard
+  const n = floodFill(im.data, im.w, im.h, 0, 0, RED); // already red: no-op
   assert.equal(n, 0);
-  // Recolor the outer ring to yellow; the inner red pocket at (2,2) stays red.
+  // Recolor the outer ring to yellow. The pocket stays red.
   const y = floodFill(im.data, im.w, im.h, 0, 0, { r: 255, g: 255, b: 0 });
   assert.equal(y, 16); // the 16 outer-ring texels
   assert.deepEqual(show(im), ['yyyyy', 'ygggy', 'ygrgy', 'ygggy', 'yyyyy']);
@@ -106,7 +100,7 @@ test('floodFill: erasing to transparent clears the region', () => {
 });
 
 test('replaceColor: recolors EVERY matching texel, contiguous or not', () => {
-  const im = grid(['rgr', 'grg', 'rgr']); // red at the 4 corners + center, non-contiguous
+  const im = grid(['rgr', 'grg', 'rgr']); // red at the corners and center
   const n = replaceColor(im.data, RED, { r: 255, g: 255, b: 0 });
   assert.equal(n, 5);
   assert.deepEqual(show(im), ['ygy', 'gyg', 'ygy']);
@@ -133,19 +127,19 @@ test('replaceColor: target === fill is a no-op', () => {
 });
 
 test('replaceColorInRect: recolors only within the rect, leaving remainder pixels', () => {
-  // A 4×3 sheet whose tile grid is the top-left 3×2 block; the right column + bottom
-  // row are "remainder" a non-divisible atlas would leave outside every tile.
+  // A 4×3 buffer tiled in its top-left 3×2. The right column and bottom row are
+  // remainder pixels outside every tile.
   const im = grid(['rrrr', 'rrrr', 'rrrr']);
   const n = replaceColorInRect(im.data, im.w, im.h, 0, 0, 3, 2, RED, GREEN);
   assert.equal(n, 6); // only the 3×2 tiled block
-  assert.deepEqual(show(im), ['gggr', 'gggr', 'rrrr']); // remainder column + row stay red
+  assert.deepEqual(show(im), ['gggr', 'gggr', 'rrrr']); // the remainder stays red
 });
 
 test('replaceColorInRect: clips an oversized rect to the buffer (no row overrun)', () => {
-  // A rect wider/taller than the buffer must not read past a row into the next.
+  // An oversized rect must not run past the end of a row into the next.
   const im = grid(['rg', 'gr']);
   const n = replaceColorInRect(im.data, im.w, im.h, 0, 0, 99, 99, RED, GREEN);
-  assert.equal(n, 2); // both reds, nothing out of bounds
+  assert.equal(n, 2); // both reds
   assert.deepEqual(show(im), ['gg', 'gg']);
 });
 
@@ -154,5 +148,5 @@ test('floodFill scales past the recursion limit (no stack overflow on a big tile
   const h = 256;
   const data = new Uint8ClampedArray(w * h * 4); // all transparent
   const n = floodFill(data, w, h, 0, 0, RED);
-  assert.equal(n, w * h); // the whole tile is one connected region
+  assert.equal(n, w * h); // one connected region
 });

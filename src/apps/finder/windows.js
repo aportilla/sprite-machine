@@ -1,83 +1,9 @@
-// ---------------------------------------------------------------------------
-// Folder windows — the Finder's windows (Sep 7 2026). ONE vf-window per OPEN
-// folder, cloned from #tpl-folder-window (windows.html beside this file):
-// the striped bar and close box of a document-tier window, movable,
-// resizable, the kit's rails on both edges, a header line reading the
-// folder's item count over the Finder's double rule (two kit rules —
-// windows.html, layout.js), and a body that is one PLACED vf-icon-field at
-// the plane's origin — the container the icon layer (icons.js) renders the
-// folder's children into (the documents and the folders whose container
-// this folder is). The Desktop Patterns panel's shape, generalized to many:
+// Finder folder windows: one vf-window per open folder, cloned from
+// #tpl-folder-window (windows.html). icons.js fills its vf-icon-field with the
+// folder's children.
 //
-//   THE LIFECYCLE. open(id) clones, titles and appends the window (a second
-//   open brings the existing one forward), adopts it into the window
-//   manager (shell/windows.js) with its placement (the shell's cascadedBox:
-//   the desktop's WINDOW_ORIGIN stepped by the cascade per folder window
-//   already open — a session truth, captured at the open) so Arrange
-//   Windows re-places it and a browser resize re-pins it like every window,
-//   and brings it to the front through the kit's one funnel. close(id) —
-//   the close box, File → Close on the front folder window, a vanished
-//   folder — releases it and REMOVES the node: existence IS visibility, the
-//   document windows' discipline.
-//
-//   THE BOX PERSISTS (Sep 8 2026 — the Finder remembered every folder
-//   window's rect, and it grated that this app did not), but as its
-//   NINE-SLICE PIN, never the box: the resize rule's own reading of where
-//   the window sits (the shell's pinOf, through windows.pinOf — each edge
-//   a strut's offset from the raster's edge or a spring's fraction of its
-//   middle). A browser is resized and reopened on another monitor all the
-//   time, and an absolute box is no truth on a raster it was not dragged
-//   on; a pin re-expresses on any raster and keeps the window on screen —
-//   a window left in a corner comes back in the corner, one spanning the
-//   middle at its fraction of it. The record is the session's first
-//   (`remembered`, read at close() — the icon layer's idiom for a closed
-//   window's icons) and the desktop-state blob's next (savedPin: a prior
-//   session's, keyed like the folder's icon, `folder:<id>`; pins() hands
-//   the blob every pin this module knows at each snapshot, the open
-//   windows' read live — the box IS the truth after a drag, a grow, a
-//   re-pin or an Arrange). open() hands it to windows.adopt, which
-//   re-expresses it on the raster of the moment by the resize rule's own
-//   policy and clamps it on-raster like every placement, so a reopened
-//   window lands exactly where a browser resize would have carried it had
-//   it stayed open. With no record — a first open, a garbled one — the
-//   fresh placement above, which is also where Arrange Windows sends every
-//   folder window (the arrangement is the reset; the memory follows). Not
-//   persisted, still: the scroll, and that it was open — a boot never
-//   reopens a window. The icons inside keep their positions the same way,
-//   by item, as the desktop's do.
-//
-//   THE FINDER'S TURN. A folder window is adopted as the FINDER's window
-//   (windows.adopt's `app`), so holding the desktop's active state makes
-//   the Finder the front application (the manager's activation wire):
-//   clicking into a folder window — or opening one — deactivates the
-//   Sprite Editor — the windoids hide, the options strip goes, the bar
-//   swaps to the Finder's menus, exactly what a System 7 Finder window did
-//   to the front application; closing it hands active to the topmost
-//   document window (the kit promotes the survivor), and the Sprite Editor
-//   returns where it was. activeFolder() reads which folder's window holds
-//   active — the Finder's "front window", what New Folder creates in, what
-//   its File → Close closes.
-//
-//   THE HEADER COUNT follows the model (the files slice's childrenOf), never
-//   the DOM — re-counted on every listing change, "N items", plain ink.
-//   And the Finder's "IN THE TRASH" MARK (Sep 9 2026): the Trash's own
-//   window and every trashed folder's wear the user's small trash glyph
-//   (src/assets/trash-indicator.png, the kit's vf-img at 1:1) at the head
-//   of the count line, the count stepping right to make room (layout.js
-//   FOLDER_TRASH_MARK_AT / FOLDER_COUNT_AT_TRASHED) — present exactly while
-//   the folder is trashed (isTrashed, re-read with the count: a folder
-//   dragged into the Trash with its window open takes the mark, one dragged
-//   out loses it). Existence IS visibility, the windows' discipline.
-//
-//   THE FIELD'S EXTENT (fit): the field is a declared box — the plane's
-//   viewport at least, so the rubber band reaches every visible px, grown
-//   to hold every icon plus the inset (layout.js fieldExtent) — which IS the
-//   scroll range (the kit sizes its plane to placed content, and its rails
-//   follow a moved icon by themselves, 0.7.0). Re-derived at open, after the
-//   icon layer renders into it, and on a grow box's commit; the viewport is
-//   arithmetic on the window's size (layout.js folderViewport), nothing
-//   measured.
-// ---------------------------------------------------------------------------
+// A window's box persists as a nine-slice pin, keyed like the folder's icon. It
+// is kept at close() for the session and handed to desktop-state.js by pins().
 
 import { VfWindow } from 'vintage-frames';
 import markup from './windows.html?raw';
@@ -95,16 +21,14 @@ import {
   FOLDER_TRASH_MARK_AT,
 } from './layout.js';
 
-/** The item's key in the desktop-state blob — its icon's (icons.js), so one
- *  identity names both records. */
+/** The folder's desktop-state key, the same as its icon's in icons.js. */
 const keyOf = (id) => `folder:${id}`;
 
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
  * @param {ReturnType<typeof import('../../shell/windows.js').initWindows>} windows
  * @param {{savedPin?: (key: string) => import('../../shell/layout.js').Pin | null}} [opts]
- *   savedPin: a prior session's pin for a folder window, by the item's key
- *   (desktop-state.js windowPin, through the menu bar's deps), or null.
+ *   savedPin: a saved pin by item key (desktop-state.js windowPin), or null.
  */
 export function initFolderWindows(desktop, windows, { savedPin = () => null } = {}) {
   const tpl = /** @type {HTMLTemplateElement} */ (
@@ -113,13 +37,12 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
   /** @type {Map<string, VfWindow>} folder id -> its open window */
   const wins = new Map();
   /** @type {Map<string, import('../../shell/layout.js').Pin>} folder id -> the pin
-   *  its window closed at, this session (the header's THE BOX PERSISTS) */
+   *  its window closed at this session */
   const remembered = new Map();
   /** @type {Set<() => void>} a window opened or closed */
   const changed = new Set();
   /** @type {Set<(id: string, field: HTMLElement) => void>} a window about
-   *  to close — its field still live, for the icon layer to remember the
-   *  positions inside it */
+   *  to close, its field still live */
   const willClose = new Set();
   const notify = () => {
     for (const fn of changed) fn();
@@ -131,15 +54,13 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
   const lineOf = (win) =>
     /** @type {any} */ (win.querySelector(':scope > vf-container[slot="header"]'));
   const markOf = (win) => /** @type {any} */ (win.querySelector('.folder-trash-mark'));
-  /** The folder a window shows, or null (not a folder window). */
+  /** The folder a window shows, or null. */
   const idOf = (win) => {
     for (const [id, w] of wins) if (w === win) return id;
     return null;
   };
 
-  /** The "in the Trash" mark (header): the small trash glyph through the
-   *  kit's vf-img at 1:1 — one image px one system px — placed at the
-   *  head of the count line. */
+  /** The header's trash mark: a 1:1 vf-img at the start of the count line. */
   function makeMark() {
     const mark = /** @type {any} */ (document.createElement('vf-img'));
     mark.className = 'folder-trash-mark';
@@ -154,14 +75,13 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
     return mark;
   }
 
-  /** The header line: the folder's item count off the model — and the
-   *  mark, present exactly while the folder is trashed, the count stepping
-   *  right beside it. */
+  /** Update the header's item count, and its trash mark while the folder is
+   *  trashed. */
   function count(id) {
     const win = wins.get(id);
     if (!win) return;
     const st = files.get();
-    const n = itemCount(st, id); // documents, folders and text files alike
+    const n = itemCount(st, id);
     const label = countOf(win);
     const text = `${n} item${n === 1 ? '' : 's'}`;
     if (label && label.textContent !== text) label.textContent = text;
@@ -173,16 +93,13 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
     if (label && label.left !== at.left) label.left = at.left;
   }
 
-  // The close box fires vf-close on the window itself (it never removes
-  // itself — "the consumer decides what closing means"): here, removal.
+  // The close box only fires vf-close. Closing removes the window.
   const onClose = (e) => {
     const id = e.target instanceof VfWindow ? idOf(e.target) : null;
     if (id != null) close(id);
   };
   desktop.addEventListener('vf-close', onClose);
-  // A grow box's commit: the plane's viewport moved, so the field's extent
-  // re-derives (a bigger body wants a bigger band surface; a smaller one
-  // keeps every icon inside the range).
+  // A grow box commit changes the viewport, so the field refits.
   const onGrow = (e) => {
     if (!(/** @type {CustomEvent} */ (e).detail?.commit)) return;
     const id = e.target instanceof VfWindow ? idOf(e.target) : null;
@@ -198,24 +115,19 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
       desktop.bringToFront(win);
       return win;
     }
-    // Cloned into THIS document and upgraded (shell/windows.js
-    // cloneWindow): its declared width/height are readable before the
-    // append.
+    // cloneWindow upgrades the clone, so width and height are readable before
+    // the append.
     win = cloneWindow(tpl);
     win.id = `win-folder-${id}`;
     win.heading = rec.name;
     fieldOf(win).label = rec.name;
     const size = { width: win.width ?? 0, height: win.height ?? 0 };
     const n = wins.size;
-    // Append first (the clamp reads the live raster's lattice off a
-    // connected element), then place: the kit activates the newcomer at
-    // slot-in — the Finder's window coming forward.
+    // Append before adopt: the clamp reads the raster's lattice from a
+    // connected element.
     desktop.append(win);
     wins.set(id, win);
-    // Where it lands: the pin its window closed at this session, else the
-    // one a prior session stored, else the fresh placement — the cascade,
-    // also what Arrange Windows re-places it onto. The Finder's panel: the
-    // bar shows the Finder's menus while it is front.
+    // This session's pin, else the saved pin, else the cascade.
     windows.adopt(win, {
       app: FINDER,
       place: (w, h) => cascadedBox(w, h, size, n),
@@ -234,16 +146,15 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
     const win = wins.get(id);
     if (!win) return;
     for (const fn of willClose) fn(id, fieldOf(win));
-    // The box, remembered as its pin — read where the window sits, on the
-    // raster it sits on — for the next open and the next snapshot.
     remembered.set(id, windows.pinOf(win));
     windows.release(win);
-    win.remove(); // existence IS visibility; the kit re-asserts active
+    win.remove(); // the kit activates the next window
     wins.delete(id);
     notify();
   }
 
-  /** The field's declared box from its icons and the plane's viewport. */
+  /** Size the field to the viewport, grown to hold every icon. The field's size
+   *  is the scroll range. */
   function fit(id) {
     const win = wins.get(id);
     if (!win) return;
@@ -260,8 +171,8 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
     if (field.height !== ext.height) field.height = ext.height;
   }
 
-  // The listing drives the titles and the counts; a folder that vanished
-  // (a future delete) closes its window.
+  // Update titles and counts from the listing. A folder that no longer exists
+  // closes its window.
   const sync = () => {
     const st = files.get();
     for (const [id, win] of [...wins]) {
@@ -279,15 +190,13 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
   const unsubscribe = files.subscribe(sync);
 
   return {
-    /** Open a folder's window (or bring it forward). Returns it, or null
-     *  for an unknown folder. */
+    /** Open a folder's window or bring it forward. Returns it, or null for an
+     *  unknown folder. */
     open,
-    /** Close a folder's window (the close box's path, File → Close's). */
     close,
     /** @param {string} id */
     isOpen: (id) => wins.has(id),
-    /** The open folders' fields, `[id, field]` each — the icon layer's
-     *  roots beside the desktop's.
+    /** The open folders' fields as `[id, field]` pairs.
      *  @returns {[string, any][]} */
     fields: () =>
       [...wins].map(([id, win]) => /** @type {[string, any]} */ ([id, fieldOf(win)])),
@@ -296,29 +205,22 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
       const win = el instanceof VfWindow ? el : el?.closest?.('vf-window');
       return win ? idOf(win) : null;
     },
-    /** The folder whose window holds the desktop's active state — the
-     *  Finder's front window — or null. */
+    /** The folder whose window is the desktop's active window, or null. */
     activeFolder() {
       const w = desktop.activeWindow;
       return w ? idOf(w) : null;
     },
-    /** The plane's viewport for an open folder's window (the lattice's
-     *  wrap width), or null. */
+    /** The plane's viewport of an open folder's window, or null. */
     viewportOf(id) {
       const win = wins.get(id);
       return win
         ? folderViewport({ width: win.width ?? 0, height: win.height ?? 0 })
         : null;
     },
-    /** Re-derive a field's extent (the icon layer calls it after rendering
-     *  into the field; a drop into it too). */
+    /** Refit a field's size after its icons change. */
     fit,
-    /** Every folder window's pin this module knows, by the item's key —
-     *  the open windows' read live (the box IS the truth after a drag, a
-     *  grow, a re-pin, an Arrange) over the ones remembered from windows
-     *  closed this session. desktop-state.js merges it into the blob at
-     *  every snapshot, so a closed folder never forgets where its window
-     *  was.
+    /** Every known folder window pin by item key: open windows read live, over
+     *  those closed this session.
      *  @returns {Record<string, import('../../shell/layout.js').Pin>} */
     pins() {
       /** @type {Record<string, import('../../shell/layout.js').Pin>} */
@@ -334,8 +236,8 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
         changed.delete(fn);
       };
     },
-    /** A window is about to close — `fn(id, field)` with the field still
-     *  live. Returns the unsubscribe. */
+    /** A window is about to close: `fn(id, field)` with the field still live.
+     *  Returns the unsubscribe. */
     onWillClose(fn) {
       willClose.add(fn);
       return () => {

@@ -1,5 +1,3 @@
-// Node-runnable tests for the pure selectors (state/derive.js): editorViewModel,
-// the old showFace() derivation. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -35,7 +33,7 @@ test('editorViewModel: own art by IDENTITY; no art a fresh blank tile, derived; 
   const back = tile(2, 2);
   setPx(back, 1, 1, [0, 255, 0]);
   const vm = editorViewModel({ views: { back }, tileW: 2, tileH: 2 }, 'front');
-  // MIRROR_AXIS is 'x': back's (1,1) shows at (0,1) behind the front canvas.
+  // MIRROR_AXIS is 'x', so back's (1,1) shows at (0,1).
   assert.equal(alphaAt(vm.mirrorBehind, 0, 1), 255);
   assert.equal(alphaAt(vm.mirrorBehind, 1, 1), 0);
   const vm2 = editorViewModel({ views: { back }, tileW: 2, tileH: 2 }, 'top');

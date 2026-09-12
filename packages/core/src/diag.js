@@ -1,18 +1,7 @@
-// ---------------------------------------------------------------------------
-// Geometry self-check — a dev probe (the app reads it under ?diag=1; a
-// consumer can read it off any built mesh). Watertightness via
-// position-based edge parity + a per-face normal histogram: a closed surface
-// uses every undirected edge exactly twice; edges used an odd number of times
-// are boundaries — a genuine hole in a mesh that should be closed.
-//
-// MODE MATTERS: a nonzero boundary/odd count is only a "hole" for a mesh that
-// claims to be watertight. The low-poly (wedge) mesh is — its T-junctions are
-// repaired (t-junction.js) — but the greedy-voxel mesh (low-poly OFF) deliberately
-// leaves its step-riser T-junctions unrepaired, so it reports nonzero boundary/odd
-// edges as EXPECTED artifacts, not holes. main.js tags the ?diag=1 title with the
-// mode so the two conditions aren't conflated. This function just counts; it never
-// asserts watertightness on its own.
-// ---------------------------------------------------------------------------
+// Geometry self-check for development (the app's ?diag=1). Edges are matched by
+// vertex position. A closed surface uses every undirected edge exactly twice, so
+// edges used an odd number of times are boundaries. Also returns a histogram of
+// triangle normals by axis.
 
 /** @param {import('three').BufferGeometry} geo */
 export function computeDiag(geo) {

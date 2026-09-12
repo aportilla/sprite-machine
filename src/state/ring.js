@@ -1,33 +1,15 @@
-// ---------------------------------------------------------------------------
-// `ring` — the 3D Sprite Atlas as the app sees it: THE ACTIVE DOCUMENT'S
-// settings, and the SHEET CHANNEL.
+// 3D Sprite Atlas state: the active document's settings and the rendered sheet.
 //
-// THE SETTINGS ARE THE DOCUMENT'S (state/ring-settings.js: every DocContext
-// carries its own store, `ctx.ring`, persisted in the document's PNG as a
-// `sprite-machine:ring` chunk and restored by every open path). This module
-// is the FAÇADE over whichever one the windoid serves: `get()` reads it,
-// `subscribe` fires on its changes AND on a switch to another document's,
-// and each setter routes to it — so the strip (sm-ring-controls), the body
-// (sm-ring-view), File → Export Sprite Atlas…'s fields (apps/sprite-editor), the
-// renderer's follower (scene/ring.js) and the windoid's height rule (the
-// Sprite Editor's windows.js) all read one store-shaped object and follow
-// the active document for free, the way the windoids themselves do. The
-// served context
-// is the ACTIVE one; while the desktop is focused (the Finder role, the
-// windoid hidden) it stays the one last served — the windoid returns aimed
-// where it was — until that document closes; with nothing served the
-// defaults read and a setter is a no-op (nothing to write to; the ?ring
-// boot hook seeds the boot document at its open instead). A switch that
-// reads the same on every key notifies nobody — the store idiom.
+// The settings API wraps the served context's ctx.ring (state/ring-settings.js).
+// The served context is the active one. While no document is active, the last
+// served context stays served until it closes. With none served, get() returns
+// the defaults and the setters do nothing. subscribe fires on setting changes
+// and on a switch to a document with different settings.
 //
-// THE SHEET CHANNEL is the doc's `onLive` shape — hot, imperative, never
-// through a store: the follower publishes the rendered sheet canvas (by
-// reference) after every render, which lands per rebuild frame during a
-// stroke; a store patch per frame would re-render every subscriber's
-// template for pixels only the windoid's cells paint. `sheet()` hands a late
-// subscriber (a reconnected windoid body) the last one. App-level: there is
-// one renderer, serving the active document like the rebuilder it follows.
-// ---------------------------------------------------------------------------
+// The renderer (scene/ring.js) publishes the sheet canvas by reference after
+// every render, once per frame during a stroke. Sheet listeners are called
+// directly, outside any store, because of that rate. sheet() returns the last
+// one for late subscribers.
 
 import { SOFTWARE } from './files.js';
 import { workspace as workspaceSingleton } from './workspace.js';
@@ -58,7 +40,7 @@ export function createActiveRing(workspace) {
   let offCtx = null;
   /** @type {Set<(s: RingSettings) => void>} */
   const listeners = new Set();
-  /** @type {RingSettings} what the listeners last heard */
+  /** @type {RingSettings} the last notified snapshot */
   let last = RING_DEFAULTS;
 
   const get = () => (ctx ? ctx.ring.get() : RING_DEFAULTS);
@@ -97,7 +79,7 @@ export function createActiveRing(workspace) {
   const sheetListeners = new Set();
 
   return {
-    /** Store-shaped (get + subscribe) for the Lit StoreController. */
+    /** Store-shaped (get + subscribe) for StoreController. */
     store: { get, subscribe },
     get,
     subscribe,
@@ -123,8 +105,8 @@ export function createActiveRing(workspace) {
       ctx?.ring.setPaper(name);
     },
 
-    /** The follower's publish: stores the sheet by reference and calls every
-     *  listener with it (null: no model — the cells show paper). */
+    /** Store the sheet by reference and call every listener with it. Null
+     *  means no model. */
     publishSheet(s) {
       sheet = s;
       for (const fn of sheetListeners) fn(s);
@@ -141,8 +123,7 @@ export function createActiveRing(workspace) {
       };
     },
 
-    /** Stop following the workspace (tests; the app's singleton lives as
-     *  long as the page). */
+    /** Stop following the workspace. */
     dispose() {
       offWorkspace();
       serve(null);
@@ -152,16 +133,13 @@ export function createActiveRing(workspace) {
 
 /**
  * @typedef {{frame: number, scale: number, anchor: {x: number, y: number}, yaws: number[]}} RingGeometry
- *   frame: the tile's edge in px (equal to `size`); scale: the DERIVED px
- *   per voxel, a float; anchor: where the lattice floor's center lands in
- *   every frame (the feet-row); yaws: one per view, in sheet order.
+ *   frame: the tile's edge in px (equal to `size`). scale: the derived px per
+ *   voxel, a float. anchor: the lattice floor's center in every frame. yaws:
+ *   one per view, in sheet order.
  */
 
-/** The ring's own record — the settings (the four the sheet depends on;
- *  the paper is the windoid's own and never written), then the frame (an
- *  importer reading `frame` keeps working), the scale (how an engine relates
- *  the sprite's px to the lattice's units), the anchor and the yaw list. The
- *  one object the PNG chunk and the TexturePacker JSON both carry.
+/** The ring record in both the export's PNG chunk and its TexturePacker JSON.
+ *  frame duplicates size for importers that read it.
  *  @param {Pick<RingSettings, 'views'|'elevation'|'offset'|'size'>} settings
  *  @param {RingGeometry} geometry */
 function ringRecord({ views, elevation, offset, size }, { frame, scale, anchor, yaws }) {
@@ -178,9 +156,8 @@ function ringRecord({ views, elevation, offset, size }, { frame, scale, anchor, 
 }
 
 /**
- * The metadata chunks the export writes beside the pixels (pure; the
- * exporter passes what it knows): a Title naming the sheet after the
- * document, the Software marker, and the ring chunk's JSON — `ringRecord`.
+ * The export's PNG text chunks: a Title after the document, the Software
+ * marker and the ring record as JSON.
  * @param {string} name  the document's name
  * @param {Pick<RingSettings, 'views'|'elevation'|'offset'|'size'>} settings
  * @param {RingGeometry} geometry
@@ -195,27 +172,20 @@ export function ringMetaChunks(name, settings, geometry) {
 }
 
 /**
- * The sheet's TexturePacker JSON (the "JSON hash" flavor — what Phaser,
- * PixiJS and the Godot / Unity importers load by filename pair; pure): one
- * frame per view, keyed `«slug»-«index»` in yaw order, each an untrimmed,
- * unrotated `frame`×`frame` box at its column of the strip, carrying the
- * engine anchor as its normalized **pivot** (TexturePacker's own field: x
- * right, y DOWN from the frame's top-left, 0..1 — so the feet-row becomes
- * the origin an engine actually uses, with no reader code — rounded to
- * four places, TexturePacker's own short decimals: under 0.03 px of error
- * at the 255-px ceiling, while the record below keeps the anchor exact); an
- * `animations` block naming the ring as one sequence in that order (the
- * TexturePacker extension PixiJS's AnimatedSprite reads); and `meta` in
- * TexturePacker's shape (`app`, `version`, `image` — the sibling PNG's
- * filename — `format`, the sheet `size`, `scale`) plus the ring's own
- * record under a `sprite-machine` key (loaders ignore keys they don't
- * know — the same object as the PNG chunk).
+ * The sheet's TexturePacker JSON, hash format (Phaser, PixiJS, Godot and Unity
+ * importers load it).
+ *   - `frames`: one per view, keyed `«slug»-«index»` in yaw order. Each is an
+ *     untrimmed, unrotated `frame`×`frame` box with the anchor as a normalized
+ *     `pivot` (x right, y down, 0..1) rounded to four places.
+ *   - `animations`: the ring as one sequence (read by PixiJS AnimatedSprite).
+ *   - `meta`: TexturePacker's fields, plus the ring record under a
+ *     `sprite-machine` key.
  * @param {string} slug  the document's filename slug (the frame keys' prefix)
  * @param {Pick<RingSettings, 'views'|'elevation'|'offset'|'size'>} settings
  * @param {RingGeometry} geometry
- * @param {{image: string, version: string}} file  the PNG's filename beside
- *   this JSON, and the app version the meta names
- * @returns {object}  JSON-ready (the exporter stringifies it)
+ * @param {{image: string, version: string}} file  the sibling PNG's filename
+ *   and the app version
+ * @returns {object}  JSON-ready
  */
 export function texturePackerJson(slug, settings, geometry, { image, version }) {
   const { frame, anchor, yaws } = geometry;
@@ -249,6 +219,4 @@ export function texturePackerJson(slug, settings, geometry, { image, version }) 
   };
 }
 
-// The app-wide singleton: the façade over the one workspace (one desktop,
-// one windoid, one renderer per page).
 export const ring = createActiveRing(workspaceSingleton);

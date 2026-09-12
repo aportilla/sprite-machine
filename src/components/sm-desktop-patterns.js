@@ -1,38 +1,6 @@
-// ---------------------------------------------------------------------------
-// <sm-desktop-patterns> — the Desktop Patterns control panel's body (the
-// window is the application's #tpl-patterns-window, apps/desktop-patterns,
-// opened from Sprite Machine → Desktop Patterns): System 7.5's Desktop Patterns
-// composition — the PREVIEW WELL across the top, the chooser under it, Set
-// Desktop Pattern along the bottom — with the classic scrollbar (one
-// pattern at a time, "67/74") replaced by a GRID of every pattern the kit
-// ships: the 38 standard MacPaint fills (PATTERN_NAMES, palette order) as a
-// 13×3 vf-grid of 16px cells — a cell IS two repeats of its 8×8 pattern,
-// the way MacPaint's own pattern bar showed them — the last well empty (38
-// tiles no rectangle; the kit's palette source kept spare wells too).
-//
-// PENDING-SELECTION SEMANTICS, the Colors dialog's: opening seeds the
-// pending pattern from the desktop's current one; pressing a cell SELECTS
-// (the well previews it, the ring marks the cell — the desktop is
-// untouched), and only Set Desktop Pattern commits, through the shell
-// slice's one setter (shell/desktop-pattern.js writes it onto the desktop and
-// desktop-state.js persists it). Closing the window discards a selection
-// never set. A cell picks on the CLICK: the desktop raises a pressed
-// background window by re-inserting its node, and vintage-frames 0.5.4
-// does that in a task after the press's click has landed, so a click on
-// this panel from behind a document window — exactly such a raise — acts
-// like any other (the press-driven bridge is retired, with the windoids';
-// see sm-tool-strip's header).
-//
-// Every fill is the kit's own: the well and each cell are `vf-container
-// pattern="…"` boxes at DECLARED sizes, so the rasters are exact — 1-bit
-// at every density — and nothing is measured; the well wears the kit's
-// rule on all four edges (FrameRect: 1px inside the declared box). The
-// selection ring is the one thing drawn here: a 1px black line over the
-// cell's edge with a 1px white line inside it, so it reads on `black` (the
-// white) and on `white` (the black) alike — the swatch well's own anatomy.
-// A CONNECTED component in the slice sense (it calls shell's setter), but
-// it renders nothing FROM the store: the pending pattern is its own.
-// ---------------------------------------------------------------------------
+// <sm-desktop-patterns>: the Desktop Patterns window's body. A preview well, a
+// grid of the kit's PATTERN_NAMES and a Set Desktop Pattern button. A cell
+// click previews its pattern. Only Set Desktop Pattern commits it.
 
 import { PATTERN_NAMES } from 'vintage-frames';
 import { css, LitElement, html } from 'lit';
@@ -40,11 +8,11 @@ import { classMap } from 'lit/directives/class-map.js';
 import { shell } from '../state/shell.js';
 import { baseStyles } from './base-styles.js';
 
-/** The preview well's declared box, system px (the rule inside it). */
+/** The preview well's box in system px, its frame rule inside. */
 export const PATTERN_WELL = { width: 222, height: 160 };
-/** The chooser: 13×3 cells of 16px — 13×16 + 12 rules + 2 frame = 222 wide,
- *  the well's width; 3×16 + 2 + 2 = 52 tall. index.html's template states
- *  the window size from these numbers. */
+/** The chooser grid: 13×16 + 12 rules + 2 frame = 222 wide, the well's width.
+ *  3×16 + 2 + 2 = 52 tall. apps/desktop-patterns/windows.html sizes the
+ *  window from these numbers. */
 export const PATTERN_GRID = { cols: 13, rows: 3, cell: 16 };
 
 export class SmDesktopPatterns extends LitElement {
@@ -54,10 +22,8 @@ export class SmDesktopPatterns extends LitElement {
       :host {
         display: block;
       }
-      /* A grid cell IS its pattern: a bare button exactly the cell's size,
-         the kit container inside it painting the fill. Reads the kit's
-         cursor token first (applyCursor's blanket can't pierce this shadow
-         root — the atlas view's note). */
+      /* The kit's cursor token first: applyCursor can't reach into this
+         shadow root. */
       .cell {
         position: relative;
         display: block;
@@ -73,9 +39,8 @@ export class SmDesktopPatterns extends LitElement {
         outline: 1px dotted var(--vf-black, #000);
         outline-offset: -3px;
       }
-      /* The selection ring: black over the cell's edge, white inside it.
-         Always in the DOM — selection flips a class (visibility, not
-         display), the no-remount discipline of the picker's overlays. */
+      /* Black over the cell's edge with white inside, so the ring shows on
+         black and white patterns. */
       .ring {
         position: absolute;
         inset: 0;
@@ -90,9 +55,8 @@ export class SmDesktopPatterns extends LitElement {
     `,
   ];
 
-  /** The pending pattern — what the well previews and Set would commit.
-   *  Seeded from the desktop's current pattern at creation (the panel is
-   *  created per open, so this IS the open-time seed). */
+  /** The pending pattern. The panel is created on each open, so this seeds
+   *  it from the desktop's current pattern. */
   #pending = shell.get().desktopPattern;
 
   render() {
@@ -149,8 +113,6 @@ export class SmDesktopPatterns extends LitElement {
     this.requestUpdate();
   }
 
-  // The one commit path: the shell slice's setter — shell/desktop-pattern.js
-  // paints it onto the desktop, desktop-state.js persists it.
   #set = () => {
     shell.setDesktopPattern(this.#pending);
   };

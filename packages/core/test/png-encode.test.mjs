@@ -1,7 +1,3 @@
-// The PNG encoder from bytes (png-encode.js): a file node:zlib inflates
-// back to the rows it was given, framed as IHDR / IDAT / IEND with valid
-// CRCs; the stored zlib stream spans blocks past 65535 bytes with zlib's own
-// Adler-32 after the last. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { inflateSync } from 'node:zlib';
@@ -58,6 +54,6 @@ test('zlibStored: a stream past one block spans several, the last flagged final,
   assert.deepEqual(new Uint8Array(inflateSync(z)), raw, 'zlib inflates it');
   assert.equal(z[2], 0, 'the first block is not final');
   assert.equal(z[2 + 5 + 65535], 1, 'the second, last block is final');
-  // The check value: Adler-32 of "Wikipedia".
+  // Reference value: Adler-32 of "Wikipedia".
   assert.equal(adler32(new TextEncoder().encode('Wikipedia')), 0x11e60398);
 });

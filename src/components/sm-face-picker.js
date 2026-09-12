@@ -1,45 +1,12 @@
-// ---------------------------------------------------------------------------
-// <sm-face-picker> — six pixel-art cube-view icons over a vf-radio-group, laid
-// out as mirror pairs by `faces` (nested vf-stacks: a row of column cells).
-// The selected face's icon takes the "selected" dither overlay, driven by the
-// `selected` prop right in the template — a classMap flip, no CSS peeking at
-// the kit's radio internals. A presentational LEAF: props down (`faces`,
-// `selected`), one bubbling `sm-select-face {face}` event up — no store
-// imports, no doc knowledge.
+// <sm-face-picker>: a vf-radio-group of cube icons, one per face in `faces`.
+// A pick dispatches a bubbling `sm-select-face` event with {face}.
 //
-// THE CUBE ICONS (formerly face-icons.js, folded in — only this component
-// renders or styles them): one small isometric cube per atlas face, drawn as
-// 21×26 1-BIT pixel art — black ink, white paper, transparent outside the
-// silhouette, and nothing else (every file decoded and checked: three pixel
-// values; the red-tinted set they replaced on 2026-09-04 carried a fourth).
-// The cube is seen from a top-front corner, so three quads are visible and
-// their three opposites hide behind it. A face with a visible quad (`front`,
-// `left`, `top`) fills that quad SOLID black; a hidden one (`back`, `right`,
-// `bottom`) draws a thin black SLIVER peeking out along the silhouette edge
-// it hides behind — "the far side of this one".
+// The cube art uses the object's own left and right, not the viewer's: `left`
+// is the cube's lower-right quad.
 //
-// Left/right in this art is the OBJECT's own handedness (stage-left), not the
-// viewer's: `left` is the cube's lower-RIGHT quad and `right` the sliver on
-// the far left, the way a car facing you shows you its left flank on your
-// right. That's deliberate — don't "fix" it to match the world axes (+x
-// right, so the `left` face's normal is −x); FACE_ART is the whole mapping.
-//
-// The art is raster, so it goes through `vf-img`: one image pixel is one
-// system px, magnified nearest-neighbor on whole device pixels. width/height
-// are stated up front so the cell reserves its box before the file lands.
-// SELECTED is a 50% black dither in the cube's silhouette (over the filled
-// quad it vanishes, over the white ones it reads as the classic selected
-// gray — ink, so it is 1-bit like the art), laid OVER the art
-// via vf-img's own top/left (system px, from the position:relative wrapper —
-// vf-img writes that placement as INLINE style, so the overlay's state rides
-// on `class`, which lit owns, never on a bound `style` attribute that would
-// clobber it). The overlay is ALWAYS in the DOM — selection flips a class, so
-// it never re-mounts (no image flash); visibility, not display, so its box
-// rules are left alone.
-//
-// Shadow DOM; `:host { display: contents }`, so the radio group sits in the
-// settings row directly.
-// ---------------------------------------------------------------------------
+// The selected icon's dither overlay is placed with vf-img's top/left, which
+// vf-img writes as inline style. The overlay toggles by class, not a bound
+// style attribute, and stays in the DOM so the image does not re-mount.
 
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
@@ -53,7 +20,6 @@ import rightUrl from '../assets/faces/right.png';
 import topUrl from '../assets/faces/top.png';
 import selectedUrl from '../assets/faces/selected.png';
 
-// face key -> its cube art. Swapping the artwork means editing this map alone.
 const FACE_ART = {
   left: leftUrl,
   right: rightUrl,
@@ -63,7 +29,7 @@ const FACE_ART = {
   bottom: bottomUrl,
 };
 
-// Native size of every tile above, in system px (all seven share one box).
+// Native size of all seven images, in system px.
 const ICON_W = 21;
 const ICON_H = 26;
 
@@ -74,16 +40,12 @@ export class SmFacePicker extends LitElement {
       :host {
         display: contents;
       }
-      /* The cube art and the "selected" dither stack in one box: the art is in
-         flow (it sizes the wrapper), the dither rides over it via vf-img's own
-         top/left. */
+      /* The positioning box for the overlay's top/left. */
       .editor-face-art {
         position: relative;
         display: block;
       }
-      /* The dither overlay: hidden until render() flips \`.on\` for the selected
-         face. Visibility, not display, so the overlay's box rules are left
-         alone. */
+      /* Visibility, not display, so vf-img's box rules are left alone. */
       .editor-face-selected {
         visibility: hidden;
       }
@@ -105,9 +67,6 @@ export class SmFacePicker extends LitElement {
     this.selected = '';
   }
 
-  // The cube icon for one atlas face, dither overlay included. A fresh
-  // TemplateResult per render diffs to attribute updates only — the seven
-  // images are never re-mounted or swapped.
   #icon(face) {
     return html`
       <div class="editor-face-art">
@@ -165,10 +124,8 @@ export class SmFacePicker extends LitElement {
     if (f && f !== this.selected) this.#emit(f);
   };
 
-  // The cube icon is a click target too; the radio's own click routes
-  // through the group's vf-change, so skip it here to avoid a double
-  // switch. A plain click, no press-driven bridge — see sm-tool-strip's
-  // header for the windoid raise and the kit's task-deferred re-insert.
+  // The icon is a click target too. A click on the radio itself goes through
+  // the group's vf-change, so it is skipped here.
   #onCellClick(e, f) {
     if (/** @type {Element} */ (e.target).closest?.('vf-radio')) return;
     if (f !== this.selected) this.#emit(f);

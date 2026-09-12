@@ -1,10 +1,3 @@
-// The skin (skin.js — pure, no THREE): the texture the mesher's
-// occupancy merge paints from. A chart per multi-color region holding its
-// pieces' colors verbatim (the round-trip, and each face's center sampling its
-// own texel — the one test an orientation drift fails), a swatch per color for
-// the one-color regions, gutters flooded from the nearest piece that never
-// overlap, a deterministic power-of-two pack, and the UV read tied to the
-// region's box. Run: node --test test/skin.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -16,9 +9,8 @@ import { packRGBA } from '../src/ingest.js';
 import { AXIS_INDEX, FACE_INDEX } from '../src/views.js';
 import { img, fill } from './helpers.mjs';
 
-// A wall painted in two colors over a full side and top: the +z face (and the
-// -z one mirror-filled from it) is ONE 4×4 region on occupancy that crosses a
-// color boundary — a chart; every other face is one color — a swatch.
+// A two-color wall. The +z and -z faces are each one 4×4 region crossing a color
+// boundary (a chart). Every other face is one color (a swatch).
 const wall = () =>
   buildVoxels({
     front: img(['RRRR', 'RRRR', 'BBBB', 'BBBB']),
@@ -52,7 +44,7 @@ test('the round-trip: a charted region’s texels are its faces’ colors, one t
     skin.charts.some(Boolean),
     'the two-color wall must chart at least one region'
   );
-  const seen = new Set(); // every exposed face belongs to exactly one region
+  const seen = new Set();
   regions.forEach((region, n) => {
     const chart = skin.charts[n];
     const g = FACE_GEO[region.face];
@@ -61,9 +53,9 @@ test('the round-trip: a charted region’s texels are its faces’ colors, one t
       assert.ok(!seen.has(key), 'a face belongs to one region');
       seen.add(key);
       if (!chart) return;
-      // the texel says what the face says...
+      // the texel holds the face's color
       assert.equal(texel(skin, chart.u0 + i, chart.v0 + j), colorAt(r, region, i, j));
-      // ...and the face's own center, as a point on the plane, lands in it
+      // and the face's center maps into that texel
       const p = [0, 0, 0];
       p[AXIS_INDEX[g.N]] = region.s;
       p[AXIS_INDEX[g.A]] = region.a + i + 0.5;
@@ -106,7 +98,7 @@ test('the gutter: a chart’s padding takes its nearest piece texel, holes and c
     assert.equal(cover[v * skin.width + u], 0, `texel ${u},${v} claimed twice`);
     cover[v * skin.width + u] = 1;
   };
-  // the wall's regions are full boxes, so the nearest piece is the clamp
+  // The wall's regions are full boxes, so the nearest piece is the clamped texel.
   for (const chart of skin.charts) {
     if (!chart) continue;
     const { u0, v0, w, h } = chart;
@@ -120,9 +112,8 @@ test('the gutter: a chart’s padding takes its nearest piece texel, holes and c
   }
   for (const { u, v } of skin.swatch.values()) claim(u, v);
 
-  // a two-color staircase region with its caps: the box beyond the diagonal
-  // is not a piece, and every texel of the padded box still holds some
-  // piece's color — never transparent
+  // A two-color staircase region with caps. The box beyond the diagonal is not
+  // a piece, but every texel of the padded box is opaque.
   const cells = [];
   for (let b = 0; b < 3; b++)
     for (let a = 0; a < 3 - b; a++)
@@ -176,8 +167,7 @@ test('determinism and size: the same input bakes byte-identical, power-of-two on
   assert.deepEqual(a.data, b.data);
   const pow2 = (n) => n > 0 && (n & (n - 1)) === 0;
   assert.ok(pow2(a.width) && pow2(a.height), `${a.width}×${a.height}`);
-  // One cell of one color: no chart, one swatch, and the sheet no bigger
-  // than the empty bake's — the floor.
+  // One cell of one color bakes to the same size as an empty bake.
   const c = packRGBA(10, 20, 30);
   const [one] = traceRegions([{ a: 0, b: 0, color: c }], []);
   const baked = bakeSkin([one], [c], new Map());
@@ -199,8 +189,7 @@ test('uvOfLattice: a region’s box corners are the chart’s corners on every f
       [1, 8],
     ].map(([a, b]) => pointOf(face, a, b, 2));
     const uvs = corners.map((p) => uvOfLattice(chart, region, p));
-    // The expectation derives from each corner's own coordinate along A and B:
-    // at the box's origin it is the chart's origin, at the far end the far edge.
+    // The box origin maps to the chart origin, the far end to the far edge.
     corners.forEach((p, k) => {
       const ca = p[AXIS_INDEX[g.A]];
       const cb = p[AXIS_INDEX[g.B]];
@@ -217,7 +206,7 @@ test('uvOfLattice: a region’s box corners are the chart’s corners on every f
       u > chart.u0 && u < chart.u0 + chart.w,
       `${face}: an interior point between`
     );
-    // and the plane sits where the face does: s + 1 for a positive face, s for a negative
+    // The plane is at s + 1 for a positive face, s for a negative one.
     assert.equal(
       corners[0][AXIS_INDEX[g.N]],
       face[0] === 'p' ? 3 : 2,

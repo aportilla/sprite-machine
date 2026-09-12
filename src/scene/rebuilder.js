@@ -1,35 +1,14 @@
-// ---------------------------------------------------------------------------
-// The mesh rebuilder — the voxel pipeline's ONLY consumer, and just another
-// store subscriber: it FOLLOWS THE ACTIVE DOCUMENT (the 3D View serves the
-// active window), wiring that context's doc channels — change (load / resize
-// / replace-all) and LIVE (the rAF-coalesced stroke flushes; it is that
-// channel's only subscriber); each event runs ingest → carve → colorize →
-// the low-poly wedge mesh (ALWAYS — the "smooth" toggle that could switch
-// the wedges off went on Sep 4 2026; greedy meshing under them is always on
-// too) and swaps the result into the stage. It writes what it measured into
-// the `build` slice for the stats readout. No active document (the desktop
-// focused with nothing open) empties the stage.
+// Mesh rebuilder. Follows the active document and, on each doc change or live
+// stroke flush, runs buildVoxels and wedgeMesh and swaps the result into the
+// stage. Writes the build stats to the build slice. With no active document the
+// stage is emptied.
 //
-// Framing: a build of a NEW sheet (the doc's `sheet` generation moved) — or
-// of a newly ACTIVATED document (a window switch is a new subject) — frames
-// the camera; every other rebuild is in place and carries the auto-rotate
-// spin forward (a fresh mesh starts at rotation 0 — without this the angle
-// would visibly snap on every stroke). The generation is left unconsumed on
-// an empty build, so the first real build of a fresh sheet still frames
-// (e.g. the first stroke on a blank atlas).
+// A new sheet generation or a newly activated document frames the camera. Other
+// rebuilds keep the previous auto-rotate angle. An empty build leaves the
+// generation unconsumed, so the first real build of a fresh sheet still frames.
 //
-// The MESH SEAM: `onMesh` hands every built mesh (with its dims) to one
-// consumer outside the stage — the 3D Sprite Atlas's renderer (scene/ring.js
-// takes a shared-geometry clone) — and null BEFORE the mesh is disposed, so
-// no clone is left holding disposed geometry — or a disposed skin: the mesh's
-// material samples a texture (the engine's skin.js, the model's colour), and the
-// rebuilder disposes it with the geometry and the material on every swap.
-// The rebuilder stays the pipeline's only consumer; the seam carries its
-// product.
-//
-// This being the pipeline's single call site is what makes the future
-// Web-Worker carve a drop-in: making this function async is a local change.
-// ---------------------------------------------------------------------------
+// onMesh receives each new mesh with its dims, and null before the old mesh is
+// disposed, so a consumer's shared-geometry clone never outlives its geometry.
 
 import { buildVoxels, wedgeMesh, computeDiag, VIEW_NAMES } from 'sprite-machine';
 import { workspace, followActive } from '../state/workspace.js';
@@ -41,22 +20,19 @@ import { build } from '../state/build.js';
  *   flat?: boolean,
  *   diag?: boolean,
  *   onMesh?: (m: {mesh: import('three').Object3D, dims: {nx: number, ny: number, nz: number}}|null) => void,
- * }} [opts]  the ?flat / ?diag dev flags, and the mesh seam (see the header)
+ * }} [opts]  the ?flat / ?diag dev flags, and onMesh (see the header)
  */
 export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}) {
   let current = null; // THREE.Object3D in the scene
-  let activeCtx = null; // the followed context
+  let activeCtx = null;
   let framedSheet = 0; // active doc's sheet generation at the last framed build
 
   function removeMesh() {
     if (!current) return;
-    onMesh?.(null); // the consumer drops its clone before the geometry dies
+    onMesh?.(null); // before the geometry is disposed
     stage.scene.remove(current);
-    // Free the GPU resources of the mesh we're replacing: the geometry, the
-    // material, and its map — the skin texture, which a material's dispose
-    // does NOT release (a leaked DataTexture per stroke would climb). The 3D
-    // Sprite Atlas's clone shares all three; THREE's dispose event releases
-    // that renderer's copies too, the clone already dropped (onMesh above).
+    // Free the geometry, the material and its map. material.dispose() does not
+    // free the skin texture.
     current.traverse?.((o) => {
       o.geometry?.dispose?.();
       o.material?.map?.dispose?.();
@@ -83,7 +59,7 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
 
     if (provided.length === 0) {
       build.setStats({ dims: null, voxels: 0, triangles: 0, warnings: [] });
-      stage.requestRender(); // the old mesh (if any) was just removed — redraw
+      stage.requestRender(); // redraw after removing the old mesh
       return;
     }
 
@@ -92,14 +68,10 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     for (const n of VIEW_NAMES) rawViews[n] = d.views[n] || null;
 
     const result = buildVoxels(rawViews, opts);
-    // The low-poly wedge mesh, always: additive 45° wedges over same-color
-    // staircases on the greedy-meshed voxel solid. (The plain greedy-voxel
-    // builder the "smooth" toggle switched to went with the toggle, Sep 4
-    // 2026, and its dead module with the test trim of Sep 5.)
     current = wedgeMesh(result, { flat });
     if (diag && current?.geometry) {
-      // The wedge mesh is guaranteed watertight (its T-junctions are repaired
-      // lattice-exactly), so a nonzero boundary/odd-edge count here is a hole.
+      // The wedge mesh is watertight, so a nonzero boundary or odd-edge count
+      // is a hole.
       document.title = 'DIAG ' + JSON.stringify(computeDiag(current.geometry));
     }
     stage.scene.add(current);
@@ -117,12 +89,11 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
       triangles: current.userData.triangles,
       warnings: [...d.atlasWarnings, ...(result.warnings || [])],
     });
-    stage.requestRender(); // the mesh changed — redraw once even if the camera is idle
+    stage.requestRender(); // redraw even if the camera is idle
   }
 
-  // Follow the active document: structural changes and live flushes of ITS
-  // doc rebuild; an activation switch is a new subject, so framing resets
-  // (`framedSheet` back to never-matching) and the switch itself rebuilds.
+  // Rebuild on the active doc's changes and live flushes. Switching documents
+  // resets framing and rebuilds.
   const stopFollow = followActive(workspace, (ctx) => {
     activeCtx = ctx;
     framedSheet = -1;
@@ -135,11 +106,8 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     return () => unsubs.forEach((u) => u());
   });
 
-  // No prefs subscription: the one render pref left, autoRotate, is the
-  // loop's per-frame read (scene/stage.js), never a rebuild.
-
   return {
-    // HMR teardown: stop listening (the stage disposes the scene itself).
+    // HMR teardown. The stage disposes the scene.
     dispose() {
       stopFollow();
     },

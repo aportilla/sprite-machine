@@ -1,12 +1,7 @@
-// ---------------------------------------------------------------------------
-// Built-in samples + a grid -> ImageData helper. Both samples are 3x2 atlases
-// (LEFT FRONT TOP / RIGHT BACK BOTTOM), so they flow through the same atlas
-// path as a user-dropped sheet. They serve two roles: SEEDS (a truly virgin
-// boot saves each one as an ordinary stored document — loaders.js
-// seedDefaultDocs) and TEMPLATES (the File → New… dialog opens one as a
-// fresh untitled copy). Each carries its native square `tile` size so the
-// dialog can display it without decoding the atlas.
-// ---------------------------------------------------------------------------
+// Built-in samples and a grid-to-ImageData helper. Each sample is a 3×2 atlas:
+// left, front, top over right, back, bottom. A first boot saves each one as a
+// stored document (loaders.js seedDefaultDocs), and File → New… opens one as an
+// untitled copy. `tile` lets the dialog show the tile size without decoding.
 
 import carAtlasUrl from '../assets/car-atlas.png';
 
@@ -40,9 +35,8 @@ export function gridToImageData(rows, palette) {
   return new ImageData(data, w, h);
 }
 
-// --- Cube: reference demo, generated as a 3x2 atlas of solid tiles ----------
-// Row 0: left(tan) front(magenta) top(teal). Row 1 blank -> mirror-X fills the
-// right, back/bottom fall back (matches the original reference cube).
+// Cube: a generated atlas of solid tiles. Row 0 is left (tan), front (magenta)
+// and top (teal). Row 1 is blank, so those faces mirror-fill.
 const CUBE_PAL = { T: [169, 220, 214], M: [199, 125, 214], N: [201, 184, 120] };
 
 function cubeAtlasImage() {
@@ -64,16 +58,13 @@ export const CUBE_SAMPLE = {
   tile: 8, // must match cubeAtlasImage()'s generator
 };
 
-// --- Car: a real 40x40 3x2 atlas (LEFT FRONT TOP / RIGHT BACK BOTTOM) --------
-// A taxi drawn to the pipeline conventions (square tiles) -> no transforms.
-// Faces left blank mirror-fill from their opposite.
+// Car: a taxi with 40×40 tiles. Blank faces mirror-fill from their opposite.
 export const CAR_ATLAS_SAMPLE = {
   name: 'Car',
-  atlas: { url: carAtlasUrl }, // layout + 40x40 tiles auto-derived from 120x80
+  atlas: { url: carAtlasUrl }, // tile size derived from the 120x80 image
   tile: 40, // must match the shipped car-atlas.png (120×80 / 3×2)
 };
 
-// Order sets the New-dialog template order and the seeding order; the first
-// entry is the default — the doc a virgin boot opens, and what ?sample boots
-// load untitled when the param gives no name. Car first — the showcase sprite.
+// Order is the New… dialog order and the seeding order. The first entry is the
+// default: a first boot opens it, and ?sample with no name loads it.
 export const SAMPLES = [CAR_ATLAS_SAMPLE, CUBE_SAMPLE];

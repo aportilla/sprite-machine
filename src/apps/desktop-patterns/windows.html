@@ -1,27 +1,11 @@
-<!-- DESKTOP PATTERNS' window (docs/app-windows-plan.md §3.7) — the
-     application's WIND resource, its window's anatomy: a fragment
-     windows.js beside this file imports whole (?raw) and parses once at the
-     application's init (shell/windows.js parseWindows), cloning the
-     template at each open (cloneWindow). -->
-<!-- ONE clone at a time, opened by Sprite Machine → Desktop Patterns
-     (through the registry — this application's `open`), removed by its
-     close box or its own application's File → Close / Quit — existence IS
-     visibility, the document windows' discipline. The Desktop Patterns
-     APPLICATION's window (a desk accessory's seat; the panel is adopted as
-     that application's, so it holding active swaps the bar to File /
-     View): a DOCUMENT-TIER window (the striped bar and close box of System
-     7.5's Desktop Patterns control panel — a windoid's slim bar carries no
-     title), movable, FIXED-size: no grow box, no zoom box. The size is
-     authored here, the one box the placement takes as input (the shell's
-     centeredBox): the body's 222-wide column — the preview well (222×160,
-     the kit's rule framing it) over the 13×3 chooser of 16px cells (13×16
-     + 12 rules + 2 frame = 222 wide, 3×16 + 2 + 2 = 52 tall) over the
-     default button (20 + its 4px ring margins), two 10px gaps between —
-     plus the stack's 12px pad (the content's own inset: a vf-window body
-     carries none since vintage-frames 0.6.0, and this is the one window
-     whose content wants one — the stack paints nothing and takes no role),
-     the 18px title bar and the 1px borders: 248 × 304
-     (sm-desktop-patterns.js states the well and grid). -->
+<!-- Desktop Patterns window. windows.js parses this fragment and clones the
+     template at each open. -->
+<!-- Fixed size, 248 × 304. The body is a 222-wide column: the 222×160 preview
+     well, the 13×3 chooser of 16px cells (52 tall with rules and frame) and
+     the default button (28 with its ring), with 10px gaps. Add the stack's
+     12px pad, the 18px title bar and the 1px borders. The inset is the
+     stack's pad because a window body has none. sm-desktop-patterns.js sets
+     the well and grid sizes. -->
 <template id="tpl-patterns-window">
   <vf-window heading="Desktop Patterns" movable width="248" height="304">
     <vf-stack pad="12">

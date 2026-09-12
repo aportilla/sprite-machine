@@ -1,36 +1,8 @@
-<!-- The TEXT VIEWER's window (docs/app-windows-plan.md §3.7) — the
-     application's WIND resource, its window's anatomy: a fragment windows.js
-     beside this file imports whole (?raw) and parses once at the
-     application's init (shell/windows.js parseWindows), cloning the
-     template per open (cloneWindow). A window's markup lives with the
-     application that owns it; the dialogs stay the desktop's (index.html). -->
-<!-- One clone per OPEN text file (windows.js), removed by its close box —
-     existence IS visibility. TeachText's window, the read-me's: a
-     DOCUMENT-TIER window (the striped bar, a close box), movable and
-     resizable, the kit's VERTICAL rail on the frame's edge with the grow
-     box in its corner cell (scrollbars="vertical" — TeachText wrapped its
-     text to the window's width and scrolled it up and down only; a
-     `resizable` window without a status strip gets the corner cell from the
-     kit), adopted by the window manager (shell/windows.js) with its
-     placement, so Arrange and a browser resize move it like every window;
-     and, holding the desktop's active state, it IS the Text Viewer's turn —
-     the Sprite Editor deactivates (windoids and strip hide) while it is
-     front, as it did when a read-me opened TeachText over it. No header, no
-     status strip; a ZOOM BOX (`zoomable`) that expands the read-me to a
-     reading column and back (layout.js expandedTextBox, windows.js). The
-     body is the file's text in ONE kit paragraph on the body face — Geneva,
-     the reading face, TeachText's own — kept verbatim by the page's one
-     text-flow rule (style.css .text-body: pre-wrap, so the file's line
-     breaks and blank lines stand and its long lines wrap at the window),
-     inside a stack that fills the scroll plane's width (the plane is never
-     narrower than the viewport, so the copy wraps at the window's edge and
-     the rail's range is the text's height) with the inset stated as the
-     stack's pad — a window body carries none of its own — 4 rows over and
-     under, 6 columns each side, TeachText's tight margin, for the eye.
-     windows.js writes the heading and the text. The SIZE is authored here,
-     the one box the placement takes as input (the shell's cascadedBox steps
-     it from the desktop's WINDOW_ORIGIN): 440 × 320 — about seventy
-     characters of Geneva 9 a line. -->
+<!-- Text Viewer window. windows.js parses this fragment and clones the
+     template for each open text file. -->
+<!-- .text-body in style.css sets pre-wrap. The stack fills the width so lines
+     wrap at the window edge. The inset is the stack's pad because a window
+     body has none. 440 × 320 fits about 70 characters of Geneva 9 per line. -->
 <template id="tpl-text-window">
   <vf-window
     heading="untitled"

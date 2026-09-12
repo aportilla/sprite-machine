@@ -1,6 +1,3 @@
-// Node-runnable tests for the observable store the state slices build on —
-// the ONE place its discipline is pinned: a patch replaces the snapshot, an
-// Object.is-equal patch is a silent no-op. Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -23,7 +20,7 @@ test('an Object.is-equal patch is a silent no-op (no new object, no notify)', ()
   let calls = 0;
   s.subscribe(() => calls++);
   s.patch({ n: 1 });
-  s.patch({ buf }); // same reference — identity, not deep equality
+  s.patch({ buf }); // same reference
   assert.equal(calls, 0);
   assert.equal(s.get(), snap, 'snapshot identity unchanged');
 });

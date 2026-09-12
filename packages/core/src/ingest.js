@@ -1,23 +1,14 @@
-// ---------------------------------------------------------------------------
-// Ingest: sprite image -> occupancy + color typed arrays, at NATIVE size — the
-// tile is NOT cropped. No THREE / no DOM here so it runs unchanged in Node tests.
+// Ingest: a sprite image to occupancy and color typed arrays, at native size. No
+// THREE or DOM.
 //
-// Strict registration: a tile is a literal slice of the voxel lattice, so texel
-// (u,v) maps 1:1 to a fixed lattice line. We deliberately do NOT crop to the
-// alpha bounding box — where a pixel sits inside its tile IS its position in the
-// object, and must line up across faces (a FRONT pixel only survives the carve
-// where the SIDE covers its row and the TOP covers its column). Cropping would
-// throw that registration away.
+// Tiles are not cropped to their alpha bounds. A texel's place in its tile is its
+// lattice position and must line up across faces.
 //
-// Input shape is ImageData-compatible: { width, height, data } where data is an
-// RGBA byte array (canvas.getImageData().data in the browser; a plain array in
-// tests). Output packs color as a Uint32 (bytes r,g,b,a, little-endian).
-// ---------------------------------------------------------------------------
+// Input is ImageData-like { width, height, data } with RGBA bytes. Colors pack into
+// a Uint32 as bytes r, g, b, a, little-endian.
 
-// Sprites are assumed to be HARD pixel art: every texel is either fully opaque
-// or fully transparent, no partial coverage. A pixel counts as solid at alpha
-// >= 128 — the 50%-coverage midpoint, robust to privacy-browser canvas farbling
-// that perturbs a 0/255 alpha by ±1 (see the wedge-mesh farbling note).
+// Sprites are hard pixel art. A texel is solid at alpha >= 128, which tolerates the
+// ±1 alpha noise privacy browsers add to canvas reads.
 const ALPHA_SOLID = 128;
 
 export const packRGBA = (r, g, b, a = 255) =>
@@ -50,9 +41,8 @@ function rot90cw(img) {
   return { width: nW, height: nH, data: out };
 }
 
-// Axis-flip blit: mirror an image horizontally (flipX) and/or vertically (flipY).
-// Exported so derive.js's display-only mirrorImage reuses one flip implementation.
-// A no-op (both false) returns the SAME object; any flip returns a fresh copy.
+// Mirror an image horizontally (flipX) and/or vertically (flipY). With both false
+// it returns the same object, otherwise a new copy.
 export function flip(img, flipX, flipY) {
   if (!flipX && !flipY) return img;
   const { width: W, height: H, data } = img;
@@ -73,8 +63,8 @@ export function flip(img, flipX, flipY) {
 }
 
 /**
- * Reorient a sprite so it matches the pipeline's view conventions. Applied
- * before ingest. `rot` is quarter-turns clockwise (0-3); flips run after rot.
+ * Reorient a sprite to the pipeline's view conventions before ingest. rot is
+ * quarter-turns clockwise (0-3). Flips apply after the rotation.
  * @param {{width,height,data}} img
  * @param {{rot?:number, flipX?:boolean, flipY?:boolean}} t
  */
@@ -86,10 +76,8 @@ export function applyTransform(img, t = {}) {
 }
 
 /**
- * Ingest a sprite at NATIVE size — occupancy/color for the WHOLE tile, no crop.
- * The tile's own dimensions become the view's dimensions, so its texels register
- * 1:1 against the other faces. A fully transparent tile has nothing to constrain
- * and returns null (treated as absent — the mirror partner colors it).
+ * Occupancy and color for a whole tile at native size. A fully transparent tile
+ * returns null and counts as absent.
  * @param {{width:number,height:number,data:ArrayLike<number>}} img
  * @returns {{w:number,h:number,occ:Uint8Array,rgb:Uint32Array} | null}
  */
@@ -115,23 +103,18 @@ export function ingestSprite(img) {
       }
     }
   }
-  if (!any) return null; // fully transparent -> absent (mirror-filled)
+  if (!any) return null;
   return { w: W, h: H, occ, rgb };
 }
 
 /**
- * Copy a view into a (targetW,targetH) grid buffer at NATIVE scale — no
- * resampling — with its (0,0) texel at (offX,offY). Under strict registration
- * gridViews passes offX=offY=0, so for a well-formed (uniform-tile) sheet every
- * view already equals the grid on the axes it constrains and this is the exact
- * fast-path identity copy below. It stays general only to pad the degenerate
- * case where a malformed sheet gives views of unequal size (origin-anchored,
- * far end left empty); the bounds guards keep that from indexing out of range.
+ * Copy a view into a targetW × targetH grid at native scale with its (0,0) texel
+ * at (offX, offY). Uncovered cells stay empty and texels outside are clipped.
  * @returns {{occ:Uint8Array, rgb:Uint32Array}}
  */
 export function placeView(view, targetW, targetH, offX, offY) {
   const { w, h, occ, rgb } = view;
-  if (w === targetW && h === targetH) return { occ, rgb }; // exact fit (offX/offY==0)
+  if (w === targetW && h === targetH) return { occ, rgb }; // assumes offX = offY = 0
   const outOcc = new Uint8Array(targetW * targetH);
   const outRgb = new Uint32Array(targetW * targetH);
   for (let sy = 0; sy < h; sy++) {

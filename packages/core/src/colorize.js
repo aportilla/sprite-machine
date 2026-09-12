@@ -1,23 +1,12 @@
-// ---------------------------------------------------------------------------
-// Colorize: assign a color to every EXPOSED face of every surface voxel.
-//
-// The corrected rule (the naive "stamp one sprite pixel down the whole depth
-// ray" smears color and was rejected):
-//   SURFACE-ONLY, PER-EXPOSED-FACE, DEPTH-AWARE (first-hit), CLOSEST-FACE-NORMAL,
-//   NEAREST-PALETTE.
-//
-// For each exposed face f with outward normal n:
-//   1. Facing view = the view whose normal == n. Sample it ONLY IF this voxel
-//      is the first solid hit marching from that view inward — i.e. nothing
-//      solid lies beyond the face along +n. This is what prevents a recessed
-//      step wall from being painted with the protruding front pixel's color.
-//   2. Else, if mirror-fill is enabled for this face's axis (on by default for
-//      all axes) and the OPPOSITE view exists, sample it mirrored (symmetry).
-//   3. Else relax: average already-assigned neighbor face colors.
-//   4. Else: the object's dominant body color.
-// Every sampled color is snapped to the sprite palette so AA fringe never
-// produces a muddy off-palette pixel.
-// ---------------------------------------------------------------------------
+// Colorize: a color for every exposed face of every surface voxel. For a face with
+// outward normal n, the first of:
+//   1. The facing view, when nothing solid lies beyond the face along n. The depth
+//      test keeps a recessed wall from taking a protruding pixel's color.
+//   2. The opposite view, under the same depth test, when mirror-fill is on for
+//      the face's axis.
+//   3. The average of already-colored neighbor faces.
+//   4. The dominant body color.
+// Sampled and averaged colors snap to the nearest palette color.
 
 import { unpackRGBA, packRGBA } from './ingest.js';
 import { voxIndex, unvoxIndex } from './carve.js';
@@ -31,7 +20,7 @@ import {
 } from './views.js';
 import { DEFAULT_MIRROR } from './constants.js';
 
-/** Build the deduped palette (union of all solid sprite pixels). */
+/** The distinct colors of all solid view texels. */
 export function buildPalette(gviews) {
   const seen = new Set();
   const palette = [];
@@ -51,8 +40,6 @@ export function buildPalette(gviews) {
 
 export function makeSnapper(palette) {
   const cache = new Map();
-  // Unpack each palette entry once (keeping its packed value) instead of
-  // re-splitting bytes on every query iteration.
   const pal = palette.map((c) => ({ c: c >>> 0, ...unpackRGBA(c) }));
   return (color) => {
     const key = color >>> 0;
@@ -73,7 +60,7 @@ export function makeSnapper(palette) {
   };
 }
 
-/** Is `(x,y,z)`'s face `faceKey` the first solid hit from its facing view? */
+/** True when no solid voxel lies beyond face faceKey of (x, y, z) along its normal. */
 function firstHitFromFace(solid, dims, x, y, z, faceKey) {
   const [nx, ny, nz] = FACE_NORMAL[faceKey];
   let cx = x + nx,
@@ -88,8 +75,7 @@ function firstHitFromFace(solid, dims, x, y, z, faceKey) {
   return true;
 }
 
-// One reused scratch — sampleView reads the projection immediately, so mutating a
-// shared object avoids a per-exposed-face allocation.
+// Reused projection scratch. sampleView reads it immediately.
 const _sampleP = { u: 0, v: 0 };
 function sampleView(gv, name, x, y, z, dims) {
   VIEWS[name].projectInto(x, y, z, dims, _sampleP);
@@ -123,8 +109,7 @@ export function colorize(solid, surfaceMask, gviews, dims, opts = {}) {
       const faceKey = FACE_KEYS[f];
       const key = idx * 6 + f;
 
-      // firstHitFromFace is invariant for this face; memoize so the facing and
-      // mirror branches march the depth ray at most once between them.
+      // Memoized so the depth ray is marched at most once per face.
       let firstHit;
       const isFirstHit = () =>
         (firstHit ??= firstHitFromFace(solid, dims, x, y, z, faceKey));
@@ -147,7 +132,7 @@ export function colorize(solid, surfaceMask, gviews, dims, opts = {}) {
     }
   }
 
-  // 3. Relaxation: average already-colored neighbors (few passes).
+  // 3. Relaxation: average already-colored neighbor faces.
   const TANGENTIAL = {
     x: [
       [0, 1, 0],

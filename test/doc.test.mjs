@@ -1,7 +1,3 @@
-// Node-runnable tests for the doc slice: the canonical atlas, the silent
-// stroke-write contract, and the rAF-coalesced live channel with its
-// drain-before-consume guard — driven by an injectable frame scheduler.
-// Run: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -27,8 +23,8 @@ const RED = [255, 0, 0, 255];
 const GREEN = [0, 255, 0, 255];
 const CLEAR = [0, 0, 0, 0];
 
-// A 3×2 atlas of 2×2 tiles (layout: LEFT FRONT TOP / RIGHT BACK BOTTOM) with
-// one red pixel in FRONT's top-left corner (sheet coords 2,0).
+// A 3×2 atlas of 2×2 tiles (left front top / right back bottom) with one red
+// pixel at front's top-left, sheet (2,0).
 function carSheet() {
   const img = sheet(6, 4);
   setPx(img, 2, 0, RED);
@@ -165,12 +161,12 @@ test('resizeTiles: a same-size call is a no-op — the doc is unchanged', () => 
 
 test('replaceAllTiles recolors every tile in ONE change notification, scoped to the tiled region', () => {
   const doc = createDoc(fakeScheduler());
-  // A 7px-wide sheet over 3 columns rounds to 2px tiles: column x=6 is outside
-  // every tile — invisible to the carve, present in a download.
+  // A 7 px wide sheet over 3 columns has 2 px tiles, so column x=6 is outside
+  // every tile.
   const img = sheet(7, 4);
-  setPx(img, 2, 0, RED); // inside FRONT
-  setPx(img, 5, 3, RED); // BOTTOM tile too — "all tiles" means all tiles
-  setPx(img, 6, 0, RED); // the remainder column
+  setPx(img, 2, 0, RED); // front tile
+  setPx(img, 5, 3, RED); // bottom tile
+  setPx(img, 6, 0, RED); // remainder column
   doc.loadAtlas(img);
   let changes = 0;
   doc.subscribe(() => changes++);

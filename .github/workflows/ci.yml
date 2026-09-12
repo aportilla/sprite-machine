@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # Both engines branches from package.json: ^20.19 and >=22.12. setup-node
-        # resolves each major to its latest patch, so 20 → ≥20.19 and 22 → ≥22.12.
+        # package.json engines: ^20.19 or >=22.12. setup-node resolves each major
+        # to its latest patch.
         node-version: [20, 22]
     steps:
       - uses: actions/checkout@v4

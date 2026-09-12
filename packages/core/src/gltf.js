@@ -1,32 +1,15 @@
-// ---------------------------------------------------------------------------
-// A glTF 2.0 BINARY writer for one textured mesh — what File → Export 3D
-// Model… hands over — and its reader (the tests'). Pure:
-// typed arrays and a PNG in, bytes out; no THREE (model.js reads the
-// arrays off the mesh). One node, one mesh, one primitive, one
-// material, one texture: the model and its skin (skin.js) sampled
-// NEAREST both ways with clamped wrap — the hard texel is part of the file
-// — under a metallic-roughness material (metalness 0, roughness 1, the 3D
-// View's) or, asked for, the KHR_materials_unlit extension: the paint
-// exact under no light.
+// glTF 2.0 binary (glb) writer for one textured mesh, and a reader. Typed arrays
+// and a PNG in, bytes out. No THREE.
 //
-// Why glb: every engine's first-party importer reads it, its material IS
-// three's MeshStandardMaterial, and a browser gives one download per
-// gesture — a .gltf is three files, or one inflated by base64. Why a
-// writer of our own: three's GLTFExporter encodes a texture by drawing it
-// into a canvas and reading it back, the readback privacy browsers
-// perturb; this one takes the PNG as bytes (png-encode.js), so the skin
-// lands verbatim. Its subset is small enough to own, like the zip writer.
+// The PNG bytes are stored as given, not drawn through a canvas, because privacy
+// browsers perturb canvas readback.
 //
-// The layout (the spec's, little-endian): a 12-byte header (the magic
-// 'glTF', version 2, the file's length), a JSON chunk padded with spaces to
-// four bytes, a BIN chunk padded with zeros holding the positions, normals,
-// UVs, indices and the PNG, each in its own 4-aligned bufferView. Positions
-// are baked in the caller's units (the scale — the reader's meters per
-// stage unit — applied here, so the accessor's min/max are the real extent
-// and the node carries no transform). UVs pass through: glTF's v = 0 is the
-// image's TOP row, and the skin's texel row 0 IS v = 0 (a DataTexture,
-// flipY false), so there is nothing to flip. The winding is CCW, three's.
-// ---------------------------------------------------------------------------
+// Layout (little-endian): a 12-byte header ('glTF', version 2, file length), a
+// JSON chunk padded with spaces to 4 bytes, and a BIN chunk padded with zeros.
+// The BIN chunk holds positions, normals, UVs, indices and the PNG, each in a
+// 4-aligned bufferView. Positions are multiplied by scale here, so the accessor
+// min/max are the real extent and the node has no transform. UVs pass through
+// unflipped: glTF v = 0 is the image's top row, as in the skin. Winding is CCW.
 
 const MAGIC = 0x46546c67; // 'glTF'
 const VERSION = 2;
@@ -44,12 +27,11 @@ const TRIANGLES = 4;
 const pad4 = (n) => (n + 3) & ~3;
 
 /**
- * The model to write: `position` / `normal` / `uv` are per-vertex triples,
- * triples and pairs (stage units, unit length, [0, 1]); `index` three vertex
- * indices per triangle, CCW; `scale` a factor onto every position (1);
- * `image` the skin as an encoded PNG, or null for a flat `color` (the
- * material's base color, linear RGB 0..1); `unlit` puts KHR_materials_unlit
- * on the material; `generator` and `extras` land on the asset.
+ * The model to write. position and normal are per-vertex xyz (stage units, unit
+ * length), uv per-vertex pairs in [0, 1], index three CCW vertex indices per
+ * triangle. scale multiplies every position (default 1). image is the skin as an
+ * encoded PNG, or null for a flat color (linear RGB 0..1). unlit adds
+ * KHR_materials_unlit. generator and extras go on the asset.
  * @typedef {{
  *   name: string,
  *   position: ArrayLike<number>,
@@ -80,7 +62,7 @@ export function glbFromModel(model) {
   if (index.length % 3 !== 0 || index.length < 3)
     throw new Error('gltf: indices come in triangles');
 
-  // The vertex buffers — positions scaled, with their extent.
+  // Scaled positions and their extent.
   const pos = new Float32Array(n * 3);
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
@@ -91,7 +73,7 @@ export function glbFromModel(model) {
     if (v < min[k]) min[k] = v;
     if (v > max[k]) max[k] = v;
   }
-  // Float32 rounding: the accessor's bounds must contain the stored values.
+  // Round the bounds to Float32 so they contain the stored values.
   for (let k = 0; k < 3; k++) {
     min[k] = Math.fround(min[k]);
     max[k] = Math.fround(max[k]);
@@ -101,7 +83,7 @@ export function glbFromModel(model) {
   const wide = n > 65535;
   const idx = wide ? Uint32Array.from(index) : Uint16Array.from(index);
 
-  // The BIN chunk: each view at a 4-aligned offset.
+  // BIN chunk: each view at a 4-aligned offset.
   /** @type {{bytes: Uint8Array, target?: number}[]} */
   const views = [
     { bytes: new Uint8Array(pos.buffer), target: ARRAY_BUFFER },
@@ -196,7 +178,7 @@ export function glbFromModel(model) {
     buffers: [{ byteLength: binLength }],
   };
 
-  // The file: header, the JSON chunk (space-padded), the BIN chunk (zero-padded).
+  // Header, JSON chunk (space-padded), BIN chunk (zero-padded).
   const jsonBytes = new TextEncoder().encode(JSON.stringify(json));
   const jsonLength = pad4(jsonBytes.length);
   const total = 12 + 8 + jsonLength + 8 + binLength;
@@ -217,9 +199,8 @@ export function glbFromModel(model) {
 }
 
 /**
- * Read a glb back: its parsed JSON and its BIN chunk (a view into `bytes`).
- * The writer's mirror — the tests read the export through it.
- * Throws on anything but a version-2 glb with a JSON chunk first.
+ * Read a glb: its parsed JSON and its BIN chunk (a view into bytes). Throws unless
+ * it is a version-2 glb with a JSON chunk first.
  * @param {Uint8Array} bytes
  * @returns {{json: any, bin: Uint8Array}}
  */
@@ -244,7 +225,7 @@ export function glbParts(bytes) {
 }
 
 /**
- * A bufferView's bytes out of a read glb (a reader convenience).
+ * A bufferView's bytes from a read glb.
  * @param {{json: any, bin: Uint8Array}} parts  @param {number} index
  */
 export function glbViewBytes(parts, index) {

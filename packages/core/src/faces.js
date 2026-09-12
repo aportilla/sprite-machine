@@ -1,27 +1,15 @@
-// ---------------------------------------------------------------------------
-// The face vocabulary's GEOMETRY: for each face key, the axes its plane spans
-// (A, B — the tangent frame every 2D read of a face uses: the regions, the
-// skin's charts and the UV read) and the axis it faces along (N), plus the two
-// lattice reads built on them — a tangent coordinate's voxel index (idxFor)
-// and its 3D point (pointOf). Pure, no THREE, Node-testable.
+// Face geometry: each face key's tangent axes (A, B) and normal axis (N), and the
+// lattice lookups idxFor (tangent coords to voxel index) and pointOf (tangent
+// coords to a 3D point).
 //
-// A face's plane sits at slice s along N: at s for a negative face (the
-// voxel's near side), at s + 1 for a positive one. Tangent (a, b) is the
-// voxel's own A/B coordinate, so the unit square [a, a+1] × [b, b+1] on the
-// plane IS that voxel's face, and a texel per face is a texel per unit
-// square — the skin's orientation rule, stated once (skin.js).
-//
-// Until Sep 7 2026 this module also merged faces into greedy rectangles
-// (culledQuads / greedyQuads); the mesher traces coplanar REGIONS now
-// (regions.js) — a rectangle being the region with four corners — so the quad
-// builders went with their last consumer.
-// ---------------------------------------------------------------------------
+// A face's plane at slice s sits at s along N for a negative face and at s + 1 for
+// a positive one. Tangent (a, b) is the voxel's own A/B coordinate, so the unit
+// square [a, a+1] × [b, b+1] on the plane is that voxel's face.
 
 import { voxIndex } from './carve.js';
 import { FACE_NORMAL, AXIS_INDEX } from './views.js';
 
-// Per-face tangent axes and the normal axis. The outward normal is read from
-// the shared FACE_NORMAL (views.js), not restated here.
+// The outward normal's sign is in FACE_NORMAL.
 export const FACE_GEO = {
   px: { N: 'x', A: 'y', B: 'z' },
   nx: { N: 'x', A: 'y', B: 'z' },
@@ -32,9 +20,7 @@ export const FACE_GEO = {
 };
 
 /**
- * The voxel index behind tangent coords (a, b) on slice s of `face` — the
- * lattice cell whose face that is. One home: the regions, the skin's baker
- * and every test compose it here.
+ * The index of the voxel whose face is at tangent coords (a, b) on slice s.
  * @param {string} face  a FACE_KEYS key
  * @param {number} a  along FACE_GEO[face].A
  * @param {number} b  along FACE_GEO[face].B
@@ -51,8 +37,7 @@ export function idxFor(face, a, b, s, dims) {
 }
 
 /**
- * The 3D lattice point at tangent (a, b) on the plane of `face` at slice s —
- * the plane at s + 1 for a positive face, at s for a negative one.
+ * The 3D lattice point at tangent (a, b) on the plane of face at slice s.
  * @param {string} face
  * @param {number} a
  * @param {number} b

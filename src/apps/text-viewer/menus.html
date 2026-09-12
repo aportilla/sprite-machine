@@ -1,41 +1,17 @@
-<!-- The TEXT VIEWER's menus (docs/apps-plan.md §3.4) — the read-me
-     application, TeachText's seat: front while a text window holds the
-     desktop's active state (its windows: windows.js beside this file). A
-     fragment of vf-menu elements: shell/menu-bar.js parses it once into
-     live nodes, slots them between the Sprite Machine menu and the clock
-     while the Text Viewer is front and lifts them out when another
-     application comes forward — a detached menu claims no key (the kit's
-     contract). apps/text-viewer/index.js wires the nodes: a menu is
-     addressed by data-menu, an item by value, WITHIN this fragment. The
-     set is what TeachText's bar showed over a read-only document: File
-     with Close and Quit, Edit with the two commands a read-only file left
-     live, and — this machine's — View with the one command over the whole
-     screen. Text editing, the day it comes, brings TeachText's full Edit
-     menu (Undo, Cut, Paste, Clear) into this fragment. -->
+<!-- Text Viewer menus. shell/menu-bar.js parses this fragment;
+     apps/text-viewer/index.js addresses items by data-menu and value. -->
 <vf-menu data-menu="file" label="File">
-  <!-- Close ⌃W (Control alone — ⌘W is the browser's before the page sees
-       it): the front text window. Always live here: the application is
-       front only with a text window active. -->
+  <!-- ⌃W: the browser takes ⌘W before the page sees it. -->
   <vf-menu-item value="close" shortcut="⌃W">Close</vf-menu-item>
-  <!-- Quit ⌃Q (on Close's reasoning): every open text window in turn —
-       TeachText's Quit. A read-me is read-only, so nothing asks. -->
+  <!-- ⌃Q: the browser takes ⌘Q. -->
   <vf-menu-item value="quit" shortcut="⌃Q">Quit</vf-menu-item>
 </vf-menu>
 <vf-menu data-menu="edit" label="Edit">
-  <!-- Copy ⌘C: the prose the mouse selected in the read-me, to the system
-       clipboard (navigator.clipboard.writeText — what the browser's own
-       copy would do, claimed so the menu says what ⌘C does); greyed while
-       the selection is empty or lies outside a text window, and greyed it
-       claims nothing, so the stroke falls through. Select All ⌘A: one
-       Range over the window's text. What TeachText left live on a
-       read-only document. -->
+  <!-- Copy is disabled unless the selection is in a text window, so ⌘C falls
+       through to the browser. -->
   <vf-menu-item value="copy" shortcut="⌘C" disabled>Copy</vf-menu-item>
   <vf-menu-item value="select-all" shortcut="⌘A">Select All</vf-menu-item>
 </vf-menu>
 <vf-menu data-menu="view" label="View">
-  <!-- ⌘J — Arrange Windows, in every application's View menu: here the
-       ARRANGE alone (the boot placement re-run on the current raster —
-       every text window back to its cascade slot with the rest), greyed
-       while the screen already IS the arrangement (windows.arranged). -->
   <vf-menu-item value="arrange" shortcut="⌘J" disabled>Arrange Windows</vf-menu-item>
 </vf-menu>

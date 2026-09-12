@@ -1,38 +1,21 @@
-// ---------------------------------------------------------------------------
-// Coplanar REGIONS: the union of one plane's exposed unit faces and the gable
-// cap half-faces the wedge blocks end on, traced as boundary loops on the
-// lattice with every collinear run merged — so a wall beside a 45° slope has
-// ONE straight diagonal edge where a stack of rectangles plus a sawtooth of
-// gable triangles had a vertex at every step, each pinning a vertex on the
-// slope that the T-junction repair then had to split the slope at. Pure 2D
-// lattice work, no THREE, Node-tested; the triangulation of a region (earcut,
-// through THREE's ShapeUtils) is the mesher's (wedge-mesh.js).
+// Coplanar regions: one plane's exposed unit faces plus the gable-cap half
+// faces of the wedge blocks, traced as boundary loops with collinear runs
+// merged. A wall beside a 45° slope gets one straight diagonal edge, so no
+// vertices land on the slope. wedge-mesh.js triangulates the regions.
 //
-// Pieces on one plane, in the face's tangent coordinates (a along
-// FACE_GEO[face].A, b along .B): a CELL is the unit square [a, a+1] × [b, b+1]
-// — an exposed voxel face; a HALF is the right triangle in that square whose
-// right angle sits at the corner (a + hiA, b + hiB) — a gable cap, the
-// prism's cross-section. Every piece carries its packed colour: a face's from
-// colorize, a cap's the wedge's. A texel per piece is a texel per unit
-// square, the skin's orientation rule (skin.js).
+// Pieces use the face's tangent coordinates: a along FACE_GEO[face].A, b along
+// .B. A cell is the unit square [a, a+1] × [b, b+1]. A half is the right
+// triangle in that square with its right angle at (a + hiA, b + hiB). Each
+// piece carries a packed color.
 //
-// The trace: every piece contributes its directed edges, CCW in (a, b); an
-// edge whose reverse another piece contributes is interior and cancels; the
-// survivors are chained by the KEEP-LEFT rule — at a vertex with several ways
-// on, the sharpest left turn — which pairs each arriving edge with the one
-// leaving along its own sector of the region. So two cells that meet only at
-// a corner are two loops (two regions, as they should be), while a bay that
-// opens onto the outside through a corner rides the outer loop through that
-// corner twice, and two holes meeting at a corner ride one hole loop twice:
-// a self-touching ring, the very shape earcut builds when it bridges a hole
-// into the outer, and one its ear test handles by design (the zero-length
-// diagonal case); the mesher asserts every region triangulates to its full
-// area. A loop with positive signed area is an OUTER, negative a HOLE. A hole
-// and a piece belong to the smallest outer containing a point of theirs (a
-// piece's centroid, a point a quarter-cell inside a hole's first edge —
-// neither ever on a lattice line or a diagonal a piece can have), so an
-// island inside a hole is its own region.
-// ---------------------------------------------------------------------------
+// Trace: each piece adds its directed edges, CCW in (a, b). An edge whose
+// reverse is also present is interior and cancels. The remaining edges chain
+// by the keep-left rule, taking the sharpest left turn at each vertex. Two
+// cells that touch only at a corner form two loops. A loop can pass through a
+// corner twice, which earcut handles. A loop with positive signed area is an
+// outer, negative a hole. Holes and pieces belong to the smallest outer that
+// contains a test point: a piece's centroid, or a point a quarter cell inside
+// a hole's first edge. Neither can lie on a lattice line or a piece's diagonal.
 
 import { FACE_KEYS, FACE_NORMAL } from './views.js';
 import { FACE_GEO, idxFor } from './faces.js';
@@ -43,15 +26,15 @@ import { FACE_GEO, idxFor } from './faces.js';
  * @typedef {number[][]} Loop  vertices [a, b] in order, the closing vertex not repeated
  * @typedef {{outer:Loop, holes:Loop[], a:number, b:number, w:number, h:number,
  *            texels:Uint32Array, present:Uint8Array, uniform:number|null, area2:number}} Region2D
- *   a region: its loops, its bounding box (a, b, w, h) in cells, a texel per
- *   box cell (`present` marks the pieces'), its one colour or null, and
- *   twice its area (a cell 2, a half 1).
+ *   loops, bounding box (a, b, w, h) in cells, a texel per box cell (`present`
+ *   marks the pieces), the single color or null, and twice the area (a cell 2,
+ *   a half 1).
  * @typedef {Region2D & {face:string, s:number, normal:number[]}} Region
  */
 
 const DIM = (dims, axis) => dims['n' + axis];
 
-/** Twice the signed area of a polygon (shoelace); positive is CCW. @param {number[][]} poly */
+/** Twice the signed area (shoelace). Positive is CCW. @param {number[][]} poly */
 function area2(poly) {
   let s = 0;
   for (let i = 0; i < poly.length; i++) {
@@ -62,7 +45,7 @@ function area2(poly) {
   return s;
 }
 
-/** Even-odd point-in-polygon; the ray is horizontal, and no test point here has an integer y. */
+/** Even-odd point-in-polygon, horizontal ray. Test points never have an integer y. */
 function inside(poly, x, y) {
   let c = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -73,7 +56,7 @@ function inside(poly, x, y) {
   return c;
 }
 
-/** Drop the vertices a ring runs straight through. Ring edges are unit steps, so a step's sign is its direction. */
+/** Drop collinear vertices. Edges are unit steps, so a step's sign is its direction. */
 function dropCollinear(ring) {
   const n = ring.length;
   const out = [];
@@ -134,7 +117,7 @@ export function traceRegions(cells, halves) {
     });
   }
 
-  // 1. directed edges; one whose reverse is present is interior and cancels
+  // 1. Directed edges. An edge whose reverse is present is interior.
   const ekey = (p, q) => p[0] + ',' + p[1] + '>' + q[0] + ',' + q[1];
   /** @type {Map<string, {p:number[], q:number[]}>} */
   const edges = new Map();
@@ -149,7 +132,7 @@ export function traceRegions(cells, halves) {
   const boundary = [];
   for (const e of edges.values()) if (!edges.has(ekey(e.q, e.p))) boundary.push(e);
 
-  // 2. the keep-left successor of every boundary edge
+  // 2. The keep-left successor of each boundary edge.
   const vkey = (p) => p[0] + ',' + p[1];
   /** @type {Map<string, {p:number[], q:number[]}[]>} */
   const outAt = new Map();
@@ -177,7 +160,7 @@ export function traceRegions(cells, halves) {
     next.set(e, best);
   }
 
-  // 3. the loops: the cycles of the successor map
+  // 3. Loops: the cycles of the successor map.
   const seen = new Set();
   /** @type {Loop[]} */
   const loops = [];
@@ -194,7 +177,7 @@ export function traceRegions(cells, halves) {
     loops.push(dropCollinear(ring));
   }
 
-  // 4. outers and holes; each hole and each piece to the innermost outer around it
+  // 4. Outers and holes. Each hole and piece goes to the innermost outer around it.
   /** @type {Loop[]} */
   const outers = [];
   /** @type {Loop[]} */
@@ -210,8 +193,8 @@ export function traceRegions(cells, halves) {
     const [p, q] = h;
     const dx = Math.sign(q[0] - p[0]);
     const dy = Math.sign(q[1] - p[1]);
-    // a quarter-cell to the RIGHT of the hole's first edge: the region is on
-    // the left of every loop, so the right is the hole's own emptiness
+    // A quarter cell to the right of the hole's first edge is inside the hole,
+    // since the region lies to the left of every loop.
     groups[
       owner((p[0] + q[0]) / 2 + 0.25 * dy, (p[1] + q[1]) / 2 - 0.25 * dx)
     ].holes.push(h);
@@ -259,12 +242,12 @@ export function traceRegions(cells, halves) {
   });
 }
 
-/** The key a plane's halves are filed under: a face key at a slice. */
+/** The map key for a plane: a face key and a slice. */
 export const planeKey = (face, s) => face + '|' + s;
 
 /**
- * The regions of every plane of the surface: the exposed faces of `surfaceMask`
- * (coloured by `faceColor`, keyed idx*6 + f) plus the halves filed per plane.
+ * The regions of every surface plane: the exposed faces in `surfaceMask`,
+ * colored by `faceColor` (keyed idx*6 + f), plus each plane's halves.
  * @param {{nx:number, ny:number, nz:number}} dims
  * @param {Uint8Array} surfaceMask
  * @param {Map<number, number>} faceColor
