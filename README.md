@@ -919,14 +919,18 @@ items`, plain ink, off the model) over the Finder's **double rule** — black,
   bar — the icon staying put, **every selected icon of its field travelling as
   one**, Escape cancelling; the kit reports the drag and a cancelable drop,
   and **the page decides what the drop means**. Three destinations, hit-tested
-  with `elementsFromPoint`: onto a **folder icon** files the set into it at
-  the next free cells; into a **folder window** it did not come from, or out
-  onto the **desktop**, files it there, each member where its own outline was
-  let go. Each cancels the kit's default and moves the **model** — a move is
-  catalog, not content: the bytes, the name and the modified time all stand.
-  Under a drag the folder icon under the pointer wears `target`, never for a
-  folder over itself or a descendant, where the drop is refused. Nothing about
-  the gesture is drawn, measured or clamped by the page.
+  with `elementsFromPoint` and **read only down to the first window under the
+  pointer** — what a window covers is hidden, so a folder icon or a folder
+  window behind it is never a destination: onto a **folder icon** files the
+  set into it at the next free cells; into a **folder window** it did not
+  come from, or out onto the **desktop**, files it there, each member where
+  its own outline was let go. Each cancels the kit's default and moves the
+  **model** — a move is catalog, not content: the bytes, the name and the
+  modified time all stand. **Another application's window** — a document, a
+  read-me, the control panel — is none of the three: a drop over it moves
+  nothing. Under a drag the folder icon under the pointer wears `target`,
+  never for a folder over itself or a descendant, where the drop is refused.
+  Nothing about the gesture is drawn, measured or clamped by the page.
 - **Copy and Paste** (the plan is
   [docs/clipboard-plan.md](docs/clipboard-plan.md)) is Mac OS X's Finder
   grammar, deliberately — System 7 copied no file with ⌘C/⌘V — over one

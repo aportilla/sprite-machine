@@ -52,20 +52,26 @@
 // and the outline's origin; the PAGE decides what a drop means (the kit's
 // position on every gesture: it reports, the consumer decides). Three
 // destinations, hit-tested with elementsFromPoint (the travelling icons
-// skipped — the outline is never a hit): onto a FOLDER ICON files the set
+// skipped — the outline is never a hit) and read only down to the first
+// window under the pointer, since the stack holds covered elements too:
+// what a window covers is hidden, so a folder icon or a window behind it
+// is never a destination (a drag inside a folder window over a desktop
+// folder it covers stays in the window). Onto a FOLDER ICON files the set
 // into that folder at its lattice's next free cells; into a FOLDER WINDOW
 // the set came from elsewhere files it there, each member where its own
 // outline was let go (the window's placementAt, held at the origin); out
 // onto the DESKTOP from a window files it to the root, each where its
-// outline was (the desktop's placementAt, held below the menu bar). Each
-// of those cancels the default action and moves the MODEL (files.moveDoc /
-// moveFolder — the icon element follows through the reconciler, landing at
-// the drop's position); a drop in the container the set came from is left
-// to the kit's default action, which moves the set whole. A folder is never
-// filed into itself or a descendant (the slice refuses; the drop is
-// cancelled and nothing moves; no highlight either). Under a drag the
-// folder icon under the pointer wears the kit's `target` — the Finder's
-// inverted destination.
+// outline was (the desktop's placementAt, held below the menu bar). A
+// window of ANOTHER APPLICATION — a document, a read-me, the control
+// panel — is none of them: the drop over it is cancelled and nothing
+// moves. Each of the three cancels the default action and moves the MODEL
+// (files.moveDoc / moveFolder — the icon element follows through the
+// reconciler, landing at the drop's position); a drop in the container the
+// set came from is left to the kit's default action, which moves the set
+// whole. A folder is never filed into itself or a descendant (the slice
+// refuses; the drop is cancelled and nothing moves; no highlight either).
+// Under a drag the folder icon under the pointer wears the kit's `target`
+// — the Finder's inverted destination.
 //
 // THE TRASH (Sep 9 2026) is the third kind, rendered from the files slice's
 // synthetic row like any desktop folder — so a drop onto it or into its
@@ -486,27 +492,32 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
   sync();
 
   // --- filing: the drag ----------------------------------------------------------
-  /** What is under the pointer, the travelling icons skipped: a folder
-   *  icon (the recipe's `data-folder`), a folder window, the desktop. */
+  /** What the pointer is over, the travelling icons skipped: a folder icon
+   *  (the recipe's `data-folder`), else the window it is in, else the
+   *  desktop. elementsFromPoint lists every element at the point, topmost
+   *  first, the covered ones too — so the stack is read down to the first
+   *  window and no further: a folder icon or a window behind it is hidden
+   *  there, never a destination. `win` is that window whoever owns it,
+   *  `window` the folder it shows (null for another application's), and
+   *  `desktop` is true only where no window covers it. */
   const under = (x, y, skip) => {
     const stack = document.elementsFromPoint(x, y).filter((el) => !skip.includes(el));
+    const front = stack.findIndex((el) => el.localName === 'vf-window');
+    const seen = front < 0 ? stack : stack.slice(0, front);
     const folderIcon = /** @type {any} */ (
-      stack.find(
+      seen.find(
         (el) =>
           el.localName === 'vf-icon' &&
           /** @type {HTMLElement} */ (el).dataset.folder != null
       ) ?? null
     );
-    const win = /** @type {any} */ (
-      stack.find((el) => el.localName === 'vf-window' && folders.folderOf(el) != null) ??
-        null
-    );
+    const win = /** @type {any} */ (front < 0 ? null : stack[front]);
     return {
       folderIcon,
       folder: folderIcon ? /** @type {string} */ (folderIcon.dataset.folder) : null,
       win,
       window: win ? folders.folderOf(win) : null,
-      desktop: stack.includes(desktop),
+      desktop: !win && stack.includes(desktop),
     };
   };
   /** Can this set be filed into `folder`? Never the Trash (it is the
@@ -591,6 +602,12 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
       }
       return;
     }
+    if (hit.win && hit.window == null) {
+      // Over another application's window: no container of the Finder's,
+      // and what it covers is hidden — refused, nothing moves.
+      e.preventDefault();
+      return;
+    }
     if (hit.window != null && hit.window !== from) {
       // Into a folder window from elsewhere: where each outline was let go,
       // on the window's plane, held at its origin.
@@ -606,7 +623,7 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
       );
       return;
     }
-    if (hit.window == null && hit.desktop && from != null) {
+    if (hit.desktop && from != null) {
       // Out onto the desktop from a window: where each outline was let go,
       // in the icons' frame — below the menu bar, on the raster.
       e.preventDefault();
