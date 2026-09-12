@@ -26,15 +26,9 @@
 // paper in the windoid and transparency in the file — and outputColorSpace
 // is the stage's SRGB, so the sprites' colors agree with the 3D View's.
 //
-// THE LIGHTS RIDE WITH THE CAMERA: in an engine the camera and the sun are
-// fixed and the OBJECT turns, so the light's direction relative to the
-// camera is constant across the ring. Rendering that with a camera that
-// orbits means the rig orbits with it — the stage's ambient + key + fill,
-// each directional light re-posed per yaw at a FIXED offset in the camera's
-// own frame (right / up / back), expressed from the stage's world rig as
-// seen from its default three-quarter framing and tuned by eye so the
-// front view at 45° reads like the 3D View. World-fixed lights would shade
-// each facing differently.
+// THE LIGHTS RIDE WITH THE CAMERA — the rig is scene/rig.js's, shared with
+// the desktop icon's renderer and re-posed per yaw, so every angle of the
+// ring is lit exactly as an engine's fixed sun would light a turning object.
 //
 // The copy out of the GL canvas (sheet.drawImage) runs in the same task as
 // the renders, and the context keeps its drawing buffer besides
@@ -52,15 +46,7 @@ import {
   ringCameraUp,
   ringCenter,
 } from '../lib/ring.js';
-
-// The rig, in the CAMERA's frame (x right, y up, z back toward the camera),
-// as unit directions from the subject: the key above and a little to the
-// right, mostly from the camera's side (the stage's key at (4, 8, 3) seen
-// from its default framing — the top faces brightest, the front lit, the
-// far flank in the ambient); the fill from above-behind the subject, a rim
-// off the top edges (the stage's (−5, 3, −4) in the same frame).
-const KEY_DIR = new THREE.Vector3(0.22, 0.52, 0.83).normalize();
-const FILL_DIR = new THREE.Vector3(-0.1, 0.81, -0.57).normalize();
+import { createRig } from './rig.js';
 
 /**
  * @typedef {{views: number, elevation: number, offset: number, size: number}} RingSettings
@@ -84,10 +70,7 @@ export function createRingRenderer() {
   scene.background = null;
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
   scene.add(camera);
-  scene.add(new THREE.AmbientLight(0xffffff, 0.85));
-  const key = new THREE.DirectionalLight(0xffffff, 1.5);
-  const fill = new THREE.DirectionalLight(0xcfd6ff, 0.35);
-  scene.add(key, fill, key.target, fill.target);
+  const rig = createRig(scene);
 
   // The 2D copy — the durable pixels the windoid and the export read.
   const sheet = document.createElement('canvas');
@@ -96,7 +79,6 @@ export function createRingRenderer() {
   let subject = null;
   const center = new THREE.Vector3();
   const dir = new THREE.Vector3();
-  const offset = new THREE.Vector3();
 
   return {
     /**
@@ -152,8 +134,6 @@ export function createRingRenderer() {
       camera.near = 0.1;
       camera.far = 3 * dist;
       camera.updateProjectionMatrix(); // the same frustum for every yaw
-      key.target.position.copy(center);
-      fill.target.position.copy(center);
 
       const yaws = ringYaws(n, first);
       renderer.setScissorTest(true);
@@ -164,18 +144,7 @@ export function createRingRenderer() {
         camera.position.copy(center).addScaledVector(dir, dist);
         camera.lookAt(center);
         camera.updateMatrixWorld();
-        // The rig re-posed in this pose's camera frame (decision: the
-        // lights ride with the camera).
-        key.position
-          .copy(
-            offset.copy(KEY_DIR).multiplyScalar(dist).applyQuaternion(camera.quaternion)
-          )
-          .add(center);
-        fill.position
-          .copy(
-            offset.copy(FILL_DIR).multiplyScalar(dist).applyQuaternion(camera.quaternion)
-          )
-          .add(center);
+        rig.pose(camera, center, dist); // the lights ride with the camera
         renderer.setViewport(i * F, 0, F, F);
         renderer.setScissor(i * F, 0, F, F);
         renderer.render(scene, camera);

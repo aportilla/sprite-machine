@@ -27,9 +27,9 @@ import { createStorageIfAvailable } from './storage/db.js';
 import {
   imageDataToPngBytes,
   bytesToImageData,
-  tileToIconDataUri,
   genericDocIconDataUri,
 } from './image-io.js';
+import { createIconRenderer } from './scene/icon-renderer.js';
 import { initWindows } from './shell/windows.js';
 import { initMenuBar } from './shell/menu-bar.js';
 import { APPS, DEFAULT_APP } from './apps/index.js';
@@ -94,12 +94,19 @@ const removeCursor = applyCursor();
 // with stubs); desktop state (icons, the folder windows' pins, edited faces
 // — never an application window's geometry) rides localStorage, both
 // disabled by ?fresh=1.
+//
+// A document's icon is a RENDER OF ITS MODEL (scene/icon-renderer.js) — the
+// 45°/45° three-quarter view, fitted to the object rather than to the tile —
+// taken once per save and cached on the record, so no boot pays for it. A
+// document with nothing painted (and a browser with no WebGL) has no model to
+// draw: the generic System 7 document glyph stands in.
+const docIcons = createIconRenderer();
 files.init({
   storage: createStorageIfAvailable(),
   encodeAtlas: imageDataToPngBytes,
   decodeAtlas: bytesToImageData,
   makeIcon: async (state) =>
-    tileToIconDataUri(state.views.front) ?? genericDocIconDataUri(),
+    docIcons.render(state.atlasImage, state.transforms) ?? genericDocIconDataUri(),
 });
 const dstate = createDesktopState(boot.fresh);
 
@@ -203,6 +210,7 @@ if (hot) {
     stage.dispose();
     rebuilder.dispose();
     ringFollow.dispose();
+    docIcons.dispose();
     disposeShortcuts();
     disposeDrop();
     // The applications first — each releases and removes its own windows —

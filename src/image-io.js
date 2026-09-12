@@ -1,8 +1,6 @@
 // Browser image decoding helpers -> ImageData (the {width,height,data} shape the
 // pipeline consumes). Standalone so the loaders and the topbar's download share it.
 
-import { contentBounds } from 'sprite-machine';
-
 async function bitmapToImageData(bmp) {
   const c = document.createElement('canvas');
   c.width = bmp.width;
@@ -76,57 +74,16 @@ export const downloadPngBytes = (bytes, filename) =>
   downloadBlob(new Blob([bytes], { type: 'image/png' }), filename);
 
 // --- desktop icon art --------------------------------------------------------
-// A document's desktop icon is generated from the document itself: the FRONT
-// tile, trimmed to its content's tight bounding box, drawn nearest-neighbor
-// into a 32×32 canvas → data URI (regenerated on every save — the seeded
-// defaults get theirs the same way, since seeding IS a save). The trim
-// means the art fills the icon
-// however small it sits in its tile; a fully transparent tile returns null,
-// falling through to the generic document glyph at every call site. The art
-// scales to fit exactly — its larger axis spans the full icon — with smoothing
-// off so hard edges survive (at a fractional scale texels land a device pixel
-// uneven; accepted, a filled icon beats a uniform-but-small one).
-/** @param {{width:number,height:number,data:Uint8ClampedArray}|null} tile
- *  @returns {string|null} */
-export function tileToIconDataUri(tile, size = 32) {
-  if (!tile || !tile.width || !tile.height) return null;
-  const box = contentBounds(tile);
-  if (!box) return null;
-  const src = document.createElement('canvas');
-  src.width = tile.width;
-  src.height = tile.height;
-  src
-    .getContext('2d')
-    .putImageData(
-      new ImageData(new Uint8ClampedArray(tile.data), tile.width, tile.height),
-      0,
-      0
-    );
-  const out = document.createElement('canvas');
-  out.width = size;
-  out.height = size;
-  const g = out.getContext('2d');
-  g.imageSmoothingEnabled = false;
-  const fit = Math.min(size / box.width, size / box.height);
-  const w = Math.max(1, Math.round(box.width * fit));
-  const h = Math.max(1, Math.round(box.height * fit));
-  g.drawImage(
-    src,
-    box.x,
-    box.y,
-    box.width,
-    box.height,
-    (size - w) >> 1,
-    (size - h) >> 1,
-    w,
-    h
-  );
-  return out.toDataURL('image/png');
-}
-
-// The fallback icon for a document whose FRONT tile is empty: a generic
-// System 7 document glyph (white page, 1px black border, folded corner),
-// drawn once and cached — deterministic, no asset to ship.
+// A document's desktop icon is generated from the document itself — a render
+// of its MODEL, made once per save and cached on the record
+// (scene/icon-renderer.js; the seeded defaults get theirs the same way, since
+// seeding IS a save). The flat FRONT-tile thumbnail that stood here until
+// Sep 11 2026 went with it: an icon shows the object, not the sheet.
+//
+// This is what stands in where there is no model to draw — a document with
+// nothing painted, or a browser with no WebGL: a generic System 7 document
+// glyph (white page, 1px black border, folded corner), drawn once and cached
+// — deterministic, no asset to ship.
 let genericDocIcon = null;
 export function genericDocIconDataUri() {
   if (genericDocIcon) return genericDocIcon;

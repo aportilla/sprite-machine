@@ -6,8 +6,9 @@
 // beside this file) for that folder's children. Nothing else is an icon:
 // the built-in defaults are seeded into the library at the first-ever boot,
 // so they're ordinary rows here, not a special cluster. A document's art is
-// generated from the document itself — the FRONT tile drawn into 32×32
-// (image-io.js) — so those icons declare the kit's `color` treatment
+// generated from the document itself — its MODEL rendered into 32×32 at the
+// three-quarter view (scene/icon-renderer.js), cached on the record by the
+// save that made it — so those icons declare the kit's `color` treatment
 // (selection darkens instead of inverting); a folder's is the app's own
 // 1-bit art (src/assets/folder.png), whose selection, `target` and open
 // ghost are the kit's exact inversions and dithers of that one file.

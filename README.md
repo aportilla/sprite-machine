@@ -1170,10 +1170,23 @@ desktop being the file browser (into the existing window if one is open,
 deselecting the icon as the application takes focus); selecting an icon
 deactivates the application, and the highlight names what the next Finder
 action — a drag, a rename — acts on; every open doc's icon wears the kit's
-`open` ghost. Icon art is generated **from the document itself**: the FRONT
-tile, **trimmed to its content's bounding box**, drawn into 32×32 → data URI,
-regenerated on every save, declared `color` so selection darkens instead of
-inverting.
+`open` ghost. Icon art is generated **from the document itself**: **the model**,
+not the sheet — rendered orthographically at the **three-quarter view** (45°
+round from the front, 45° up: the 3D View's own yaw, higher) into 32×32 → data
+URI, declared `color` so selection darkens instead of inverting. **The frame is
+the model's, not the lattice's** (`lib/icon.js`, the one place this parts
+company with the 3D Sprite Atlas): the tight projected bounding box of the
+geometry, so a two-voxel cube painted in the middle of a 64 tile fills its icon
+exactly as a 64-voxel ship does, and the tile size never enters it. **Hard
+pixels** — no antialiasing, no supersample, the 32px buffer IS the icon — the
+3D View's discipline, over the engine's own headless `buildModel` on a third
+offscreen GL context, made on the first icon (`scene/icon-renderer.js`,
+lighting the model through the atlas renderer's rig, `scene/rig.js`). It is
+rendered **once per save and cached on the record**, so a boot pays for no
+icon and a document that has never been saved since the render changed keeps
+the art its last save made. A document with **nothing painted** has no model
+to draw, and so does every document where WebGL is out of reach: the generic
+System 7 document glyph stands in.
 
 Icon **placement is the windows' regime in the icons' own frame** — the whole
 desktop below the **menu bar**, since icons are the Finder's furniture and the
