@@ -80,11 +80,26 @@
   <vf-menu-item value="arrange" shortcut="⌘J" disabled>Arrange Windows</vf-menu-item>
 </vf-menu>
 <vf-menu data-menu="special" label="Special">
+  <!-- Clean Up (docs/clean-up-plan.md): the ONE contextual item on this
+       bar — every icon of the Finder's front container snapped onto that
+       container's lattice, each to the nearest free cell, the arrangement
+       kept and only its slop gone. Its label follows its OBJECT, as System
+       7's did: "Clean Up Window" while a folder window holds the desktop's
+       active state, "Clean Up Desktop" without one (apps/finder/index.js
+       syncGate writes it; with the Finder front those are the only two
+       readings there are — a document window active means the Sprite
+       Editor is front and these menus are off the bar). This is not the ⌘J
+       case: there one command wore two names, here the object itself
+       changes. Never greyed — picking it on a container already tidy moves
+       nothing — and no key equivalent, as System 7's Special menu gave
+       none. At the head of the menu, above Empty Trash…, where System 7
+       kept it. The boot label matches a fresh desktop: no window front. -->
+  <vf-menu-item value="clean-up">Clean Up Desktop</vf-menu-item>
   <!-- Empty Trash… (docs/trash-plan.md, workspace.emptyTrash): the Finder's
        command over the Trash's contents, behind the Finder's alert
        (index.html #dlg-empty-trash — the ellipsis, System 7's promise of a
-       box). System 7's Special menu, where the command lived, one item
-       until Clean Up joins it (it sat in the Sprite Machine menu while the
+       box). System 7's Special menu, where the command lived, below Clean
+       Up as it was there (it sat in the Sprite Machine menu while the
        bar was every role's — Sep 9 to Sep 11 2026). Greyed while the Trash
        is empty (the listing is re-read), which on a virgin profile is this
        `disabled`. No key equivalent, as System 7 gave it none. Emptying

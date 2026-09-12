@@ -6,8 +6,8 @@
 // off it otherwise (shell/menu-bar.js). This module wires those menus:
 // New… (through the Sprite Editor's box — the one New, always a document),
 // New Folder, Close (the front folder window), the clipboard's three,
-// Arrange Windows, and the Special menu's two — Empty Trash… with its
-// alert, and Restore Default Files. Its windows are its own
+// Arrange Windows, and the Special menu's three — Clean Up, Empty Trash…
+// with its alert, and Restore Default Files. Its windows are its own
 // (docs/app-windows-plan.md), made here: the folder windows (windows.js,
 // windows.html) and the icon layer over the desktop's field and theirs
 // (icons.js — the drag, the rubber band, filing, the selection the Edit
@@ -46,8 +46,10 @@
 // enabled Copy would claim ⌘C typed into an icon's rename box; Arrange
 // Windows the windows' state (greyed while the screen IS the arrangement);
 // Empty Trash… the Trash's contents; Restore Default Files whether any
-// built-in is missing at all. Every handler guards on "no modal open"
-// (deps.modalOpen): key equivalents fire app-wide.
+// built-in is missing at all. Clean Up is the one item with no gate: what
+// it reads off the front window is its NAME (Clean Up Window / Clean Up
+// Desktop), never its state — docs/clean-up-plan.md. Every handler guards
+// on "no modal open" (deps.modalOpen): key equivalents fire app-wide.
 // ---------------------------------------------------------------------------
 
 import menus from './menus.html?raw';
@@ -418,6 +420,15 @@ export const finder = {
     on(menuSpecial, 'vf-menu-select', (e) => {
       if (modalOpen()) return;
       switch (menuDetail(e).value) {
+        // Clean Up Window / Clean Up Desktop (docs/clean-up-plan.md): the
+        // Finder's front container — the front folder window, else the
+        // desktop, New Folder's own reading — onto its lattice, every icon
+        // to the nearest free cell, walked there one at a time by the kit
+        // (the icon layer's cleanUp). The label says which (syncGate
+        // below); the command is the one verb.
+        case 'clean-up':
+          icons.cleanUp(folders.activeFolder());
+          break;
         // Empty Trash…: the Finder's command over the catalog (the alert
         // above); greyed while the Trash is empty (syncTrash below).
         case 'empty-trash':
@@ -508,11 +519,18 @@ export const finder = {
     const itemCopy = item(menuEdit, 'copy');
     const itemPaste = item(menuEdit, 'paste');
     const itemSelectAll = item(menuEdit, 'select-all');
+    const itemCleanUp = item(menuSpecial, 'clean-up');
     /** Whether the innermost focused element is a text control. */
     let textFocused = false;
     const syncGate = () => {
       const st = files.get();
       const front = folders.activeFolder();
+      // Clean Up is never greyed; what follows the front window is its
+      // NAME, System 7's way of saying which container the command is over
+      // (docs/clean-up-plan.md §2.4) — the same reading of the front
+      // window as Close's above, on the same signals.
+      const cleanUp = front == null ? 'Clean Up Desktop' : 'Clean Up Window';
+      if (itemCleanUp.textContent !== cleanUp) itemCleanUp.textContent = cleanUp;
       itemClose.disabled = front == null;
       itemNewFolder.disabled = isTrashed(st, front);
       itemCopy.disabled = textFocused || icons.selection().length === 0;
@@ -592,6 +610,10 @@ export const finder = {
         /** Every folder window's pin the Finder knows, by key — the
          *  snapshot's other reading. */
         pins: () => folders.pins(),
+        /** Icons moved with no gesture to end the move (a Clean Up's walk
+         *  landing its last icon) — the snapshot's cue. Returns the
+         *  unsubscribe. @param {() => void} fn */
+        onMoved: (fn) => icons.onMoved(fn),
       },
       dispose() {
         for (const fn of teardown) fn();

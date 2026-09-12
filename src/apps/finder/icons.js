@@ -26,16 +26,24 @@
 // bar (icons are the Finder's furniture; the options strip is application
 // chrome, hidden whenever the desktop takes focus, so it reserves nothing
 // above an icon): a saved position (a previous session's drag) wins, else
-// the first FREE cell of the container's lattice (layout.js
-// iconDefault — the classic left-edge column below the Tools band, wrapping
-// on a short raster; iconGridDefault inside a window — rows from the
-// plane's origin, wrapping at its width); on the desktop it is clamped
+// the first FREE cell of the container's lattice (layout.js — the
+// desktop's column down the RIGHT edge from below the menu bar, folding
+// into further columns to the left; a window's rows from the plane's
+// origin, wrapping at its width); on the desktop it is clamped
 // on-raster at boot, and a browser resize re-pins every desktop icon by the
 // same nine-slice rule as the windows, in the icons' own frame (repinIcons
 // below, on the window manager's raster signal) — a window's icons are in
 // its coordinates and travel with it. The layer remembers a closed window's icon positions for
 // the session (folders.onWillClose), and hands desktop-state every position
 // it knows (positions()), so a closed folder never forgets its arrangement.
+// CLEAN UP (Sep 12 2026, docs/clean-up-plan.md) is the one command over
+// those positions: the Finder's Special → Clean Up Window / Clean Up
+// Desktop takes every icon of ONE container onto that container's lattice,
+// each to the nearest free cell (layout.js cleanUp — an alignment, never a
+// re-flow), and the kit WALKS them there (vintage-frames 0.10.0's
+// vf-icon-field.dragIcons): one at a time in the lattice's fill order, each
+// icon's dotted outline travelling to its cell before the icon lands. The
+// Trash cleans up like any icon.
 //
 // FILING IS THE DRAG (Sep 7 2026, vintage-frames 0.7.0): a movable icon's
 // drag is the kit's — the classic dotted outline over everything, the icon
@@ -114,8 +122,11 @@ import { shell, SPRITE_EDITOR, TEXT_VIEWER } from '../../state/shell.js';
 import { workspace } from '../../state/workspace.js';
 import { pinOf, pinTo, MENU_BAR } from '../../shell/layout.js';
 import {
-  iconDefault,
-  iconGridDefault,
+  cleanUp as cleanUpOnto,
+  desktopLattice,
+  fillOrder,
+  folderLattice,
+  latticeSlot,
   trashDefault,
   ICON_CELL,
   ICON_FRAME,
@@ -162,6 +173,8 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
   // --- the selection's signal (header) --------------------------------------------
   /** @type {Set<() => void>} */
   const selectionListeners = new Set();
+  /** Told when a Clean Up's walk has landed (onMoved). @type {Set<() => void>} */
+  const movedListeners = new Set();
   const notifySelection = () => {
     for (const fn of selectionListeners) fn();
   };
@@ -260,27 +273,37 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
   );
 
   // --- the lattices --------------------------------------------------------------
-  /** The container's default lattice: the desktop's raster-derived column,
-   *  or a window's grid at its plane's width. */
-  const latticeFor = (folder) =>
+  /** The container's lattice: the desktop's raster-derived column down the
+   *  right edge, or a window's grid at its plane's width. Read live — the
+   *  raster and the window's size are both the moment's. */
+  const gridFor = (folder) =>
     folder == null
-      ? (slot) => iconDefault(slot, desktop.height)
-      : (slot) => iconGridDefault(slot, folders.viewportOf(folder)?.width ?? 0);
-  /** The first lattice cell no icon in `root` sits on (within half a
-   *  cell) — where a new item lands, and a filed one with no landing. */
+      ? desktopLattice(desktop.width, desktop.height)
+      : folderLattice(folders.viewportOf(folder)?.width ?? 0);
+  /** A container's field: the desktop's, or an open folder window's. */
+  const rootOf = (folder) =>
+    folder == null
+      ? desktopField
+      : (folders.fields().find(([id]) => id === folder)?.[1] ?? null);
+  /** The first lattice cell no icon in `root` OVERLAPS — where a new item
+   *  lands, and a filed one with no landing. A cell is held when some
+   *  icon's 64px plate covers part of it: for icons ON the lattice that is
+   *  the plain "an icon sits here" (both pitches are wider than the plate,
+   *  so neighbours never block each other), and for one OFF it — dragged,
+   *  or the Trash in its corner, which sits between two rows — it is what
+   *  keeps a new icon from landing over art that is already there. */
   function nextFree(root, folder) {
-    const at = latticeFor(folder);
+    const grid = gridFor(folder);
     const taken = iconsIn(root).map(posOf);
     for (let slot = 0; slot < 4096; slot++) {
-      const p = at(slot);
+      const p = latticeSlot(grid, slot);
       const held = taken.some(
         (t) =>
-          Math.abs(t.left - p.left) < ICON_CELL / 2 &&
-          Math.abs(t.top - p.top) < ICON_CELL / 2
+          Math.abs(t.left - p.left) < ICON_CELL && Math.abs(t.top - p.top) < ICON_CELL
       );
       if (!held) return p;
     }
-    return at(0);
+    return latticeSlot(grid, 0);
   }
 
   /** Write a position onto an icon in its container's discipline. On the
@@ -617,14 +640,19 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
    *  nine-slice pin (the shell's pinOf/pinTo) in the ICON_FRAME: the
    *  desktop below the MENU BAR (the options strip is no chrome of theirs),
    *  uniform bands — no application furniture lives in the Finder's frame.
-   *  The classic left-edge column is a strut (it stays at its 16px), its
-   *  rows spring with the middle; an icon dragged into a corner stays in
-   *  that corner. A fixed-size box — the 64px cell — so its edges resolve
-   *  through the anchor rule. Deliberately NO clamp, like the windows: the
+   *  The default right-edge column is a far strut (it keeps its 16px from
+   *  the right edge at any width), its rows spring with the middle; an icon
+   *  dragged into a corner stays in that corner. A fixed-size box — the
+   *  64px cell — so its edges resolve through the anchor rule. Deliberately NO clamp, like the windows: the
    *  same pin always maps back exactly, so growing back returns every icon
    *  whole. A folder window's icons are in its coordinates and travel with
    *  it. */
   const repinIcons = (before, after) => {
+    // A Clean Up walking the desktop is finished first — a second walk
+    // finishes the one in flight, synchronously, every icon still to go
+    // landing on the targets read off the OLD raster — so the pins below
+    // are read from where the icons now are, not from a walk half done.
+    desktopField.dragIcons([]);
     for (const icon of iconsIn(desktopField)) {
       const cur = { ...posOf(icon), ...CELL };
       let rec = pins.get(icon);
@@ -692,12 +720,62 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
      *  included — it selects like any icon; Copy and a filing skip it).
      *  @param {string|null} folder */
     selectAll(folder) {
-      const root =
-        folder == null
-          ? desktopField
-          : (folders.fields().find(([id]) => id === folder)?.[1] ?? null);
+      const root = rootOf(folder);
       if (!root) return;
       this.select(iconsIn(root).map(keyOf));
+    },
+    /** CLEAN UP (docs/clean-up-plan.md): every icon of ONE container onto
+     *  that container's lattice — the Finder's Special → Clean Up Window
+     *  (`folder`: its front folder window) and Clean Up Desktop (null).
+     *  Each icon takes the nearest FREE cell to where it already sits
+     *  (layout.js's cleanUp — an alignment, never a re-flow); the Trash
+     *  cleans up like any icon. WHICH cell is the page's: the kit ships no
+     *  lattice, and its walk takes the targets it is handed.
+     *
+     *  THE WALK is the kit's (vintage-frames 0.10.0, kit ask #16 —
+     *  docs/kit-asks-icon-move.md): the field's dragIcons walks the moves
+     *  one at a time, each icon's dotted outline travelling from where it
+     *  sits to its cell and the icon landing when it arrives, the Finder's
+     *  beat between landings, at once under prefers-reduced-motion. The
+     *  cells go over as they are: the kit resolves each landing as a drop's
+     *  (clamped whole in the container, snapped) before the outline sets
+     *  off, and the one rule of this app's the kit cannot know — never
+     *  above the menu bar — the lattice already keeps, its first row
+     *  starting below the bar. The
+     *  ORDER is ours — the lattice's fill order (layout.js fillOrder): down
+     *  the desktop's right-edge column and on leftward, across a window's
+     *  rows — and the cadence the kit's. An icon already on its cell takes
+     *  no beat, so a tidy container resolves at once. A press anywhere, or
+     *  Escape, finishes the walk (every icon still to go lands); so does a
+     *  second Clean Up of the same container, and a browser resize
+     *  (repinIcons below). When the last icon has landed a window's field
+     *  re-fits (an icon gathered back in from past the viewport shrinks the
+     *  scroll range) and onMoved tells the desktop state, since no gesture
+     *  ended the move for its pointerup to be heard.
+     *  @param {string|null} folder
+     *  @returns {Promise<void>} */
+    async cleanUp(folder) {
+      const root = rootOf(folder);
+      if (!root) return;
+      const grid = gridFor(folder);
+      const icons = iconsIn(root);
+      const cells = cleanUpOnto(grid, icons.map(posOf));
+      const moves = icons
+        .map((icon, i) => ({ icon, ...cells[i] }))
+        .sort((a, b) => fillOrder(grid, a, b));
+      await root.dragIcons(moves);
+      if (folder != null) folders.fit(folder);
+      for (const fn of movedListeners) fn();
+    },
+    /** Icons moved with no gesture to end the move — a Clean Up's walk
+     *  landing its last icon. The desktop state's cue to snapshot (main.js),
+     *  where a drag's pointerup is the cue for a drag. Returns the
+     *  unsubscribe. @param {() => void} fn */
+    onMoved(fn) {
+      movedListeners.add(fn);
+      return () => {
+        movedListeners.delete(fn);
+      };
     },
     /** The selection changed — a press, the band, a paste's select, the
      *  activation's clear, the chrome bridge's re-select. Returns the
@@ -711,6 +789,7 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
     dispose() {
       for (const fn of teardown) fn();
       selectionListeners.clear();
+      movedListeners.clear();
       highlight(null);
       // Remove the rendered icons so an HMR re-init rebuilds them with fresh
       // listeners instead of stacking stale ones (the folder windows' go

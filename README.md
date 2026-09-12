@@ -472,7 +472,22 @@ Desktop Patterns  │ Sprite Machine  File  View                             10:
   item below carries the rule), greyed while the screen already is the
   arrangement. No window tail: System 7's Finder listed no windows, and the
   way back to an open document is its window's click, or its icon.
-- **Special** — _Empty Trash…_ (see [The Trash](#the-trash)), greyed while
+- **Special** — _Clean Up Window_ / _Clean Up Desktop_, the one item whose
+  name follows its **object** as System 7's did (the front folder window,
+  else the desktop): every icon of that container onto the container's own
+  lattice, each to the **nearest free cell** — an alignment, never a
+  re-flow, so the arrangement survives and only its slop goes, and the
+  Trash cleans up like any icon (the plan is
+  [docs/clean-up-plan.md](docs/clean-up-plan.md)). Never greyed — picking
+  it on a container already tidy moves nothing. The icons are **walked**
+  there as the Finder walked them: one at a time — down the desktop's
+  column and on leftward, across a window's rows — each icon's dotted
+  outline travelling from where it sat to its cell before the icon lands,
+  a short beat between landings, all at once under reduced motion; a press
+  anywhere or Escape lands the rest at once (vintage-frames 0.10.0's
+  `dragIcons`, kit ask #16 —
+  [docs/kit-asks-icon-move.md](docs/kit-asks-icon-move.md)). Then _Empty Trash…_ (see
+  [The Trash](#the-trash)), greyed while
   the Trash is empty; then, after a rule, _Restore Default Files_, which
   stores the built-in documents and read-me text files the library is
   **missing** — the route by which a profile that has already booted gets a
@@ -483,8 +498,8 @@ Desktop Patterns  │ Sprite Machine  File  View                             10:
   doubles nothing and overwrites nothing. No ellipsis — there is no question
   to ask — and it is greyed while nothing is missing, the Trash counting as
   the library (a trashed Read Me is still a Read Me; the way back to it is
-  to drag it out). Neither item has a key equivalent, as System 7's Special
-  menu gave none. Clean Up joins them one day.
+  to drag it out). No item here has a key equivalent, as System 7's Special
+  menu gave none.
 
 **The Sprite Editor's menus** — a document window front. Every item is
 document-scoped by construction, so none needs a role gate:
@@ -973,8 +988,8 @@ items`, plain ink, off the model) over the Finder's **double rule** — black,
   the paste's counting; a first
   **Save** lands on the desktop, as does a dropped PNG's. `?file=` resolves by
   name across every folder but the Trash. **Not yet**: no small-icon view, no
-  zoom box, no Clean Up, no Put Away, no Cut, and the Finder's two alerts (a
-  name too long, a folder into itself) are silent refusals.
+  zoom box, no _Clean Up by Name_, no Put Away, no Cut, and the Finder's two
+  alerts (a name too long, a folder into itself) are silent refusals.
 
 ### The Trash
 
@@ -1006,7 +1021,7 @@ a folder made inside it.
   small 12×12 1-bit trash glyph at the head of the count line, the count
   stepping right to make room, present exactly while the folder is trashed.
 - **Special → Empty Trash…** — the Finder's Special menu, where System 7 kept
-  it, one item until Clean Up joins it (it sat in the Sprite Machine menu
+  it, under Clean Up as it was there (it sat in the Sprite Machine menu
   while one bar served every role; emptying the Trash from the Sprite Editor
   means a desktop click first, as on a Mac) — raises the Finder's alert in
   the unsaved box's anatomy, naming N items and the K they use, over Cancel
@@ -1242,13 +1257,18 @@ System 7 document glyph stands in.
 Icon **placement is the windows' regime in the icons' own frame** — the whole
 desktop below the **menu bar**, since icons are the Finder's furniture and the
 options strip is application chrome: the default lattice derives from the live
-raster (the classic left-edge column below the Tools band, folding into
-further columns on a short raster), a saved position wins, pulled on-raster at
+raster — a column down the **right** edge, from the menu bar's own 16px
+inset, folding into further columns to the **left** where a Mac put a mounted
+volume, with the Trash at the bottom of that first column — a saved position
+wins, pulled on-raster at
 boot, and on a **browser resize** every icon keeps its **nine-slice pin** in
 the same stroke as the windows, in `ICON_FRAME` — uniform 100px bands, since
 no application furniture lives in the Finder's frame. An icon dragged into a
 corner stays there, and the same no-clamp reversibility means a
-shrink-then-grow round-trips every icon exactly home.
+shrink-then-grow round-trips every icon exactly home. **Clean Up** (the
+Special menu, above) is the one command over those positions: it takes the
+front container's icons back onto that same lattice, each to the nearest
+free cell.
 
 Icon layout, the **folder windows' pins**, the open SAVED documents' edited
 faces (and which was active), the **desktop pattern** and the About box's

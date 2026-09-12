@@ -75,7 +75,8 @@
 // what a load shows is the URL's call (?file=<name>, else the About box;
 // main.js) — they hand a saved doc its remembered edited face when
 // it IS opened. Writes are snapshot-on-exit plus a debounce on any store
-// change or desktop gesture — snapshotting is cheap and loses nothing that
+// change, desktop gesture or gestureless move of the furniture (a Clean
+// Up's walk) — snapshotting is cheap and loses nothing that
 // matters. `?fresh=1` disables BOTH directions, so a ?fresh boot neither
 // reads nor clobbers a real session's state. Older blobs migrate shallowly: icons
 // carry over (v1's `lastDocId` becomes the one docs entry), and the window
@@ -236,10 +237,15 @@ export function createDesktopState(fresh) {
      * windows' read live, the closed ones' as remembered), merged the same
      * way — the header's THE FINDER'S furniture. The application's windows
      * are deliberately not an input: nothing about them persists.
+     * `onMoved` subscribes to the furniture moving with no gesture to end
+     * the move — the Finder's Clean Up, whose icons land over a walk the
+     * kit paces, well after the menu pick's pointerup scheduled its write —
+     * and schedules one more.
      * @param {{readIcons: () => Record<string, {left:number, top:number}|null>,
-     *          readWindows?: () => Record<string, import('./layout.js').Pin>}} inputs
+     *          readWindows?: () => Record<string, import('./layout.js').Pin>,
+     *          onMoved?: (fn: () => void) => () => void}} inputs
      */
-    start({ readIcons, readWindows = () => ({}) }) {
+    start({ readIcons, readWindows = () => ({}), onMoved = () => () => {} }) {
       if (fresh) return () => {};
       /** @type {Record<string, {left:number, top:number}>} */
       let known = { ...(saved?.icons ?? {}) };
@@ -293,13 +299,15 @@ export function createDesktopState(fresh) {
 
       // Store changes (the open set, faces, the desktop pattern — the shell
       // slice's other flips schedule a harmless extra snapshot), desktop
-      // gestures (icon drags end in a pointerup), and browser resizes
-      // (every icon re-pins to the new raster) all schedule a write;
-      // leaving the page flushes one synchronously.
+      // gestures (icon drags end in a pointerup), browser resizes (every
+      // icon re-pins to the new raster) and a move no gesture ended
+      // (onMoved) all schedule a write; leaving the page flushes one
+      // synchronously.
       const unsubs = [
         files.subscribe(writeSoon),
         workspace.subscribe(writeSoon),
         shell.subscribe(writeSoon),
+        onMoved(writeSoon),
       ];
       const onPointerUp = () => writeSoon();
       const onHide = () => {

@@ -163,6 +163,7 @@ const finder = menuBar.apps[FINDER];
 const stopPersist = dstate.start({
   readIcons: () => finder.positions(),
   readWindows: () => finder.pins(),
+  onMoved: (fn) => finder.onMoved(fn),
 });
 // The address bar mirrors the active SAVED document (#<name>, replaceState),
 // so a plain reload restores what's on screen; ?fresh leaves even the URL
