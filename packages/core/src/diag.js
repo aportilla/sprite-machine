@@ -3,11 +3,15 @@
 // edges used an odd number of times are boundaries. Also returns a histogram of
 // triangle normals by axis.
 
-/** @param {import('three').BufferGeometry} geo */
-export function computeDiag(geo) {
-  const pos = geo.attributes.position.array;
-  const nrm = geo.attributes.normal.array;
-  const idx = geo.index ? geo.index.array : null;
+/**
+ * @param {{position:ArrayLike<number>, normal:ArrayLike<number>,
+ *          index?:ArrayLike<number>|null}} geometry
+ *   flat triangle buffers, non-indexed when index is null
+ */
+export function computeDiag(geometry) {
+  const pos = geometry.position;
+  const nrm = geometry.normal;
+  const idx = geometry.index ?? null;
   const triCount = idx ? idx.length / 3 : pos.length / 9;
   const key = (i) => {
     const x = Math.round(pos[i * 3] * 1e4);

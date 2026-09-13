@@ -30,7 +30,7 @@ Read `README.md` first; it is the spec. The testing policy is
   to npm as `sprite-machine`; the app imports it by that name through the
   workspace link, and the package typechecks with no DOM lib. Engine code
   never reaches for the DOM; app code never reaches into `packages/core`
-  except through its barrel. `npm test` runs both packages' suites.
+  except through its published entries. `npm test` runs both packages' suites.
 - Commit messages: a one-line subject, then one or two short paragraphs
   (what, why, the decisions, tests), no counts, and the
   `Claude-Session:` trailer. Commit and push on the user's word only.

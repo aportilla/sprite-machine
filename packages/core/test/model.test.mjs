@@ -17,20 +17,17 @@ test("buildModel: one unit per voxel, a transforms chunk applied as the app appl
   });
   const direct = buildModel(sheet(t, { ...views, front: flip(halfFront, true, false) }));
   assert.deepEqual(
-    Array.from(flipped.mesh.geometry.attributes.position.array),
-    Array.from(direct.mesh.geometry.attributes.position.array)
+    Array.from(flipped.geometry.position),
+    Array.from(direct.geometry.position)
   );
-  assert.deepEqual(
-    Array.from(flipped.mesh.geometry.index.array),
-    Array.from(direct.mesh.geometry.index.array)
-  );
+  assert.deepEqual(Array.from(flipped.geometry.index), Array.from(direct.geometry.index));
 
   // One unit per voxel: the mesh spans 0..t in y.
   assert.deepEqual(flipped.dims, { nx: t, ny: t, nz: t });
   assert.equal(flipped.unitsPerVoxel, 1);
-  const bb = flipped.mesh.geometry.boundingBox;
-  assert.equal(bb.min.y, 0);
-  assert.equal(bb.max.y, t);
+  const bb = flipped.geometry.bounds;
+  assert.equal(bb.min[1], 0);
+  assert.equal(bb.max[1], t);
   assert.equal(flipped.triangles > 0, true);
 
   // The glb scales positions to meters by voxelsPerMeter and records it in extras.
@@ -52,17 +49,13 @@ test('buildModel with layers: the union of the blocks; without the option a shee
   const layered = buildModel(halves, { layers: 2 });
   const whole = buildModel(sheet(t, box('RRRR')));
   assert.deepEqual(layered.dims, whole.dims);
-  for (const attr of ['position', 'normal', 'uv']) {
+  for (const attr of ['position', 'normal', 'uv', 'index']) {
     assert.deepEqual(
-      Array.from(layered.mesh.geometry.attributes[attr].array),
-      Array.from(whole.mesh.geometry.attributes[attr].array),
+      Array.from(layered.geometry[attr]),
+      Array.from(whole.geometry[attr]),
       attr
     );
   }
-  assert.deepEqual(
-    Array.from(layered.mesh.geometry.index.array),
-    Array.from(whole.mesh.geometry.index.array)
-  );
 
   assert.deepEqual(
     buildModel(halves).dims,

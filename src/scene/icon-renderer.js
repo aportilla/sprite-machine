@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import { buildModel } from 'sprite-machine';
+import { toMesh } from 'sprite-machine/three';
 import { ringCameraDir, ringCameraUp } from '../lib/ring.js';
 import {
   ICON_SIZE,
@@ -93,13 +94,13 @@ export function createIconRenderer() {
     } catch {
       return null; // no painted view
     }
-    const mesh = model.mesh;
+    const mesh = toMesh(model);
     const w = worldNow();
     try {
       if (!w) return null;
-      // The mesh is one unit per voxel and already centered, so its positions
+      // The model is one unit per voxel and already centered, so its positions
       // are world coordinates.
-      const fit = orthoFit(mesh.geometry.attributes.position.array, DIR, UP);
+      const fit = orthoFit(model.geometry.position, DIR, UP);
       if (!fit) return null;
       const { camera, renderer, scene, rig, canvas, samples, icon, art } = w;
       center.set(...fit.center);

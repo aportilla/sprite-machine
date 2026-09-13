@@ -99,8 +99,8 @@ export function ringCameraUp(yaw, elevation) {
 }
 
 /**
- * The lattice center the camera looks at, in voxel units. The mesh builders
- * center X and Z (finishVoxelMesh). Y starts at 0.
+ * The lattice center the camera looks at, in voxel units. The mesher centers
+ * X and Z. Y starts at 0.
  * @param {{nx: number, ny: number, nz: number}} dims
  * @returns {[number, number, number]}
  */

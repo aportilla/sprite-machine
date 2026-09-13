@@ -12,8 +12,9 @@
 // rebuilds keep the previous auto-rotate angle. An empty build leaves the
 // generation unconsumed, so the first real build of a fresh sheet still frames.
 //
-// onMesh receives each new mesh with its dims, and null before the old mesh is
-// disposed, so a consumer's shared-geometry clone never outlives its geometry.
+// onMesh receives each new mesh with the mesher's record and the dims, and null
+// before the old mesh is disposed, so a consumer's shared-geometry clone never
+// outlives its geometry.
 
 import {
   buildVoxels,
@@ -22,6 +23,7 @@ import {
   computeDiag,
   VIEW_NAMES,
 } from 'sprite-machine';
+import { toMesh } from 'sprite-machine/three';
 import { workspace, followActive } from '../state/workspace.js';
 import { build } from '../state/build.js';
 
@@ -34,7 +36,8 @@ const rawViewsOf = (views) =>
  * @param {{
  *   flat?: boolean,
  *   diag?: boolean,
- *   onMesh?: (m: {mesh: import('three').Object3D, dims: {nx: number, ny: number, nz: number}}|null) => void,
+ *   onMesh?: (m: {mesh: import('three').Object3D, model: ReturnType<typeof wedgeMesh>,
+ *                 dims: {nx: number, ny: number, nz: number}}|null) => void,
  * }} [opts]  the ?flat / ?diag dev flags, and onMesh (see the header)
  */
 export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}) {
@@ -94,15 +97,16 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
       return;
     }
 
-    current = wedgeMesh(result, { flat });
-    if (diag && current?.geometry) {
+    const model = wedgeMesh(result, { flat });
+    current = toMesh(model);
+    if (diag) {
       // The wedge mesh is watertight, so a nonzero boundary or odd-edge count
       // is a hole.
-      document.title = 'DIAG ' + JSON.stringify(computeDiag(current.geometry));
+      document.title = 'DIAG ' + JSON.stringify(computeDiag(model.geometry));
     }
     stage.scene.add(current);
     stage.setSpinTarget(current);
-    onMesh?.({ mesh: current, dims: result.dims });
+    onMesh?.({ mesh: current, model, dims: result.dims });
     if (d.sheet !== framedSheet) {
       stage.frameObject(current);
       framedSheet = d.sheet;
@@ -112,7 +116,7 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     build.setStats({
       dims: result.dims,
       voxels: result.solidCount,
-      triangles: current.userData.triangles,
+      triangles: model.triangles,
       warnings: [...d.atlasWarnings, ...(result.warnings || [])],
     });
     stage.requestRender(); // redraw even if the camera is idle

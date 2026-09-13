@@ -56,11 +56,10 @@ export function layeredSheet(t, blocks) {
   return out;
 }
 
-/** Counts a mesh's undirected edges used an odd number of times. 0 means watertight. */
-export function oddEdges(mesh) {
-  const geo = mesh.geometry;
-  const pos = geo.attributes.position.array;
-  const idx = geo.index ? geo.index.array : null;
+/** Counts a geometry's undirected edges used an odd number of times. 0 means watertight. */
+export function oddEdges(geometry) {
+  const pos = geometry.position;
+  const idx = geometry.index ?? null;
   const tris = idx ? idx.length / 3 : pos.length / 9;
   const key = (i) =>
     `${Math.round(pos[i * 3] * 1e4)},${Math.round(pos[i * 3 + 1] * 1e4)},${Math.round(pos[i * 3 + 2] * 1e4)}`;

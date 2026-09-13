@@ -1,25 +1,24 @@
 // Headless entry: a sheet's pixels to a model, and a model to a glb.
 //
 // buildModel runs slice, ingest, carve, colorize, the layer union and the
-// wedge mesher, and returns the mesh at one unit per voxel, so a position is a
-// lattice coordinate. modelToGlb writes the same glb as the app's export, with
-// the skin encoded from bytes. Both are synchronous.
+// wedge mesher, and returns the record at one unit per voxel, so a position is
+// a lattice coordinate. modelToGlb writes the same glb as the app's export,
+// with the skin encoded from bytes. Both are synchronous.
 
 import { sliceLayers, validateSheet } from './atlas.js';
 import { buildLayeredVoxels } from './pipeline.js';
 import { wedgeMesh } from './wedge-mesh.js';
 import { encodePng } from './png-encode.js';
 import { glbFromModel } from './gltf.js';
+import { unpackRGBA } from './ingest.js';
 import { VIEW_NAMES } from './views.js';
 
 /**
- * A built model: the mesh, the lattice dims and the mesh's units per voxel
+ * A built model: the mesher's record, the lattice dims and the units per voxel
  * (1 from buildModel).
- * @typedef {{
- *   mesh: import('three').Mesh,
+ * @typedef {import('./wedge-mesh.js').Built & {
  *   dims: {nx:number, ny:number, nz:number},
  *   unitsPerVoxel: number,
- *   triangles: number,
  *   warnings: string[],
  * }} Model
  */
@@ -34,7 +33,7 @@ import { VIEW_NAMES } from './views.js';
  *   `transforms`: per-view reorientation, as stored in the
  *   `sprite-machine:transforms` chunk, applied in every layer; `layers`: the
  *   sheet's block count
- * @returns {Model}  the mesh at one unit per voxel
+ * @returns {Model}  the model at one unit per voxel
  * @throws on an invalid sheet, or one with no painted view in any layer
  */
 export function buildModel(sheet, { transforms = {}, layers = 1 } = {}) {
@@ -51,20 +50,29 @@ export function buildModel(sheet, { transforms = {}, layers = 1 } = {}) {
     throw new Error('buildModel: the sheet has no painted view.');
   }
   const { nx, ny, nz } = result.dims;
-  const mesh = wedgeMesh(result, { worldSize: Math.max(nx, ny, nz) });
   return {
-    mesh,
+    ...wedgeMesh(result, { worldSize: Math.max(nx, ny, nz) }),
     dims: result.dims,
     unitsPerVoxel: 1,
-    triangles: Number(mesh.userData.triangles) || 0,
     warnings: [...sliced.warnings, ...(result.warnings || [])],
   };
 }
 
+/** The sRGB transfer to linear, one channel in 0..1. */
+const srgbToLinear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+
+/** A packed sRGB color as linear RGB in 0..1. */
+function linearRGB(packed) {
+  const { r, g, b } = unpackRGBA(packed);
+  return [r / 255, g / 255, b / 255].map(srgbToLinear);
+}
+
 /**
  * The model as a glb, with its skin embedded behind a nearest sampler, or its
- * flat color when the material has no map.
- * @param {{mesh: import('three').Mesh, dims: {nx:number, ny:number, nz:number}, unitsPerVoxel?: number}} model
+ * flat color, made linear, when it has no skin.
+ * @param {{geometry: import('./wedge-mesh.js').Geometry,
+ *          skin: import('./skin.js').Skin|null, color?: number|null,
+ *          dims: {nx:number, ny:number, nz:number}, unitsPerVoxel?: number}} model
  * @param {{name: string, voxelsPerMeter?: number, unlit?: boolean, generator?: string}} opts
  *   `voxelsPerMeter` sets the scale (at 10, a 40-voxel car is 4 m long);
  *   `unlit` adds KHR_materials_unlit; `generator` is written to the asset
@@ -74,20 +82,17 @@ export function modelToGlb(
   model,
   { name, voxelsPerMeter = 10, unlit = false, generator }
 ) {
-  const { mesh, dims } = model;
+  const { geometry, skin, dims } = model;
   const unitsPerVoxel = model.unitsPerVoxel ?? 1;
-  const geo = mesh.geometry;
-  const material = /** @type {import('three').MeshStandardMaterial} */ (mesh.material);
-  const map = material.map;
   return glbFromModel({
     name,
-    position: geo.attributes.position.array,
-    normal: geo.attributes.normal.array,
-    uv: geo.attributes.uv.array,
-    index: geo.index.array,
+    position: geometry.position,
+    normal: geometry.normal,
+    uv: geometry.uv,
+    index: geometry.index,
     scale: 1 / (unitsPerVoxel * voxelsPerMeter),
-    image: map ? { bytes: encodePng(map.image) } : null,
-    color: map ? null : material.color.toArray(),
+    image: skin ? { bytes: encodePng(skin) } : null,
+    color: skin || model.color == null ? null : linearRGB(model.color),
     unlit,
     generator,
     extras: { 'sprite-machine': { voxelsPerMeter, dims: { ...dims } } },

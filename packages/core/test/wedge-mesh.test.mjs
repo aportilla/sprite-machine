@@ -5,7 +5,7 @@ import { buildVoxels } from '../src/pipeline.js';
 import { wedgeMesh } from '../src/wedge-mesh.js';
 import { img, fill, oddEdges } from './helpers.mjs';
 
-const wedgeCount = (views) => wedgeMesh(buildVoxels(views)).userData.wedges;
+const wedgeCount = (views) => wedgeMesh(buildVoxels(views)).wedges;
 const EPS = 1e-4;
 
 // A 45° ramp of one material.
@@ -16,24 +16,28 @@ const ramp = () => ({
 });
 
 test('wedge mesh is watertight — solid cube (no wedges)', () => {
-  const mesh = wedgeMesh(
+  const built = wedgeMesh(
     buildVoxels(
       { front: fill(6, 6, 'T'), right: fill(6, 6, 'T'), top: fill(6, 6, 'T') },
       { mirror: { x: true, y: false, z: false } }
     )
   );
-  assert.equal(mesh.userData.wedges, 0, 'a solid cube has no notches to wedge');
-  assert.equal(oddEdges(mesh), 0, 'base faces must weld watertight');
+  assert.equal(built.wedges, 0, 'a solid cube has no notches to wedge');
+  assert.equal(oddEdges(built.geometry), 0, 'base faces must weld watertight');
 });
 
 test('wedge mesh is watertight — staircase (base faces + wedges)', () => {
-  const mesh = wedgeMesh(buildVoxels(ramp()));
-  assert.ok(mesh.userData.wedges > 0, 'the ramp must produce wedges');
-  assert.equal(oddEdges(mesh), 0, 'base faces + wedges must weld with no boundary edges');
+  const built = wedgeMesh(buildVoxels(ramp()));
+  assert.ok(built.wedges > 0, 'the ramp must produce wedges');
+  assert.equal(
+    oddEdges(built.geometry),
+    0,
+    'base faces + wedges must weld with no boundary edges'
+  );
 });
 
 test('a slope is one quad: a ramp costs the same triangles 1 wide and 4 wide; a ridge colour seam still welds', () => {
-  const tris = (m) => m.userData.triangles;
+  const tris = (m) => m.triangles;
   const wide = wedgeMesh(buildVoxels(ramp()));
   const narrow = wedgeMesh(
     buildVoxels({
@@ -42,9 +46,9 @@ test('a slope is one quad: a ramp costs the same triangles 1 wide and 4 wide; a 
       top: fill(1, 4, 'T'),
     })
   );
-  assert.equal(wide.userData.wedges, 4 * narrow.userData.wedges, 'four times the cells');
-  assert.equal(wide.userData.slopes, 1, 'the three steps are one block');
-  assert.equal(narrow.userData.slopes, 1);
+  assert.equal(wide.wedges, 4 * narrow.wedges, 'four times the cells');
+  assert.equal(wide.slopes, 1, 'the three steps are one block');
+  assert.equal(narrow.slopes, 1);
   assert.equal(
     tris(wide),
     tris(narrow),
@@ -53,7 +57,7 @@ test('a slope is one quad: a ramp costs the same triangles 1 wide and 4 wide; a 
   // Floor, back, toe riser, top tread and slope are quads. The two sides are
   // pentagons with the diagonal as one edge.
   assert.equal(tris(wide), 2 + 2 + 2 + 2 + 2 + 3 + 3);
-  assert.equal(oddEdges(wide), 0);
+  assert.equal(oddEdges(wide.geometry), 0);
 
   const seam = wedgeMesh(
     buildVoxels({
@@ -62,9 +66,13 @@ test('a slope is one quad: a ramp costs the same triangles 1 wide and 4 wide; a 
       top: img(['TTRR', 'TTRR', 'TTRR', 'TTRR']),
     })
   );
-  assert.equal(seam.userData.wedges, wide.userData.wedges, 'every cell still wedges');
-  assert.equal(seam.userData.slopes, 2, 'the seam halves the block');
-  assert.equal(oddEdges(seam), 0, 'two colours of slope abut with no boundary edges');
+  assert.equal(seam.wedges, wide.wedges, 'every cell still wedges');
+  assert.equal(seam.slopes, 2, 'the seam halves the block');
+  assert.equal(
+    oddEdges(seam.geometry),
+    0,
+    'two colours of slope abut with no boundary edges'
+  );
 });
 
 test('a self-touching boundary triangulates whole and welds: a bay open at a corner, two holes meeting at one', () => {
@@ -77,12 +85,8 @@ test('a self-touching boundary triangulates whole and welds: a bay open at a cor
       top: fill(3, 1, 'T'),
     })
   );
-  assert.equal(
-    bay.userData.wedges,
-    0,
-    'the corner notch must stay a step for the pinch to exist'
-  );
-  assert.equal(oddEdges(bay), 0);
+  assert.equal(bay.wedges, 0, 'the corner notch must stay a step for the pinch to exist');
+  assert.equal(oddEdges(bay.geometry), 0);
   const holes = wedgeMesh(
     buildVoxels({
       front: img(['MMMM', 'M.MM', 'MM.M', 'MMMM']),
@@ -90,8 +94,8 @@ test('a self-touching boundary triangulates whole and welds: a bay open at a cor
       top: fill(4, 1, 'T'),
     })
   );
-  assert.equal(holes.userData.wedges, 0);
-  assert.equal(oddEdges(holes), 0);
+  assert.equal(holes.wedges, 0);
+  assert.equal(oddEdges(holes.geometry), 0);
 });
 
 // A deterministic ±1 RGB perturbation of opaque pixels, like the canvas
@@ -182,7 +186,7 @@ test('strict gate: a corner whose riser and tread differ never wedges (author co
   );
 });
 
-// finishVoxelMesh (mesh-util.js) centers X and Z and leaves Y as authored.
+// The mesher centers X and Z and leaves Y as authored.
 
 test('the mesh centers on X and Z (bbox center ~0)', () => {
   // A 4x4x4 cube at worldSize 2.5 spans [-1.25, 1.25] on the centered axes.
@@ -192,24 +196,24 @@ test('the mesh centers on X and Z (bbox center ~0)', () => {
       { mirror: { x: true, y: false, z: false } }
     )
   );
-  const bb = cube.geometry.boundingBox; // computed by finishVoxelMesh
-  assert.ok(Math.abs((bb.min.x + bb.max.x) / 2) < EPS, 'X center must be ~0');
-  assert.ok(Math.abs((bb.min.z + bb.max.z) / 2) < EPS, 'Z center must be ~0');
-  assert.ok(Math.abs(bb.min.x - -1.25) < EPS);
-  assert.ok(Math.abs(bb.max.x - 1.25) < EPS);
+  const bb = cube.geometry.bounds;
+  assert.ok(Math.abs((bb.min[0] + bb.max[0]) / 2) < EPS, 'X center must be ~0');
+  assert.ok(Math.abs((bb.min[2] + bb.max[2]) / 2) < EPS, 'Z center must be ~0');
+  assert.ok(Math.abs(bb.min[0] - -1.25) < EPS);
+  assert.ok(Math.abs(bb.max[0] - 1.25) < EPS);
   // A cube can't tell nx from nz, so check a 3x1x2 box too.
   const box = buildVoxels(
     { front: fill(3, 1, 'T'), right: fill(2, 1, 'T'), top: fill(3, 2, 'T') },
     { mirror: { x: true, y: true, z: true } }
   );
   assert.deepEqual(box.dims, { nx: 3, ny: 1, nz: 2 });
-  const bbox = wedgeMesh(box).geometry.boundingBox;
-  assert.ok(Math.abs((bbox.min.x + bbox.max.x) / 2) < EPS, 'X center ~0 even at nx=3');
-  assert.ok(Math.abs((bbox.min.z + bbox.max.z) / 2) < EPS, 'Z center ~0 even at nz=2');
+  const bbox = wedgeMesh(box).geometry.bounds;
+  assert.ok(Math.abs((bbox.min[0] + bbox.max[0]) / 2) < EPS, 'X center ~0 even at nx=3');
+  assert.ok(Math.abs((bbox.min[2] + bbox.max[2]) / 2) < EPS, 'Z center ~0 even at nz=2');
 });
 
 test('the mesh leaves Y as authored — a floating object does not rest on y=0', () => {
-  const mesh = wedgeMesh(
+  const built = wedgeMesh(
     buildVoxels(
       {
         front: img(['MM', '..', '..']), // content only in the top row
@@ -218,39 +222,33 @@ test('the mesh leaves Y as authored — a floating object does not rest on y=0',
       { mirror: { x: false, y: false, z: false } }
     )
   );
-  const bb = mesh.geometry.boundingBox;
+  const bb = built.geometry.bounds;
   // The solid is at grid y=2 of 3 with s = 2.5/3. Base at 2s = 5/3, top at 2.5.
-  assert.ok(bb.min.y > 1.5, `floating base must stay above y=0 (got ${bb.min.y})`);
-  assert.ok(Math.abs(bb.min.y - 5 / 3) < EPS, 'base sits at world y = 2 * (2.5/3)');
-  assert.ok(Math.abs(bb.max.y - 2.5) < EPS, 'top reaches the full world height');
+  assert.ok(bb.min[1] > 1.5, `floating base must stay above y=0 (got ${bb.min[1]})`);
+  assert.ok(Math.abs(bb.min[1] - 5 / 3) < EPS, 'base sits at world y = 2 * (2.5/3)');
+  assert.ok(Math.abs(bb.max[1] - 2.5) < EPS, 'top reaches the full world height');
 });
 
 // Color comes from the skin texture (skin.js).
 
 test('the mesh carries its skin: uvs in [0,1]; one material samples one texel, a two-color wall a chart', () => {
   // Each triangle's three uv pairs from the indexed geometry.
-  const triUVs = (geo) => {
-    const uv = geo.attributes.uv;
-    const idx = geo.index.array;
+  const triUVs = ({ uv, index }) => {
     const out = [];
-    for (let t = 0; t < idx.length; t += 3)
-      out.push([0, 1, 2].map((k) => [uv.getX(idx[t + k]), uv.getY(idx[t + k])]));
+    for (let t = 0; t < index.length; t += 3)
+      out.push([0, 1, 2].map((k) => [uv[index[t + k] * 2], uv[index[t + k] * 2 + 1]]));
     return out;
   };
   const oneTexel = (tri) => tri.every(([u, v]) => u === tri[0][0] && v === tri[0][1]);
 
   // The ramp is one material, so every triangle samples one texel.
-  const mesh = wedgeMesh(buildVoxels(ramp()));
-  const geo = mesh.geometry;
-  assert.equal(geo.attributes.uv.count, geo.attributes.position.count, 'a uv per vertex');
-  for (const v of geo.attributes.uv.array)
-    assert.ok(v >= 0 && v <= 1, `uv ${v} outside [0,1]`);
+  const built = wedgeMesh(buildVoxels(ramp()));
+  const geo = built.geometry;
+  assert.equal(geo.uv.length / 2, geo.position.length / 3, 'a uv per vertex');
+  for (const v of geo.uv) assert.ok(v >= 0 && v <= 1, `uv ${v} outside [0,1]`);
   assert.ok(triUVs(geo).every(oneTexel), 'a one-material triangle samples one texel');
-  assert.ok(mesh.material.map, 'the material samples the skin');
-  assert.deepEqual(
-    [mesh.material.map.image.width, mesh.material.map.image.height],
-    [mesh.userData.skin.width, mesh.userData.skin.height]
-  );
+  assert.ok(built.skin, 'the record carries the skin');
+  assert.equal(built.color, null, 'and no flat color');
 
   // A two-color wall merges to one charted +z rect.
   const wall = wedgeMesh(
@@ -260,10 +258,14 @@ test('the mesh carries its skin: uvs in [0,1]; one material samples one texel, a
       top: fill(4, 4, 'T'),
     })
   );
-  assert.ok(wall.userData.skin.charts > 0, 'the wall charts at least one rect');
+  assert.ok(wall.charts > 0, 'the wall charts at least one rect');
   assert.ok(
     triUVs(wall.geometry).some((t) => !oneTexel(t)),
     'a charted triangle spans texels'
   );
-  assert.equal(oddEdges(wall), 0, 'a chart seam splits vertices, never the surface');
+  assert.equal(
+    oddEdges(wall.geometry),
+    0,
+    'a chart seam splits vertices, never the surface'
+  );
 });

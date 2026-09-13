@@ -1,20 +1,20 @@
 # sprite-machine
 
 Turns a 3×2 sheet of pixel-art face sprites (left / front / top over right /
-back / bottom) into a low-poly, textured three.js mesh or a glTF 2.0 binary.
-One pixel is one voxel. 45° wedges smooth every same-colour staircase, and
-the colour comes from a nearest-sampled skin texture.
+back / bottom) into a low-poly, textured model: indexed triangle buffers and
+a skin bitmap, or a glTF 2.0 binary. One pixel is one voxel. 45° wedges
+smooth every same-colour staircase, and the colour comes from a
+nearest-sampled skin texture.
 
 This is the engine behind [Sprite Machine](https://aportilla.github.io/sprite-machine/),
 the desktop app that draws these sheets. It runs at a build step, at a
 server's startup, or in the browser.
 
 ```bash
-npm install sprite-machine three
+npm install sprite-machine
 ```
 
-`three` is a peer dependency: the mesh is a `THREE.Mesh`, and the mesher uses
-three's geometry utilities. Requires Node 20.19+ or 22.12+.
+The root entry depends on `earcut` alone. Requires Node 20.19+ or 22.12+.
 
 ## The API
 
@@ -23,8 +23,11 @@ import { buildModel, modelToGlb } from 'sprite-machine';
 
 // sheet: {width, height, data}, an ImageData or the same shape
 const model = buildModel(sheet, { transforms, layers });
-//   → { mesh, dims, triangles, warnings, unitsPerVoxel: 1 }
-//     mesh is a THREE.Mesh at one unit per voxel, its skin the material's map.
+//   → { geometry, skin, color, triangles, dims, warnings, unitsPerVoxel: 1 }
+//     geometry is { position, normal, uv, index, bounds }: Float32 xyz per
+//     vertex at one unit per voxel, centered on X and Z, unit normals, uv
+//     pairs in [0, 1], a Uint32 CCW triangle index and the bounds. skin is
+//     the texture, { width, height, data }, sRGB RGBA with row 0 at v = 0.
 //     transforms is the per-view reorientation (optional). layers is the
 //     sheet's block count (optional, 1 by default; see Layers).
 
@@ -34,9 +37,26 @@ const glb = modelToGlb(model, { name: 'car', voxelsPerMeter: 10 });
 ```
 
 Both functions are synchronous and pure. `buildModel` throws on an invalid
-sheet or a sheet with no painted view in any layer. A three.js page can use
-`model.mesh` directly, and a Node process writes the glb. To build off the main
+sheet or a sheet with no painted view in any layer. To build off the main
 thread, call them from a worker or a child process.
+
+### In three.js
+
+Two routes. `sprite-machine/three` turns the model into a `THREE.Mesh`, with
+`three` installed beside the engine:
+
+```js
+import { toMesh, toGeometry, skinTexture } from 'sprite-machine/three';
+
+const mesh = toMesh(model); // a flat-shaded MeshStandardMaterial over the skin
+const geo = toGeometry(model.geometry); // a BufferGeometry with its bounds
+const map = skinTexture(model.skin); // a DataTexture, nearest, sRGB, flipY false
+```
+
+Or write the glb and load it with `GLTFLoader`, which reads the sampler, the
+sRGB texture, the unlit extension and the node name. Every other engine loads
+the glb. `three` is an optional peer (0.152 or later), and the root entry
+never imports it.
 
 ### In Node: a document PNG in
 
@@ -56,8 +76,7 @@ otherwise. It takes an optional `name`, which overrides the Title chunk. With
 neither, the name is `'sprite'`.
 
 `sprite-machine/node` is the only entry with a PNG decoder. The root entry
-takes pixels and depends only on three, so a browser bundle never includes
-`pngjs`. In a browser, decode with `createImageBitmap` and a canvas, and pass
+takes pixels, so a browser bundle never includes `pngjs`. In a browser, decode with `createImageBitmap` and a canvas, and pass
 the `ImageData` to `buildModel`.
 
 ### The CLI

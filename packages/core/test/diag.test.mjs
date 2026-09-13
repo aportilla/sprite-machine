@@ -3,16 +3,10 @@ import assert from 'node:assert/strict';
 
 import { computeDiag } from '../src/diag.js';
 
-// A geometry stub with the fields computeDiag reads. A null index means
-// non-indexed geometry.
+// A geometry with the fields computeDiag reads. A null index means non-indexed
+// geometry.
 function stub(position, normal, index = null) {
-  return {
-    attributes: {
-      position: { array: position },
-      normal: { array: normal },
-    },
-    index: index ? { array: index } : null,
-  };
+  return { position, normal, index };
 }
 
 test('closed surface (tetrahedron) — no boundary or odd edges', () => {

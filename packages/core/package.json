@@ -1,7 +1,7 @@
 {
   "name": "sprite-machine",
   "version": "0.1.1",
-  "description": "Turn a sheet of pixel-art face sprites into a low-poly, textured three.js mesh or a glTF binary — the engine behind Sprite Machine.",
+  "description": "Turn a sheet of pixel-art face sprites into a low-poly, textured glTF binary — the engine behind Sprite Machine.",
   "license": "MIT",
   "author": "Adam Portilla",
   "type": "module",
@@ -28,7 +28,8 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.js",
-    "./node": "./src/node.js"
+    "./node": "./src/node.js",
+    "./three": "./src/three.js"
   },
   "bin": {
     "sprite-machine": "./bin/sprite-machine.mjs"
@@ -44,9 +45,15 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "peerDependencies": {
-    "three": "^0.185.0"
+    "three": ">=0.152.0"
+  },
+  "peerDependenciesMeta": {
+    "three": {
+      "optional": true
+    }
   },
   "dependencies": {
+    "earcut": "3.0.2",
     "pngjs": "^7.0.0"
   }
 }

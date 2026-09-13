@@ -89,36 +89,36 @@ test('glbFromModel → glbParts: the framing, four aligned views and the PNG ver
 });
 
 test('a wedge mesh exports whole: its welded vertices and index verbatim, the skin the embedded image', () => {
-  const mesh = wedgeMesh(
+  const built = wedgeMesh(
     buildVoxels({
       front: img(['RRRR', 'RRRR', 'BBBB', 'BBBB']),
       right: fill(4, 4, 'T'),
       top: fill(4, 4, 'T'),
     })
   );
-  const geo = mesh.geometry;
-  const skin = encodePng(mesh.material.map.image);
+  const geo = built.geometry;
+  const skin = encodePng(built.skin);
   const parts = glbParts(
     glbFromModel({
       name: 'wall',
-      position: geo.attributes.position.array,
-      normal: geo.attributes.normal.array,
-      uv: geo.attributes.uv.array,
-      index: geo.index.array,
+      position: geo.position,
+      normal: geo.normal,
+      uv: geo.uv,
+      index: geo.index,
       image: { bytes: skin },
     })
   );
   const prim = parts.json.meshes[0].primitives[0];
   assert.equal(
     parts.json.accessors[prim.attributes.POSITION].count,
-    geo.attributes.position.count
+    geo.position.length / 3
   );
-  assert.equal(parts.json.accessors[prim.indices].count, geo.index.count);
+  assert.equal(parts.json.accessors[prim.indices].count, geo.index.length);
   assert.deepEqual(
     new Uint16Array(
       glbViewBytes(parts, parts.json.accessors[prim.indices].bufferView).slice().buffer
     ),
-    Uint16Array.from(geo.index.array)
+    Uint16Array.from(geo.index)
   );
   assert.deepEqual(glbViewBytes(parts, parts.json.images[0].bufferView), skin);
 });

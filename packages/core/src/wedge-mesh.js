@@ -12,22 +12,21 @@
 // - Slopes: the wedge cells of one 45° plane form a grid, greedy-merged by
 //   color into one quad per block.
 // - Base faces: coplanar regions (regions.js) of exposed faces and cap halves,
-//   triangulated with earcut (THREE.ShapeUtils).
+//   triangulated with earcut.
 // Color comes from the skin (skin.js), so regions merge on occupancy alone.
 // UVs are read from lattice positions after the T-junction repair.
 //
 // Not handled: convex staircases still step, and 3D corners where two ridges
 // meet become a step.
 
-import * as THREE from 'three';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import earcut from 'earcut';
 import { voxIndex } from './carve.js';
 import { FACE_GEO, pointOf } from './faces.js';
 import { faceRegions, planeKey } from './regions.js';
 import { unpackRGBA } from './ingest.js';
 import { bakeSkin, uvOfLattice, swatchUV } from './skin.js';
 import { eliminateTJunctions } from './t-junction.js';
-import { finishVoxelMesh, skinTexture } from './mesh-util.js';
+import { weldVertices } from './weld.js';
 import { AXIS_INDEX, FACE_INDEX, faceKeyOf } from './views.js';
 import { DEFAULT_WORLD_SIZE } from './constants.js';
 
@@ -51,6 +50,28 @@ const RIDGES = [
  *            swatch:number|null}} Tri
  */
 
+/**
+ * Indexed triangle buffers: xyz positions centered on X and Z with Y as
+ * authored (see carve.js), unit normals, uv pairs in [0, 1] (zero in flat
+ * mode), CCW index triples and the positions' bounds.
+ * @typedef {{position:Float32Array, normal:Float32Array, uv:Float32Array,
+ *            index:Uint32Array, bounds:{min:number[], max:number[]}}} Geometry
+ */
+
+/**
+ * The mesher's output: the geometry, the skin or, in flat mode, a packed flat
+ * color, and the counts. sprite-machine/three turns it into a THREE.Mesh.
+ * @typedef {{geometry:Geometry, skin:import('./skin.js').Skin|null,
+ *            color:number|null, triangles:number, wedges:number,
+ *            slopes:number, charts:number}} Built
+ */
+
+/**
+ * @param {object} result  a buildVoxels result
+ * @param {{flat?:boolean, worldSize?:number}} [opts]  `flat` skips the skin
+ *   and the wedge gate; `worldSize` is the longest side's length
+ * @returns {Built}
+ */
 export function wedgeMesh(result, opts = {}) {
   const { dims, solid, surfaceMask, faceColor } = result;
   const { nx, ny, nz } = dims;
@@ -284,15 +305,18 @@ export function wedgeMesh(result, opts = {}) {
     const paint = chart
       ? { chart, region }
       : { swatch: flat ? FLAT_COLOR : /** @type {number} */ (region.uniform) >>> 0 };
-    const toV2 = (loop) => loop.map(([a, b]) => new THREE.Vector2(a, b));
-    const faces = THREE.ShapeUtils.triangulateShape(
-      toV2(region.outer),
-      region.holes.map(toV2)
-    );
+    // earcut takes the loops flat, the holes by their first vertex's index.
+    const coords = [];
+    const holeStarts = [];
+    for (const hole of [region.outer, ...region.holes]) {
+      if (hole !== region.outer) holeStarts.push(coords.length / 2);
+      for (const [a, b] of hole) coords.push(a, b);
+    }
+    const faces = earcut(coords, holeStarts);
     const verts = [region.outer, ...region.holes].flat();
     let area = 0;
-    for (const [i0, i1, i2] of faces) {
-      const [p, q, r] = [verts[i0], verts[i1], verts[i2]];
+    for (let k = 0; k < faces.length; k += 3) {
+      const [p, q, r] = [verts[faces[k]], verts[faces[k + 1]], verts[faces[k + 2]]];
       area += Math.abs((q[0] - p[0]) * (r[1] - p[1]) - (r[0] - p[0]) * (q[1] - p[1]));
       pushTri(
         pointOf(region.face, p[0], p[1], region.s),
@@ -336,28 +360,33 @@ export function wedgeMesh(result, opts = {}) {
     }
   }
 
-  // Assemble.
-  let geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  // Weld by position, normal and uv, so vertices of differently facing
-  // triangles or of different charts stay split. flatShading ignores the
-  // normals, but this weld and diag.js depend on them.
-  geo = mergeVertices(geo, 1e-4);
+  // 5. Weld by position, normal and uv, so vertices of differently facing
+  // triangles or of different charts stay split. Flat shading ignores the
+  // normals, but this weld and diag.js depend on them. Then center X and Z and
+  // take the bounds.
+  const welded = weldVertices(pos, nrm, uv);
+  const { position } = welded;
+  const dx = (-nx * s) / 2;
+  const dz = (-nz * s) / 2;
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < position.length; i += 3) {
+    position[i] += dx;
+    position[i + 2] += dz;
+    for (let k = 0; k < 3; k++) {
+      const v = position[i + k];
+      if (v < min[k]) min[k] = v;
+      if (v > max[k]) max[k] = v;
+    }
+  }
 
-  const charted = skin ? skin.charts.reduce((n, c) => n + (c ? 1 : 0), 0) : 0;
-  const paint = skin ? { map: skinTexture(skin) } : { color: FLAT_COLOR };
-  return finishVoxelMesh(geo, {
-    nx,
-    nz,
-    s,
-    ...paint,
-    userData: {
-      triangles: geo.index ? geo.index.count / 3 : repaired.length,
-      wedges: wedges.length, // cells
-      slopes,
-      skin: skin ? { width: skin.width, height: skin.height, charts: charted } : null,
-    },
-  });
+  return {
+    geometry: { ...welded, bounds: { min, max } },
+    skin,
+    color: skin ? null : FLAT_COLOR,
+    triangles: welded.index.length / 3,
+    wedges: wedges.length, // cells
+    slopes,
+    charts: skin ? skin.charts.reduce((n, c) => n + (c ? 1 : 0), 0) : 0,
+  };
 }

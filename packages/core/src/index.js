@@ -1,6 +1,6 @@
 // Public API of the sprite-machine package. Exports are listed by name: with
 // export *, a name exported by two modules is silently dropped. The Node adapter
-// is sprite-machine/node.
+// is sprite-machine/node, the three adapter sprite-machine/three.
 
 export {
   packRGBA,
@@ -64,7 +64,7 @@ export { LAYERS_CHUNK, layersChunk, parseLayersChunk, layerCount } from './layer
 export { traceRegions, planeKey, faceRegions } from './regions.js';
 export { eliminateTJunctions } from './t-junction.js';
 export { bakeSkin, uvOfLattice, swatchUV } from './skin.js';
-export { skinTexture, finishVoxelMesh } from './mesh-util.js';
+export { weldVertices } from './weld.js';
 export { wedgeMesh } from './wedge-mesh.js';
 export {
   PNG_SIGNATURE,

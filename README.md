@@ -15,14 +15,15 @@ npm run build      # static bundle in dist/
 ```
 
 The engine (pipeline, mesher, file formats) is the npm package
-`sprite-machine` in `packages/core`, a second workspace with `three` as a peer
-dependency. Its [README](packages/core/README.md) documents the API.
-`buildModel` returns the THREE.Mesh at one unit per voxel, and `modelToGlb`
-writes the glb that File → Export 3D Model… writes. `sprite-machine/node` adds
-`readSheet` and `sheetToGlb` over a document PNG's bytes, and
-`npx sprite-machine build` runs them from a shell. The app imports the engine
-by name through the workspace link. `npm publish -w packages/core` releases
-the engine alone. The app deploys to GitHub Pages on every push to `main`
+`sprite-machine` in `packages/core`, a second workspace whose root entry
+depends on `earcut` alone. Its [README](packages/core/README.md) documents
+the API. `buildModel` returns the model as typed arrays and a skin bitmap at
+one unit per voxel, `modelToGlb` writes the glb that File → Export 3D Model…
+writes, and `sprite-machine/three` turns the model into a THREE.Mesh, with
+`three` an optional peer. `sprite-machine/node` adds `readSheet` and
+`sheetToGlb` over a document PNG's bytes, and `npx sprite-machine build` runs
+them from a shell. The app imports the engine by name through the workspace
+link. `npm publish -w packages/core` releases the engine alone. The app deploys to GitHub Pages on every push to `main`
 (`.github/workflows/pages.yml`): <https://aportilla.github.io/sprite-machine/>.
 
 The gates are `npm test`, `npm run lint`, `npm run typecheck` and
@@ -1027,13 +1028,14 @@ The grid pipeline is pure typed-array code with no THREE or DOM. The app state
 application's `layout.js`) are pure JS. All of it runs under Node.
 
 ```
-packages/core/  the engine, published as `sprite-machine`. No DOM, THREE for the mesh
-                only, typechecked with no DOM lib. Pipeline (ingest, carve,
-                colorize, the layer union), mesher (regions, wedge-mesh, t-junction,
-                skin, mesh-util), atlas, file formats (png-chunks, png-encode, gltf,
-                layers), views, faces, constants, diag, model (buildModel →
-                modelToGlb), node (readSheet, sheetToGlb over pngjs), the index
-                barrel. test/, bin/ (the CLI), README.md (the API).
+packages/core/  the engine, published as `sprite-machine`. No DOM, THREE only in
+                the three adapter, typechecked with no DOM lib. Pipeline (ingest,
+                carve, colorize, the layer union), mesher (regions, wedge-mesh,
+                t-junction, skin, weld), atlas, file formats (png-chunks,
+                png-encode, gltf, layers), views, faces, constants, diag, model
+                (buildModel → modelToGlb), node (readSheet, sheetToGlb over
+                pngjs), three (toMesh over an optional peer), the index barrel.
+                test/, bin/ (the CLI), README.md (the API).
 src/lib/        editor domain, no THREE or DOM: ring geometry, rasterizers (rect,
                 fill, select, brush, ants), edges (edge hints), layers (blocks,
                 names, the underlay compositor), sheet-shape (the shape rule: tile
