@@ -1,6 +1,6 @@
 {
   "name": "sprite-machine",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Turn a sheet of pixel-art face sprites into a low-poly, textured glTF binary — the engine behind Sprite Machine.",
   "license": "MIT",
   "author": "Adam Portilla",
