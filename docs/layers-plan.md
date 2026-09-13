@@ -471,7 +471,8 @@ the plan.
    sparse layer is edited. The alternative shows the edited layer alone.
 7. **A Layer menu** between Edit and View, with the list at its tail and
    digits `1` to `8` on the list's items. Recommended. The alternatives are
-   the commands in Edit with the list in View, or no keys at all.
+   the commands in Edit with the list in View, or no keys at all. Changed
+   2026-09-13: the Layer menu follows View, so the bar leads File, Edit, View.
 8. **Rename Layer…** ships with New and Delete, as an undo step.
    Recommended: the names are in the chunk from the start and the prompt
    exists. The alternative leaves the numbered defaults and defers it.
@@ -495,8 +496,7 @@ the plan.
 
 ## 7. Follow-ups
 
-- Duplicate Layer, Merge Down, and Move Layer Up / Down (which changes
-  precedence).
+- Duplicate Layer and Merge Down. Move Layer Up / Down built 2026-09-13.
 - A drawn face beating a mirror-derived one across layers, so a later
   layer's blank back never paints over the body's drawn back. It needs
   `colorize` to report which rule colored each face.

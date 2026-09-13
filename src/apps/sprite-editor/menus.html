@@ -36,17 +36,6 @@
   <!-- Retiles the active document as an undoable edit, applied on OK only. -->
   <vf-menu-item value="tile-size">Tile Size…</vf-menu-item>
 </vf-menu>
-<!-- New and Delete are each one undo step, and so is a rename. index.js syncLayers
-     greys New Layer at LAYER_MAX and Delete Layer with one layer. -->
-<vf-menu data-menu="layer" label="Layer">
-  <vf-menu-item value="layer-new">New Layer</vf-menu-item>
-  <vf-menu-item value="layer-delete">Delete Layer</vf-menu-item>
-  <vf-menu-item value="layer-rename">Rename Layer…</vf-menu-item>
-  <vf-separator></vf-separator>
-  <!-- index.js syncLayers appends one item per layer of the active document
-       here, in block order, with value layer:<i>, the edited one checked. Their
-       digit shortcuts are display-only. src/shortcuts.js handles the keys. -->
-</vf-menu>
 <vf-menu data-menu="view" label="View">
   <!-- No Fullscreen item: the Fullscreen API takes Esc away from the page. -->
   <!-- index.js syncArrange sets the value: "arrange" while a window is off its
@@ -60,6 +49,21 @@
   <vf-menu-item value="ring">3D Sprite Atlas</vf-menu-item>
   <!-- index.js syncWindows appends a separator and one item per open document
        window here, in creation order, with value window:<key>. -->
+</vf-menu>
+<!-- New, Delete and each move are one undo step, and so is a rename. index.js
+     syncLayers greys New Layer at LAYER_MAX, Delete Layer with one layer, and
+     Move Layer Up and Down on the first and last layers. Up is toward Layer 1. -->
+<vf-menu data-menu="layer" label="Layer">
+  <vf-menu-item value="layer-new">New Layer</vf-menu-item>
+  <vf-menu-item value="layer-delete">Delete Layer</vf-menu-item>
+  <vf-menu-item value="layer-rename">Rename Layer…</vf-menu-item>
+  <vf-separator></vf-separator>
+  <vf-menu-item value="layer-up">Move Layer Up</vf-menu-item>
+  <vf-menu-item value="layer-down">Move Layer Down</vf-menu-item>
+  <vf-separator></vf-separator>
+  <!-- index.js syncLayers appends one item per layer of the active document
+       here, in block order, with value layer:<i>, the edited one checked. Their
+       digit shortcuts are display-only. src/shortcuts.js handles the keys. -->
 </vf-menu>
 <!-- Bare-letter shortcuts are display-only in the kit. src/shortcuts.js handles
      the keys. -->

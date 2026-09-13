@@ -281,6 +281,29 @@ test('addLayer and removeLayer change the count without a new sheet generation, 
   assert.equal(doc.addLayer(), false, 'not past LAYER_MAX');
 });
 
+test('moveLayer moves a block and its name without a new sheet generation, a pending stroke moving with it', () => {
+  const doc = createDoc(fakeScheduler());
+  assert.equal(doc.moveLayer(0, 1), false, 'no sheet yet');
+  doc.loadAtlas(carSheet(), {}, { names: ['Body'] });
+  doc.addLayer();
+  doc.applyTileEdit(0, 'front', workTile([1, 1, GREEN]));
+  let changes = 0;
+  doc.subscribe(() => changes++);
+
+  assert.equal(doc.moveLayer(0, 1), true);
+  const s = doc.get();
+  assert.equal(changes, 1);
+  assert.equal(s.sheet, 1, 'the same document');
+  assert.deepEqual(s.names, ['Layer 2', 'Body']);
+  assert.equal(s.layers[0].front, null, 'the blank layer moved up');
+  assert.deepEqual(getPx(s.layers[1].front, 1, 1), GREEN, 'the stroke moved down');
+  assert.deepEqual(getPx(s.atlasImage, 3, 5), GREEN);
+
+  assert.equal(doc.moveLayer(1, 1), false, 'no move');
+  assert.equal(doc.moveLayer(1, 2), false, 'past the last layer');
+  assert.equal(doc.moveLayer(-1, 0), false);
+});
+
 test('the sheet generation bumps on loadAtlas only — never on resize/replace', () => {
   const doc = createDoc(fakeScheduler());
   assert.equal(doc.get().sheet, 0);

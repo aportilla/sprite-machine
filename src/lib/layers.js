@@ -66,6 +66,24 @@ export function removeBlock(image, index, blockHeight) {
 }
 
 /**
+ * A copy of a sheet with block `from` moved to index `to`, the blocks between
+ * shifted one place toward `from`.
+ * @param {{width:number, height:number, data:Uint8ClampedArray}} image
+ * @param {number} from  @param {number} to  @param {number} blockHeight
+ * @returns {{width:number, height:number, data:Uint8ClampedArray}}
+ */
+export function moveBlock(image, from, to, blockHeight) {
+  const { width, height } = image;
+  const size = blockHeight * width * 4;
+  const block = (k) => image.data.subarray(k * size, (k + 1) * size);
+  const data = new Uint8ClampedArray(image.data);
+  const step = from < to ? 1 : -1;
+  for (let k = from; k !== to; k += step) data.set(block(k + step), k * size);
+  data.set(block(from), to * size);
+  return { width, height, data };
+}
+
+/**
  * Composite same-size tiles in order, each over the ones before it, with
  * straight alpha. Null entries are skipped.
  * @param {({width:number, height:number, data:ArrayLike<number>}|null)[]} tiles

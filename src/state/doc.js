@@ -7,7 +7,7 @@
 //
 // Two channels:
 //   - subscribe: structural changes (a new atlas, a tile resize, replace all, a
-//     layer added, removed or renamed).
+//     layer added, removed, moved or renamed).
 //   - onLive: stroke-rate edits, coalesced to one blit per animation frame.
 // applyTileEdit mutates layers[layer][face] without a change notification, so
 // the underlay recomputes only on a face or layer switch or a structural change.
@@ -25,7 +25,13 @@ import {
   LAYER_MAX,
 } from 'sprite-machine';
 import { replaceColorInRect } from '../lib/fill.js';
-import { appendBlock, removeBlock, fitLayerNames, nextLayerName } from '../lib/layers.js';
+import {
+  appendBlock,
+  removeBlock,
+  moveBlock,
+  fitLayerNames,
+  nextLayerName,
+} from '../lib/layers.js';
 
 /** @typedef {{width:number,height:number,data:Uint8ClampedArray}} Tile */
 /** @typedef {Record<string, Tile|null>} Views */
@@ -206,7 +212,7 @@ export function createDoc(scheduler = {}) {
     },
 
     // Restore the whole sheet and its layer names (undo/redo of a resize,
-    // replace all, New Layer or Delete Layer). The image is adopted by
+    // replace all or a layer added, removed or moved). The image is adopted by
     // reference and sliced into as many layers as there are names. The sheet
     // generation does not change.
     /** @param {Tile} image  @param {string[]} names */
@@ -275,6 +281,23 @@ export function createDoc(scheduler = {}) {
       const atlasImage = removeBlock(s.atlasImage, index, s.rows * s.tileH);
       const names = s.names.filter((_, i) => i !== index);
       store.patch({ atlasImage, names, ...slicedPatch(atlasImage, names.length) });
+      return true;
+    },
+
+    // Move a layer's block and its name to index `to`. Returns whether the sheet
+    // changed: false with no sheet, an index out of range or `to` the same.
+    /** @param {number} index  @param {number} to */
+    moveLayer(index, to) {
+      const s0 = store.get();
+      const count = s0.layers.length;
+      if (!s0.atlasImage || !inRange(index) || !inRange(to)) return false;
+      if (index >= count || to >= count || index === to) return false;
+      this.drain();
+      const s = store.get();
+      const atlasImage = moveBlock(s.atlasImage, index, to, s.rows * s.tileH);
+      const names = [...s.names];
+      names.splice(to, 0, ...names.splice(index, 1));
+      store.patch({ atlasImage, names, ...slicedPatch(atlasImage, count) });
       return true;
     },
 

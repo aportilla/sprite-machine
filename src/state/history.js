@@ -3,7 +3,8 @@
 //     after} tile snapshots), pushed by the editor when the canvas commits a
 //     gesture.
 //   - `atlas`: a pair of whole-sheet {image, names} snapshots for a resize,
-//     replace all, New Layer or Delete Layer, recorded by withAtlasSnapshot.
+//     replace all or a layer added, removed or moved, recorded by
+//     withAtlasSnapshot.
 //   - `names`: a pair of layer name lists for a rename, recorded by
 //     withNamesSnapshot.
 //

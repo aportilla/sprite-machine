@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   appendBlock,
   removeBlock,
+  moveBlock,
   defaultLayerName,
   nextLayerName,
   fitLayerNames,
@@ -27,6 +28,16 @@ test('appendBlock adds a transparent block at the bottom; removeBlock cuts one b
   assert.deepEqual(rowValues(removeBlock(three, 1, 2)), [1, 2, 0, 0]);
   assert.deepEqual(rowValues(removeBlock(three, 2, 2)), [1, 2, 3, 4]);
   assert.deepEqual(rowValues(two), [1, 2, 3, 4], 'the source is untouched');
+});
+
+test('moveBlock puts one block at a new index and shifts the ones between; rows past the last block stay', () => {
+  const three = striped(7); // three blocks of 2 rows and a remainder row
+  assert.deepEqual(rowValues(moveBlock(three, 0, 1, 2)), [3, 4, 1, 2, 5, 6, 7]);
+  assert.deepEqual(rowValues(moveBlock(three, 2, 1, 2)), [1, 2, 5, 6, 3, 4, 7]);
+  assert.deepEqual(rowValues(moveBlock(three, 0, 2, 2)), [3, 4, 5, 6, 1, 2, 7]);
+  assert.deepEqual(rowValues(moveBlock(three, 2, 0, 2)), [5, 6, 1, 2, 3, 4, 7]);
+  assert.deepEqual(rowValues(moveBlock(three, 1, 1, 2)), [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(rowValues(three), [1, 2, 3, 4, 5, 6, 7], 'the source is untouched');
 });
 
 test('layer names: the default is numbered from 1; New Layer counts up from its own number past names in use; a chunk’s names are fitted to the count', () => {

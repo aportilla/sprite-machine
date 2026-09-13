@@ -613,6 +613,16 @@ export const spriteEditor = {
           }
           break;
         }
+        case 'layer-up':
+        case 'layer-down': {
+          // The moved layer stays the edited one.
+          const i = ctx.layer;
+          const to = v === 'layer-up' ? i - 1 : i + 1;
+          if (ctx.history.withAtlasSnapshot(() => ctx.doc.moveLayer(i, to))) {
+            workspace.setLayer(ctx.key, to);
+          }
+          break;
+        }
         case 'layer-rename': {
           const i = ctx.layer;
           promptName('layer', ctx.doc.get().names[i] ?? '').then((name) => {
@@ -756,6 +766,8 @@ export const spriteEditor = {
     // structural channel, the edited layer on the workspace store.
     const itemLayerNew = item(menuLayer, 'layer-new');
     const itemLayerDelete = item(menuLayer, 'layer-delete');
+    const itemLayerUp = item(menuLayer, 'layer-up');
+    const itemLayerDown = item(menuLayer, 'layer-down');
     const layerAnchor = /** @type {Element} */ (menuLayer.lastElementChild);
     /** @type {HTMLElementTagNameMap['vf-menu-item'][]} by layer */
     const layerItems = [];
@@ -778,6 +790,8 @@ export const spriteEditor = {
       });
       itemLayerNew.disabled = !ctx || names.length >= LAYER_MAX;
       itemLayerDelete.disabled = !ctx || names.length <= 1;
+      itemLayerUp.disabled = !ctx || ctx.layer <= 0;
+      itemLayerDown.disabled = !ctx || ctx.layer >= names.length - 1;
     };
     teardown.push(
       workspace.subscribe(syncLayers),

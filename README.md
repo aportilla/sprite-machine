@@ -203,8 +203,8 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   once, on the first move press, and each offset composites them over the base
   (`lib/select.js`), so a drag doesn't smear what it crosses.
 - **Undo**: a gesture (stroke, rect, fill, move) is one step, and an all-faces
-  replace, a tile resize, New Layer and Delete Layer are each one whole-sheet
-  step that also restores the layer names. Rename Layer… is a step of its own.
+  replace, a tile resize, New Layer, Delete Layer and each layer move are one
+  whole-sheet step that also restores the layer names. Rename Layer… is a step of its own.
   An undo lands on the layer and face it recorded without switching the editor
   to them. History holds 50 entries and clears when a document loads.
 - **Eraser** (`E`): a pencil that writes transparency, with its own tip size
@@ -349,7 +349,7 @@ application's menus follow, and the **clock** stays at the right end:
 
 ```
 Finder            │ Sprite Machine  File  Edit  View  Special              10:42 │
-Sprite Editor     │ Sprite Machine  File  Edit  Layer  View  Tools         10:42 │
+Sprite Editor     │ Sprite Machine  File  Edit  View  Layer  Tools         10:42 │
 Text Viewer       │ Sprite Machine  File  Edit  View                       10:42 │
 Desktop Patterns  │ Sprite Machine  File  View                             10:42 │
 ```
@@ -429,21 +429,6 @@ document to act on):
   _Tile Size…_ sets the active document's square tile size in a dialog that
   applies on OK as one undo step (see [Drawing editor](#drawing-editor)). No
   Cut or Clear.
-- **Layer**: _New Layer_, _Delete Layer_, _Rename Layer…_, then after a rule
-  one item per layer of the active document in block order, named for the
-  layer, with the edited one checked and `1` to `8` shown as the keys.
-  - _New Layer_ appends a transparent layer, named _Layer n_ for the first
-    number free counting from its own, and edits it. It is greyed at eight
-    layers.
-  - _Delete Layer_ removes the edited layer and edits the one above it, or
-    Layer 1. It is greyed while the document has one layer.
-  - Both are one undo step. _Rename Layer…_ opens the name prompt on the edited
-    layer's name, and a rename is an undo step too.
-  - A pick from the list, or its digit key, switches the layer the window
-    edits. A switch never dirties the document. The digit keys follow the tool
-    keys' rules and wait while a stroke or drag is in progress.
-  - The three commands have no key equivalents. See [Layers](#input-a-32-atlas)
-    for the sheet.
 - **View**: _Arrange Windows_ ⌘J comes first. Its label is fixed and its
   command depends on the windows. If any visible window is off its placement,
   it arranges: the boot placement re-runs on the current raster and document
@@ -459,6 +444,27 @@ document to act on):
   the section and its separator are absent. There is no Fullscreen item: the
   Fullscreen API takes Esc from the editor, and Chrome's top layer covers the
   kit's page-drawn cursor.
+- **Layer**: _New Layer_, _Delete Layer_, _Rename Layer…_; _Move Layer Up_,
+  _Move Layer Down_; then after a rule one item per layer of the active
+  document in block order, named for the layer, with the edited one checked
+  and `1` to `8` shown as the keys.
+  - _New Layer_ appends a transparent layer, named _Layer n_ for the first
+    number free counting from its own, and edits it. It is greyed at eight
+    layers.
+  - _Delete Layer_ removes the edited layer and edits the one above it, or
+    Layer 1. It is greyed while the document has one layer.
+  - _Move Layer Up_ swaps the edited layer's block and name with the layer
+    above it, toward Layer 1, and _Move Layer Down_ with the one below. The
+    moved layer stays the edited one. Up is greyed on the first layer and Down
+    on the last. A move changes which layer's colors show where layers
+    overlap.
+  - New, Delete and each move are one undo step. _Rename Layer…_ opens the
+    name prompt on the edited layer's name, and a rename is an undo step too.
+  - A pick from the list, or its digit key, switches the layer the window
+    edits. A switch never dirties the document. The digit keys follow the tool
+    keys' rules and wait while a stroke or drag is in progress.
+  - The five commands have no key equivalents. See [Layers](#input-a-32-atlas)
+    for the sheet.
 - **Tools** lists the six tools with the active one checked. The menu, the
   Tools palette and the S/B/R/G/E/I keys set the same tool.
 
@@ -1102,7 +1108,7 @@ the few light-DOM rules.
 **Two-speed state.** Templates read store state. Everything the canvas hot paths
 touch is a private field in `<sm-draw-canvas>`, so a pencil drag never schedules
 a render. Each document's doc slice has two channels: `subscribe` for structural
-changes (load, resize, replace all, a layer added, removed or renamed, undo
+changes (load, resize, replace all, a layer added, removed, moved or renamed, undo
 restore) and `onLive` for stroke-rate edits, coalesced per animation frame, one
 notification per edited layer and face. `applyTileEdit` stores the working
 buffer by reference without notifying `subscribe`, so the underlay recomputes
@@ -1127,13 +1133,13 @@ release, and a layer key waits while it is set.
 
 - **Concavity.** An opt-in per-column depth channel would carve single-axis
   notches within a layer.
-- **Layers.** Duplicate Layer, Merge Down, and Move Layer Up / Down (which changes
-  precedence). A drawn face beating a mirror-derived one across layers, so a later
-  layer's blank back never paints over the body's drawn back (`colorize` would
-  report which rule colored each face). Hiding a layer from the union, a `hidden`
-  flag per entry in the chunk. A layered built-in sample and a `?layer=` dev hook.
-  A Layers windoid. The layer count in the glb's `extras`. A versioned re-seed of
-  the text files, so an existing profile reads the Layers paragraph.
+- **Layers.** Duplicate Layer and Merge Down. A drawn face beating a
+  mirror-derived one across layers, so a later layer's blank back never paints
+  over the body's drawn back (`colorize` would report which rule colored each
+  face). Hiding a layer from the union, a `hidden` flag per entry in the chunk. A
+  layered built-in sample and a `?layer=` dev hook. A Layers windoid. The layer
+  count in the glb's `extras`. A versioned re-seed of the text files, so an
+  existing profile reads the Layers paragraph.
 - **Low-poly scope.** A convex staircase still steps, and a 3-D corner where two
   ridges meet degrades to a step.
 - **Perf.** The render loop redraws only on change, and the skin is rebaked per
