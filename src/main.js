@@ -41,6 +41,7 @@ import './components/sm-color-picker.js';
 import './components/sm-desktop-patterns.js';
 import './components/sm-options-bar.js';
 import './components/sm-tools-panel.js';
+import './components/sm-palette-view.js';
 import './components/sm-atlas-view.js';
 import './components/sm-atlas-controls.js';
 import './components/sm-ring-controls.js';

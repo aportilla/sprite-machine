@@ -6,6 +6,7 @@ export function createPrefs() {
   const store = createStore({
     autoRotate: false, // the 3D View's auto-spin
     showRing: false, // the 3D Sprite Atlas windoid (View → 3D Sprite Atlas)
+    showPalette: false, // the Color Palette windoid (View → Color Palette)
   });
   return {
     store,
@@ -18,6 +19,10 @@ export function createPrefs() {
     /** @param {boolean} v */
     setShowRing(v) {
       store.patch({ showRing: !!v });
+    },
+    /** @param {boolean} v */
+    setShowPalette(v) {
+      store.patch({ showPalette: !!v });
     },
   };
 }

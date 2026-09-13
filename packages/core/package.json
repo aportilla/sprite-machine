@@ -29,6 +29,7 @@
   "exports": {
     ".": "./src/index.js",
     "./node": "./src/node.js",
+    "./browser": "./src/browser.js",
     "./three": "./src/three.js"
   },
   "bin": {
@@ -53,7 +54,9 @@
     }
   },
   "dependencies": {
-    "earcut": "3.0.2",
+    "earcut": "3.0.2"
+  },
+  "devDependencies": {
     "pngjs": "^7.0.0"
   }
 }

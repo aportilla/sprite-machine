@@ -1,7 +1,8 @@
-// The editor's palettes: the pencil ramp and the Colors dialog's named swatches.
+// The editor's palettes: the pencil ramp, the Colors dialog's named swatches and
+// a document's own colors.
 
 import { packRGBA } from 'sprite-machine';
-import { hexToRgb } from './color.js';
+import { hexToRgb, rgbKey } from './color.js';
 
 // PENCIL_PALETTE: the DB16 (DawnBringer 16) ramp. No two swatches are within the
 // wedge merge tolerance (sameMat in wedge-mesh.js).
@@ -237,3 +238,65 @@ export const PALETTE_168 = PALETTE_168_ROWS.flat().map(([css, name]) => {
   const rgb = hexToRgb(css);
   return { packed: packRGBA(rgb.r, rgb.g, rgb.b, 255), css, rgb, name };
 });
+
+const NAME_BY_KEY = new Map(PALETTE_168.map((p) => [rgbKey(p.rgb), p.name]));
+
+/**
+ * The Colors dialog's name for a color, or null.
+ * @param {{r:number,g:number,b:number}} rgb
+ * @returns {string|null}
+ */
+export const paletteName = (rgb) => NAME_BY_KEY.get(rgbKey(rgb)) ?? null;
+
+/** The most swatches the Color Palette windoid lists. */
+export const PALETTE_VIEW_MAX = 256;
+
+/**
+ * A color's place in documentColors' order as one number: gray or not, then
+ * the hue in 30° bands centered on red, then lightness (max + min), then the
+ * 24-bit key.
+ * @param {number} key  0xRRGGBB
+ */
+function colorRank(key) {
+  const r = key >> 16;
+  const g = (key >> 8) & 0xff;
+  const b = key & 0xff;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let band = 0;
+  if (d > 0) {
+    const sector =
+      max === r ? (g - b) / d + 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    band = 1 + (Math.floor((sector % 6) * 2 + 0.5) % 12);
+  }
+  return (band * 511 + max + min) * 0x1000000 + key;
+}
+
+/**
+ * The distinct colors of every texel whose alpha is not 0, keyed by RGB: grays
+ * first by lightness, then by hue, then by lightness within a hue, at most
+ * `max` of them. The order depends on the set of colors alone.
+ * @param {{data: ArrayLike<number>}} image  an RGBA sheet
+ * @param {number} [max]
+ * @returns {{r:number,g:number,b:number}[]}
+ */
+export function documentColors({ data }, max = PALETTE_VIEW_MAX) {
+  const keys = new Set();
+  let last = -1;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue;
+    const key = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
+    if (key === last) continue;
+    last = key;
+    keys.add(key);
+  }
+  return [...keys]
+    .map(colorRank)
+    .sort((a, b) => a - b)
+    .slice(0, max)
+    .map((rank) => {
+      const key = rank % 0x1000000;
+      return { r: key >> 16, g: (key >> 8) & 0xff, b: key & 0xff };
+    });
+}

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { inflateSync } from 'node:zlib';
 
-import { encodePng, zlibStored, adler32 } from '../src/png-encode.js';
+import { encodePng, pngScanlines, zlibStored, adler32 } from '../src/png-encode.js';
 import { readChunks, crc32, isPng } from '../src/png-chunks.js';
 
 const noise = (n) => {
@@ -42,6 +42,11 @@ test('encodePng: the file inflates back to its rows, framed IHDR / IDAT / IEND w
       data.subarray(y * stride, (y + 1) * stride)
     );
   }
+  assert.deepEqual(
+    raw,
+    pngScanlines({ width, height, data }),
+    'the IDAT is pngScanlines'
+  );
   assert.throws(
     () => encodePng({ width: 2, height: 2, data: new Uint8Array(3) }),
     /expected/

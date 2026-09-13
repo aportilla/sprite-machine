@@ -1,6 +1,7 @@
 // Public API of the sprite-machine package. Exports are listed by name: with
 // export *, a name exported by two modules is silently dropped. The Node adapter
-// is sprite-machine/node, the three adapter sprite-machine/three.
+// is sprite-machine/node, the browser adapter sprite-machine/browser and the
+// three adapter sprite-machine/three.
 
 export {
   packRGBA,
@@ -75,7 +76,14 @@ export {
   readTextChunks,
   setTextChunks,
 } from './png-chunks.js';
-export { adler32, zlibStored, encodePng } from './png-encode.js';
+export { parsePng, unfilterPng, decodePng } from './png-decode.js';
+export {
+  adler32,
+  zlibStored,
+  pngScanlines,
+  pngFromZlib,
+  encodePng,
+} from './png-encode.js';
 export { glbFromModel, glbParts, glbViewBytes } from './gltf.js';
 export { computeDiag } from './diag.js';
 export { DEFAULT_MIRROR, DEFAULT_WORLD_SIZE } from './constants.js';

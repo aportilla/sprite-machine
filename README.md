@@ -15,16 +15,19 @@ npm run build      # static bundle in dist/
 ```
 
 The engine (pipeline, mesher, file formats) is the npm package
-`sprite-machine` in `packages/core`, a second workspace whose root entry
-depends on `earcut` alone. Its [README](packages/core/README.md) documents
-the API. `buildModel` returns the model as typed arrays and a skin bitmap at
-one unit per voxel, `modelToGlb` writes the glb that File → Export 3D Model…
-writes, and `sprite-machine/three` turns the model into a THREE.Mesh, with
-`three` an optional peer. `sprite-machine/node` adds `readSheet` and
-`sheetToGlb` over a document PNG's bytes, and `npx sprite-machine build` runs
-them from a shell. The app imports the engine by name through the workspace
-link. `npm publish -w packages/core` releases the engine alone. The app deploys to GitHub Pages on every push to `main`
-(`.github/workflows/pages.yml`): <https://aportilla.github.io/sprite-machine/>.
+`sprite-machine` in `packages/core`, a second workspace whose one dependency
+is `earcut`. Its [README](packages/core/README.md) documents the API.
+`buildModel` returns the model as typed arrays and a skin bitmap at one unit
+per voxel, `modelToGlb` writes the glb that File → Export 3D Model… writes,
+and `sprite-machine/three` turns the model into a THREE.Mesh, with `three` an
+optional peer. `sprite-machine/node` adds `readSheet` and `sheetToGlb` over a
+document PNG's bytes, and `npx sprite-machine build` runs them from a shell.
+`sprite-machine/browser` decodes and encodes PNGs over the platform's
+compression streams, and the app opens and saves documents with it. The app
+imports the engine by name through the workspace link.
+`npm publish -w packages/core` releases the engine alone. The app deploys to
+GitHub Pages on every push to `main` (`.github/workflows/pages.yml`):
+<https://aportilla.github.io/sprite-machine/>.
 
 The gates are `npm test`, `npm run lint`, `npm run typecheck` and
 `npm run build`, and the Pages workflow runs all four before it deploys. There
@@ -44,9 +47,10 @@ The app is a System 7 style desktop built with the
 kit. It has a menu bar, an options strip, one movable document window per open
 document, and floating utility windoids that serve the active document: the
 **Tools** palette, the **Full Sprite View** (the face picker over a clickable
-grid of the atlas's tiles), the **3D View**, and the toggleable
+grid of the atlas's tiles), the **3D View**, and two toggleable windoids, the
 **3D Sprite Atlas** (the model rendered orthographically from a ring of
-angles, which File → Export Sprite Atlas… saves). Documents are files on the
+angles, which File → Export Sprite Atlas… saves) and the **Color Palette**
+(the document's colors). Documents are files on the
 desktop, saved in the browser and opened by double-clicking their icons.
 Folders hold them and the Trash deletes them. Read-me text files ship with the
 app and open in the Text Viewer (see [Text files](#text-files)). Clicking the
@@ -226,6 +230,9 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   same-hue pairs fall within the wedge merge tolerance (`sameMat`,
   `TOL2 = 12²`) and can merge into a wedge on a staircase. `lib/palette.js`
   lists them. No gray pair merges.
+- **The Color Palette** (View → Color Palette) is a grid of swatches at the
+  bottom left, one per color in the active document. Pressing a swatch sets the
+  ink, and the ink's swatch is ringed. See [Windows](#windows).
 - **Face picker**: six cube icons over a radio row in the Full Sprite View's
   header pick the face the active document's window edits. Each document keeps
   its own face. The icons sit in mirror pairs and pick on click. They are
@@ -435,10 +442,12 @@ document to act on):
   windows cascade in stacking order. If everything is placed, it toggles the
   active window's zoom box, so repeated ⌘J zooms and unzooms that window.
   `arranged()` compares each visible window with its placed box, ignoring
-  hidden windows, the atlas strip's width and which document holds which
-  cascade slot. After a separator, _3D Sprite Atlas_ shows or hides that
-  windoid and is checked while it is shown. It starts off on every load, and
-  the windoid's close box unchecks it. After a second separator comes one item
+  hidden windows, the atlas strip's width, the Color Palette's size and which
+  document holds which cascade slot. After a separator, _3D Sprite Atlas_ and
+  _Color Palette_ each show or hide their windoid and are checked while it is
+  shown.
+  Both start off on every load, and a windoid's close box unchecks its item.
+  Neither has a key equivalent. After a second separator comes one item
   per open document window, in creation order, named for the document with the
   active one checked. A pick brings that window forward. With no document open
   the section and its separator are absent. There is no Fullscreen item: the
@@ -531,7 +540,7 @@ are not documents.
   zoomed across a browser resize.
 - **Utility windoids**: the Tools palette, Full Sprite View and 3D View have no
   close box or menu toggle and are shown whenever the Sprite Editor is front.
-  The 3D Sprite Atlas is the one toggleable windoid. Windoids float above
+  The 3D Sprite Atlas and the Color Palette are toggleable. Windoids float above
   document windows, never become active, and hide together when the
   application deactivates. Their controls act on click, except the Tools
   palette's cells and the Full Sprite View's face tiles, which pick on
@@ -587,16 +596,45 @@ header's height and the windoid's minimum width.
   re-placed instead. It resizes horizontally only. Its width is the user's,
   seeded with the row's width and floored at the header's. A wider row scrolls
   horizontally. The placement docks it on the bottom margin, left-aligned with
-  the document window. While shown, its band is taken out of the vacancy, so
-  new windows, Arrange and the zoom box stay clear of it. Showing it doesn't
-  move other windows.
+  the document window, or 14 px right of a shown Color Palette. While shown,
+  its band is taken out of the vacancy, so new windows, Arrange and the zoom box
+  stay clear of it. Showing it doesn't move other windows.
+
+**The Color Palette** lists the active document's colors, one `vf-swatch` per
+color in a grid of 19 px square cells (`paletteGrid`). The grid has as many
+columns as the window's width fits. Empty cells fill the rows the window holds
+past the swatches, and more rows than fit scroll vertically. It has no header. Its status strip reads "Color Palette".
+
+- **The colors** are every distinct RGB whose alpha is not 0, across the whole
+  sheet, every layer and face (`documentColors` in `lib/palette.js`). Grays
+  come first by lightness, then colors by hue in 30° bands, by lightness inside
+  a band. The order depends only on which colors are present, so a swatch
+  moves only when a color before it comes or goes. The list stops at 256
+  (`PALETTE_VIEW_MAX`). While the windoid is shown it rescans on every
+  structural and live change to the document, and re-renders when the list
+  changes.
+- **A press** on a swatch sets the ink through `session.pickColor`, so the
+  eraser becomes the pencil. Swatches pick on press, like the Tools palette's
+  cells. The ink's swatch is ringed like the selected Desktop Patterns cell: 1px
+  black over its white inset, 1px white inside. A picked color not yet painted
+  marks nothing. A swatch's tooltip is its hex, after the Colors dialog's name
+  when it has one.
+- **View → Color Palette** shows it and its close box hides it. It docks on
+  the bottom margin, left-aligned with the document window, sized to show five
+  columns by three rows, and the atlas strip moves to its right. It resizes in both
+  axes, floored at the width that shows the status label and two rows, and
+  Arrange Windows restores its size. While shown, its band is taken out of the
+  vacancy like the strip's, so new windows, Arrange and the zoom box stay clear
+  of it. Showing it doesn't move other windows. It keeps its size across a
+  browser resize, and a placed Color Palette stays docked.
 
 The Sprite Editor's placement is computed from the live raster
 (`apps/sprite-editor/layout.js`, pure). The Tools palette is at the top left.
 The Full Sprite View sits over the 3D View as a right-hand rail, both
-right-aligned at one width. The document window is at `WINDOW_ORIGIN` beside
-the Tools palette and fills the vacant middle, less the cascade room at the
-right and bottom. Further document windows open at the same size, cascaded
+right-aligned at one width. The Color Palette and the 3D Sprite Atlas strip
+share the bottom band. The document window is at `WINDOW_ORIGIN` beside the
+Tools palette and fills the vacant middle, less the cascade room at the right
+and bottom. Further document windows open at the same size, cascaded
 down-right into the first of five slots no open window holds. A closed or
 moved window frees its slot, and a full cascade wraps to the first.
 
@@ -607,9 +645,9 @@ window boxes do persist.
 
 When the browser window resizes, every window moves by one rule, the
 **nine-slice pin** (`pinOf`/`pinTo`). The open area below the options strip
-has outer bands around a middle. The bands are 100 system px at the left and
-bottom and wider at the top and right to hold the rail (the Sprite Editor
-declares them at init). An edge in a band is a **strut**: its offset from that
+has outer bands around a middle. The bottom band is 100 system px. The others
+are wider, to hold the rail at the top and right and the Color Palette with the
+strip's left edge at the left (the Sprite Editor declares them at init). An edge in a band is a **strut**: its offset from that
 raster edge holds. An edge in the middle is a **spring**: its fraction of the
 middle holds. So a window against an edge stays against it, and one spanning
 the middle scales with it. Placed windoids are all struts, so a resize puts
@@ -861,7 +899,11 @@ one-layer file reads `{"layers":[{"name":"Layer 1"}]}`). `Software` stays
 `sprite-machine 1`. The pixels alone are a complete document; the tile size and
 the layer count derive from the dimensions, and a chunk whose names don't match
 the count is fitted to it. Save, Download, drop-import and paste share this
-format. Download writes the saved bytes verbatim, a downloaded PNG dropped back
+format. Opening and saving decode and encode PNGs with the engine's
+`sprite-machine/browser` entry (`src/image-io.js`), so a document's pixels are
+the file's exactly, also in privacy browsers that perturb canvas readback. An
+image that is not a PNG decodes through a canvas. A save writes 8-bit RGBA
+with every row unfiltered and deflated. Download writes the saved bytes verbatim, a downloaded PNG dropped back
 restores losslessly, and a foreign 3×2 sheet imports as an untitled document
 with default ring settings. Stripping the chunks loses only the name,
 timestamps, ring settings and layer names. The system clipboard
@@ -1038,15 +1080,18 @@ packages/core/  the engine, published as `sprite-machine`. No DOM, THREE only in
                 the three adapter, typechecked with no DOM lib. Pipeline (ingest,
                 carve, colorize, the layer union), mesher (regions, wedge-mesh,
                 t-junction, skin, weld), atlas, file formats (png-chunks,
-                png-encode, gltf, layers), views, faces, constants, diag, model
-                (buildModel → modelToGlb), node (readSheet, sheetToGlb over
-                pngjs), three (toMesh over an optional peer), the index barrel.
-                test/, bin/ (the CLI), README.md (the API).
+                png-decode, png-encode, gltf, layers, sheet), views, faces,
+                constants, diag, model (buildModel → modelToGlb), node
+                (readSheet, sheetToGlb over zlib), browser (readSheet, decodePng,
+                encodePng over the compression streams), three (toMesh over an
+                optional peer), the index barrel. test/, bin/ (the CLI),
+                README.md (the API).
 src/lib/        editor domain, no THREE or DOM: ring geometry, rasterizers (rect,
                 fill, select, brush, ants), edges (edge hints), layers (blocks,
                 names, the underlay compositor), sheet-shape (the shape rule: tile
-                and layer count), icon (document icon rules), zip, color, palette,
-                sprite-data (built-in samples)
+                and layer count), icon (document icon rules), zip, color, palette
+                (the named palettes, a document's colors), sprite-data (built-in
+                samples)
 src/texts/      built-in text files (.txt, imported ?raw), seeded once per profile
 src/apps/       finder, sprite-editor, text-viewer, desktop-patterns, and the
                 registry (index). Each app has menus.html, index.js (menu wiring,
@@ -1170,8 +1215,14 @@ release, and a layer key waits while it is set.
   desktop skeleton has an in-flow slot under the menu bar. Document icons read
   their open state from `windows.isOpen`, as text icons do. Per-window struts
   replace `setFrameBands`.
-- **Engine package.** `.d.ts` files emitted from the JSDoc on prepack. A
-  `sprite-machine/browser` adapter with `readSheet` over `createImageBitmap`.
+- **Engine package.** `.d.ts` files emitted from the JSDoc on prepack.
+- **Exact renders.** The sprite atlas export encodes through `toBlob` and the
+  document icon renderer reads its render through `getImageData`, so both can
+  carry a privacy browser's noise. Reading the render with `readPixels` into
+  the engine's encoder would make them exact, if those browsers leave
+  `readPixels` alone.
+- **Color Palette.** Reordering swatches by drag, and a count of the document's
+  colors.
 - **Export.** The skin as a PNG beside the model. A note for Unity users to turn
   mipmaps off on the texture: its importer generates them regardless of the
   sampler, and a mipmapped chart bleeds at distance. For the sprite atlas: a drop

@@ -14,7 +14,7 @@ server's startup, or in the browser.
 npm install sprite-machine
 ```
 
-The root entry depends on `earcut` alone. Requires Node 20.19+ or 22.12+.
+The package depends on `earcut` alone. Requires Node 20.19+ or 22.12+.
 
 ## The API
 
@@ -63,8 +63,9 @@ never imports it.
 ```js
 import { readSheet, sheetToGlb } from 'sprite-machine/node';
 
-// pngjs decodes the pixels. The Title, sprite-machine:transforms and
-// sprite-machine:layers chunks are read as the app reads them.
+// The engine's PNG decoder reads the pixels, over zlib. The Title,
+// sprite-machine:transforms and sprite-machine:layers chunks are read as the
+// app reads them.
 const { image, name, transforms, layers } = readSheet(bytes);
 const glb = sheetToGlb(bytes, { voxelsPerMeter: 10 }); // readSheet, buildModel, modelToGlb
 ```
@@ -75,9 +76,34 @@ when that count divides the sheet's height into whole blocks, and one layer
 otherwise. It takes an optional `name`, which overrides the Title chunk. With
 neither, the name is `'sprite'`.
 
-`sprite-machine/node` is the only entry with a PNG decoder. The root entry
-takes pixels, so a browser bundle never includes `pngjs`. In a browser, decode with `createImageBitmap` and a canvas, and pass
-the `ImageData` to `buildModel`.
+### In a browser
+
+```js
+import { readSheet, decodePng, encodePng } from 'sprite-machine/browser';
+import { buildModel, layerCount } from 'sprite-machine';
+
+const sheet = await readSheet(bytes); // the Node entry's result
+const model = buildModel(sheet.image, {
+  transforms: sheet.transforms,
+  layers: layerCount(sheet.image.height, sheet.layers) ?? 1,
+});
+
+const { width, height, data } = await decodePng(bytes); // 8-bit RGBA, row 0 on top
+const png = await encodePng({ width, height, data }); // a Uint8Array, deflated
+```
+
+The browser entry inflates and deflates with `DecompressionStream` and
+`CompressionStream`, with no canvas, so the pixels are exactly the file's: a
+privacy browser can noise a canvas read, and a canvas color-manages a PNG with
+a `gAMA` or `iCCP` chunk. Its functions are async, and `inflate` and `deflate`
+are exported too.
+
+The decoder reads every color type and bit depth the PNG spec defines, and
+Adam7. A sample of another depth scales to 8 bits as `floor(v · 255 / max + 0.5)`,
+and a pixel matching the `tRNS` color key reads as 0, 0, 0, 0. The root entry
+exports it as `decodePng(bytes, inflate)`, beside its halves `parsePng` and
+`unfilterPng`. The root's `encodePng(img)` is synchronous and writes stored
+deflate blocks. `pngScanlines` and `pngFromZlib` are its halves.
 
 ### The CLI
 

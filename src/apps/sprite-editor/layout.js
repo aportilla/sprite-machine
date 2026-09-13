@@ -1,14 +1,16 @@
 // Sprite Editor window geometry (pure). All values are whole system px.
 //
 // - initialPlacement(): the Tools palette top-left, the Full Sprite View over the
-//   3D View as a right-hand rail, the 3D Sprite Atlas strip docked at the bottom,
-//   and the document box in the vacant middle, leaving room for the cascade.
+//   3D View as a right-hand rail, the Color Palette and the 3D Sprite Atlas strip
+//   docked at the bottom, and the document box in the vacant middle, leaving
+//   room for the cascade.
 // - zoomedBox(): a document window's zoomed box from its top-left.
 // - spriteHeightFor(), ringHeightFor(), ringWidthFor(): derived windoid sizes.
+// - paletteGrid(): the Color Palette's columns, rows and scrolled height.
 // - RING_FIELDS: the 3D Sprite Atlas controls layout. RING_STRIP and
 //   RING_MIN_WIDTH derive from it.
-// - FRAME_BANDS: the widened top and right bands of the resize frame, which make
-//   every placed windoid all struts.
+// - FRAME_BANDS: the widened left, top and right bands of the resize frame, which
+//   make every placed windoid all struts.
 
 import {
   CASCADE_SLOTS,
@@ -35,6 +37,52 @@ export const TOOLS_BOX = {
   width: TOOL_CELL.width + TOOLS_CHROME.w,
   height: TOOL_COUNT * TOOL_CELL.height + (TOOL_COUNT - 1) + TOOLS_CHROME.h,
 };
+
+// Color Palette: square swatch cells, as many columns as the body is wide, over
+// the kit's 15px vertical rail and 15px status strip. The chrome is 2 borders
+// and the rail across, and 12 bar + 2 borders + 15 status down. The width floor
+// fits the status label: "Color Palette" is 59 wide in the body face, after the
+// strip's 6px inset and before its 21px of grow box clearance. The height floor
+// shows two rows. The placement seeds five columns by three rows.
+export const PALETTE_CELL = 19;
+const PALETTE_CHROME = { w: 2 + 15, h: 12 + 2 + 15 };
+const PALETTE_LABEL_WIDTH = 59;
+const PALETTE_PITCH = PALETTE_CELL + 1;
+/** A window showing exactly `columns` × `rows` cells. */
+const paletteBox = (columns, rows) => ({
+  width: columns * PALETTE_PITCH - 1 + PALETTE_CHROME.w,
+  height: rows * PALETTE_PITCH - 1 + PALETTE_CHROME.h,
+});
+export const PALETTE_MIN_WIDTH = 2 + 6 + PALETTE_LABEL_WIDTH + 21;
+export const PALETTE_MIN_HEIGHT = paletteBox(1, 2).height;
+const PALETTE_BOX = paletteBox(5, 3);
+
+/**
+ * The Color Palette's grid for a window `width` × `height` holding `count`
+ * swatches. Cells share their borders, so n cells span n × PALETTE_PITCH − 1,
+ * with the closing line one pixel past that.
+ * - columns: the whole cells across the body, at least one.
+ * - rows: enough for the swatches, and at least the whole rows the body holds,
+ *   which show as empty cells.
+ * - height: the scrolled plane. It holds the closing line while that fits the
+ *   body, and stops short of it otherwise, so the line falls on the status
+ *   strip's rule.
+ *
+ * @param {number} width
+ * @param {number} height
+ * @param {number} count
+ * @returns {{columns: number, rows: number, height: number}}
+ */
+export function paletteGrid(width, height, count) {
+  const body = Math.max(0, height - PALETTE_CHROME.h);
+  const columns = Math.max(1, Math.floor((width - PALETTE_CHROME.w + 1) / PALETTE_PITCH));
+  const rows = Math.max(
+    Math.ceil(count / columns),
+    Math.floor((body + 1) / PALETTE_PITCH)
+  );
+  const span = rows * PALETTE_PITCH;
+  return { columns, rows, height: span <= body ? span : span - 1 };
+}
 
 // Windoid header heights, including the header's 1px rule. windows.html authors
 // the same values as header-height.
@@ -145,16 +193,30 @@ export function ringWidthFor(views, size) {
   return Math.max(RING_MIN_WIDTH, ringRowWidth(views, size) + RING_CHROME.w);
 }
 
+/** The height the bottom band takes off the vacancy, GAP included: the taller
+ *  of the shown strip and the shown Color Palette, or 0 with neither shown. */
+function bottomBand({ ringSize, ringShown, paletteShown }) {
+  const h = Math.max(
+    ringShown ? ringHeightFor(ringSize) : 0,
+    paletteShown ? PALETTE_BOX.height : 0
+  );
+  return h > 0 ? h + GAP : 0;
+}
+
 /**
  * The boot arrangement for a desktopW × desktopH raster. ringViews and ringSize
- * size the 3D Sprite Atlas strip, and the doc box leaves room for it only when
- * ringShown. The Tools palette gets a position only. Its size is TOOLS_BOX.
+ * size the 3D Sprite Atlas strip. The Color Palette and the strip share the
+ * bottom band, the strip right of the Palette when paletteShown, and the doc box
+ * leaves room for the band when either is shown. The Tools palette gets a
+ * position only. Its size is TOOLS_BOX.
  *
  * @param {number} desktopW
  * @param {number} desktopH
- * @param {{ringViews?: number, ringSize?: number, ringShown?: boolean}} [opts]
+ * @param {{ringViews?: number, ringSize?: number, ringShown?: boolean,
+ *          paletteShown?: boolean}} [opts]
  * @returns {{
  *   tools: {left: number, top: number},
+ *   palette: {left: number, top: number, width: number, height: number},
  *   sprite: {left: number, top: number, width: number, height: number},
  *   stage: {left: number, top: number, width: number, height: number},
  *   ring: {left: number, top: number, width: number, height: number},
@@ -164,7 +226,7 @@ export function ringWidthFor(views, size) {
 export function initialPlacement(
   desktopW,
   desktopH,
-  { ringViews = 4, ringSize = 64, ringShown = false } = {}
+  { ringViews = 4, ringSize = 64, ringShown = false, paletteShown = false } = {}
 ) {
   const top = WINDOW_ORIGIN.top;
 
@@ -184,19 +246,33 @@ export function initialPlacement(
   // The vacant middle, between the Tools palette and the rail.
   const x0 = WINDOW_ORIGIN.left;
   const vacantW = Math.max(0, railLeft - EDGE - x0);
-  // The 3D Sprite Atlas strip, docked at the bottom and left-aligned with the doc
-  // box. Its width is the natural row, capped at the vacancy and floored at
-  // RING_MIN_WIDTH. It is placed even when hidden.
-  const ringH = ringHeightFor(ringSize);
-  const ring = {
+  // The bottom band, both windoids on the bottom margin and placed even when
+  // hidden. The Color Palette is left-aligned with the doc box. The 3D Sprite
+  // Atlas strip starts there too, or EDGE right of a shown Palette. Its width is
+  // the natural row, capped at the room left of the rail and floored at
+  // RING_MIN_WIDTH.
+  const palette = {
     left: x0,
+    top: Math.max(top, desktopH - GAP - PALETTE_BOX.height),
+    ...PALETTE_BOX,
+  };
+  const ringH = ringHeightFor(ringSize);
+  const ringLeft = paletteShown ? x0 + PALETTE_BOX.width + EDGE : x0;
+  const ring = {
+    left: ringLeft,
     top: Math.max(top, desktopH - GAP - ringH),
-    width: Math.max(RING_MIN_WIDTH, Math.min(ringWidthFor(ringViews, ringSize), vacantW)),
+    width: Math.max(
+      RING_MIN_WIDTH,
+      Math.min(ringWidthFor(ringViews, ringSize), railLeft - EDGE - ringLeft)
+    ),
     height: ringH,
   };
-  // A shown strip takes its height plus GAP off the vacancy before the cascade
-  // room, so every cascade slot stays above it.
-  const vacantH = Math.max(0, desktopH - GAP - top - (ringShown ? ringH + GAP : 0));
+  // A shown band comes off the vacancy before the cascade room, so every cascade
+  // slot stays above it.
+  const vacantH = Math.max(
+    0,
+    desktopH - GAP - top - bottomBand({ ringSize, ringShown, paletteShown })
+  );
   const doc = {
     left: x0,
     top,
@@ -204,29 +280,29 @@ export function initialPlacement(
     height: Math.max(DOC_MIN, vacantH - CASCADE_ROOM),
   };
 
-  return { tools: { left: EDGE, top }, sprite, stage, ring, doc };
+  return { tools: { left: EDGE, top }, palette, sprite, stage, ring, doc };
 }
 
 /**
  * A document window's zoomed box at `pos` on a desktopW × desktopH raster. The
  * top-left stays. The right edge stops at the rail's gutter, and the bottom at
- * the bottom margin or GAP above a shown 3D Sprite Atlas strip. Both sides are
- * floored at DOC_MIN.
+ * the bottom margin or GAP above a shown bottom band. Both sides are floored at
+ * DOC_MIN.
  *
  * @param {number} desktopW
  * @param {number} desktopH
  * @param {{left: number, top: number}} pos
- * @param {{ringShown?: boolean, ringSize?: number}} [opts]
+ * @param {{ringShown?: boolean, ringSize?: number, paletteShown?: boolean}} [opts]
  * @returns {{left: number, top: number, width: number, height: number}}
  */
 export function zoomedBox(
   desktopW,
   desktopH,
   pos,
-  { ringShown = false, ringSize = 64 } = {}
+  { ringShown = false, ringSize = 64, paletteShown = false } = {}
 ) {
   const railLeft = Math.max(0, desktopW - EDGE - SPRITE_WIDTH);
-  const bottom = desktopH - GAP - (ringShown ? ringHeightFor(ringSize) + GAP : 0);
+  const bottom = desktopH - GAP - bottomBand({ ringSize, ringShown, paletteShown });
   return {
     left: pos.left,
     top: pos.top,
@@ -235,11 +311,14 @@ export function zoomedBox(
   };
 }
 
-/** The resize frame's widened bands, declared at init, so the rail windoids'
- *  edges are struts. The top band covers the rail head: the Sprite View's
- *  square-tile height, the GAP below it, and one GAP of slack for lattice
- *  snapping. The right band covers the rail column and its gutters. */
+/** The resize frame's widened bands, declared at init, so the docked windoids'
+ *  edges are struts. The left band covers the Color Palette and the strip's left
+ *  edge beside it, with one GAP of slack for lattice snapping. The top band
+ *  covers the rail head: the Sprite View's square-tile height, the GAP below it,
+ *  and one GAP of slack. The right band covers the rail column and its
+ *  gutters. */
 export const FRAME_BANDS = {
+  left: WINDOW_ORIGIN.left + PALETTE_BOX.width + EDGE + GAP,
   top: WINDOW_ORIGIN.top - TOP_RESERVE + spriteHeightFor(SPRITE_WIDTH) + GAP + GAP,
   right: EDGE + SPRITE_WIDTH + EDGE,
 };

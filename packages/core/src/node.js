@@ -1,61 +1,24 @@
 // Node adapter (sprite-machine/node): decodes a document PNG to RGBA pixels
-// and its metadata, or straight to a glb. The only PNG decoder in the engine
-// (pngjs). Text chunks are read best-effort: a malformed chunk list loses the
-// name, transforms and layer names but not the pixels.
+// and its metadata, or straight to a glb. The decoder is the root entry's, over
+// zlib.
 
-import { PNG } from 'pngjs';
-import { isPng, readTextChunks } from './png-chunks.js';
-import { LAYERS_CHUNK, parseLayersChunk, layerCount } from './layers.js';
+import { inflateSync } from 'node:zlib';
+import { isPng } from './png-chunks.js';
+import { parsePng, unfilterPng } from './png-decode.js';
+import { sheetMeta } from './sheet.js';
+import { layerCount } from './layers.js';
 import { buildModel, modelToGlb } from './model.js';
-
-const TRANSFORMS_CHUNK = 'sprite-machine:transforms';
 
 /**
  * Decode a document PNG.
  * @param {Uint8Array} bytes
- * @returns {{
- *   image: {width:number, height:number, data:Uint8ClampedArray},
- *   name: string|null,
- *   transforms: Record<string, {rot?:number, flipX?:boolean, flipY?:boolean}>,
- *   layers: string[]|null,
- *   chunks: Record<string, string>,
- * }}  the pixels, the Title chunk, the parsed transforms chunk, the layer
- *   names from the sprite-machine:layers chunk, and every text chunk verbatim
- * @throws when the bytes are not a PNG, or pngjs cannot decode them
+ * @returns {import('./sheet.js').Sheet}
+ * @throws when the bytes are not a PNG, or do not decode
  */
 export function readSheet(bytes) {
   if (!isPng(bytes)) throw new Error('readSheet: not a PNG.');
-  const png = PNG.sync.read(
-    Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  );
-  const image = {
-    width: png.width,
-    height: png.height,
-    data: new Uint8ClampedArray(png.data.buffer, png.data.byteOffset, png.data.length),
-  };
-  /** @type {Record<string, string>} */
-  let chunks = {};
-  try {
-    chunks = readTextChunks(bytes);
-  } catch {
-    chunks = {};
-  }
-  /** @type {Record<string, {rot?:number, flipX?:boolean, flipY?:boolean}>} */
-  let transforms = {};
-  if (chunks[TRANSFORMS_CHUNK]) {
-    try {
-      transforms = JSON.parse(chunks[TRANSFORMS_CHUNK]);
-    } catch {
-      transforms = {};
-    }
-  }
-  return {
-    image,
-    name: chunks.Title ?? null,
-    transforms,
-    layers: parseLayersChunk(chunks[LAYERS_CHUNK]),
-    chunks,
-  };
+  const header = parsePng(bytes);
+  return { image: unfilterPng(header, inflateSync(header.idat)), ...sheetMeta(bytes) };
 }
 
 /**

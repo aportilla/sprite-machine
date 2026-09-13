@@ -1,7 +1,8 @@
-// PNG encoder from bytes: 8-bit RGBA, non-interlaced, filter 0 on every row,
-// the pixel stream in stored (uncompressed) deflate blocks. It encodes the
-// skin for glb export without a canvas, because privacy browsers perturb
-// canvas readback.
+// PNG encoder from bytes: 8-bit RGBA, non-interlaced, filter 0 on every row.
+// pngScanlines is the raw stream, pngFromZlib the file around it once
+// compressed, and encodePng their composition over stored deflate blocks. It
+// encodes the skin for glb export without a canvas, because privacy browsers
+// perturb canvas readback.
 //
 // zlib framing: the header CMF 0x78, FLG 0x01 (a pair that passes the header
 // check), then blocks of up to 65535 bytes, each behind a 5-byte header
@@ -46,14 +47,15 @@ export function zlibStored(raw) {
 }
 
 /**
- * Encode an RGBA image as a PNG file. Row 0 is the top row.
+ * An RGBA image's scan lines, each led by filter type 0, uncompressed. Row 0
+ * is the top row.
  * @param {{width:number, height:number, data:Uint8Array|Uint8ClampedArray}} img
  * @returns {Uint8Array}
  */
-export function encodePng({ width, height, data }) {
+export function pngScanlines({ width, height, data }) {
   if (!(width > 0 && height > 0) || !data || data.length < width * height * 4) {
     throw new Error(
-      `encodePng: expected {width>0, height>0, data.length>=w*h*4}, got ` +
+      `png-encode: expected {width>0, height>0, data.length>=w*h*4}, got ` +
         `${width}×${height} with ${data ? data.length : 'no'} bytes.`
     );
   }
@@ -63,6 +65,17 @@ export function encodePng({ width, height, data }) {
     raw[y * (stride + 1)] = 0; // filter type: none
     raw.set(data.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
   }
+  return raw;
+}
+
+/**
+ * A PNG file of 8-bit RGBA rows from their zlib stream: IHDR, one IDAT, IEND.
+ * @param {number} width
+ * @param {number} height
+ * @param {Uint8Array} zlib  pngScanlines' output, compressed
+ * @returns {Uint8Array}
+ */
+export function pngFromZlib(width, height, zlib) {
   const ihdr = new Uint8Array(13);
   const iv = new DataView(ihdr.buffer);
   iv.setUint32(0, width);
@@ -73,7 +86,7 @@ export function encodePng({ width, height, data }) {
   const parts = [
     PNG_SIGNATURE,
     buildChunk('IHDR', ihdr),
-    buildChunk('IDAT', zlibStored(raw)),
+    buildChunk('IDAT', zlib),
     buildChunk('IEND', new Uint8Array(0)),
   ];
   let total = 0;
@@ -85,4 +98,14 @@ export function encodePng({ width, height, data }) {
     at += p.length;
   }
   return out;
+}
+
+/**
+ * Encode an RGBA image as a PNG file, its rows in stored deflate blocks. Row 0
+ * is the top row.
+ * @param {{width:number, height:number, data:Uint8Array|Uint8ClampedArray}} img
+ * @returns {Uint8Array}
+ */
+export function encodePng(img) {
+  return pngFromZlib(img.width, img.height, zlibStored(pngScanlines(img)));
 }

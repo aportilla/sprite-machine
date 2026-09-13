@@ -380,9 +380,9 @@ export function initWindows(desktop) {
       }
       return true;
     },
-    /** Widens the shared window frame's top and right bands. Call it at an
+    /** Widens the shared window frame's left, top and right bands. Call it at an
      *  application's init. A saved pin is valid only in the frame it was read in.
-     *  @param {{top?: number, right?: number}} bands */
+     *  @param {{left?: number, top?: number, right?: number}} bands */
     setFrameBands(bands) {
       frame = windowFrame(bands);
       pins = new WeakMap();

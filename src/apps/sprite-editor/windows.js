@@ -2,8 +2,9 @@
 // document.
 //
 // - The windoids come from windows.html and are appended hidden. They are shown
-//   while the Sprite Editor is front, and the 3D Sprite Atlas also needs
-//   prefs.showRing. Hiding keeps them mounted, so canvas identity survives.
+//   while the Sprite Editor is front, and the 3D Sprite Atlas and the Color
+//   Palette also need their prefs. Hiding keeps them mounted, so canvas identity
+//   survives.
 // - Document windows are reconciled from the workspace. A new context clones
 //   #tpl-document-window. A closed context removes its window.
 // - Placement comes from layout.js on the live raster at init, on each open and
@@ -20,6 +21,8 @@ import { cloneWindow, parseWindows } from '../../shell/windows.js';
 import {
   FRAME_BANDS,
   initialPlacement,
+  PALETTE_MIN_HEIGHT,
+  PALETTE_MIN_WIDTH,
   ringHeightFor,
   RING_MIN_WIDTH,
   spriteHeightFor,
@@ -29,8 +32,13 @@ import {
   zoomedBox,
 } from './layout.js';
 
-/** Windoid ids (markup id `win-<id>`). `ring` is the toggleable 3D Sprite Atlas. */
-const WINDOIDS = ['tools', 'sprite', 'stage', 'ring'];
+/** Windoid ids (markup id `win-<id>`). */
+const WINDOIDS = ['tools', 'sprite', 'stage', 'ring', 'palette'];
+/** The windoids the View menu toggles, each by its prefs flag. They keep their
+ *  close boxes. `ring` is the 3D Sprite Atlas. */
+const TOGGLED = { ring: 'showRing', palette: 'showPalette' };
+/** The axes of a windoid's size that are the user's, which arranged() ignores. */
+const USER_AXES = { ring: ['width'], palette: ['width', 'height'] };
 
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
@@ -60,12 +68,14 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
     // Hidden from the first frame. syncUtility shows them.
     byId[id].hidden = true;
     // closable defaults to true and markup can't set a boolean attribute false.
-    // The 3D Sprite Atlas keeps its close box.
-    if (id !== 'ring') byId[id].closable = false;
+    if (!TOGGLED[id]) byId[id].closable = false;
   }
-  // The 3D View's grow-box floor. The ring's size rect is set in fitRing.
+  // The 3D View's and the Color Palette's grow-box floors. The ring's size rect
+  // is set in fitRing.
   byId.stage.minWidth = STAGE_MIN_WIDTH;
   byId.stage.minHeight = STAGE_MIN_HEIGHT;
+  byId.palette.minWidth = PALETTE_MIN_WIDTH;
+  byId.palette.minHeight = PALETTE_MIN_HEIGHT;
   // Markup order is stacking order. The Tools palette is last, so it is on top.
   desktop.append(...authored);
   // Resize policies for the re-pin. Windoids without one keep their live size.
@@ -75,6 +85,7 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
   const policies = {
     stage: () => ({ min: { width: STAGE_MIN_WIDTH, height: STAGE_MIN_HEIGHT } }),
     ring: (cur) => ({ size: { height: cur.height }, min: { width: RING_MIN_WIDTH } }),
+    palette: (cur) => ({ size: { width: cur.width, height: cur.height } }),
   };
   for (const id of WINDOIDS) {
     windows.adopt(byId[id], { app: SPRITE_EDITOR, policy: policies[id] ?? null });
@@ -89,6 +100,7 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
       ringViews: r.views,
       ringSize: r.size,
       ringShown: ringShown(),
+      paletteShown: prefs.get().showPalette,
     });
 
   // Full Sprite View: fixed size. The height fits the 3×2 tile grid at the active
@@ -195,19 +207,22 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
     })
   );
 
-  // Windoid visibility: shown while the Sprite Editor is front. The 3D Sprite
-  // Atlas also needs prefs.showRing, and comes to the front when it appears.
-  let ringWasShown = false;
+  // Windoid visibility: shown while the Sprite Editor is front. A toggled
+  // windoid also needs its pref, and comes to the front when it appears.
+  /** @type {Record<string, boolean>} */
+  const wasShown = {};
   const syncUtility = () => {
     const { appActive } = shell.get();
     for (const id of WINDOIDS) {
-      const shown = appActive && (id !== 'ring' || ringShown());
+      const shown = appActive && (!TOGGLED[id] || prefs.get()[TOGGLED[id]]);
       byId[id].hidden = !shown;
     }
-    const ringNow = !byId.ring.hidden;
-    if (ringNow && !ringWasShown) desktop.bringToFront(byId.ring);
-    ringWasShown = ringNow;
-    // Visibility changes arranged(), and the strip's changes the doc box.
+    for (const id of Object.keys(TOGGLED)) {
+      const now = !byId[id].hidden;
+      if (now && !wasShown[id]) desktop.bringToFront(byId[id]);
+      wasShown[id] = now;
+    }
+    // Visibility changes arranged(), and a toggled windoid's changes the doc box.
     windows.layoutChanged();
   };
   unsubs.push(shell.subscribe(syncUtility), prefs.subscribe(syncUtility));
@@ -285,6 +300,10 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
       prefs.setShowRing(false);
       return;
     }
+    if (t === byId.palette) {
+      prefs.setShowPalette(false);
+      return;
+    }
     const key = keyOf(t);
     if (key != null) onDocumentClose(key);
   };
@@ -304,7 +323,11 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
       desktop.width,
       desktop.height,
       { left: win.left ?? 0, top: win.top ?? 0 },
-      { ringShown: ringShown(), ringSize: ring.get().size }
+      {
+        ringShown: ringShown(),
+        ringSize: ring.get().size,
+        paletteShown: prefs.get().showPalette,
+      }
     );
   /** The zoom toggle, shared by the zoom box and ⌘J (zoomActive). */
   const zoomToggle = (win) => {
@@ -332,10 +355,10 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
   //   hidden ones included, and every document window cascaded in stacking
   //   order. Nothing activates or restacks.
   // - arranged() checks each visible window against the boxes arrange() writes.
-  //   It ignores the ring strip's width. Document windows may fill the first n
-  //   cascade slots in any order, so a raise alone doesn't unarrange them. The
-  //   active document window may be zoomed from its slot, so ⌘J keeps toggling
-  //   its zoom.
+  //   It ignores the ring strip's width and the Color Palette's size. Document
+  //   windows may fill the first n cascade slots in any order, so a raise alone
+  //   doesn't unarrange them. The active document window may be zoomed from its
+  //   slot, so ⌘J keeps toggling its zoom.
   /** The document windows in stacking order, bottom-most first. */
   const docWindows = () =>
     [...desktop.querySelectorAll(':scope > vf-window')]
@@ -358,9 +381,7 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
         for (const id of WINDOIDS) {
           const win = byId[id];
           if (win.hidden) continue;
-          if (!at(win, windoidBox(id, smart), id === 'ring' ? ['width'] : [])) {
-            return false;
-          }
+          if (!at(win, windoidBox(id, smart), USER_AXES[id])) return false;
         }
         // Each visible document window claims a distinct slot among the first n,
         // where n counts hidden windows too.

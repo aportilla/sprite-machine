@@ -79,9 +79,9 @@ export function wedgeMesh(result, opts = {}) {
   const worldSize = opts.worldSize ?? DEFAULT_WORLD_SIZE;
   const s = worldSize / Math.max(nx, ny, nz);
 
-  // Privacy browsers perturb getImageData by about ±1 per channel, which can
-  // split one material into near-duplicate palette entries. sameMat allows a
-  // squared RGB distance up to TOL2, which also absorbs antialiasing.
+  // Art from other tools can split one material into near-duplicate colors, by
+  // antialiasing or a noised canvas read. sameMat allows a squared RGB distance
+  // up to TOL2.
   const TOL2 = 12 * 12;
   const sameMat = (a, b) => {
     if (a == null || b == null) return false;

@@ -11,13 +11,10 @@
 import 'vintage-frames';
 import { LitElement, html, nothing } from 'lit';
 import { live } from 'lit/directives/live.js';
-import { PALETTE_168 } from '../lib/palette.js';
-import { hexToRgb, normalizeHex, rgbKey, rgbToHex } from '../lib/color.js';
+import { PALETTE_168, paletteName } from '../lib/palette.js';
+import { hexToRgb, normalizeHex, rgbToHex } from '../lib/color.js';
 import { session } from '../state/session.js';
 import { StoreController } from '../state/store-controller.js';
-
-/** rgbKey → palette name, for the readout. */
-const NAME_BY_KEY = new Map(PALETTE_168.map((p) => [rgbKey(p.rgb), p.name]));
 
 export class SmColorPicker extends LitElement {
   #built = false; // true once the dialog has been opened
@@ -78,7 +75,7 @@ export class SmColorPicker extends LitElement {
     const valid = normalizeHex(this.#hexText) !== null;
     const readout = this.#hover ?? {
       css: rgbToHex(this.#pending),
-      name: NAME_BY_KEY.get(rgbKey(this.#pending)) ?? 'Custom',
+      name: paletteName(this.#pending) ?? 'Custom',
     };
     return html`
       <vf-dialog

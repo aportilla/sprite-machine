@@ -137,17 +137,17 @@ export const BAND = 100;
 
 /**
  * The frame shared by every window: below TOP_RESERVE, with outer slices at
- * least BAND thick. An application may widen `top` and `right` (setFrameBands
- * in shell/windows.js).
+ * least BAND thick. An application may widen `left`, `top` and `right`
+ * (setFrameBands in shell/windows.js).
  *
- * @param {{top?: number, right?: number}} [bands]
+ * @param {{left?: number, top?: number, right?: number}} [bands]
  * @returns {Frame}
  */
-export function windowFrame({ top = BAND, right = BAND } = {}) {
+export function windowFrame({ left = BAND, top = BAND, right = BAND } = {}) {
   return {
     reserve: TOP_RESERVE,
     bands: {
-      left: BAND,
+      left: Math.max(BAND, left),
       top: Math.max(BAND, top),
       right: Math.max(BAND, right),
       bottom: BAND,

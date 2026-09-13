@@ -1,5 +1,7 @@
-// Sprite builders and mesh probes shared by the engine's tests.
+// Sprite builders, mesh probes and PNG fixtures shared by the engine's tests.
+import { deflateSync } from 'node:zlib';
 import { blitTile, DEFAULT_ATLAS_LAYOUT } from '../src/atlas.js';
+import { PNG_SIGNATURE, buildChunk } from '../src/png-chunks.js';
 
 /** Palette letters for the sprite builders. '.' or ' ' in a row is transparent. */
 export const C = {
@@ -112,4 +114,101 @@ export function hasTJunction(tris) {
     ])
       for (const v of verts) if (interior(p, q, v)) return true;
   return false;
+}
+
+const SAMPLES_PER_PIXEL = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
+const ADAM7_PASSES = [
+  [0, 0, 8, 8],
+  [4, 0, 8, 8],
+  [0, 4, 4, 8],
+  [2, 0, 4, 4],
+  [0, 2, 2, 4],
+  [1, 0, 2, 2],
+  [0, 1, 1, 2],
+];
+
+/** The PNG spec's Paeth predictor, as written there. */
+function paeth(a, b, c) {
+  const p = a + b - c;
+  const pa = Math.abs(p - a);
+  const pb = Math.abs(p - b);
+  const pc = Math.abs(p - c);
+  if (pa <= pb && pa <= pc) return a;
+  return pb <= pc ? b : c;
+}
+
+/**
+ * A PNG file written sample by sample, independent of the engine's encoder.
+ * `pixel(x, y)` gives a pixel's samples at the bit depth, packed into scan
+ * lines per Adam7 pass when `interlace` is 1. Line k of pass p takes filter
+ * type `filter(k, p)`; the default varies the type of each pass's first line.
+ * `palette` is the PLTE bytes, `trns` the tRNS bytes, and the scan lines are
+ * zlib-deflated into one IDAT.
+ * @param {{width: number, height: number, bitDepth: number, colorType: number,
+ *   interlace?: number, pixel: (x: number, y: number) => number[],
+ *   filter?: (k: number, p: number) => number, palette?: number[],
+ *   trns?: number[]}} opts
+ */
+export function pngFile({
+  width,
+  height,
+  bitDepth,
+  colorType,
+  interlace = 0,
+  pixel,
+  filter = (k, p) => (k + p + 2) % 5,
+  palette,
+  trns,
+}) {
+  const bits = SAMPLES_PER_PIXEL[colorType] * bitDepth;
+  const back = Math.max(1, bits >> 3);
+  const lines = [];
+  const passes = interlace ? ADAM7_PASSES : [[0, 0, 1, 1]];
+  for (const [p, [x0, y0, dx, dy]] of passes.entries()) {
+    const xs = [];
+    for (let x = x0; x < width; x += dx) xs.push(x);
+    let prev = null;
+    for (let y = y0, k = 0; y < height && xs.length; y += dy, k++) {
+      const samples = xs.flatMap((x) => pixel(x, y));
+      const line = new Uint8Array(Math.ceil((xs.length * bits) / 8));
+      samples.forEach((v, i) => {
+        if (bitDepth === 16) {
+          line[2 * i] = v >> 8;
+          line[2 * i + 1] = v & 0xff;
+        } else {
+          const at = i * bitDepth;
+          line[at >> 3] |= v << (8 - bitDepth - (at & 7));
+        }
+      });
+      const up = prev ?? new Uint8Array(line.length);
+      const type = filter(k, p);
+      lines.push(type);
+      for (let i = 0; i < line.length; i++) {
+        const a = i >= back ? line[i - back] : 0;
+        const c = i >= back ? up[i - back] : 0;
+        const predicted = [0, a, up[i], (a + up[i]) >> 1, paeth(a, up[i], c)][type];
+        lines.push((line[i] - predicted) & 0xff);
+      }
+      prev = line;
+    }
+  }
+  const ihdr = new Uint8Array(13);
+  new DataView(ihdr.buffer).setUint32(0, width);
+  new DataView(ihdr.buffer).setUint32(4, height);
+  ihdr.set([bitDepth, colorType, 0, 0, interlace], 8);
+  const parts = [
+    PNG_SIGNATURE,
+    buildChunk('IHDR', ihdr),
+    ...(palette ? [buildChunk('PLTE', Uint8Array.from(palette))] : []),
+    ...(trns ? [buildChunk('tRNS', Uint8Array.from(trns))] : []),
+    buildChunk('IDAT', deflateSync(Uint8Array.from(lines))),
+    buildChunk('IEND', new Uint8Array(0)),
+  ];
+  const file = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of parts) {
+    file.set(p, at);
+    at += p.length;
+  }
+  return file;
 }

@@ -1,5 +1,11 @@
 // Browser image helpers: decode to ImageData, encode to PNG and download files.
+// PNGs decode and encode through the engine's browser entry, because privacy
+// browsers perturb canvas readback.
 
+import { isPng } from 'sprite-machine';
+import { decodePng, encodePng } from 'sprite-machine/browser';
+
+// The canvas decode, for an image that is not a PNG.
 async function bitmapToImageData(bmp) {
   const c = document.createElement('canvas');
   c.width = bmp.width;
@@ -10,45 +16,21 @@ async function bitmapToImageData(bmp) {
   return g.getImageData(0, 0, bmp.width, bmp.height);
 }
 
-export async function fileToImageData(file) {
-  return bitmapToImageData(await createImageBitmap(file));
-}
-
 export async function urlToImageData(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
-  return bitmapToImageData(await createImageBitmap(await res.blob()));
+  return bytesToImageData(new Uint8Array(await res.arrayBuffer()));
 }
 
-// Encode an ImageData, or a plain {width, height, data} object, to a PNG Blob.
-export function imageDataToBlob(imageData) {
-  const id =
-    imageData instanceof ImageData
-      ? imageData
-      : new ImageData(
-          new Uint8ClampedArray(imageData.data),
-          imageData.width,
-          imageData.height
-        );
-  const c = document.createElement('canvas');
-  c.width = id.width;
-  c.height = id.height;
-  c.getContext('2d').putImageData(id, 0, 0);
-  return new Promise((resolve, reject) => {
-    c.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('canvas toBlob returned null'))),
-      'image/png'
-    );
-  });
-}
+/** An ImageData, or a plain {width, height, data} object, as PNG bytes. */
+export const imageDataToPngBytes = (imageData) => encodePng(imageData);
 
-// ImageData to PNG bytes, and image bytes back to ImageData.
-export async function imageDataToPngBytes(imageData) {
-  const blob = await imageDataToBlob(imageData);
-  return new Uint8Array(await blob.arrayBuffer());
-}
-
+/** Image bytes as an ImageData. A PNG's holds the decoder's buffer. */
 export async function bytesToImageData(bytes) {
+  if (isPng(bytes)) {
+    const { width, height, data } = await decodePng(bytes);
+    return new ImageData(data, width, height);
+  }
   return bitmapToImageData(await createImageBitmap(new Blob([bytes])));
 }
 
