@@ -351,17 +351,9 @@ Steps 1 and 2 are the engine. Steps 3 to 6 are the app.
 
 ## 5. Kit asks
 
-One, found 2026-09-13 and written up in `docs/scroll-area-offset-report.md`:
-
-- **#17 The scroll area's border-floor padding.** `vf-scroll-area`'s viewport
-  pads by `mod(var(--vf-scale) * 1px, 1px)`, the part of a fractional frame
-  border that Chromium floored to a whole CSS px (THREE-X-DISPLAYS.md). Chrome
-  152 at 2× paints that border at its full 3 device px, so the padding is extra
-  and the content, flow or placed at (0,0), sits one device px (a third of a
-  system px) right of and below the content region's corner. Seen in the
-  Color Palette on the user's display, where the grid's lines miss the frame.
-  Every scroll area carries it, the text window and the ring windoid included.
-  No app bridge.
+- **#17 The scroll area's border-floor padding.** Shipped in vintage-frames
+  0.10.1: scroll content no longer sits one device px inside the frame above
+  1×.
 
 ## 6. Tests
 
