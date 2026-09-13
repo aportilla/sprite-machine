@@ -26,10 +26,10 @@ const frontAlphaAt = (doc) => {
   return s.atlasImage.data[(0 * s.atlasImage.width + 2) * 4 + 3];
 };
 
-function makeWorld() {
+function makeWorld({ layers = 1 } = {}) {
   const frames = fakeScheduler();
   const doc = createDoc(frames);
-  doc.loadAtlas(sheet(6, 4));
+  doc.loadAtlas(sheet(6, 4 * layers), {}, { layers });
   const history = createHistory(doc, { limit: 3 });
   return { doc, history, frames };
 }
@@ -45,9 +45,9 @@ test('a tile entry undoes and redoes through the doc structurally', () => {
   const { doc, history, frames } = makeWorld();
   const before = tile(null);
   const after = tile([0, 0, RED]);
-  doc.applyTileEdit('front', after);
+  doc.applyTileEdit(0, 'front', after);
   frames.frame();
-  history.pushTile('front', before, after);
+  history.pushTile(0, 'front', before, after);
   assert.equal(history.get().canUndo, true);
   assert.equal(frontAlphaAt(doc), 255);
 
@@ -57,7 +57,7 @@ test('a tile entry undoes and redoes through the doc structurally', () => {
   assert.equal(structural, 1, 'a restore is a CHANGE-channel event');
   assert.equal(frontAlphaAt(doc), 0, 'the pixel is gone from the sheet');
   assert.equal(
-    doc.get().views.front,
+    doc.get().layers[0].front,
     null,
     'a blank restore reverts the face to derived'
   );
@@ -71,20 +71,20 @@ test('a tile entry undoes and redoes through the doc structurally', () => {
 
 test('an identical before/after pair is dropped, not recorded', () => {
   const { history } = makeWorld();
-  history.pushTile('front', tile([0, 0, RED]), tile([0, 0, RED]));
+  history.pushTile(0, 'front', tile([0, 0, RED]), tile([0, 0, RED]));
   assert.equal(history.get().canUndo, false);
 });
 
 test('snapshots are copies — mutating the pushed buffer later changes nothing', () => {
   const { doc, history, frames } = makeWorld();
   const work = tile([0, 0, RED]);
-  doc.applyTileEdit('front', work);
+  doc.applyTileEdit(0, 'front', work);
   frames.frame();
-  history.pushTile('front', tile(null), work);
+  history.pushTile(0, 'front', tile(null), work);
   work.data.set(GREEN, 0);
   history.undo();
   history.redo();
-  const f = doc.get().views.front;
+  const f = doc.get().layers[0].front;
   assert.deepEqual(
     [...f.data.subarray(0, 4)],
     RED,
@@ -113,8 +113,8 @@ test('withAtlasSnapshot drops a no-op (nothing changed, nothing recorded)', () =
 });
 
 test('withAtlasSnapshot folds a pending live stroke into the BEFORE side', () => {
-  const { doc, history, frames } = makeWorld();
-  doc.applyTileEdit('front', tile([0, 0, RED])); // pending: no frame has run
+  const { doc, history } = makeWorld();
+  doc.applyTileEdit(0, 'front', tile([0, 0, RED])); // pending: no frame has run
   history.withAtlasSnapshot(() => doc.resizeTiles(3, 3));
   history.undo();
   assert.equal(doc.get().tileW, 2);
@@ -127,7 +127,7 @@ test('an atlas undo does not disturb the stored snapshot (copy-out)', () => {
   history.undo();
   // Edit the restored sheet, then redo and undo. The entry still holds the
   // unedited 2px sheet.
-  doc.applyTileEdit('front', tile([0, 0, RED]));
+  doc.applyTileEdit(0, 'front', tile([0, 0, RED]));
   frames.frame();
   history.redo();
   history.undo();
@@ -135,19 +135,44 @@ test('an atlas undo does not disturb the stored snapshot (copy-out)', () => {
   assert.equal(frontAlphaAt(doc), 0, 'the snapshot predates the edit');
 });
 
+test('an atlas entry restores the layer names with the sheet', () => {
+  const { doc, history } = makeWorld();
+  const changed = history.withAtlasSnapshot(() => doc.addLayer());
+  assert.equal(changed, true);
+  assert.deepEqual(doc.get().names, ['Layer 1', 'Layer 2']);
+  history.undo();
+  assert.deepEqual([doc.get().layers.length, doc.get().names], [1, ['Layer 1']]);
+  history.redo();
+  assert.deepEqual(
+    [doc.get().layers.length, doc.get().names],
+    [2, ['Layer 1', 'Layer 2']]
+  );
+});
+
+test('a names entry undoes and redoes a rename; a rename to the same name records nothing', () => {
+  const { doc, history } = makeWorld({ layers: 2 });
+  history.withNamesSnapshot(() => doc.renameLayer(1, 'Wheels'));
+  history.withNamesSnapshot(() => doc.renameLayer(1, 'Wheels'));
+  history.undo();
+  assert.deepEqual(doc.get().names, ['Layer 1', 'Layer 2']);
+  assert.equal(history.get().canUndo, false, 'one entry');
+  history.redo();
+  assert.deepEqual(doc.get().names, ['Layer 1', 'Wheels']);
+});
+
 test('a new edit clears the redo stack', () => {
   const { history } = makeWorld();
-  history.pushTile('front', tile(null), tile([0, 0, RED]));
+  history.pushTile(0, 'front', tile(null), tile([0, 0, RED]));
   history.undo();
   assert.equal(history.get().canRedo, true);
-  history.pushTile('front', tile(null), tile([0, 0, GREEN]));
+  history.pushTile(0, 'front', tile(null), tile([0, 0, GREEN]));
   assert.equal(history.get().canRedo, false);
 });
 
 test('the stack is bounded — the oldest entry falls off', () => {
-  const { doc, history } = makeWorld(); // limit 3
+  const { history } = makeWorld(); // limit 3
   const colors = [RED, GREEN, [0, 0, 255, 255], [255, 255, 0, 255]];
-  for (const c of colors) history.pushTile('front', tile(null), tile([0, 0, c]));
+  for (const c of colors) history.pushTile(0, 'front', tile(null), tile([0, 0, c]));
   let undone = 0;
   while (history.undo()) undone++;
   assert.equal(undone, 3, 'only the newest three survive');
@@ -155,7 +180,7 @@ test('the stack is bounded — the oldest entry falls off', () => {
 
 test('a wholesale load clears both stacks', () => {
   const { doc, history } = makeWorld();
-  history.pushTile('front', tile(null), tile([0, 0, RED]));
+  history.pushTile(0, 'front', tile(null), tile([0, 0, RED]));
   history.undo();
   assert.equal(history.get().canRedo, true);
   doc.loadAtlas(sheet(6, 4));
@@ -164,12 +189,26 @@ test('a wholesale load clears both stacks', () => {
 
 test('undoing a tile entry for a NON-current face still lands on the sheet', () => {
   const { doc, history, frames } = makeWorld();
-  doc.applyTileEdit('top', tile([1, 1, RED]));
+  doc.applyTileEdit(0, 'top', tile([1, 1, RED]));
   frames.frame();
-  history.pushTile('top', tile(null), tile([1, 1, RED]));
+  history.pushTile(0, 'top', tile(null), tile([1, 1, RED]));
   // The top tile is column 2, row 0. Its texel (1,1) is sheet (5,1).
   const topAlpha = () => doc.get().atlasImage.data[(1 * 6 + 5) * 4 + 3];
   assert.equal(topAlpha(), 255);
   history.undo();
   assert.equal(topAlpha(), 0);
+});
+
+test('a tile entry restores on its own layer', () => {
+  const { doc, history, frames } = makeWorld({ layers: 2 });
+  doc.applyTileEdit(1, 'top', tile([1, 1, RED]));
+  frames.frame();
+  history.pushTile(1, 'top', tile(null), tile([1, 1, RED]));
+  // Layer 1's top texel (1,1) is sheet (5, 5); layer 0's is (5, 1).
+  const alphaAt = (y) => doc.get().atlasImage.data[(y * 6 + 5) * 4 + 3];
+  doc.applyTileEdit(0, 'top', tile([1, 1, GREEN]));
+  frames.frame();
+  history.undo();
+  assert.equal(alphaAt(5), 0, 'layer 1 restored');
+  assert.equal(alphaAt(1), 255, 'layer 0 untouched');
 });

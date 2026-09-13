@@ -80,8 +80,8 @@ Smooth slopes (low-poly additive 45° wedges) and the planar merge are always
 on. The 3D View's header has one control, **rotate** (auto-spin), off on every
 load. Sprites are hard pixel art: every texel is fully opaque or fully
 transparent. A face with no view of its own is mirror-filled from its opposite
-at render time. The **face picker** selects which of the six faces you edit. A
-mirror-derived face shows as empty.
+at render time. The **face picker** selects which of the six faces you edit,
+and the **Layer** menu which layer. A mirror-derived face shows as empty.
 
 ## Input: a 3×2 atlas
 
@@ -98,7 +98,19 @@ tiles). Each tile is a literal slice of the voxel lattice: a pixel's position
 in its tile is its position in the object. Tiles are read at full size, with no
 auto-crop, and must line up across faces. A FRONT pixel is solid only where the
 SIDE covers its row and the TOP covers its column. Use square tiles for a cubic
-lattice. The editor's onion-skin helps line pixels up.
+lattice. The editor's underlay helps line pixels up.
+
+**Layers.** A document stacks up to eight layers (`LAYER_MAX`). The sheet grows
+downward, one 3×2 block of six tiles per layer, every block at the one tile
+size: `3t × 2tN` for N layers, Layer 1 on top. Each layer carves its own hull
+and the model is their union (see
+[The technique](#the-technique-multi-view-visual-hull-voxelization)), so it can
+hold shapes one set of six views would fill in, such as wheels apart from the
+body above them. The app takes the count from the shape: a `3t × 2tN` sheet of
+square tiles, `t` from 1 to 64 and N from 1 to 8, is N layers, and the
+`sprite-machine:layers` chunk only names them (see
+[Documents](#documents-a-document-is-a-png)). Any other sheet opens as one layer
+of whatever the 3×2 layout gives.
 
 **Tile orientation** (world: `+x` right, `+y` up, `+z` front, toward the
 camera). A tile drawn this way needs no transform:
@@ -111,9 +123,10 @@ camera). A tile drawn this way needs no transform:
 | TOP          | plan view, width horizontal                             | top edge     | width × depth  |
 | BOTTOM       | plan from below (car rolled sideways, not end-over-end) | top edge     | width × depth  |
 
-Check each tile against the Front points column, using the faded onion-skin of
+Check each tile against the Front points column, using the faded underlay of
 the mirrored opposite behind the canvas. The pipeline accepts per-tile `rot`,
-`flipX` and `flipY` transforms for sheets that don't follow the convention.
+`flipX` and `flipY` transforms for sheets that don't follow the convention, and
+applies each to the same-named tile of every layer.
 
 ## Drawing editor
 
@@ -141,6 +154,7 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   derives each edge's neighbour, scan line and direction from
   `VIEW_IMAGE_AXES`. Each strip texel is the first painted texel walking inward
   from the seam. A neighbour with no art contributes its mirrored opposite. The
+  neighbours are the edited layer's own, and other layers never show there. The
   corners stay empty. The strips sit on the canvas's texel lattice with no gap,
   at full opacity, on white, so the dithered rectangle is exactly the drawable
   area. They take no pointer input. A stroke never changes them, since a
@@ -168,8 +182,9 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   arcs, so a radius of 1 clips the corner texel (`lib/rect.js`).
 - **Fill**: **contiguous** (on by default) floods the 4-connected region. Off,
   it recolors every texel on the face matching the clicked color, and **on all
-  faces** (enabled only then) does so across the atlas. Clicking empty space
-  targets transparent, and a right-click fills to transparent.
+  faces** (enabled only then) does so across the edited layer's six tiles.
+  Clicking empty space targets transparent, and a right-click fills to
+  transparent.
 - **Selection** (`S`): drag a box to select it. The border is marching ants,
   1 system px on the outermost texels, drawn as whole-pixel black and white
   runs (`lib/ants.js`) on their own top layer. They stand still under reduced
@@ -187,8 +202,10 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   once, on the first move press, and each offset composites them over the base
   (`lib/select.js`), so a drag doesn't smear what it crosses.
 - **Undo**: a gesture (stroke, rect, fill, move) is one step, and an all-faces
-  replace or a tile resize is one whole-sheet step. History holds 50 entries
-  and clears when a document loads.
+  replace, a tile resize, New Layer and Delete Layer are each one whole-sheet
+  step that also restores the layer names. Rename Layer… is a step of its own.
+  An undo lands on the layer and face it recorded without switching the editor
+  to them. History holds 50 entries and clears when a document loads.
 - **Eraser** (`E`): a pencil that writes transparency, with its own tip size
   and shape. Its preview, the erase treatment, is marching ants around the
   texels the tip would clear, with no fill. The eraser's hover and stroke, a
@@ -219,17 +236,21 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   erased.
 - **Tile size**: **Edit → Tile Size…** has one number field with Cancel / OK.
   OK (or Return) retiles the atlas to a square tile from 1 to 64. Nothing
-  changes before OK. Square tiles keep registration, since a 3×2 atlas shares
-  the depth axis between the side tile's width and the top tile's height. The
-  art stays centered, and the extra texel of an odd step alternates ends so
+  changes before OK. Every layer resizes the same way. Square tiles keep
+  registration, since a 3×2 atlas shares the depth axis between the side tile's
+  width and the top tile's height. The art stays centered, and the extra texel
+  of an odd step alternates ends so
   repeated resizes don't drift. A ground-resting sprite floats up off the
   shadow plane as the tile grows. The engine's `resizeAtlas` defaults to
   origin-anchored and accepts a non-square pair, which the carve warns about.
 
 There is no automatic ground rest: an object sits at whatever Y you paint it.
-Two aids help registration. The faded onion-skin of the opposite face behind
-the canvas shows the art on the other side. The edge hints outside it show
-what the art meets past each edge.
+Two aids help registration. The faded **underlay** behind the canvas is one
+composited tile drawn at `ONION_ALPHA` (`lib/layers.js`): the edited layer's
+opposite face, mirrored, then every other layer's art on the same face in block
+order, later over earlier. It shows the art on the other side and the art in
+the other layers. The edge hints outside the canvas show what the edited
+layer's art meets past each edge.
 
 **Dev hooks**, parsed in `src/boot/params.js`: `?sample=<index|name>` opens a
 built-in sample as an untitled document from memory, skipping seeding, `?file`
@@ -313,7 +334,7 @@ Each document has one window. New Sprite or New…, a document icon's
 double-click and a dropped PNG each open a new, cascaded window. Nothing loads
 over an open document, so the unsaved-changes question comes only on close.
 Opening a stored document that is already open activates its window. Untitled
-names count up. Each window has its own editor, edited face and bounded undo history. The tool
+names count up. Each window has its own editor, edited face and layer, and bounded undo history. The tool
 and ink are app-wide. The windoids and the Edit menu serve the active document,
 so switching windows re-targets the 3D View (the camera re-frames), the Full
 Sprite View, the options strip's clamp bounds and Undo/Redo.
@@ -327,7 +348,7 @@ application's menus follow, and the **clock** stays at the right end:
 
 ```
 Finder            │ Sprite Machine  File  Edit  View  Special              10:42 │
-Sprite Editor     │ Sprite Machine  File  Edit  View  Tools                10:42 │
+Sprite Editor     │ Sprite Machine  File  Edit  Layer  View  Tools         10:42 │
 Text Viewer       │ Sprite Machine  File  Edit  View                       10:42 │
 Desktop Patterns  │ Sprite Machine  File  View                             10:42 │
 ```
@@ -407,6 +428,21 @@ document to act on):
   _Tile Size…_ sets the active document's square tile size in a dialog that
   applies on OK as one undo step (see [Drawing editor](#drawing-editor)). No
   Cut or Clear.
+- **Layer**: _New Layer_, _Delete Layer_, _Rename Layer…_, then after a rule
+  one item per layer of the active document in block order, named for the
+  layer, with the edited one checked and `1` to `8` shown as the keys.
+  - _New Layer_ appends a transparent layer, named _Layer n_ for the first
+    number free counting from its own, and edits it. It is greyed at eight
+    layers.
+  - _Delete Layer_ removes the edited layer and edits the one above it, or
+    Layer 1. It is greyed while the document has one layer.
+  - Both are one undo step. _Rename Layer…_ opens the name prompt on the edited
+    layer's name, and a rename is an undo step too.
+  - A pick from the list, or its digit key, switches the layer the window
+    edits. A switch never dirties the document. The digit keys follow the tool
+    keys' rules and wait while a stroke or drag is in progress.
+  - The three commands have no key equivalents. See [Layers](#input-a-32-atlas)
+    for the sheet.
 - **View**: _Arrange Windows_ ⌘J comes first. Its label is fixed and its
   command depends on the windows. If any visible window is off its placement,
   it arranges: the boot placement re-runs on the current raster and document
@@ -452,8 +488,9 @@ Only the front application's items fire, and the bar flashes the menu of a
 fired command. A disabled item does not fire either, so its key reaches the
 browser: a greyed Undo leaves ⌘Z to a focused field, and a greyed Arrange
 Windows leaves Ctrl+J to the browser's Downloads off-Mac. `src/shortcuts.js`
-handles the bare-letter tool keys, because the kit never matches an unmodified
-printable key. The Tools menu only displays those letters.
+handles the bare-letter tool keys and the layer digits, because the kit never
+matches an unmodified printable key. The Tools and Layer menus only display
+those keys.
 
 ### Windows
 
@@ -477,7 +514,9 @@ are not documents.
   `apps/sprite-editor/windows.js`. A window is created on open at the doc box,
   cascaded into the first free slot, and removed on close. Each is
   `movable resizable zoomable`, titled with the document's name, with a status
-  strip naming the edited face. The **zoom box** toggles size with the
+  strip naming the edited face, led by the edited layer's name when the
+  document has more than one (`Layer 2, Front Face`). The **zoom box** toggles
+  size with the
   top-left held. It grows the window right and down to the vacant middle's
   edges and records the previous size. On a window already at that size it
   restores the recorded size, or the doc box size if none is recorded. ⌘J's
@@ -495,8 +534,11 @@ are not documents.
 - **The Full Sprite View** has the face picker in its header, over a 3×2 grid
   of live canvases, one per face, drawn nearest-neighbor on `gray-12` paper.
   The picker box declares `pattern="white"`, because a bare `vf-container`
-  inherits the desktop pattern. The grid follows the active document's live
-  channel at rAF rate. Pressing a tile selects that face, and the selected tile
+  inherits the desktop pattern. Each cell shows the edited layer's tile at full
+  opacity over the other layers' art on that face, composited in block order
+  and faded to `ONION_ALPHA`, so a sparse layer keeps the map recognizable. The
+  grid follows the active document's live channel at rAF rate and repaints on a
+  layer switch. Pressing a tile selects that face, and the selected tile
   has a black outline. The window is movable, not resizable. Its width is the
   grid's, and its height follows the active tile's ratio.
 - **The 3D View** has a **rotate** checkbox in its header (auto-spin, off on
@@ -665,10 +707,11 @@ scrollbars="both"`, created on open and removed by its close box. Its header
   _«name» copy 2_, and so on. A reference to a record emptied from the Trash is
   skipped. Paste is not undoable.
 - **Pasting an outside image** (an `image/png` the app didn't write) first
-  checks `lib/sheet-shape.js`: a 3×2 atlas of square tiles, `t` from 1 to 64,
-  stricter than the drop. A valid image is saved as a new document where Paste
-  lands, re-encoded, with its title, transforms and ring settings read from its
-  chunks. It lands selected. Without a `Title` it is named _untitled_ (counted
+  checks `lib/sheet-shape.js`: a `3t × 2tN` sheet of square tiles, `t` from 1 to
+  64 and N from 1 to 8 layers, stricter than the drop. A valid image is saved as
+  a new document of N layers where Paste lands, re-encoded, with its title,
+  transforms, ring settings and layer names read from its chunks. It lands
+  selected. Without a `Title` it is named _untitled_ (counted
   per container) and opens for rename. No window opens. An invalid image shows
   the paste alert with the rule and its dimensions.
 - **Clipboard routes**: ⌘V and the menu pick use the Async Clipboard API.
@@ -802,15 +845,19 @@ waits with the caret at its end.
 
 ### Documents: a document is a .png
 
-A document is one sprite `.png`, the 3×2 atlas, with its metadata in PNG text
-chunks (the engine's `png-chunks.js`): `Title`, `Creation Time`, `Software`,
-`sprite-machine:transforms` (only when non-identity) and `sprite-machine:ring`,
-the **3D Sprite Atlas settings** (always). The pixels alone are a complete
-document; the tile size derives from the dimensions. Save, Download,
-drop-import and paste share this format. Download writes the saved bytes
-verbatim, a downloaded PNG dropped back restores losslessly, and a foreign 3×2
-sheet imports as an untitled document with default ring settings. Stripping the
-chunks loses only the name, timestamps and ring settings. The system clipboard
+A document is one sprite `.png`, the 3×2 atlas with one block per layer, with
+its metadata in PNG text chunks (the engine's `png-chunks.js`): `Title`,
+`Creation Time`, `Software`, `sprite-machine:transforms` (only when
+non-identity), `sprite-machine:ring`, the **3D Sprite Atlas settings** (always),
+and `sprite-machine:layers`, the layer names in block order (always, so a
+one-layer file reads `{"layers":[{"name":"Layer 1"}]}`). `Software` stays
+`sprite-machine 1`. The pixels alone are a complete document; the tile size and
+the layer count derive from the dimensions, and a chunk whose names don't match
+the count is fitted to it. Save, Download, drop-import and paste share this
+format. Download writes the saved bytes verbatim, a downloaded PNG dropped back
+restores losslessly, and a foreign 3×2 sheet imports as an untitled document
+with default ring settings. Stripping the chunks loses only the name,
+timestamps, ring settings and layer names. The system clipboard
 strips them, so a PNG copied out with Edit → Copy and pasted back arrives
 _untitled_. A copy and paste within the app keeps everything (see
 [Folders](#folders)).
@@ -854,8 +901,9 @@ rules in `lib/icon.js`:
   premultiplied alpha. Pixels at least half covered then go opaque in their
   own color, the rest go clear, and a one-pixel, four-connected black outline
   surrounds the covered pixels.
-- Built with the engine's `buildModel` on an offscreen GL context created on
-  the first icon, lit by `scene/rig.js`. It renders once per save and is
+- Built with the engine's `buildModel` over every layer on an offscreen GL
+  context created on the first icon, lit by `scene/rig.js`. It renders once per
+  save and is
   cached on the record, so a document keeps its icon until it is saved again. A document with nothing
   painted, or no WebGL, gets the generic document glyph.
 
@@ -869,12 +917,12 @@ front container's icons to the nearest free lattice cells.
 
 One versioned localStorage key (`shell/desktop-state.js`, v3) holds icon
 positions, folder window pins, the open saved documents' edited faces and
-which was active, the desktop pattern, `greet`, and the `seeded` and
+layers and which was active, the desktop pattern, `greet`, and the `seeded` and
 `seededTexts` flags. It is written on change and on exit. A v1 or v2 blob
 migrates and drops its window geometry. Application windows are not stored.
 Icons restore at boot. Documents do not reopen at boot; a saved document the
-URL opens takes its remembered face. Untitled windows do not survive a reload
-(no autosave).
+URL opens takes its remembered face and layer. Untitled windows do not survive
+a reload (no autosave).
 
 ---
 
@@ -915,6 +963,20 @@ faces and colors its surface. 1 pixel = 1 voxel = 1 cube.
    T-junction repair. The mesh is one `BufferGeometry` with
    `MeshStandardMaterial({ map, flatShading })`. Color is a texture because the
    default materials in Unity, Godot and Unreal ignore vertex colors.
+
+**Layers** (`unionVoxels` in the engine's `pipeline.js`). Steps 1 to 5 run once
+per layer, each exactly as a one-layer sheet would, so an empty layer changes
+nothing. A layer with no painted view is dropped with its warnings. The union's
+lattice is the per-axis max of the layers' dims. A layer with views on one plane
+only is one voxel deep on that axis and sits on the face of the lattice its
+views look at: a front-only layer on the front plane, a top-only layer at the
+top, a left-only layer on the +x side, and with both views of a pair, the
+positive one. A voxel is solid when any layer holds it, and the surface is
+extracted again from that solid. Each exposed face takes the color the last
+layer in block order that holds its voxel gave it, so a later layer paints over
+an earlier one where they overlap and no color is recomputed. Warnings are
+prefixed `Layer k:`. Step 6 meshes the union, so a riser in one layer and a
+tread in another form a slope when their colors match.
 
 ### Render modes
 
@@ -967,14 +1029,15 @@ application's `layout.js`) are pure JS. All of it runs under Node.
 ```
 packages/core/  the engine, published as `sprite-machine`. No DOM, THREE for the mesh
                 only, typechecked with no DOM lib. Pipeline (ingest, carve,
-                colorize), mesher (regions, wedge-mesh, t-junction, skin, mesh-util),
-                atlas, file formats (png-chunks, png-encode, gltf), views, faces,
-                constants, diag, model (buildModel → modelToGlb), node (readSheet,
-                sheetToGlb over pngjs), the index barrel. test/, bin/ (the CLI),
-                README.md (the API).
+                colorize, the layer union), mesher (regions, wedge-mesh, t-junction,
+                skin, mesh-util), atlas, file formats (png-chunks, png-encode, gltf,
+                layers), views, faces, constants, diag, model (buildModel →
+                modelToGlb), node (readSheet, sheetToGlb over pngjs), the index
+                barrel. test/, bin/ (the CLI), README.md (the API).
 src/lib/        editor domain, no THREE or DOM: ring geometry, rasterizers (rect,
-                fill, select, brush, ants), edges (edge hints), sheet-shape (the
-                paste rule), icon (document icon rules), zip, color, palette,
+                fill, select, brush, ants), edges (edge hints), layers (blocks,
+                names, the underlay compositor), sheet-shape (the shape rule: tile
+                and layer count), icon (document icon rules), zip, color, palette,
                 sprite-data (built-in samples)
 src/texts/      built-in text files (.txt, imported ?raw), seeded once per profile
 src/apps/       finder, sprite-editor, text-viewer, desktop-patterns, and the
@@ -1037,10 +1100,13 @@ the few light-DOM rules.
 **Two-speed state.** Templates read store state. Everything the canvas hot paths
 touch is a private field in `<sm-draw-canvas>`, so a pencil drag never schedules
 a render. Each document's doc slice has two channels: `subscribe` for structural
-changes (load, resize, replace all, undo restore) and `onLive` for stroke-rate
-edits, coalesced per animation frame. `applyTileEdit` stores the working buffer
-by reference without notifying `subscribe`, so the onion skin recomputes only on
-a face switch or structural change. Every consumer of the canonical atlas (save,
+changes (load, resize, replace all, a layer added, removed or renamed, undo
+restore) and `onLive` for stroke-rate edits, coalesced per animation frame, one
+notification per edited layer and face. `applyTileEdit` stores the working
+buffer by reference without notifying `subscribe`, so the underlay recomputes
+only on a face or layer switch or a structural change. The rebuilder keeps one
+`buildVoxels` result per layer, so a stroke rebuilds its own layer and re-unions
+the rest from the cache. Every consumer of the canonical atlas (save,
 export, resize, replace all, an undo snapshot) calls `drain()` first. Canvas
 backing stores are sized in JS, because a template-bound width clears them.
 Editable `vf-*` values are bound with `live()`, so a re-render re-syncs after
@@ -1051,13 +1117,21 @@ typing.
 `connectedCallback` wires the doc subscription. It lives until the document
 closes and survives the desktop's raise-driven DOM reorders. Brush state lives in
 the session slice. The canvas resets its working buffer when `tile` (by
-identity), `tileW` or `tileH` changes.
+identity), `tileW` or `tileH` changes, so a face or layer switch drops a
+selection. The session's `gesture` flag is set from a canvas press to its
+release, and a layer key waits while it is set.
 
 ## Known limitations & next steps
 
-- **Concavity.** A visual hull over-approximates along each axis (the gap between
-  wheels fills into a skirt). An opt-in per-column depth channel would carve
-  single-axis notches.
+- **Concavity.** An opt-in per-column depth channel would carve single-axis
+  notches within a layer.
+- **Layers.** Duplicate Layer, Merge Down, and Move Layer Up / Down (which changes
+  precedence). A drawn face beating a mirror-derived one across layers, so a later
+  layer's blank back never paints over the body's drawn back (`colorize` would
+  report which rule colored each face). Hiding a layer from the union, a `hidden`
+  flag per entry in the chunk. A layered built-in sample and a `?layer=` dev hook.
+  A Layers windoid. The layer count in the glb's `extras`. A versioned re-seed of
+  the text files, so an existing profile reads the Layers paragraph.
 - **Low-poly scope.** A convex staircase still steps, and a 3-D corner where two
   ridges meet degrades to a step.
 - **Perf.** The render loop redraws only on change, and the skin is rebaked per

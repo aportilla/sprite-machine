@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   sliceAtlas,
+  sliceLayers,
   validateSheet,
   blitTile,
   cellOf,
@@ -48,6 +49,52 @@ test('round-trip: slice then blit every view reproduces the sheet byte-for-byte'
     blitTile(rebuilt, t, c * tileW, r * tileH);
   }
   assert.deepEqual(rebuilt.data, sheet.data);
+});
+
+// The rows y0 to y0 + h of a sheet, as a sheet.
+const cutRows = (img, y0, h) => ({
+  width: img.width,
+  height: h,
+  data: img.data.slice(y0 * img.width * 4, (y0 + h) * img.width * 4),
+});
+
+// Sheets of one width stacked top to bottom.
+const stack = (...imgs) => {
+  const data = new Uint8ClampedArray(imgs.reduce((n, img) => n + img.data.length, 0));
+  let at = 0;
+  for (const img of imgs) {
+    data.set(img.data, at);
+    at += img.data.length;
+  }
+  return {
+    width: imgs[0].width,
+    height: imgs.reduce((h, img) => h + img.height, 0),
+    data,
+  };
+};
+
+test('sliceLayers: block k is the 3×2 atlas in rows 2tk to 2t(k+1); one layer is sliceAtlas', () => {
+  const t = 3;
+  const sheet = makeSheet(t, t, 3, 6); // three blocks, every texel painted
+  const res = sliceLayers(sheet, { layers: 3 });
+  assert.deepEqual(
+    [res.layers.length, res.tileW, res.tileH, res.cols, res.rows, res.warnings],
+    [3, t, t, 3, 2, []]
+  );
+  for (let k = 0; k < 3; k++) {
+    assert.deepEqual(res.layers[k], sliceAtlas(cutRows(sheet, 2 * t * k, 2 * t)).views);
+  }
+
+  const one = makeSheet(4, 3, 3, 2);
+  const a = sliceAtlas(one);
+  assert.deepEqual(sliceLayers(one), {
+    layers: [a.views],
+    tileW: a.tileW,
+    tileH: a.tileH,
+    cols: a.cols,
+    rows: a.rows,
+    warnings: a.warnings,
+  });
 });
 
 test('empty tile blitted in re-slices back to null via isBlank', () => {
@@ -253,6 +300,20 @@ test('resizeAtlas: an asymmetric (non-square) resize falls out of registration �
   assert.notEqual(skew.dims.nz, base.dims.nz, 'depth axis is double-booked → shifts');
   assert.ok(skew.solidCount < base.solidCount, 'asymmetric resize shears voxels away');
   assert.ok(skew.warnings.length > 0, 'the shear is surfaced as a warning');
+});
+
+test('resizeAtlas with layers: each block resizes as a sheet of its own would, into a 2 · layers · h tall sheet', () => {
+  const top = artSheet(4);
+  const below = makeSheet(4, 4, 3, 2);
+  for (const anchor of ['origin', 'center']) {
+    const out = resizeAtlas(stack(top, below), 6, 6, { layers: 2, anchor });
+    assert.deepEqual([out.width, out.height], [18, 24]);
+    assert.deepEqual(
+      out,
+      stack(resizeAtlas(top, 6, 6, { anchor }), resizeAtlas(below, 6, 6, { anchor })),
+      anchor
+    );
+  }
 });
 
 test('resizeAtlas: shrinking below the object extent crops without throwing', () => {

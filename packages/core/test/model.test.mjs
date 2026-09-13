@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { buildModel, modelToGlb } from '../src/model.js';
 import { flip } from '../src/ingest.js';
 import { glbParts } from '../src/gltf.js';
-import { img, fill, sheet } from './helpers.mjs';
+import { img, fill, sheet, layeredSheet } from './helpers.mjs';
 
 test("buildModel: one unit per voxel, a transforms chunk applied as the app applies it; modelToGlb: the reader's scale", () => {
   const t = 4;
@@ -41,4 +41,41 @@ test("buildModel: one unit per voxel, a transforms chunk applied as the app appl
   assert.equal(parts.json.nodes[0].name, 'slab');
 
   assert.throws(() => buildModel(sheet(t, {})), /no painted view/);
+});
+
+test('buildModel with layers: the union of the blocks; without the option a sheet is one block; only a sheet blank in every layer throws', () => {
+  const t = 4;
+  const rows = (row) => img([row, row, row, row]);
+  const box = (row) => ({ front: rows(row), left: fill(t, t, 'R'), top: rows(row) });
+  const halves = layeredSheet(t, [box('RR..'), box('..RR')]);
+
+  const layered = buildModel(halves, { layers: 2 });
+  const whole = buildModel(sheet(t, box('RRRR')));
+  assert.deepEqual(layered.dims, whole.dims);
+  for (const attr of ['position', 'normal', 'uv']) {
+    assert.deepEqual(
+      Array.from(layered.mesh.geometry.attributes[attr].array),
+      Array.from(whole.mesh.geometry.attributes[attr].array),
+      attr
+    );
+  }
+  assert.deepEqual(
+    Array.from(layered.mesh.geometry.index.array),
+    Array.from(whole.mesh.geometry.index.array)
+  );
+
+  assert.deepEqual(
+    buildModel(halves).dims,
+    { nx: t, ny: 2 * t, nz: 2 * t },
+    'one block of t × 2t tiles'
+  );
+
+  assert.throws(
+    () => buildModel(layeredSheet(t, [{}, {}]), { layers: 2 }),
+    /no painted view/
+  );
+  assert.equal(
+    buildModel(layeredSheet(t, [{}, box('RRRR')]), { layers: 2 }).triangles,
+    12
+  );
 });

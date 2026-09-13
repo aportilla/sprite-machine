@@ -23,7 +23,7 @@ import { workspace } from '../../state/workspace.js';
 import { clipboard, pasteSource } from '../../state/clipboard.js';
 import { createDoc } from '../../state/doc.js';
 import { createRingSettings } from '../../state/ring-settings.js';
-import { TILE_MIN, TILE_MAX } from 'sprite-machine';
+import { TILE_MIN, TILE_MAX, LAYER_MAX } from 'sprite-machine';
 import { sheetShape } from '../../lib/sheet-shape.js';
 import { readSheetMeta, missingDefaults, restoreDefaultFiles } from '../../loaders.js';
 import { SAMPLES } from '../../lib/sprite-data.js';
@@ -109,9 +109,9 @@ export const finder = {
     /** @param {{width: number, height: number}|null} image */
     function showPasteAlert(image) {
       const rule =
-        `The clipboard image isn’t a sprite sheet: a sheet is a 3 × 2 atlas of ` +
-        `square tiles, from ${3 * TILE_MIN} × ${2 * TILE_MIN} to ` +
-        `${3 * TILE_MAX} × ${2 * TILE_MAX} pixels.`;
+        `The clipboard image isn’t a sprite sheet: a sheet stacks 1 to ${LAYER_MAX} ` +
+        `layers top to bottom, each a 3 × 2 atlas of square tiles from ` +
+        `${3 * TILE_MIN} × ${2 * TILE_MIN} to ${3 * TILE_MAX} × ${2 * TILE_MAX} pixels.`;
       pasteMsg.textContent = image
         ? `${rule} This image is ${image.width} × ${image.height}.`
         : rule;
@@ -235,13 +235,14 @@ export const finder = {
         showPasteAlert(null);
         return;
       }
-      if (!sheetShape(image.width, image.height).tile) {
+      const shape = sheetShape(image.width, image.height);
+      if (!shape.tile) {
         showPasteAlert(image);
         return;
       }
-      const { title, transforms, ring: ringMeta } = readSheetMeta(bytes);
+      const { title, transforms, ring: ringMeta, names } = readSheetMeta(bytes);
       const doc = createDoc();
-      doc.loadAtlas(image, transforms);
+      doc.loadAtlas(image, transforms, { layers: shape.layers, names });
       const res = await files.save(doc, {
         fileId: null,
         name: title ?? nextDocName(files.get(), target),

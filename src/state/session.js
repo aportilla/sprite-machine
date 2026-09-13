@@ -1,5 +1,5 @@
-// Session slice: editor UI state shared by every document window. The face a
-// window edits is on its workspace context.
+// Session slice: editor UI state shared by every document window. The face and
+// layer a window edits are on its workspace context.
 //
 // Setters clamp to bounds the caller derives from the doc's tile geometry.
 
@@ -31,6 +31,9 @@ export function createSession() {
     fillContiguous: true,
     fillAllFaces: false,
     pickerOpen: false,
+    // A canvas drag is in progress, from press to release. The layer keys wait
+    // for it, since a switch would reset the canvas mid-gesture.
+    gesture: false,
   });
 
   return {
@@ -105,6 +108,11 @@ export function createSession() {
 
     closePicker() {
       store.patch({ pickerOpen: false });
+    },
+
+    /** @param {boolean} v */
+    setGesture(v) {
+      store.patch({ gesture: !!v });
     },
   };
 }

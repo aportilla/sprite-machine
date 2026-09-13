@@ -3,9 +3,9 @@
 // eyedropper), fits the canvas to whole system px and handles the gesture keys
 // (Esc, Shift and the tool letters).
 //
-// - Layers: the edge-hint frame (lib/edges.js) behind a stack of four canvases:
-//   the onion-skin background, the pixel canvas, the cursor overlay and the
-//   selection's ants.
+// - The stack: the edge-hint frame (lib/edges.js) behind four canvases: the
+//   underlay (the other layers and the mirrored opposite face), the pixel
+//   canvas, the cursor overlay and the selection's ants.
 // - Selection: drag a marquee, then drag inside it to move the pixels. The first
 //   move lifts the texels into #selFloat and clears them in a copy of the buffer
 //   (#selBase). Each offset composites base and float into #work in place.
@@ -26,6 +26,7 @@
 //   sm-pick-color         { rgb }            an eyedrop on a painted texel
 //   sm-pick-transparent                      an eyedrop on empty space
 //   sm-replace-all-tiles  { target, fill }   a non-contiguous fill on all faces
+//   sm-gesture            { active }         a drag started or ended
 
 import { css, LitElement, html } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
@@ -45,6 +46,7 @@ import {
 } from '../lib/select.js';
 import { ANTS_PERIOD } from '../lib/ants.js';
 import { EDGE_HINT } from '../lib/edges.js';
+import { ONION_ALPHA } from '../lib/layers.js';
 import {
   drawPencilPreview,
   drawFootprintAnts,
@@ -52,9 +54,6 @@ import {
   drawMarchingAnts,
 } from './draw-overlays.js';
 import { baseStyles } from './base-styles.js';
-
-// The onion-skin's alpha. The background layer has no CSS opacity.
-const MIRROR_ALPHA = 0.22;
 
 // Marching ants tick: one system px of dash travel per tick.
 const ANTS_MS = 100;
@@ -123,8 +122,8 @@ export class SmDrawCanvas extends LitElement {
         cursor: var(--vf-cursor, crosshair);
         touch-action: none;
       }
-      /* The onion-skin, under the pixel canvas. Its fade is drawn at
-       MIRROR_ALPHA (#paintBg). */
+      /* The underlay, under the pixel canvas. Its fade is drawn at
+       ONION_ALPHA (#paintBg), not with CSS opacity. */
       .editor-canvas-bg {
         z-index: 0;
         pointer-events: none;
@@ -147,7 +146,8 @@ export class SmDrawCanvas extends LitElement {
     tile: { attribute: false },
     tileW: { type: Number },
     tileH: { type: Number },
-    mirrorBehind: { attribute: false },
+    /** The underlay tile, drawn faded behind the art, or null. */
+    onionBehind: { attribute: false },
     /** The edge-hint frame around the tile (lib/edges.js edgeHintFrame). */
     edgeHints: { attribute: false },
     tool: {},
@@ -171,7 +171,7 @@ export class SmDrawCanvas extends LitElement {
     this.tile = null;
     this.tileW = 0;
     this.tileH = 0;
-    this.mirrorBehind = null;
+    this.onionBehind = null;
     this.edgeHints = null;
     this.tool = 'pencil';
     this.ink = null;
@@ -194,6 +194,7 @@ export class SmDrawCanvas extends LitElement {
   #drawing = false; // a pencil stroke is in progress
   #prev = null; // last painted texel this stroke, for line interpolation
   #forceErase = false; // right-button erase
+  #gestureNotified = false; // last state sent with sm-gesture
   // Undo capture: the bytes at gesture start and whether a pixel changed.
   #gestureBefore = null;
   #gestureChanged = false;
@@ -272,6 +273,7 @@ export class SmDrawCanvas extends LitElement {
     // Re-fit when --vf-scale changes. The kit updates --vf-scale before these
     // callbacks run.
     this.#offScale = onScaleChange(() => this.#layout());
+    this.#notifyGesture();
   }
 
   disconnectedCallback() {
@@ -283,6 +285,11 @@ export class SmDrawCanvas extends LitElement {
     this.#offScale?.();
     this.#offScale = null;
     this.#stopAnts();
+    // A removed window never releases its drag. A reconnect reports it again.
+    if (this.#gestureNotified) {
+      this.#gestureNotified = false;
+      this.#emit('sm-gesture', { active: false });
+    }
   }
 
   willUpdate(changed) {
@@ -298,6 +305,7 @@ export class SmDrawCanvas extends LitElement {
       this.#prev = null;
       this.#forceErase = false;
     }
+    this.#notifyGesture();
   }
 
   firstUpdated() {
@@ -321,7 +329,7 @@ export class SmDrawCanvas extends LitElement {
     // when there is one.
     if (changed.has('edgeHints')) this.#paintHints();
     if (geom) this.#applyGeometry();
-    else if (changed.has('mirrorBehind')) this.#paintBg();
+    else if (changed.has('onionBehind')) this.#paintBg();
     else if (changed.has('edgeHints')) this.#layout(); // the band appeared or went away
 
     if (
@@ -339,7 +347,7 @@ export class SmDrawCanvas extends LitElement {
 
   // Working buffer and canvas geometry
   // Reset the working copy from the tile's art, or empty when it has none. A
-  // mirror-derived face opens empty, with the onion-skin behind it.
+  // mirror-derived face opens empty, with the underlay behind it.
   #resetWorking() {
     const w = this.tileW;
     const h = this.tileH;
@@ -393,14 +401,14 @@ export class SmDrawCanvas extends LitElement {
     this.#layout();
   }
 
-  // Paint the system-res background: the opposite face's onion-skin at
-  // MIRROR_ALPHA, magnified nearest-neighbor, on a transparent ground.
+  // Paint the system-res background: the underlay at ONION_ALPHA, magnified
+  // nearest-neighbor, on a transparent ground.
   #paintBg() {
     const bg = this.#bg.value;
     if (!bg || !bg.width || !bg.height) return;
     const g = bg.getContext('2d');
     g.clearRect(0, 0, bg.width, bg.height);
-    const m = this.mirrorBehind;
+    const m = this.onionBehind;
     if (m) {
       const tmp = document.createElement('canvas');
       tmp.width = this.tileW;
@@ -413,7 +421,7 @@ export class SmDrawCanvas extends LitElement {
           0
         );
       g.imageSmoothingEnabled = false; // crisp texels
-      g.globalAlpha = MIRROR_ALPHA; // putImageData ignores alpha; drawImage honors it
+      g.globalAlpha = ONION_ALPHA; // putImageData ignores alpha; drawImage honors it
       g.drawImage(tmp, 0, 0, this.#sysW, this.#sysH);
       g.globalAlpha = 1;
     }
@@ -570,6 +578,16 @@ export class SmDrawCanvas extends LitElement {
     this.#gestureChanged = false;
   }
 
+  // Emit sm-gesture when a drag starts or ends: a pencil or eraser stroke, a
+  // rect drag or a selection drag. Every handler that can start or end one
+  // calls this after it runs.
+  #notifyGesture() {
+    const active = this.#drawing || this.#rectDragging || this.#selDrag != null;
+    if (active === this.#gestureNotified) return;
+    this.#gestureNotified = active;
+    this.#emit('sm-gesture', { active });
+  }
+
   // Gesture keys
   // Checked in order:
   // 1. A selection drag: Esc cancels, Shift toggles the axis lock, a tool
@@ -582,6 +600,11 @@ export class SmDrawCanvas extends LitElement {
   // 3. A rect drag: Esc cancels, Shift square-locks, a tool letter cancels.
   //    shortcuts.js makes the tool switch.
   #onKeyDown = (e) => {
+    this.#keyDown(e);
+    this.#notifyGesture();
+  };
+
+  #keyDown(e) {
     if (this.#selDrag) {
       this.#onSelectionDragKey(e);
       return;
@@ -610,7 +633,7 @@ export class SmDrawCanvas extends LitElement {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key.toLowerCase();
     if (TOOL_KEYS.has(k)) this.#cancelRect();
-  };
+  }
 
   // A selection drag: Esc cancels (a move reverts to its grab), Shift starts
   // the axis lock from the last texel, and a tool letter cancels. The tool
@@ -1193,7 +1216,23 @@ export class SmDrawCanvas extends LitElement {
   }
 
   // Pointer
+  // A press, release or cancel can start or end a drag, so each reports it.
   #onPointerDown = (e) => {
+    this.#pointerDown(e);
+    this.#notifyGesture();
+  };
+
+  #onPointerUp = (e) => {
+    this.#pointerUp(e);
+    this.#notifyGesture();
+  };
+
+  #onPointerCancel = (e) => {
+    this.#pointerCancel(e);
+    this.#notifyGesture();
+  };
+
+  #pointerDown(e) {
     const t = this.#toTexel(e);
     if (!t) return;
     e.preventDefault();
@@ -1240,7 +1279,7 @@ export class SmDrawCanvas extends LitElement {
     this.#canvas.value.setPointerCapture?.(e.pointerId);
     this.#stroke(t.px, t.py);
     this.#drawCursor(t); // a right press shows the erase ants at once
-  };
+  }
 
   #onPointerMove = (e) => {
     if (this.#selDrag) {
@@ -1282,7 +1321,7 @@ export class SmDrawCanvas extends LitElement {
     this.#stroke(t.px, t.py);
   };
 
-  #onPointerUp = (e) => {
+  #pointerUp(e) {
     if (this.#selDrag) {
       if (e.pointerId !== this.#selPointer) return; // ignore a stray second pointer
       if (this.#selDrag === 'marquee') this.#endMarquee(e);
@@ -1312,11 +1351,11 @@ export class SmDrawCanvas extends LitElement {
     this.#forceErase = false;
     this.#canvas.value.releasePointerCapture?.(e.pointerId);
     this.#redrawCursorLayer(); // clears a right-button stroke's ants
-  };
+  }
 
   // pointercancel discards a rect drag and cancels a selection drag. A pencil
   // stroke ends and keeps its pixels and undo entry.
-  #onPointerCancel = (e) => {
+  #pointerCancel(e) {
     if (this.#selDrag) {
       if (e.pointerId !== this.#selPointer) return; // only the owner can cancel
       if (this.#selDrag === 'marquee') this.#cancelMarquee();
@@ -1334,7 +1373,7 @@ export class SmDrawCanvas extends LitElement {
     this.#forceErase = false;
     this.#canvas.value.releasePointerCapture?.(e.pointerId);
     this.#redrawCursorLayer();
-  };
+  }
 
   // Clear the hover preview and reset the selection cursor on leave, except
   // during a rect or selection drag.

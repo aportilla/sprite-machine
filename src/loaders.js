@@ -1,27 +1,43 @@
 // Atlas loaders: validate a sheet, then open it as a new workspace context.
 // Validation runs first, so a bad sheet leaves no empty window.
 
-import { validateSheet, clampTile, isPng, readTextChunks } from 'sprite-machine';
+import {
+  validateSheet,
+  clampTile,
+  isPng,
+  readTextChunks,
+  LAYERS_CHUNK,
+  parseLayersChunk,
+} from 'sprite-machine';
 import { urlToImageData, bytesToImageData } from './image-io.js';
 import { workspace } from './state/workspace.js';
 import { createDoc } from './state/doc.js';
 import { files } from './state/files.js';
 import { build } from './state/build.js';
 import { RING_CHUNK_KEY, parseRingChunk } from './state/ring-settings.js';
+import { sheetLayers } from './lib/sheet-shape.js';
 
 // Returns the new context, or null with the error on the build slice. face and
-// ring seed the context at open, so they don't mark the document dirty.
+// ring seed the context at open, so they don't mark the document dirty. The
+// layer count comes from the sheet's shape, and names only names the layers.
 /** @param {ImageData} imageData
  *  @param {{transforms?: Record<string, object>, name?: string, face?: string,
- *           ring?: Partial<import('./state/ring-settings.js').RingSettings>|null}} [opts] */
-export function openSheet(imageData, { transforms = {}, name, face, ring = null } = {}) {
+ *           ring?: Partial<import('./state/ring-settings.js').RingSettings>|null,
+ *           names?: string[]|null}} [opts] */
+export function openSheet(
+  imageData,
+  { transforms = {}, name, face, ring = null, names = null } = {}
+) {
   const bad = validateSheet(imageData);
   if (bad) {
     build.setError(bad);
     return null;
   }
   const ctx = workspace.open({ name, face, ring });
-  ctx.doc.loadAtlas(imageData, transforms);
+  ctx.doc.loadAtlas(imageData, transforms, {
+    layers: sheetLayers(imageData.width, imageData.height),
+    names,
+  });
   return ctx;
 }
 
@@ -49,30 +65,39 @@ export async function loadSample(sample, { name = sample.name, face } = {}) {
 }
 
 /**
- * Read the document chunks from PNG bytes: Title, sprite-machine:transforms and
- * sprite-machine:ring. Best-effort: a non-PNG or a bad chunk loses only that
- * metadata, never the pixels. Used by loadFile and the Finder's paste.
+ * Read the document chunks from PNG bytes: Title, sprite-machine:transforms,
+ * sprite-machine:ring and sprite-machine:layers. Best-effort: a non-PNG or a
+ * bad chunk loses only that metadata, never the pixels. Used by loadFile and
+ * the Finder's paste.
  * @param {Uint8Array} bytes
  * @returns {{title: string|null, transforms: Record<string, object>,
- *   ring: Partial<import('./state/ring-settings.js').RingSettings>|null}}
+ *   ring: Partial<import('./state/ring-settings.js').RingSettings>|null,
+ *   names: string[]|null}}
  */
 export function readSheetMeta(bytes) {
-  let title = null;
-  let transforms = {};
-  let ring = null;
+  /** @type {Record<string, string>} */
+  let meta = {};
   if (isPng(bytes)) {
     try {
-      const meta = readTextChunks(bytes);
-      title = meta.Title ?? null;
-      if (meta['sprite-machine:transforms']) {
-        transforms = JSON.parse(meta['sprite-machine:transforms']);
-      }
-      ring = parseRingChunk(meta[RING_CHUNK_KEY]);
+      meta = readTextChunks(bytes);
     } catch {
-      transforms = {};
+      meta = {};
     }
   }
-  return { title, transforms, ring };
+  let transforms = {};
+  try {
+    if (meta['sprite-machine:transforms']) {
+      transforms = JSON.parse(meta['sprite-machine:transforms']);
+    }
+  } catch {
+    transforms = {};
+  }
+  return {
+    title: meta.Title ?? null,
+    transforms,
+    ring: parseRingChunk(meta[RING_CHUNK_KEY]),
+    names: parseLayersChunk(meta[LAYERS_CHUNK]),
+  };
 }
 
 // Decode and open a dropped file. Returns the context, or null with the error on
@@ -81,11 +106,12 @@ export function readSheetMeta(bytes) {
 export async function loadFile(f) {
   try {
     const bytes = new Uint8Array(await f.arrayBuffer());
-    const { title, transforms, ring } = readSheetMeta(bytes);
+    const { title, transforms, ring, names } = readSheetMeta(bytes);
     return openSheet(await bytesToImageData(bytes), {
       transforms,
       name: title ?? f.name.replace(/\.[^.]+$/, ''),
       ring,
+      names,
     });
   } catch (err) {
     build.setError(`Couldn't read "${f.name}" as an image: ${err.message}`);

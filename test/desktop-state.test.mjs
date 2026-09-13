@@ -53,7 +53,7 @@ test('v1 and v2 blobs migrate shallowly and read as seeded (their window geometr
   });
   assert.deepEqual(two, {
     v: 3,
-    docs: [{ fileId: 'x', face: 'top' }],
+    docs: [{ fileId: 'x', face: 'top', layer: null }],
     activeFileId: 'x',
     icons: { 'doc:x': { left: 1, top: 2 } },
     seeded: true,
@@ -62,7 +62,7 @@ test('v1 and v2 blobs migrate shallowly and read as seeded (their window geometr
   const one = migrateDesktopState({ v: 1, lastDocId: 'y', icons: {} });
   assert.deepEqual(one, {
     v: 3,
-    docs: [{ fileId: 'y', face: null }],
+    docs: [{ fileId: 'y', face: null, layer: null }],
     activeFileId: 'y',
     icons: {},
     seeded: true,

@@ -4,9 +4,10 @@
 // runs under Node.
 //
 // - A document is stored as PNG bytes. A save writes the Title, Creation Time,
-//   Software, sprite-machine:transforms (non-identity only) and
-//   sprite-machine:ring chunks. The record's name, icon and dims are a cache.
-//   The chunks take precedence, so a rename or copy rewrites Title.
+//   Software, sprite-machine:transforms (non-identity only),
+//   sprite-machine:ring and sprite-machine:layers chunks. The record's name,
+//   icon and dims are a cache. The chunks take precedence, so a rename or copy
+//   rewrites Title.
 // - A folder is a storage record {id, name, parent, createdAt, modifiedAt}.
 //   An item's `folder` is a folder id, or null for the desktop. An id with no
 //   folder record resolves to the desktop. A folder cannot move into itself or
@@ -19,7 +20,13 @@
 //   The listing omits the text; textOf reads it.
 
 import { createStore } from './store.js';
-import { readTextChunks, setTextChunks } from 'sprite-machine';
+import {
+  readTextChunks,
+  setTextChunks,
+  LAYERS_CHUNK,
+  layersChunk,
+  parseLayersChunk,
+} from 'sprite-machine';
 import { RING_CHUNK_KEY, ringChunk, parseRingChunk } from './ring-settings.js';
 
 export const UNTITLED = 'untitled';
@@ -243,7 +250,7 @@ export function copyName(state, folder, name, kind = 'doc') {
  *             listTexts?(): Promise<any[]>, getText?(id: string): Promise<any>,
  *             putText?(r: any): Promise<any>, removeText?(id: string): Promise<any>}|null,
  *   encodeAtlas: (img: object) => Promise<Uint8Array>,
- *   decodeAtlas: (bytes: Uint8Array) => Promise<object>,
+ *   decodeAtlas: (bytes: Uint8Array) => Promise<{width: number, height: number, data: Uint8ClampedArray}>,
  *   makeIcon?: (docState: object) => Promise<string|null>,
  *   now?: () => number,
  *   newId?: () => string,
@@ -270,7 +277,8 @@ export function createFiles(deps = null) {
   const NOTHING = () => ({ available: false, list: [], folders: [TRASH_ROW], texts: [] });
 
   // The metadata chunks a save writes. A null value removes the chunk.
-  function metaChunks(name, createdAt, transforms, ring) {
+  function metaChunks(name, createdAt, state, ring) {
+    const { transforms, names } = state;
     return {
       Title: name,
       'Creation Time': new Date(createdAt).toISOString(),
@@ -278,6 +286,7 @@ export function createFiles(deps = null) {
       [TRANSFORMS_KEY]:
         transforms && Object.keys(transforms).length ? JSON.stringify(transforms) : null,
       [RING_CHUNK_KEY]: ring ? ringChunk(ring) : null,
+      [LAYERS_CHUNK]: layersChunk(names),
     };
   }
 
@@ -285,7 +294,7 @@ export function createFiles(deps = null) {
     doc.drain();
     const state = doc.get();
     const bytes = await d.encodeAtlas(state.atlasImage);
-    return setTextChunks(bytes, metaChunks(name, createdAt, state.transforms, ring));
+    return setTextChunks(bytes, metaChunks(name, createdAt, state, ring));
   }
 
   /** A folder record by id. Folder listing rows are whole records, so they can be
@@ -390,11 +399,14 @@ export function createFiles(deps = null) {
 
     /**
      * Load a stored document: pixels, transforms, ring settings (null when
-     * the PNG has none) and name (the Title chunk, else the record's).
-     * Resolves null when the id is gone. Throws when decoding fails.
+     * the PNG has none), layer names (null when it has none) and name (the
+     * Title chunk, else the record's). Resolves null when the id is gone.
+     * Throws when decoding fails.
      * @param {string} id
-     * @returns {Promise<{image: object, transforms: object,
-     *   ring: Partial<import('./ring-settings.js').RingChunkSettings>|null, name: string}|null>}
+     * @returns {Promise<{image: {width: number, height: number, data: Uint8ClampedArray},
+     *   transforms: object,
+     *   ring: Partial<import('./ring-settings.js').RingChunkSettings>|null,
+     *   names: string[]|null, name: string}|null>}
      */
     async load(id) {
       const rec = await d.storage.get(id);
@@ -421,6 +433,7 @@ export function createFiles(deps = null) {
         image,
         transforms,
         ring: parseRingChunk(meta[RING_CHUNK_KEY]),
+        names: parseLayersChunk(meta[LAYERS_CHUNK]),
         name: meta.Title ?? rec.name ?? UNTITLED,
       };
     },

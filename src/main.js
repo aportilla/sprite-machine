@@ -79,15 +79,16 @@ const removeCursor = applyCursor();
 
 // Persistence. The files slice takes its browser dependencies here so it stays
 // Node-testable. Desktop state (icon positions, folder window pins, edited
-// faces) lives in localStorage. ?fresh disables both. makeIcon runs at save and
-// its result is cached on the record.
+// faces and layers) lives in localStorage. ?fresh disables both. makeIcon runs
+// at save and its result is cached on the record.
 const docIcons = createIconRenderer();
 files.init({
   storage: createStorageIfAvailable(),
   encodeAtlas: imageDataToPngBytes,
   decodeAtlas: bytesToImageData,
   makeIcon: async (state) =>
-    docIcons.render(state.atlasImage, state.transforms) ?? genericDocIconDataUri(),
+    docIcons.render(state.atlasImage, state.transforms, state.layers.length) ??
+    genericDocIconDataUri(),
 });
 const dstate = createDesktopState(boot.fresh);
 
@@ -191,8 +192,8 @@ if (hot) {
 //   2. Unseeded profile: store the built-in documents and text files, skipping
 //      names already stored, then set the seeded flag. The flag is written
 //      after the last save, so an interrupted seeding runs again next boot.
-//   3. ?file names a stored document: open it on its remembered face.
-//      Otherwise show the About box, unless Show at startup is off.
+//   3. ?file names a stored document: open it on its remembered face and
+//      layer. Otherwise show the About box, unless Show at startup is off.
 async function bootDocuments() {
   if (boot.fresh || boot.sampleExplicit) {
     // Not awaited: the dev boot must not wait on IndexedDB, which can stall
@@ -227,12 +228,13 @@ async function bootDocuments() {
     if (match) {
       const res = await workspace.openStored(match.id).catch(() => null);
       if (res) {
+        const remembered = dstate.saved?.docs?.find((d) => d.fileId === match.id);
         // ?edit overrides the remembered face.
-        const face =
-          boot.edit ??
-          dstate.saved?.docs?.find((d) => d.fileId === match.id)?.face ??
-          null;
+        const face = boot.edit ?? remembered?.face ?? null;
         if (face) workspace.setFace(res.ctx.key, face);
+        if (Number.isInteger(remembered?.layer)) {
+          workspace.setLayer(res.ctx.key, remembered.layer);
+        }
         return;
       }
     }

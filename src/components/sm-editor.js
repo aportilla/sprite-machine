@@ -47,7 +47,7 @@ export class SmEditor extends LitElement {
     /** @type {import('../state/workspace.js').DocContext|null} */
     this.ctx = null;
 
-    // Session (brush state) and workspace (face, activation) changes
+    // Session (brush state) and workspace (face, layer, activation) changes
     // re-render. Live strokes notify neither.
     new StoreController(this, session.store);
     new StoreController(this, workspace.store);
@@ -87,24 +87,26 @@ export class SmEditor extends LitElement {
     return maxCornerRadius(d.tileW || 1, d.tileH || 1);
   }
 
-  // Per-face view model, memoized on face, `views` identity and tile size. A
-  // live stroke mutates views[face] in place, so the memo holds mid-stroke and
-  // the canvas keeps its buffer.
+  // The view model, memoized on face, layer, `layers` identity and tile size. A
+  // live stroke mutates layers[layer][face] in place, so the memo holds
+  // mid-stroke and the canvas keeps its buffer. Its key names the layer and
+  // face the canvas's buffer belongs to, which the edit handlers address.
   #vm = null;
   #vmKey = null; // identities the memo is valid for
   #viewModel() {
     const d = this.ctx.doc.get();
-    const face = this.ctx.face;
+    const { face, layer } = this.ctx;
     const k = this.#vmKey;
     if (
       !this.#vm ||
       k.face !== face ||
-      k.views !== d.views ||
+      k.layer !== layer ||
+      k.layers !== d.layers ||
       k.tileW !== d.tileW ||
       k.tileH !== d.tileH
     ) {
-      this.#vm = editorViewModel(d, face);
-      this.#vmKey = { face, views: d.views, tileW: d.tileW, tileH: d.tileH };
+      this.#vm = editorViewModel(d, face, layer);
+      this.#vmKey = { face, layer, layers: d.layers, tileW: d.tileW, tileH: d.tileH };
     }
     return this.#vm;
   }
@@ -138,7 +140,7 @@ export class SmEditor extends LitElement {
             .tile=${vm.tile}
             .tileW=${d.tileW}
             .tileH=${d.tileH}
-            .mirrorBehind=${vm.mirrorBehind}
+            .onionBehind=${vm.onionBehind}
             .edgeHints=${vm.edgeHints}
             .tool=${s.tool}
             .ink=${s.ink}
@@ -152,6 +154,7 @@ export class SmEditor extends LitElement {
             .active=${this.#isActive}
             @sm-live=${this.#onLive}
             @sm-commit=${this.#onCommit}
+            @sm-gesture=${(e) => session.setGesture(e.detail.active)}
             @sm-selection=${(e) => workspace.setSelection(this.ctx.key, e.detail.bounds)}
             @sm-rect-drag=${(e) => workspace.setRectDrag(this.ctx.key, e.detail.bounds)}
             @sm-pick-color=${(e) => session.pickColor(e.detail.rgb)}
@@ -167,20 +170,27 @@ export class SmEditor extends LitElement {
   // notify the change channel, so the view model memo stays valid.
   #onLive = (e) => {
     const { tile, dirty } = e.detail;
-    if (this.#vm?.wasDerived && !dirty) return;
-    this.ctx.doc.applyTileEdit(this.ctx.face, tile);
+    if (!this.#vmKey || (this.#vm.wasDerived && !dirty)) return;
+    const { layer, face } = this.#vmKey;
+    this.ctx.doc.applyTileEdit(layer, face, tile);
   };
 
   #onCommit = (e) => {
+    if (!this.#vmKey) return;
     const { before, after } = e.detail;
-    this.ctx.history.pushTile(this.ctx.face, before, after);
+    const { layer, face } = this.#vmKey;
+    this.ctx.history.pushTile(layer, face, before, after);
   };
 
-  // Fill with contiguous off and all faces on: recolor the whole sheet under
-  // one atlas undo snapshot.
+  // Fill with contiguous off and all faces on: recolor the layer's six tiles
+  // under one atlas undo snapshot.
   #onReplaceAllTiles = (e) => {
+    if (!this.#vmKey) return;
     const { target, fill } = e.detail;
-    this.ctx.history.withAtlasSnapshot(() => this.ctx.doc.replaceAllTiles(target, fill));
+    const { layer } = this.#vmKey;
+    this.ctx.history.withAtlasSnapshot(() =>
+      this.ctx.doc.replaceAllTiles(layer, target, fill)
+    );
   };
 }
 

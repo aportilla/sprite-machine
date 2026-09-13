@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildVoxels } from '../src/pipeline.js';
+import { buildVoxels, unionVoxels, buildLayeredVoxels } from '../src/pipeline.js';
 import { packRGBA } from '../src/ingest.js';
 import { voxIndex } from '../src/carve.js';
 import { faceRegions } from '../src/regions.js';
@@ -258,4 +258,83 @@ test('buildVoxels with no views yields one voxel and warns', () => {
   assert.deepEqual(r.dims, { nx: 1, ny: 1, nz: 1 });
   assert.equal(r.solidCount, 1);
   assert.ok(r.warnings.some((w) => /no usable views/i.test(w)));
+});
+
+// Layers
+
+const rows4 = (row) => img([row, row, row, row]);
+// A box over the columns `row` paints, the full height and depth of a 4³ lattice.
+const box = (row, ch) => ({ front: rows4(row), left: fill(4, 4, ch), top: rows4(row) });
+const LEFT_RED = box('RR..', 'R'); // x 0..1
+const RIGHT_BLUE = box('..BB', 'B'); // x 2..3
+const CUBE_BLUE = box('BBBB', 'B');
+
+test('unionVoxels: two disjoint layers hold the sum of their voxels', () => {
+  const a = buildVoxels(LEFT_RED);
+  const b = buildVoxels(RIGHT_BLUE);
+  const u = unionVoxels([a, b]);
+  assert.deepEqual(u.dims, { nx: 4, ny: 4, nz: 4 });
+  assert.equal(u.solidCount, a.solidCount + b.solidCount);
+  assert.deepEqual(
+    u.solid,
+    a.solid.map((v, i) => v | b.solid[i])
+  );
+  assertSurfaceColored(u);
+});
+
+test('unionVoxels: an exposed face of a voxel two layers hold takes the later layer’s color', () => {
+  const cube = buildVoxels(CUBE_BLUE);
+  const half = buildVoxels(LEFT_RED);
+  const over = unionVoxels([cube, half]);
+  assert.equal(over.solidCount, 64);
+  assert.equal(colorOf(over, 0, 3, 0, 'py'), pk('R'), 'both hold it: the later red');
+  assert.equal(colorOf(over, 0, 1, 2, 'nx'), pk('R'));
+  assert.equal(colorOf(over, 3, 3, 0, 'py'), pk('B'), 'the cube alone holds it');
+  assert.equal(colorOf(over, 1, 3, 0, 'px'), undefined, 'buried in the union');
+  assertSurfaceColored(over);
+
+  const under = unionVoxels([half, cube]);
+  assert.equal(colorOf(under, 0, 3, 0, 'py'), pk('B'));
+});
+
+test('unionVoxels: a blank layer adds nothing and its warnings are dropped; one layer is buildVoxels', () => {
+  const a = buildVoxels(LEFT_RED);
+  const faint = fill(4, 4, 'R');
+  for (let i = 3; i < faint.data.length; i += 4) faint.data[i] = 100; // below the ingest threshold
+  for (const blank of [buildVoxels({}), buildVoxels({ front: faint })]) {
+    const u = unionVoxels([blank, a]);
+    assert.deepEqual(
+      [u.dims, u.solid, u.surfaceMask, u.faceColor, u.palette],
+      [a.dims, a.solid, a.surfaceMask, a.faceColor, a.palette]
+    );
+    assert.deepEqual(u.warnings, []);
+    assert.deepEqual(u.layers, [null, a]);
+  }
+  assert.equal(unionVoxels([a]), a);
+  assert.deepEqual(buildLayeredVoxels([LEFT_RED]), buildVoxels(LEFT_RED));
+  assert.deepEqual(unionVoxels([]).providedViews, [], 'no layers: one empty layer');
+});
+
+test('unionVoxels: a layer with views on one plane is a slab on the lattice face they look at', () => {
+  const body = buildVoxels(LEFT_RED);
+  const at = (u, x, y, z) => u.solid[voxIndex(x, y, z, u.dims)];
+  const art = ['..GG', '..GG', '....', '....'];
+
+  const front = unionVoxels([body, buildVoxels({ front: img(art) })]);
+  assert.deepEqual(front.dims, { nx: 4, ny: 4, nz: 4 });
+  assert.equal(front.solidCount, 32 + 4);
+  assert.deepEqual([at(front, 3, 3, 3), at(front, 3, 3, 0)], [1, 0], 'front-only: z = 3');
+  assert.ok(front.warnings.length > 0);
+  assert.ok(front.warnings.every((w) => w.startsWith('Layer 2: ')));
+  assertSurfaceColored(front);
+
+  const back = unionVoxels([
+    body,
+    buildVoxels({ back: img(['GG..', 'GG..', '....', '....']) }),
+  ]);
+  assert.deepEqual([at(back, 3, 3, 0), at(back, 3, 3, 3)], [1, 0], 'back-only: z = 0');
+
+  const top = unionVoxels([body, buildVoxels({ top: rows4('..GG') })]);
+  assert.deepEqual([at(top, 3, 3, 1), at(top, 3, 0, 1)], [1, 0], 'top-only: y = 3');
+  assertSurfaceColored(top);
 });

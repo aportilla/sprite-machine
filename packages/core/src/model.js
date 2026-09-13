@@ -1,12 +1,12 @@
 // Headless entry: a sheet's pixels to a model, and a model to a glb.
 //
-// buildModel runs slice, ingest, carve, colorize and the wedge mesher, and
-// returns the mesh at one unit per voxel, so a position is a lattice
-// coordinate. modelToGlb writes the same glb as the app's export, with the
-// skin encoded from bytes. Both are synchronous.
+// buildModel runs slice, ingest, carve, colorize, the layer union and the
+// wedge mesher, and returns the mesh at one unit per voxel, so a position is a
+// lattice coordinate. modelToGlb writes the same glb as the app's export, with
+// the skin encoded from bytes. Both are synchronous.
 
-import { sliceAtlas, validateSheet } from './atlas.js';
-import { buildVoxels } from './pipeline.js';
+import { sliceLayers, validateSheet } from './atlas.js';
+import { buildLayeredVoxels } from './pipeline.js';
 import { wedgeMesh } from './wedge-mesh.js';
 import { encodePng } from './png-encode.js';
 import { glbFromModel } from './gltf.js';
@@ -25,27 +25,31 @@ import { VIEW_NAMES } from './views.js';
  */
 
 /**
- * Build the model of a 3×2 sprite sheet.
+ * Build the model of a sprite sheet: one 3×2 block of tiles, or `layers` blocks
+ * stacked top to bottom, whose hulls are unioned (unionVoxels).
  * @param {{width:number, height:number, data:ArrayLike<number>}} sheet
  *   the atlas's RGBA pixels, ImageData-shaped
- * @param {{transforms?: Record<string, {rot?:number, flipX?:boolean, flipY?:boolean}>}} [opts]
- *   per-view reorientation, as stored in the `sprite-machine:transforms` chunk
+ * @param {{transforms?: Record<string, {rot?:number, flipX?:boolean, flipY?:boolean}>,
+ *          layers?: number}} [opts]
+ *   `transforms`: per-view reorientation, as stored in the
+ *   `sprite-machine:transforms` chunk, applied in every layer; `layers`: the
+ *   sheet's block count
  * @returns {Model}  the mesh at one unit per voxel
- * @throws on an invalid sheet, or one with no painted view
+ * @throws on an invalid sheet, or one with no painted view in any layer
  */
-export function buildModel(sheet, { transforms = {} } = {}) {
+export function buildModel(sheet, { transforms = {}, layers = 1 } = {}) {
   const bad = validateSheet(sheet);
   if (bad) throw new Error(`buildModel: ${bad}`);
-  const sliced = sliceAtlas(sheet);
-  /** @type {Record<string, {width:number, height:number, data:ArrayLike<number>}|null>} */
-  const rawViews = {};
-  let provided = 0;
-  for (const n of VIEW_NAMES) {
-    rawViews[n] = sliced.views[n] || null;
-    if (rawViews[n]) provided++;
+  const sliced = sliceLayers(sheet, { layers });
+  const result = buildLayeredVoxels(
+    sliced.layers.map((views) =>
+      Object.fromEntries(VIEW_NAMES.map((n) => [n, views[n] || null]))
+    ),
+    { transforms }
+  );
+  if (result.providedViews.length === 0) {
+    throw new Error('buildModel: the sheet has no painted view.');
   }
-  if (provided === 0) throw new Error('buildModel: the sheet has no painted view.');
-  const result = buildVoxels(rawViews, { transforms });
   const { nx, ny, nz } = result.dims;
   const mesh = wedgeMesh(result, { worldSize: Math.max(nx, ny, nz) });
   return {

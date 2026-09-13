@@ -39,6 +39,12 @@ I — Eyedropper
 
 A tool key works while a document window is front and nothing is being typed into.
 
+THE LAYERS
+
+1 to 8 — Edit that layer of the document
+
+A layer key works where a tool key does, and waits while a stroke or a drag is in progress.
+
 THE TEXT VIEWER — a read-me window
 
 ⌃W — Close

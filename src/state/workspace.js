@@ -7,6 +7,9 @@
 //   the kit's bringToFront.
 // - Dirty tracking: a live stroke, a structural doc change or a ring setting
 //   change marks a context dirty. A wholesale load marks it clean.
+// - ctx.face and ctx.layer are the face and layer the window edits. They are
+//   UI state, so a switch never dirties. A structural change clamps the layer
+//   to the layer count.
 // - ctx.selection is its own store for the marquee (`bounds`) and the rect
 //   tool's drag box (`rect`). Both change at pointer-move rate, so they stay
 //   out of the workspace store.
@@ -16,6 +19,7 @@ import { createDoc } from './doc.js';
 import { createHistory } from './history.js';
 import { createRingSettings } from './ring-settings.js';
 import { files as filesSingleton, UNTITLED, copyName } from './files.js';
+import { sheetLayers } from '../lib/sheet-shape.js';
 
 /**
  * @typedef {{
@@ -23,6 +27,7 @@ import { files as filesSingleton, UNTITLED, copyName } from './files.js';
  *   doc: ReturnType<typeof createDoc>,
  *   history: ReturnType<typeof createHistory>,
  *   face: string,
+ *   layer: number,
  *   fileId: string|null,
  *   name: string,
  *   dirty: boolean,
@@ -128,11 +133,11 @@ export function createWorkspace(deps = {}) {
      * loads pixels into `ctx.doc` next, and that load's sheet change leaves the
      * context clean. `ring` seeds the atlas settings before the tracker is
      * wired, so seeding does not mark the context dirty.
-     * @param {{name?: string, fileId?: string|null, face?: string,
+     * @param {{name?: string, fileId?: string|null, face?: string, layer?: number,
      *          ring?: Partial<import('./ring-settings.js').RingSettings>|null}} [init]
      * @returns {DocContext}
      */
-    open({ name, fileId = null, face = 'left', ring = null } = {}) {
+    open({ name, fileId = null, face = 'left', layer = 0, ring = null } = {}) {
       const doc = makeDoc();
       /** @type {DocContext} */
       const ctx = {
@@ -140,6 +145,7 @@ export function createWorkspace(deps = {}) {
         doc,
         history: makeHistory(doc),
         face,
+        layer,
         fileId,
         name: name ?? this.nextUntitledName(),
         dirty: false,
@@ -151,13 +157,16 @@ export function createWorkspace(deps = {}) {
       };
       let lastSheet = doc.get().sheet;
       const unsubs = [
+        // A new sheet leaves the context clean, any other change dirties it, and
+        // either can shrink the layer count under ctx.layer.
         doc.subscribe((s) => {
-          if (s.sheet !== lastSheet) {
-            lastSheet = s.sheet;
-            setDirty(ctx, false);
-          } else {
-            setDirty(ctx, true);
-          }
+          const dirty = s.sheet === lastSheet;
+          lastSheet = s.sheet;
+          const layer = Math.max(0, Math.min(ctx.layer, s.layers.length - 1));
+          if (ctx.dirty === dirty && ctx.layer === layer) return;
+          ctx.dirty = dirty;
+          ctx.layer = layer;
+          touch();
         }),
         doc.onLive(() => setDirty(ctx, true)),
         ctx.ring.subscribe(() => setDirty(ctx, true)),
@@ -179,7 +188,10 @@ export function createWorkspace(deps = {}) {
       const rec = await files.load(id);
       if (!rec) return null;
       const ctx = this.open({ name: rec.name, fileId: id, ring: rec.ring });
-      ctx.doc.loadAtlas(rec.image, rec.transforms);
+      ctx.doc.loadAtlas(rec.image, rec.transforms, {
+        layers: sheetLayers(rec.image.width, rec.image.height),
+        names: rec.names,
+      });
       return { ctx, existed: false };
     },
 
@@ -209,6 +221,18 @@ export function createWorkspace(deps = {}) {
       const ctx = byKey(key);
       if (!ctx || ctx.face === face) return;
       ctx.face = face;
+      touch();
+    },
+
+    /** Which layer this window edits, clamped to the document's layers.
+     *  @param {string} key  @param {number} layer */
+    setLayer(key, layer) {
+      const ctx = byKey(key);
+      if (!ctx) return;
+      const top = Math.max(0, ctx.doc.get().layers.length - 1);
+      const next = Math.max(0, Math.min(top, Math.floor(Number(layer)) || 0));
+      if (ctx.layer === next) return;
+      ctx.layer = next;
       touch();
     },
 

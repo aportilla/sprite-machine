@@ -35,7 +35,7 @@ import {
   slugOf,
 } from '../../state/files.js';
 import { workspace, followActive } from '../../state/workspace.js';
-import { TILE_MIN, TILE_MAX, clampTile, setTextChunks } from 'sprite-machine';
+import { TILE_MIN, TILE_MAX, LAYER_MAX, clampTile, setTextChunks } from 'sprite-machine';
 import { SAMPLES } from '../../lib/sprite-data.js';
 import { ringFrame, ringSheet, ringAnchor, ringYaws } from '../../lib/ring.js';
 import { zipStore } from '../../lib/zip.js';
@@ -74,6 +74,7 @@ export const spriteEditor = {
     };
     const menuFile = menu('file');
     const menuEdit = menu('edit');
+    const menuLayer = menu('layer');
     const menuTools = menu('tools');
     const menuView = menu('view');
 
@@ -155,22 +156,24 @@ export const spriteEditor = {
       }
     });
 
-    // The name prompt for a first save or a rename. It resolves only in vf-close,
-    // to the trimmed name or to null on Cancel or Escape. The plain frame draws
-    // heading as a title, so the per-use text goes in the caption and the label.
+    // The name prompt for a first save, a rename or a layer rename. It resolves
+    // only in vf-close, to the trimmed name or to null on Cancel or Escape. The
+    // plain frame draws heading as a title, so the per-use text goes in the
+    // caption and the label.
     const nameField = $('#name-field');
     const nameCaption = $('#name-caption');
     const btnNameOk = $('#btn-name-ok');
     const NAME_PROMPTS = {
       save: { label: 'Save', caption: 'Save document as:', ok: 'Save' },
       rename: { label: 'Rename', caption: 'Rename document to:', ok: 'Rename' },
+      layer: { label: 'Rename Layer', caption: 'Rename layer to:', ok: 'Rename' },
     };
     const nameValid = () => String(nameField.value ?? '').trim() !== '';
     const syncNameOk = () => {
       btnNameOk.disabled = !nameValid();
     };
     let namePending = null; // { resolve, value } while open
-    /** @param {'save'|'rename'} use  @param {string} initial */
+    /** @param {'save'|'rename'|'layer'} use  @param {string} initial */
     function promptName(use, initial) {
       const p = NAME_PROMPTS[use];
       dlgName.label = p.label;
@@ -590,6 +593,44 @@ export const spriteEditor = {
       }
     });
 
+    on(menuLayer, 'vf-menu-select', (e) => {
+      if (modalOpen()) return;
+      const ctx = workspace.active();
+      if (!ctx) return;
+      const v = String(menuDetail(e).value ?? '');
+      switch (v) {
+        case 'layer-new':
+          // The new layer becomes the edited one.
+          if (ctx.history.withAtlasSnapshot(() => ctx.doc.addLayer())) {
+            workspace.setLayer(ctx.key, ctx.doc.get().layers.length - 1);
+          }
+          break;
+        case 'layer-delete': {
+          // The layer above the deleted one becomes the edited one, or Layer 1.
+          const i = ctx.layer;
+          if (ctx.history.withAtlasSnapshot(() => ctx.doc.removeLayer(i))) {
+            workspace.setLayer(ctx.key, i - 1);
+          }
+          break;
+        }
+        case 'layer-rename': {
+          const i = ctx.layer;
+          promptName('layer', ctx.doc.get().names[i] ?? '').then((name) => {
+            if (name != null) {
+              ctx.history.withNamesSnapshot(() => ctx.doc.renameLayer(i, name));
+            }
+          });
+          break;
+        }
+        default:
+          // An item from the layer list (syncLayers).
+          if (v.startsWith('layer:')) {
+            workspace.setLayer(ctx.key, Number(v.slice('layer:'.length)));
+          }
+          break;
+      }
+    });
+
     on(menuTools, 'vf-menu-select', (e) => {
       if (modalOpen()) return;
       const v = menuDetail(e).value;
@@ -708,6 +749,45 @@ export const spriteEditor = {
       windowItems.clear();
     });
     syncWindows();
+
+    // The Layer menu's list: one item per layer of the active document, after
+    // the separator, in block order, named for the layer with the edited one
+    // checked and its digit key shown. The count and names change on the doc's
+    // structural channel, the edited layer on the workspace store.
+    const itemLayerNew = item(menuLayer, 'layer-new');
+    const itemLayerDelete = item(menuLayer, 'layer-delete');
+    const layerAnchor = /** @type {Element} */ (menuLayer.lastElementChild);
+    /** @type {HTMLElementTagNameMap['vf-menu-item'][]} by layer */
+    const layerItems = [];
+    const syncLayers = () => {
+      const ctx = workspace.active();
+      const names = ctx ? ctx.doc.get().names : [];
+      while (layerItems.length > names.length) layerItems.pop().remove();
+      names.forEach((name, i) => {
+        let it = layerItems[i];
+        if (!it) {
+          it = document.createElement('vf-menu-item');
+          it.setAttribute('value', `layer:${i}`);
+          it.setAttribute('shortcut', String(i + 1));
+          it.checkable = true;
+          (layerItems[i - 1] ?? layerAnchor).after(it);
+          layerItems.push(it);
+        }
+        if (it.textContent !== name) it.textContent = name;
+        it.checked = i === ctx.layer;
+      });
+      itemLayerNew.disabled = !ctx || names.length >= LAYER_MAX;
+      itemLayerDelete.disabled = !ctx || names.length <= 1;
+    };
+    teardown.push(
+      workspace.subscribe(syncLayers),
+      followActive(workspace, (ctx) => (ctx ? ctx.doc.subscribe(syncLayers) : undefined)),
+      () => {
+        for (const it of layerItems) it.remove();
+        layerItems.length = 0;
+      }
+    );
+    syncLayers();
 
     // The Tools menu checks the session's current tool.
     const toolItems = ['select', 'pencil', 'rect', 'fill', 'eraser', 'eyedropper'].map(

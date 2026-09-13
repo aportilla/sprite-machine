@@ -38,17 +38,17 @@ function makeWorld() {
   return { ws, files, storage, frame };
 }
 
-/** Open a context loaded with a blank 3×2 sheet of 2×2 tiles. */
-function openLoaded(ws, init) {
+/** Open a context loaded with a blank 3×2 sheet of 2×2 tiles per layer. */
+function openLoaded(ws, init, { layers = 1, names = null } = {}) {
   const ctx = ws.open(init);
-  ctx.doc.loadAtlas(sheet(6, 4));
+  ctx.doc.loadAtlas(sheet(6, 4 * layers), {}, { layers, names });
   return ctx;
 }
 
 const stroke = (ctx) => {
   const tile = { width: 2, height: 2, data: new Uint8ClampedArray(16) };
   tile.data[3] = 255;
-  ctx.doc.applyTileEdit('front', tile);
+  ctx.doc.applyTileEdit(0, 'front', tile);
 };
 
 // Contexts and naming
@@ -82,6 +82,25 @@ test('setFace is per-context', () => {
   ws.setFace(a.key, 'top');
   assert.equal(a.face, 'top');
   assert.equal(b.face, 'left');
+});
+
+test('setLayer clamps to the document’s layers and never dirties; a structural change clamps the layer too', () => {
+  const { ws } = makeWorld();
+  const ctx = openLoaded(ws, {}, { layers: 3 });
+  let notified = 0;
+  ws.subscribe(() => notified++);
+  ws.setLayer(ctx.key, 9);
+  assert.deepEqual([ctx.layer, notified, ctx.dirty], [2, 1, false]);
+  ws.setLayer(ctx.key, -1);
+  assert.equal(ctx.layer, 0);
+
+  ws.setLayer(ctx.key, 2);
+  ctx.doc.removeLayer(2);
+  assert.equal(ctx.layer, 1, 'the deleted top layer takes the edited one with it');
+  const moves = notified;
+  ctx.doc.removeLayer(0);
+  assert.equal(ctx.layer, 0);
+  assert.ok(notified > moves, 'a moved layer notifies the workspace');
 });
 
 test('setSelection is per-context, on the context’s OWN store; a rect drag rides beside it', () => {
@@ -209,6 +228,17 @@ test('openStored loads a fresh context; a second open returns the existing one',
   assert.equal(ws.get().contexts.length, 1);
 
   assert.equal(await ws.openStored('nope'), null);
+});
+
+test('openStored reopens a layered document with its count and names', async () => {
+  const { ws } = makeWorld();
+  const orig = openLoaded(ws, {}, { layers: 2, names: ['Body', 'Wheels'] });
+  await ws.save(orig.key, 'Car');
+  ws.close(orig.key);
+  const { ctx } = await ws.openStored('id-1');
+  assert.equal(ctx.doc.get().layers.length, 2);
+  assert.deepEqual(ctx.doc.get().names, ['Body', 'Wheels']);
+  assert.equal(ctx.dirty, false);
 });
 
 test('the ring settings are the context’s: a change dirties it, a save writes them, a stored open restores them clean; an unseeded context has the defaults', async () => {

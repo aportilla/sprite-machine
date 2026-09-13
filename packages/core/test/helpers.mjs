@@ -36,15 +36,22 @@ export const fill = (w, h, ch) => img(Array.from({ length: h }, () => ch.repeat(
 
 /** A 3×2 sheet of t×t tiles with the named views. Missing views are transparent. */
 export function sheet(t, tiles) {
+  return layeredSheet(t, [tiles]);
+}
+
+/** A 3t × 2tN sheet: one 3×2 block of t×t tiles per entry, the first on top. */
+export function layeredSheet(t, blocks) {
   const out = {
     width: 3 * t,
-    height: 2 * t,
-    data: new Uint8ClampedArray(3 * t * 2 * t * 4),
+    height: 2 * t * blocks.length,
+    data: new Uint8ClampedArray(3 * t * 2 * t * blocks.length * 4),
   };
-  DEFAULT_ATLAS_LAYOUT.forEach((row, r) =>
-    row.forEach((name, c) => {
-      if (tiles[name]) blitTile(out, tiles[name], c * t, r * t);
-    })
+  blocks.forEach((tiles, k) =>
+    DEFAULT_ATLAS_LAYOUT.forEach((row, r) =>
+      row.forEach((name, c) => {
+        if (tiles[name]) blitTile(out, tiles[name], c * t, (2 * k + r) * t);
+      })
+    )
   );
   return out;
 }

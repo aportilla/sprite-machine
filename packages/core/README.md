@@ -22,10 +22,11 @@ three's geometry utilities. Requires Node 20.19+ or 22.12+.
 import { buildModel, modelToGlb } from 'sprite-machine';
 
 // sheet: {width, height, data}, an ImageData or the same shape
-const model = buildModel(sheet, { transforms });
+const model = buildModel(sheet, { transforms, layers });
 //   → { mesh, dims, triangles, warnings, unitsPerVoxel: 1 }
 //     mesh is a THREE.Mesh at one unit per voxel, its skin the material's map.
-//     transforms is the per-view reorientation (optional).
+//     transforms is the per-view reorientation (optional). layers is the
+//     sheet's block count (optional, 1 by default; see Layers).
 
 const glb = modelToGlb(model, { name: 'car', voxelsPerMeter: 10 });
 //   → Uint8Array: one node, one mesh, one primitive, the skin embedded as
@@ -33,24 +34,26 @@ const glb = modelToGlb(model, { name: 'car', voxelsPerMeter: 10 });
 ```
 
 Both functions are synchronous and pure. `buildModel` throws on an invalid
-sheet or a sheet with no painted view. A three.js page can use `model.mesh`
-directly, and a Node process writes the glb. To build off the main thread,
-call them from a worker or a child process.
+sheet or a sheet with no painted view in any layer. A three.js page can use
+`model.mesh` directly, and a Node process writes the glb. To build off the main
+thread, call them from a worker or a child process.
 
 ### In Node: a document PNG in
 
 ```js
 import { readSheet, sheetToGlb } from 'sprite-machine/node';
 
-// pngjs decodes the pixels. The Title and sprite-machine:transforms chunks
-// are read as the app reads them.
-const { image, name, transforms } = readSheet(bytes);
+// pngjs decodes the pixels. The Title, sprite-machine:transforms and
+// sprite-machine:layers chunks are read as the app reads them.
+const { image, name, transforms, layers } = readSheet(bytes);
 const glb = sheetToGlb(bytes, { voxelsPerMeter: 10 }); // readSheet, buildModel, modelToGlb
 ```
 
-`readSheet` also returns `chunks`, every text chunk verbatim. `sheetToGlb`
-takes an optional `name`, which overrides the Title chunk. With neither, the
-name is `'sprite'`.
+`readSheet` also returns `chunks`, every text chunk verbatim. `layers` is the
+layer names, or null. `sheetToGlb` builds as many layers as the chunk names
+when that count divides the sheet's height into whole blocks, and one layer
+otherwise. It takes an optional `name`, which overrides the Title chunk. With
+neither, the name is `'sprite'`.
 
 `sprite-machine/node` is the only entry with a PNG decoder. The root entry
 takes pixels and depends only on three, so a browser bundle never includes
@@ -92,6 +95,27 @@ The model's origin is the centre of the lattice floor, Y up, with CCW
 winding. `voxelsPerMeter` sets the glb's scale: at 10, a 40-voxel car is
 4 m long.
 
+### Layers
+
+A sheet can stack several blocks of the six tiles, one under another at one
+tile size: `3t × 2tN` for `N` layers, the first on top. Each layer carves its
+own hull and the model is their union, so it can hold concave shapes a single
+hull fills in, such as a body on separate wheels. Where two layers hold the
+same voxel, the later layer colours its faces. A layer with views on one plane
+only is one voxel deep, on the face of the lattice those views look at: a
+front-only layer lies on the front plane.
+
+```js
+const model = buildModel(sheet, { layers: 2 });
+```
+
+Without `layers`, a sheet is one block. A document PNG names its blocks in a
+`sprite-machine:layers` text chunk, `{"layers":[{"name":"Body"},{"name":"Wheels"}]}`,
+whose length is the layer count. The parts are exported too: `sliceLayers`,
+`buildLayeredVoxels`, `unionVoxels`, `LAYERS_CHUNK`, `layersChunk`,
+`parseLayersChunk`, `layerCount` and `LAYER_MAX` (8, the app's cap, which the
+chunk parser also holds to).
+
 ## The technique: multi-view visual-hull voxelization
 
 1. **Ingest**: each tile at native size into occupancy and packed-RGB
@@ -112,6 +136,10 @@ winding. `voxelsPerMeter` sets the glb's scale: at 10, a 40-voxel car is
    T-junction repair keeps the mesh watertight. The colour is a skin: a
    chart per multi-colour region and a swatch per colour, packed
    deterministically onto a power-of-two texture and sampled nearest.
+
+With layers, steps 1 to 5 run once per layer. The union ORs the solids in the
+largest lattice, extracts its surface again, and gives each exposed face the
+colour the last layer holding its voxel gave it. Step 6 meshes the union.
 
 The wedge gate is local. A riser and its tread painted the same colour get a
 ramp at the corner. Painted differently, they keep the step.

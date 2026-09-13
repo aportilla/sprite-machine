@@ -1,6 +1,7 @@
 // Atlas slicing and resizing on ImageData-like {width, height, data} sheets.
 // Unless given, the tile size derives from the sheet and the layout: a 3x2 layout
-// on a 120x80 sheet gives 40x40 tiles.
+// on a 120x80 sheet gives 40x40 tiles. A layered sheet stacks blocks of the
+// layout one under another, every block at the same tile size.
 
 import { VIEW_NAMES, VIEW_IMAGE_AXES } from './views.js';
 
@@ -16,6 +17,13 @@ export const TILE_MIN = 1;
 export const TILE_MAX = 64;
 export const clampTile = (n) =>
   Math.max(TILE_MIN, Math.min(TILE_MAX, Math.round(Number(n) || 0)));
+
+// The most layers a document stacks. Every layer is carved on its own, so a
+// full rebuild is up to this many carves.
+export const LAYER_MAX = 8;
+
+// A `layers` option as a whole count of at least 1.
+const layerOption = (n) => Math.max(1, Math.floor(Number(n) || 1));
 
 export function layoutSize(layout) {
   const rows = layout.length;
@@ -102,41 +110,30 @@ export function validateSheet(img) {
   return null;
 }
 
-/**
- * @param {{width:number,height:number,data:ArrayLike<number>}} img
- * @param {{layout?:string[][], tileW?:number, tileH?:number}} [opts]
- * @returns {{views:Record<string,{width,height,data}|null>,
- *            tileW:number, tileH:number, cols:number, rows:number,
- *            warnings:string[]}}
- */
-export function sliceAtlas(img, opts = {}) {
-  const layout = opts.layout || DEFAULT_ATLAS_LAYOUT;
-  const {
-    cols,
-    rows,
-    tileW: autoW,
-    tileH: autoH,
-  } = deriveTileSize(img.width, img.height, layout);
+/** @typedef {Record<string, {width:number,height:number,data:Uint8ClampedArray}|null>} Views */
+
+// Slice `count` stacked blocks of the layout at tileW × tileH. Block k's cell
+// (r, c) starts at column c·tileW and row (rows·k + r)·tileH. A cell past the
+// sheet's edge is left out, and a blank tile slices to null.
+function sliceBlocks(img, layout, count, tileW, tileH) {
+  const { cols, rows } = layoutSize(layout);
+  const gridRows = rows * count;
   const warnings = [];
-
-  const tileW = Math.round(opts.tileW || autoW);
-  const tileH = Math.round(opts.tileH || autoH);
-
-  /** @type {Record<string, {width:number,height:number,data:ArrayLike<number>}|null>} */
-  const views = {};
+  /** @type {Views[]} */
+  const blocks = Array.from({ length: count }, () => ({}));
 
   if (!(img.width > 0 && img.height > 0) || tileW < 1 || tileH < 1) {
     warnings.push(
       `Atlas is unusable: a ${img.width}×${img.height}px sheet split into ` +
-        `${cols}×${rows} gives ${tileW}×${tileH}px tiles. Check the image and tile size.`
+        `${cols}×${gridRows} gives ${tileW}×${tileH}px tiles. Check the image and tile size.`
     );
-    return { views, tileW, tileH, cols, rows, warnings };
+    return { blocks, cols, rows, warnings };
   }
 
-  if (cols * tileW !== img.width || rows * tileH !== img.height) {
+  if (cols * tileW !== img.width || gridRows * tileH !== img.height) {
     warnings.push(
-      `Layout ${cols}x${rows} at ${tileW}x${tileH} tiles = ` +
-        `${cols * tileW}x${rows * tileH}px, but image is ${img.width}x${img.height}px. ` +
+      `Layout ${cols}x${gridRows} at ${tileW}x${tileH} tiles = ` +
+        `${cols * tileW}x${gridRows * tileH}px, but image is ${img.width}x${img.height}px. ` +
         `Tiles are read from the top-left; check tile size / layout.`
     );
   }
@@ -144,19 +141,60 @@ export function sliceAtlas(img, opts = {}) {
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < (layout[r] || []).length; c++) {
       const name = layout[r][c];
-      if (!name) continue;
-      if (!VIEW_NAMES.includes(name)) {
+      if (name && !VIEW_NAMES.includes(name)) {
         warnings.push(`Unknown view "${name}" in layout; ignored.`);
-        continue;
       }
-      const sx = c * tileW;
-      const sy = r * tileH;
-      if (sx + tileW > img.width || sy + tileH > img.height) continue;
-      const tile = subTile(img, sx, sy, tileW, tileH);
-      views[name] = isBlank(tile) ? null : tile;
     }
   }
-  return { views, tileW, tileH, cols, rows, warnings };
+
+  blocks.forEach((views, k) => {
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < (layout[r] || []).length; c++) {
+        const name = layout[r][c];
+        if (!name || !VIEW_NAMES.includes(name)) continue;
+        const sx = c * tileW;
+        const sy = (rows * k + r) * tileH;
+        if (sx + tileW > img.width || sy + tileH > img.height) continue;
+        const tile = subTile(img, sx, sy, tileW, tileH);
+        views[name] = isBlank(tile) ? null : tile;
+      }
+    }
+  });
+  return { blocks, cols, rows, warnings };
+}
+
+/**
+ * @param {{width:number,height:number,data:ArrayLike<number>}} img
+ * @param {{layout?:string[][], tileW?:number, tileH?:number}} [opts]
+ * @returns {{views:Views, tileW:number, tileH:number, cols:number, rows:number,
+ *            warnings:string[]}}
+ */
+export function sliceAtlas(img, opts = {}) {
+  const layout = opts.layout || DEFAULT_ATLAS_LAYOUT;
+  const auto = deriveTileSize(img.width, img.height, layout);
+  const tileW = Math.round(opts.tileW || auto.tileW);
+  const tileH = Math.round(opts.tileH || auto.tileH);
+  const { blocks, cols, rows, warnings } = sliceBlocks(img, layout, 1, tileW, tileH);
+  return { views: blocks[0], tileW, tileH, cols, rows, warnings };
+}
+
+/**
+ * Slice a layered sheet into one views record per block. The tile is the width
+ * over the layout's columns and the height over its rows times `layers`. With
+ * one layer this is sliceAtlas.
+ * @param {{width:number,height:number,data:ArrayLike<number>}} img
+ * @param {{layers?:number, layout?:string[][]}} [opts]
+ * @returns {{layers:Views[], tileW:number, tileH:number, cols:number, rows:number,
+ *            warnings:string[]}}  rows is the layout's, not the sheet's
+ */
+export function sliceLayers(img, opts = {}) {
+  const layout = opts.layout || DEFAULT_ATLAS_LAYOUT;
+  const count = layerOption(opts.layers);
+  const { cols, rows } = layoutSize(layout);
+  const tileW = Math.round(img.width / cols);
+  const tileH = Math.round(img.height / (rows * count));
+  const { blocks, warnings } = sliceBlocks(img, layout, count, tileW, tileH);
+  return { layers: blocks, tileW, tileH, cols, rows, warnings };
 }
 
 /**
@@ -262,45 +300,46 @@ export function splitLow(oldSize, newSize) {
  * A square resize keeps registration with either anchor. When newTileW !== newTileH
  * the depth axis nz gets two sizes (the side tile's width and the top tile's
  * height), so the carve drops voxels and warns.
+ *
+ * opts.layers reads the sheet as that many stacked blocks and resizes each one
+ * the same way. Without it the sheet is one block.
  * @param {{width:number,height:number,data:ArrayLike<number>}} img
  * @param {number} newTileW @param {number} newTileH
- * @param {{layout?:string[][], anchor?:'origin'|'center'}} [opts]
+ * @param {{layout?:string[][], anchor?:'origin'|'center', layers?:number}} [opts]
  * @returns {{width:number,height:number,data:Uint8ClampedArray}}
  */
 export function resizeAtlas(img, newTileW, newTileH, opts = {}) {
   const layout = opts.layout || DEFAULT_ATLAS_LAYOUT;
   const center = opts.anchor === 'center';
-  const {
-    cols,
-    rows,
-    tileW: ow,
-    tileH: oh,
-  } = deriveTileSize(img.width, img.height, layout);
-  const oldW = Math.round(ow);
-  const oldH = Math.round(oh);
+  const count = layerOption(opts.layers);
+  const { cols, rows } = layoutSize(layout);
+  const oldW = Math.round(img.width / cols);
+  const oldH = Math.round(img.height / (rows * count));
   const dW = newTileW - oldW;
   const dH = newTileH - oldH;
   // Lattice lines to add or crop at each world axis's low end.
   const padLowCol = center ? splitLow(oldW, newTileW) : 0;
   const padLowRow = center ? splitLow(oldH, newTileH) : 0;
   const W = cols * newTileW;
-  const H = rows * newTileH;
+  const H = rows * count * newTileH;
   const sheet = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4) };
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < (layout[r] || []).length; c++) {
-      const name = layout[r][c];
-      if (!name || !VIEW_NAMES.includes(name)) continue;
-      const sx = c * oldW;
-      const sy = r * oldH;
-      if (sx + oldW > img.width || sy + oldH > img.height) continue; // ragged sheet
-      const src = subTile(img, sx, sy, oldW, oldH);
-      const { colFlip, rowFlip } = VIEW_IMAGE_AXES[name];
-      // A flipped image axis has its low pixel at the world-high end, so it takes
-      // the far pad.
-      const offX = colFlip ? dW - padLowCol : padLowCol;
-      const offY = rowFlip ? dH - padLowRow : padLowRow;
-      const resized = resizeTileTo(src, newTileW, newTileH, offX, offY);
-      blitTile(sheet, resized, c * newTileW, r * newTileH);
+  for (let k = 0; k < count; k++) {
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < (layout[r] || []).length; c++) {
+        const name = layout[r][c];
+        if (!name || !VIEW_NAMES.includes(name)) continue;
+        const sx = c * oldW;
+        const sy = (rows * k + r) * oldH;
+        if (sx + oldW > img.width || sy + oldH > img.height) continue; // ragged sheet
+        const src = subTile(img, sx, sy, oldW, oldH);
+        const { colFlip, rowFlip } = VIEW_IMAGE_AXES[name];
+        // A flipped image axis has its low pixel at the world-high end, so it
+        // takes the far pad.
+        const offX = colFlip ? dW - padLowCol : padLowCol;
+        const offY = rowFlip ? dH - padLowRow : padLowRow;
+        const resized = resizeTileTo(src, newTileW, newTileH, offX, offY);
+        blitTile(sheet, resized, c * newTileW, (rows * k + r) * newTileH);
+      }
     }
   }
   return sheet;

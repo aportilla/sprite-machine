@@ -6,9 +6,9 @@
 //   window).
 // - windows: folder window boxes as nine-slice pins (layout.js pinOf), keyed
 //   like icons, so they stay on screen after a browser resize.
-// - docs, activeFileId: each open saved document's edited face, and the active
-//   one. Documents are not reopened at boot. An entry restores the face when
-//   its document opens.
+// - docs, activeFileId: each open saved document's edited face and layer, and
+//   the active one. Documents are not reopened at boot. An entry restores the
+//   face and layer when its document opens.
 // - pattern: the desktop pattern.
 // - greet: whether a load with no document to open shows the About box.
 //   A blob without it reads true.
@@ -31,7 +31,7 @@ const VERSION = 3;
 const WRITE_DEBOUNCE_MS = 400;
 
 function docEntry(d) {
-  return { fileId: d.fileId, face: d.face ?? null };
+  return { fileId: d.fileId, face: d.face ?? null, layer: d.layer ?? null };
 }
 
 /**

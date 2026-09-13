@@ -1,7 +1,9 @@
 // <sm-atlas-view>: the Full Sprite View window's body. A 3×2 vf-grid with one
 // canvas per face of the active document, each at tile resolution and scaled
-// nearest-neighbor. The cell height follows the tile's aspect ratio. A tile
-// picks its face on pointerdown, like the Tools palette.
+// nearest-neighbor. A cell shows the edited layer's tile over the other
+// layers' art on that face, composited in block order and faded. The cell
+// height follows the tile's aspect ratio. A tile picks its face on
+// pointerdown, like the Tools palette.
 //
 // With no active document the cells keep their last pixels. The windoid is
 // hidden then.
@@ -14,6 +16,7 @@ import { workspace, followActive } from '../state/workspace.js';
 import { StoreController } from '../state/store-controller.js';
 import { DEFAULT_ATLAS_LAYOUT } from 'sprite-machine';
 import { ATLAS_GRID } from '../apps/sprite-editor/layout.js';
+import { ONION_ALPHA } from '../lib/layers.js';
 import { baseStyles } from './base-styles.js';
 import { parsePatternAttr } from './ui-bits.js';
 
@@ -82,6 +85,9 @@ export class SmAtlasView extends LitElement {
   #tileW = 0;
   #tileH = 0;
   #cellH = ATLAS_GRID.cell; // square until a tile sets the ratio
+  /** The sheet, copied in once per paint for drawImage. */
+  #scratch = document.createElement('canvas');
+  #paintedLayer = -1; // the layer the cells last showed
   /** Parsed `pattern`. Null paints nothing. */
   #pattern = null;
   #patternWarn = { warned: false };
@@ -90,8 +96,8 @@ export class SmAtlasView extends LitElement {
     super();
     /** @type {string|null} the `pattern` attribute, verbatim */
     this.pattern = null;
-    // Re-renders the ring on a face switch or activation. Pixels come from
-    // the doc channels.
+    // Re-renders the ring on a face switch or activation, and repaints on a
+    // layer switch (updated). Other pixel changes come from the doc channels.
     new StoreController(this, workspace.store);
     // One pattern fill per cell button at its declared size. The controller
     // re-applies after every update, so a cell-height change resizes the
@@ -135,6 +141,12 @@ export class SmAtlasView extends LitElement {
   firstUpdated() {
     // The cell canvases exist only after the first render.
     this.#syncGeometry();
+  }
+
+  // A layer switch changes the workspace store only, which re-renders here.
+  updated() {
+    const active = workspace.active();
+    if (active && active.layer !== this.#paintedLayer) this.#paint();
   }
 
   render() {
@@ -209,22 +221,45 @@ export class SmAtlasView extends LitElement {
     this.#paint();
   }
 
-  // putImageData's dirty rect copies each face's region from the sheet with
-  // no per-face copy. The live channel fires after the sheet blit, so the
-  // atlas is current here.
+  // Each cell draws the other layers' tiles for its face at full opacity, in
+  // block order, fades them to ONION_ALPHA with destination-in, then draws the
+  // edited layer's tile over them. The live channel fires after the sheet
+  // blit, so the atlas is current here.
   #paint() {
-    const img = workspace.active()?.doc.get().atlasImage;
+    const active = workspace.active();
+    const s = active?.doc.get();
+    const img = s?.atlasImage;
     if (!img || !(this.#tileW > 0)) return;
+    this.#paintedLayer = active.layer;
+    const scratch = this.#scratch;
+    if (scratch.width !== img.width || scratch.height !== img.height) {
+      scratch.width = img.width;
+      scratch.height = img.height;
+    }
     const id =
       img instanceof ImageData
         ? img
         : new ImageData(new Uint8ClampedArray(img.data), img.width, img.height);
+    scratch.getContext('2d').putImageData(id, 0, 0);
+    const w = this.#tileW;
+    const h = this.#tileH;
+    const count = s.layers.length;
+    const layer = Math.min(active.layer, count - 1);
     for (const { face, r, c } of GRID_CELLS) {
-      const ctx = this.#cellCanvas.get(face).value?.getContext('2d');
-      if (!ctx) continue;
-      const sx = c * this.#tileW;
-      const sy = r * this.#tileH;
-      ctx.putImageData(id, -sx, -sy, sx, sy, this.#tileW, this.#tileH);
+      const g = this.#cellCanvas.get(face).value?.getContext('2d');
+      if (!g) continue;
+      const blit = (k) =>
+        g.drawImage(scratch, c * w, (s.rows * k + r) * h, w, h, 0, 0, w, h);
+      g.globalCompositeOperation = 'source-over';
+      g.clearRect(0, 0, w, h);
+      if (count > 1) {
+        for (let k = 0; k < count; k++) if (k !== layer) blit(k);
+        g.globalCompositeOperation = 'destination-in';
+        g.fillStyle = `rgba(0, 0, 0, ${ONION_ALPHA})`;
+        g.fillRect(0, 0, w, h);
+        g.globalCompositeOperation = 'source-over';
+      }
+      blit(layer);
     }
   }
 }

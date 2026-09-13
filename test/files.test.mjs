@@ -62,7 +62,7 @@ const stroke = (doc) => {
   // A live edit, pending until the next frame or drain.
   const tile = { width: 2, height: 2, data: new Uint8ClampedArray(16) };
   tile.data[3] = 255;
-  doc.applyTileEdit('front', tile);
+  doc.applyTileEdit(0, 'front', tile);
 };
 
 // Naming
@@ -170,6 +170,20 @@ test('the ring settings round-trip through their chunk when passed; a save witho
     'a save without settings removes the chunk (replace semantics)'
   );
   assert.equal((await files.load('id-1')).ring, null);
+});
+
+test('the layers chunk is written on every save, round-trips through load, and survives a copy', async () => {
+  const { files, doc, storage } = makeWorld();
+  const chunkOf = (id) =>
+    readTextChunks(storage.map.get(id).png)['sprite-machine:layers'];
+  const one = await files.save(doc, { name: 'One' });
+  assert.equal(chunkOf(one.id), '{"layers":[{"name":"Layer 1"}]}');
+
+  doc.loadAtlas(sheet(6, 8), {}, { layers: 2, names: ['Body', 'Wheels'] });
+  const two = await files.save(doc, { name: 'Two' });
+  assert.deepEqual((await files.load(two.id)).names, ['Body', 'Wheels']);
+  const copy = await files.copyDoc(two.id, { folder: null });
+  assert.equal(chunkOf(copy.id), chunkOf(two.id));
 });
 
 test('load hands back pixels, name and transforms; a missing id resolves null', async () => {

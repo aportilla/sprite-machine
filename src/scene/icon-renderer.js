@@ -85,11 +85,11 @@ export function createIconRenderer() {
     return world;
   }
 
-  function draw(sheet, transforms) {
+  function draw(sheet, transforms, layers) {
     if (!sheet) return null;
     let model;
     try {
-      model = buildModel(sheet, { transforms });
+      model = buildModel(sheet, { transforms, layers });
     } catch {
       return null; // no painted view
     }
@@ -146,17 +146,18 @@ export function createIconRenderer() {
 
   return {
     /**
-     * A document's icon as a 32×32 PNG data URI. Null when the sheet has no
-     * painted view or there is no WebGL.
+     * A document's icon as a 32×32 PNG data URI, the model of every layer.
+     * Null when the sheet has no painted view or there is no WebGL.
      * @param {{width: number, height: number, data: ArrayLike<number>}|null} sheet
      *   the document's atlas pixels
      * @param {Record<string, object>} [transforms]  per-view reorientation
      *   (the sprite-machine:transforms chunk)
+     * @param {number} [layers]  the sheet's layer count
      * @returns {string|null}
      */
-    render(sheet, transforms = {}) {
+    render(sheet, transforms = {}, layers = 1) {
       try {
-        return draw(sheet, transforms);
+        return draw(sheet, transforms, layers);
       } catch (err) {
         // Runs inside files.save. A throw here would fail the save.
         console.warn('sprite-machine: the document icon could not be drawn —', err);

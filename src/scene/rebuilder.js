@@ -1,7 +1,12 @@
 // Mesh rebuilder. Follows the active document and, on each doc change or live
-// stroke flush, runs buildVoxels and wedgeMesh and swaps the result into the
-// stage. Writes the build stats to the build slice. With no active document the
-// stage is emptied.
+// stroke flush, unions its layers' voxels, runs wedgeMesh and swaps the result
+// into the stage. Writes the build stats to the build slice. With no active
+// document the stage is emptied.
+//
+// It keeps one buildVoxels result per layer. A live flush rebuilds only the
+// layer it edited and a re-slice rebuilds every layer, then the union is
+// recomputed from the cache. A rename leaves the layers as they are and
+// rebuilds nothing.
 //
 // A new sheet generation or a newly activated document frames the camera. Other
 // rebuilds keep the previous auto-rotate angle. An empty build leaves the
@@ -10,9 +15,19 @@
 // onMesh receives each new mesh with its dims, and null before the old mesh is
 // disposed, so a consumer's shared-geometry clone never outlives its geometry.
 
-import { buildVoxels, wedgeMesh, computeDiag, VIEW_NAMES } from 'sprite-machine';
+import {
+  buildVoxels,
+  unionVoxels,
+  wedgeMesh,
+  computeDiag,
+  VIEW_NAMES,
+} from 'sprite-machine';
 import { workspace, followActive } from '../state/workspace.js';
 import { build } from '../state/build.js';
+
+/** @param {Record<string, object|null>} views  one layer's views */
+const rawViewsOf = (views) =>
+  Object.fromEntries(VIEW_NAMES.map((n) => [n, views[n] || null]));
 
 /**
  * @param {ReturnType<typeof import('./stage.js').createStage>} stage
@@ -26,6 +41,10 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
   let current = null; // THREE.Object3D in the scene
   let activeCtx = null;
   let framedSheet = 0; // active doc's sheet generation at the last framed build
+  /** @type {(ReturnType<typeof buildVoxels>|null)[]} per layer, null until built */
+  let cache = [];
+  /** @type {object[]|null} the doc's `layers` the cache was built from */
+  let cachedLayers = null;
 
   function removeMesh() {
     if (!current) return;
@@ -42,7 +61,8 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     stage.setSpinTarget(null);
   }
 
-  function rebuild() {
+  /** @param {number|null} [edited]  the layer a live flush edited */
+  function rebuild(edited = null) {
     const ctx = activeCtx;
     if (!ctx) {
       removeMesh();
@@ -51,23 +71,29 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
       return;
     }
     const d = ctx.doc.get();
+    if (d.layers !== cachedLayers) {
+      cachedLayers = d.layers;
+      cache = d.layers.map(() => null);
+    } else if (edited != null) {
+      cache[edited] = null;
+    } else {
+      return;
+    }
     const opts = { transforms: d.transforms };
-    const provided = VIEW_NAMES.filter((n) => d.views[n]);
+    d.layers.forEach((views, i) => {
+      cache[i] ??= buildVoxels(rawViewsOf(views), opts);
+    });
+    const result = unionVoxels(cache);
 
     const prevRotY = current ? current.rotation.y : null;
     removeMesh();
 
-    if (provided.length === 0) {
+    if (result.providedViews.length === 0) {
       build.setStats({ dims: null, voxels: 0, triangles: 0, warnings: [] });
       stage.requestRender(); // redraw after removing the old mesh
       return;
     }
 
-    /** @type {Record<string, {width:number,height:number,data:Uint8ClampedArray}|null>} */
-    const rawViews = {};
-    for (const n of VIEW_NAMES) rawViews[n] = d.views[n] || null;
-
-    const result = buildVoxels(rawViews, opts);
     current = wedgeMesh(result, { flat });
     if (diag && current?.geometry) {
       // The wedge mesh is watertight, so a nonzero boundary or odd-edge count
@@ -93,15 +119,20 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
   }
 
   // Rebuild on the active doc's changes and live flushes. Switching documents
-  // resets framing and rebuilds.
+  // drops the cache, resets framing and rebuilds.
   const stopFollow = followActive(workspace, (ctx) => {
     activeCtx = ctx;
     framedSheet = -1;
+    cache = [];
+    cachedLayers = null;
     if (!ctx) {
       rebuild();
       return;
     }
-    const unsubs = [ctx.doc.subscribe(() => rebuild()), ctx.doc.onLive(() => rebuild())];
+    const unsubs = [
+      ctx.doc.subscribe(() => rebuild()),
+      ctx.doc.onLive((_, edit) => rebuild(edit.layer)),
+    ];
     rebuild();
     return () => unsubs.forEach((u) => u());
   });

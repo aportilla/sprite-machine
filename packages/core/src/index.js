@@ -19,7 +19,7 @@ export {
   extractSurface,
 } from './carve.js';
 export { buildPalette, makeSnapper, colorize } from './colorize.js';
-export { buildVoxels } from './pipeline.js';
+export { buildVoxels, unionVoxels, buildLayeredVoxels } from './pipeline.js';
 export {
   VIEW_TO_FACE,
   FACE_TO_VIEW,
@@ -44,6 +44,7 @@ export {
   DEFAULT_ATLAS_LAYOUT,
   TILE_MIN,
   TILE_MAX,
+  LAYER_MAX,
   clampTile,
   layoutSize,
   deriveTileSize,
@@ -51,6 +52,7 @@ export {
   contentBounds,
   validateSheet,
   sliceAtlas,
+  sliceLayers,
   blitTile,
   resizeTileTo,
   resizeTile,
@@ -58,6 +60,7 @@ export {
   resizeAtlas,
   cellOf,
 } from './atlas.js';
+export { LAYERS_CHUNK, layersChunk, parseLayersChunk, layerCount } from './layers.js';
 export { traceRegions, planeKey, faceRegions } from './regions.js';
 export { eliminateTJunctions } from './t-junction.js';
 export { bakeSkin, uvOfLattice, swatchUV } from './skin.js';
