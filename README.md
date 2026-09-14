@@ -82,10 +82,10 @@ documents are also templates in File → New…. A 3×2 sprite sheet PNG dropped
 anywhere on the page opens as a new document.
 
 Smooth slopes (low-poly additive 45° wedges) and the planar merge are always
-on. The 3D View's header has one control, **rotate** (auto-spin), off on every
-load. Sprites are hard pixel art: every texel is fully opaque or fully
-transparent. A face with no view of its own is mirror-filled from its opposite
-at render time. The **face picker** selects which of the six faces you edit,
+on. The 3D View's header has two controls, off on every load: **rotate**
+(auto-spin) and **single layer**, which shows only the edited layer. Sprites
+are hard pixel art: every texel is fully opaque or fully transparent. A face
+with no view of its own is mirror-filled from its opposite at render time. The **face picker** selects which of the six faces you edit,
 and the **Layer** menu which layer. A mirror-derived face shows as empty.
 
 ## Input: a 3×2 atlas
@@ -557,10 +557,20 @@ are not documents.
   layer switch. Pressing a tile selects that face, and the selected tile
   has a black outline. The window is movable, not resizable. Its width is the
   grid's, and its height follows the active tile's ratio.
-- **The 3D View** has a **rotate** checkbox in its header (auto-spin, off on
-  every load) over the THREE canvas in a kit pattern well. The renderer clears
-  transparent, so the model and its shadow sit on the pattern. The status
-  strip shows only the triangle count, updated on each rebuild.
+- **The 3D View** has two checkboxes in its header, **rotate** (auto-spin) and
+  **single layer**, both off on every load, over the THREE canvas in a kit
+  pattern well. The renderer clears transparent, so the model and its shadow
+  sit on the pattern. When a document loads or its window becomes active, the
+  camera frames the full tile volume, the model's lattice box, fitting the
+  narrower of the view's two angles. A model drawn in part of its tile shows
+  smaller, and a stroke, Tile Size…, a layer switch or a checkbox never moves
+  the camera. The status strip shows only the triangle count of the mesh in
+  view, updated on each rebuild.
+- **Single layer** shows the edited layer alone, in place in the whole model's
+  lattice, and follows a layer switch. An empty layer shows the empty well and
+  `0 triangles`. The checkbox is greyed while the active document has one
+  layer, and keeps its check while greyed. It covers the 3D View only: the 3D
+  Sprite Atlas, both exports and the document icon keep the whole model.
 
 **The 3D Sprite Atlas** ("ring" in the source) renders the active document's
 model orthographically from evenly stepped yaws at one elevation, as a row of
@@ -1105,10 +1115,11 @@ src/state/      pure JS slices on store.js: doc and history (per document), work
                 controllers that re-render on store changes.
 src/storage/    the IndexedDB wrapper (docs, folders, texts), injected into files
 src/scene/      stage (the 3D View's renderer, camera, lights, ground, framing,
-                on-demand render loop); rebuilder (the active document's mesh, out
-                through onMesh); ring and ring-renderer (3D Sprite Atlas);
-                model-export (glb); icon-renderer (document icons); rig (lights for
-                the offscreen renderers)
+                on-demand render loop); rebuilder (the active document's whole
+                model, out through onMesh, and the mesh the 3D View shows); ring
+                and ring-renderer (3D Sprite Atlas); model-export (glb);
+                icon-renderer (document icons); rig (lights for the offscreen
+                renderers)
 src/shell/      shared by every application: layout (desktop geometry, the cascade,
                 nearness, the nine-slice pin), windows (the window manager),
                 menu-bar (Sprite Machine menu, shared dialogs, menu swap),
@@ -1159,7 +1170,8 @@ notification per edited layer and face. `applyTileEdit` stores the working
 buffer by reference without notifying `subscribe`, so the underlay recomputes
 only on a face or layer switch or a structural change. The rebuilder keeps one
 `buildVoxels` result per layer, so a stroke rebuilds its own layer and re-unions
-the rest from the cache. Every consumer of the canonical atlas (save,
+the rest from the cache, and a layer switch under single layer meshes from the
+cache without carving. Every consumer of the canonical atlas (save,
 export, resize, replace all, an undo snapshot) calls `drain()` first. Canvas
 backing stores are sized in JS, because a template-bound width clears them.
 Editable `vf-*` values are bound with `live()`, so a re-render re-syncs after

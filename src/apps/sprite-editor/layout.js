@@ -97,12 +97,16 @@ const SPRITE_PICKER_PAD = 8;
 export const SPRITE_STRIP =
   SPRITE_PICKER_PAD + SPRITE_PICKER.height + SPRITE_PICKER_PAD + 1;
 
-// 3D View size floor: its chrome plus a 107px canvas on both axes. The chrome is 2
-// across and 12 bar + 2 borders + STAGE_STRIP + 15 status down. The header's
-// controls (77 wide) must fit within the width.
+// 3D View size floor: its chrome around the header's row across and a 107px
+// canvas down. The chrome is 2 across and 12 bar + 2 borders + STAGE_STRIP + 15
+// status down. The row (sm-stage-controls.js) is two checkboxes 12 apart inside
+// 8px insets, each a 13px box and a 6px gap before its label. In the display
+// face, "rotate" is 42 wide and "single layer" 77.
 const STAGE_CHROME = { w: 2, h: 12 + 2 + STAGE_STRIP + 15 };
+const STAGE_CHECKBOX = 13 + 6;
+const STAGE_ROW = 8 + STAGE_CHECKBOX + 42 + 12 + STAGE_CHECKBOX + 77 + 8; // 185
 const STAGE_CANVAS_MIN = 107;
-export const STAGE_MIN_WIDTH = STAGE_CHROME.w + STAGE_CANVAS_MIN; // 109
+export const STAGE_MIN_WIDTH = STAGE_CHROME.w + STAGE_ROW; // 187
 export const STAGE_MIN_HEIGHT = STAGE_CHROME.h + STAGE_CANVAS_MIN; // 160
 
 // Full Sprite View: fixed size. The atlas grid sets the width, and the height is

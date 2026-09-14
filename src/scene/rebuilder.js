@@ -8,13 +8,20 @@
 // recomputed from the cache. A rename leaves the layers as they are and
 // rebuilds nothing.
 //
-// A new sheet generation or a newly activated document frames the camera. Other
-// rebuilds keep the previous auto-rotate angle. An empty build leaves the
-// generation unconsumed, so the first real build of a fresh sheet still frames.
+// It holds two meshes: the whole model's and the one in the stage. While
+// prefs.singleLayer is on and the document has more than one layer, the stage
+// shows the edited layer alone, in place in the whole model's lattice, and the
+// triangle count is that mesh's. A layer switch or a toggle never carves and
+// keeps the whole model.
 //
-// onMesh receives each new mesh with the mesher's record and the dims, and null
-// before the old mesh is disposed, so a consumer's shared-geometry clone never
-// outlives its geometry.
+// A new sheet generation or a newly activated document frames the camera on
+// the whole model's lattice. A new mesh in the stage otherwise takes the
+// previous auto-rotate angle. An empty build leaves the generation unconsumed,
+// so the first real build of a fresh sheet still frames.
+//
+// onMesh receives each new mesh of the whole model with the mesher's record and
+// the dims, and null before the old mesh is disposed, so a consumer's
+// shared-geometry clone never outlives its geometry.
 
 import {
   buildVoxels,
@@ -25,11 +32,25 @@ import {
 } from 'sprite-machine';
 import { toMesh } from 'sprite-machine/three';
 import { workspace, followActive } from '../state/workspace.js';
+import { prefs } from '../state/prefs.js';
 import { build } from '../state/build.js';
 
 /** @param {Record<string, object|null>} views  one layer's views */
 const rawViewsOf = (views) =>
   Object.fromEntries(VIEW_NAMES.map((n) => [n, views[n] || null]));
+
+const NO_STATS = { dims: null, voxels: 0, triangles: 0, warnings: [] };
+
+// Free the geometry, the material and its map. material.dispose() does not free
+// the skin texture.
+/** @param {import('three').Object3D} obj */
+const disposeMesh = (obj) =>
+  obj.traverse?.((o) => {
+    const m = /** @type {any} */ (o);
+    m.geometry?.dispose?.();
+    m.material?.map?.dispose?.();
+    m.material?.dispose?.();
+  });
 
 /**
  * @param {ReturnType<typeof import('./stage.js').createStage>} stage
@@ -41,84 +62,127 @@ const rawViewsOf = (views) =>
  * }} [opts]  the ?flat / ?diag dev flags, and onMesh (see the header)
  */
 export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}) {
-  let current = null; // THREE.Object3D in the scene
   let activeCtx = null;
   let framedSheet = 0; // active doc's sheet generation at the last framed build
   /** @type {(ReturnType<typeof buildVoxels>|null)[]} per layer, null until built */
   let cache = [];
   /** @type {object[]|null} the doc's `layers` the cache was built from */
   let cachedLayers = null;
+  /**
+   * The whole model's mesh and readout, or null while no layer has a view.
+   * @type {{mesh: import('three').Object3D, triangles: number,
+   *         stats: {dims: {nx: number, ny: number, nz: number}, voxels: number,
+   *                 warnings: string[]}}|null}
+   */
+  let whole = null;
+  /** @type {import('three').Object3D|null} the mesh in the stage */
+  let shown = null;
+  /** @type {number|null} the layer the stage shows alone, null for the whole model */
+  let shownLayer = null;
+  let spinY = 0; // the shown mesh's auto-rotate angle, carried to the next one
 
-  function removeMesh() {
-    if (!current) return;
-    onMesh?.(null); // before the geometry is disposed
-    stage.scene.remove(current);
-    // Free the geometry, the material and its map. material.dispose() does not
-    // free the skin texture.
-    current.traverse?.((o) => {
-      o.geometry?.dispose?.();
-      o.material?.map?.dispose?.();
-      o.material?.dispose?.();
-    });
-    current = null;
+  // Take the mesh out of the stage. The whole model's mesh is not disposed.
+  function unshow() {
+    if (!shown) return;
+    spinY = shown.rotation.y;
+    stage.scene.remove(shown);
+    if (shown !== whole?.mesh) disposeMesh(shown);
+    shown = null;
     stage.setSpinTarget(null);
+  }
+
+  // Dispose the whole model's mesh. unshow() runs first.
+  function dropWhole() {
+    if (!whole) return;
+    onMesh?.(null); // before the geometry is disposed
+    disposeMesh(whole.mesh);
+    whole = null;
   }
 
   /** @param {number|null} [edited]  the layer a live flush edited */
   function rebuild(edited = null) {
     const ctx = activeCtx;
     if (!ctx) {
-      removeMesh();
-      build.setStats({ dims: null, voxels: 0, triangles: 0, warnings: [] });
+      if (!whole) return; // nothing shown, and the stats are already blank
+      unshow();
+      dropWhole();
+      build.setStats(NO_STATS);
       stage.requestRender();
       return;
     }
     const d = ctx.doc.get();
+    const layer = prefs.get().singleLayer && d.layers.length > 1 ? ctx.layer : null;
+    let remodel = true;
     if (d.layers !== cachedLayers) {
       cachedLayers = d.layers;
       cache = d.layers.map(() => null);
     } else if (edited != null) {
       cache[edited] = null;
+    } else if (layer !== shownLayer) {
+      remodel = false;
     } else {
       return;
     }
-    const opts = { transforms: d.transforms };
-    d.layers.forEach((views, i) => {
-      cache[i] ??= buildVoxels(rawViewsOf(views), opts);
-    });
-    const result = unionVoxels(cache);
+    shownLayer = layer;
+    unshow();
 
-    const prevRotY = current ? current.rotation.y : null;
-    removeMesh();
+    if (remodel) {
+      dropWhole();
+      const opts = { transforms: d.transforms };
+      d.layers.forEach((views, i) => {
+        cache[i] ??= buildVoxels(rawViewsOf(views), opts);
+      });
+      const result = unionVoxels(cache);
+      if (result.providedViews.length > 0) {
+        const model = wedgeMesh(result, { flat });
+        whole = {
+          mesh: toMesh(model),
+          triangles: model.triangles,
+          stats: {
+            dims: result.dims,
+            voxels: result.solidCount,
+            warnings: [...d.atlasWarnings, ...(result.warnings || [])],
+          },
+        };
+        if (diag) {
+          // The wedge mesh is watertight, so a nonzero boundary or odd-edge count
+          // is a hole.
+          document.title = 'DIAG ' + JSON.stringify(computeDiag(model.geometry));
+        }
+        onMesh?.({ mesh: whole.mesh, model, dims: result.dims });
+      }
+    }
 
-    if (result.providedViews.length === 0) {
-      build.setStats({ dims: null, voxels: 0, triangles: 0, warnings: [] });
+    if (!whole) {
+      build.setStats(NO_STATS);
       stage.requestRender(); // redraw after removing the old mesh
       return;
     }
 
-    const model = wedgeMesh(result, { flat });
-    current = toMesh(model);
-    if (diag) {
-      // The wedge mesh is watertight, so a nonzero boundary or odd-edge count
-      // is a hole.
-      document.title = 'DIAG ' + JSON.stringify(computeDiag(model.geometry));
+    let triangles = whole.triangles;
+    if (layer == null) {
+      shown = whole.mesh;
+    } else {
+      // An empty layer has no provided view and shows nothing.
+      const alone = unionVoxels(cache, { only: layer });
+      triangles = 0;
+      if (alone.providedViews.length > 0) {
+        const model = wedgeMesh(alone, { flat });
+        shown = toMesh(model);
+        triangles = model.triangles;
+      }
     }
-    stage.scene.add(current);
-    stage.setSpinTarget(current);
-    onMesh?.({ mesh: current, model, dims: result.dims });
     if (d.sheet !== framedSheet) {
-      stage.frameObject(current);
+      stage.frameLattice(whole.stats.dims);
       framedSheet = d.sheet;
-    } else if (prevRotY != null) {
-      current.rotation.y = prevRotY;
+      spinY = 0;
     }
-    build.setStats({
-      dims: result.dims,
-      voxels: result.solidCount,
-      triangles: model.triangles,
-      warnings: [...d.atlasWarnings, ...(result.warnings || [])],
-    });
+    if (shown) {
+      shown.rotation.y = spinY;
+      stage.scene.add(shown);
+      stage.setSpinTarget(shown);
+    }
+    build.setStats({ ...whole.stats, triangles });
     stage.requestRender(); // redraw even if the camera is idle
   }
 
@@ -140,11 +204,18 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     rebuild();
     return () => unsubs.forEach((u) => u());
   });
+  // A layer switch changes the workspace store and the checkbox changes prefs.
+  // Any other change to either returns early.
+  const unsubShown = [
+    workspace.subscribe(() => rebuild()),
+    prefs.subscribe(() => rebuild()),
+  ];
 
   return {
     // HMR teardown. The stage disposes the scene.
     dispose() {
       stopFollow();
+      unsubShown.forEach((u) => u());
     },
   };
 }

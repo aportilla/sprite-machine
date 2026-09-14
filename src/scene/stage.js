@@ -1,12 +1,15 @@
 // THREE stage for the 3D View: renderer, scene, orbit camera, lights, ground,
 // framing, resize handling and the on-demand render loop. The rebuilder adds and
-// removes meshes.
+// removes meshes. The camera frames the lattice box, the full tile volume. A
+// frame asked for while the canvas has no size waits until it has one.
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { DEFAULT_WORLD_SIZE } from 'sprite-machine';
 import { prefs } from '../state/prefs.js';
 
 const RENDER_SCALE = 0.5; // half-resolution render, upscaled by CSS
+const FAR = 100; // the camera's far plane, unless a fit needs it farther
 
 // Camera direction presets for the ?cam= dev flag (default: three-quarter iso).
 const CAM_DIRS = {
@@ -33,7 +36,7 @@ export function createStage(canvas, { cam = null } = {}) {
   const scene = new THREE.Scene();
   scene.background = null;
 
-  const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+  const camera = new THREE.PerspectiveCamera(28, 1, 0.1, FAR);
   camera.position.set(5, 4.2, 5);
 
   const controls = new OrbitControls(camera, canvas);
@@ -71,16 +74,28 @@ export function createStage(canvas, { cam = null } = {}) {
   scene.add(ground);
 
   const ISO_DIR = new THREE.Vector3(...(CAM_DIRS[cam] || [1, 0.8, 1])).normalize();
-  function frameObject(obj) {
-    const box = new THREE.Box3().setFromObject(obj);
-    const sphere = box.getBoundingSphere(new THREE.Sphere());
-    const center = sphere.center;
-    const r = Math.max(sphere.radius, 0.5);
-    const dist = (r / Math.sin((camera.fov * Math.PI) / 180 / 2)) * 1.25;
+  /** Fit the camera to the lattice box of `dims`. Reads the camera's aspect. */
+  function fitLattice(dims) {
+    // The box where the mesher puts the lattice: DEFAULT_WORLD_SIZE over the
+    // longest axis, X and Z centered, Y from 0.
+    const s = DEFAULT_WORLD_SIZE / Math.max(dims.nx, dims.ny, dims.nz);
+    const size = new THREE.Vector3(dims.nx, dims.ny, dims.nz).multiplyScalar(s);
+    const center = new THREE.Vector3(0, size.y / 2, 0);
+    const r = size.length() / 2; // the box's bounding sphere radius
+    // The narrower of the vertical and horizontal half-angles, so a tall view
+    // keeps the box's sides.
+    const v = (camera.fov * Math.PI) / 360;
+    const half = Math.min(v, Math.atan(Math.tan(v) * camera.aspect));
+    const dist = (r / Math.sin(half)) * 1.25;
     controls.target.copy(center);
     camera.position.copy(center).addScaledVector(ISO_DIR, dist);
+    camera.far = Math.max(FAR, 2 * (dist + r));
+    camera.updateProjectionMatrix();
     controls.update();
   }
+
+  /** @type {{nx: number, ny: number, nz: number}|null} dims waiting for a canvas size */
+  let pendingFrame = null;
 
   // The mesh auto-rotate spins, or null.
   let spinTarget = null;
@@ -101,6 +116,11 @@ export function createStage(canvas, { cam = null } = {}) {
     if (camera.aspect !== aspect) {
       camera.aspect = aspect;
       camera.updateProjectionMatrix();
+      changed = true;
+    }
+    if (pendingFrame && w > 0 && h > 0) {
+      fitLattice(pendingFrame);
+      pendingFrame = null;
       changed = true;
     }
     if (changed) requestRender();
@@ -129,7 +149,14 @@ export function createStage(canvas, { cam = null } = {}) {
 
   return {
     scene,
-    frameObject,
+    /**
+     * Frame the lattice box of `dims`, now or once the canvas has a size.
+     * @param {{nx: number, ny: number, nz: number}} dims
+     */
+    frameLattice(dims) {
+      pendingFrame = dims;
+      resize();
+    },
     requestRender,
     /** @param {THREE.Object3D|null} obj */
     setSpinTarget(obj) {

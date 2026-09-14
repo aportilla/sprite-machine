@@ -25,7 +25,7 @@ LAYERS
 
 A document can hold up to eight layers. Each is a full set of six faces at the document's tile size, stacked below the first in the sheet. Every layer carves its own solid and the model is all of them together, so shapes one set of faces can't carve, like wheels apart from the body above them, can be drawn as separate layers. Where layers overlap, the later layer's colors show.
 
-Layer → New Layer adds a layer and makes it the one you edit. Delete Layer, Rename Layer…, Move Layer Up and Move Layer Down act on the edited layer, and the list at the foot of the menu, or the keys 1 to 8, switch layers. While you edit a layer, the faded art behind the canvas includes the other layers' art on the same face, and the Full Sprite View shows it faded under this layer's tiles. The strips outside the canvas show this layer's neighbouring faces alone.
+Layer → New Layer adds a layer and makes it the one you edit. Delete Layer, Rename Layer…, Move Layer Up and Move Layer Down act on the edited layer, and the list at the foot of the menu, or the keys 1 to 8, switch layers. While you edit a layer, the faded art behind the canvas includes the other layers' art on the same face, and the Full Sprite View shows it faded under this layer's tiles. The strips outside the canvas show this layer's neighbouring faces alone. Check single layer in the 3D View's header to see only the layer you are editing, in its place in the model; the 3D Sprite Atlas and the exports still use every layer.
 
 SAVING AND FILING
 
