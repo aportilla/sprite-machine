@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildVoxels, unionVoxels, buildLayeredVoxels } from '../src/pipeline.js';
-import { packRGBA } from '../src/ingest.js';
+import { packRGBA, flip } from '../src/ingest.js';
 import { voxIndex } from '../src/carve.js';
 import { faceRegions } from '../src/regions.js';
 import { VIEWS } from '../src/views.js';
@@ -168,7 +168,7 @@ test('strict registration: unmatched front pixels carve away', () => {
     {
       // front paints (x=2, y=2) and (x=0, y=0)
       front: img(['..M', '...', 'M..']),
-      top: img(['T..', 'T..', 'T..']), // column x=0 only
+      top: img(['..T', '..T', '..T']), // column x=0 only, the right column
       right: img(['...', '...', 'NNN']), // row y=0 only
     },
     { mirror: { x: false, y: false, z: false } }
@@ -245,9 +245,9 @@ test('projection conventions: the object front pins to TOP/BOTTOM’s top row an
   assert.equal(VIEWS.top.project(0, 0, 0, d).v, d.nz - 1);
   assert.equal(VIEWS.bottom.project(0, 0, d.nz - 1, d).v, 0);
   assert.equal(VIEWS.bottom.project(0, 0, 0, d).v, d.nz - 1);
-  // Bottom mirrors x: x=0 is its right column.
-  assert.equal(VIEWS.top.project(0, 0, 0, d).u, 0);
-  assert.equal(VIEWS.bottom.project(0, 0, 0, d).u, d.nx - 1);
+  // Top mirrors x: x=0 is its right column.
+  assert.equal(VIEWS.top.project(0, 0, 0, d).u, d.nx - 1);
+  assert.equal(VIEWS.bottom.project(0, 0, 0, d).u, 0);
   // Left: the front is the left image column.
   assert.equal(VIEWS.left.project(0, 0, d.nz - 1, d).u, 0);
   assert.equal(VIEWS.left.project(0, 0, 0, d).u, d.nz - 1);
@@ -264,7 +264,11 @@ test('buildVoxels with no views yields one voxel and warns', () => {
 
 const rows4 = (row) => img([row, row, row, row]);
 // A box over the columns `row` paints, the full height and depth of a 4³ lattice.
-const box = (row, ch) => ({ front: rows4(row), left: fill(4, 4, ch), top: rows4(row) });
+const box = (row, ch) => ({
+  front: rows4(row),
+  left: fill(4, 4, ch),
+  top: flip(rows4(row), true, false),
+});
 const LEFT_RED = box('RR..', 'R'); // x 0..1
 const RIGHT_BLUE = box('..BB', 'B'); // x 2..3
 const CUBE_BLUE = box('BBBB', 'B');
@@ -334,7 +338,7 @@ test('unionVoxels: a layer with views on one plane is a slab on the lattice face
   ]);
   assert.deepEqual([at(back, 3, 3, 0), at(back, 3, 3, 3)], [1, 0], 'back-only: z = 0');
 
-  const top = unionVoxels([body, buildVoxels({ top: rows4('..GG') })]);
+  const top = unionVoxels([body, buildVoxels({ top: rows4('GG..') })]);
   assert.deepEqual([at(top, 3, 3, 1), at(top, 3, 0, 1)], [1, 0], 'top-only: y = 3');
   assertSurfaceColored(top);
 });

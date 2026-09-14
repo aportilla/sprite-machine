@@ -130,11 +130,11 @@ in its tile is its position in the object. The faces must be **registered**:
 a FRONT pixel is solid only where the SIDE covers its row and the TOP covers
 its column. Every texel must be fully opaque or fully transparent.
 
-World axes: `+x` right, `+y` up, `+z` toward the front. Draw FRONT and BACK
-head-on and upright, RIGHT and LEFT as side views with the front pointing
-right and left, and TOP and BOTTOM as plan views with the front at the top
-edge. Per-tile `rot` / `flipX` / `flipY` transforms handle sheets that don't
-follow the convention.
+World axes: `+x` right, `+y` up, `+z` toward the front. Draw each tile as its
+face is seen from outside: FRONT and BACK head-on and upright, RIGHT and LEFT
+as side views with the front pointing right and left, and TOP and BOTTOM from
+above and below with the front at the top edge. Per-tile `rot` / `flipX` /
+`flipY` transforms handle sheets that don't follow the convention.
 
 The model's origin is the centre of the lattice floor, Y up, with CCW
 winding. `voxelsPerMeter` sets the glb's scale: at 10, a 40-voxel car is

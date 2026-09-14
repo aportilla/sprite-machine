@@ -43,7 +43,11 @@ test("buildModel: one unit per voxel, a transforms chunk applied as the app appl
 test('buildModel with layers: the union of the blocks; without the option a sheet is one block; only a sheet blank in every layer throws', () => {
   const t = 4;
   const rows = (row) => img([row, row, row, row]);
-  const box = (row) => ({ front: rows(row), left: fill(t, t, 'R'), top: rows(row) });
+  const box = (row) => ({
+    front: rows(row),
+    left: fill(t, t, 'R'),
+    top: flip(rows(row), true, false),
+  });
   const halves = layeredSheet(t, [box('RR..'), box('..RR')]);
 
   const layered = buildModel(halves, { layers: 2 });

@@ -63,7 +63,7 @@ test('a slope is one quad: a ramp costs the same triangles 1 wide and 4 wide; a 
     buildVoxels({
       front: img(['TTRR', 'TTRR', 'TTRR', 'TTRR']),
       right: img(['...T', '..TT', '.TTT', 'TTTT']),
-      top: img(['TTRR', 'TTRR', 'TTRR', 'TTRR']),
+      top: img(['RRTT', 'RRTT', 'RRTT', 'RRTT']),
     })
   );
   assert.equal(seam.wedges, wide.wedges, 'every cell still wedges');

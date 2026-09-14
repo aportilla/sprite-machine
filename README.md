@@ -118,15 +118,16 @@ square tiles, `t` from 1 to 64 and N from 1 to 8, is N layers, and the
 of whatever the 3×2 layout gives.
 
 **Tile orientation** (world: `+x` right, `+y` up, `+z` front, toward the
-camera). A tile drawn this way needs no transform:
+camera). Each tile is its face as seen from outside, never a mirror image. A
+tile drawn this way needs no transform:
 
-| Tile         | Draw as…                                                | Front points | Size           |
-| ------------ | ------------------------------------------------------- | ------------ | -------------- |
-| FRONT / BACK | head-on / from behind, upright                          | —            | width × height |
-| RIGHT        | the right side                                          | right        | depth × height |
-| LEFT         | the left side                                           | left         | depth × height |
-| TOP          | plan view, width horizontal                             | top edge     | width × depth  |
-| BOTTOM       | plan from below (car rolled sideways, not end-over-end) | top edge     | width × depth  |
+| Tile         | Draw as…                                           | Front points | Size           |
+| ------------ | -------------------------------------------------- | ------------ | -------------- |
+| FRONT / BACK | head-on / from behind, upright                     | —            | width × height |
+| RIGHT        | the right side                                     | right        | depth × height |
+| LEFT         | the left side                                      | left         | depth × height |
+| TOP          | from above, the right side on the right            | top edge     | width × depth  |
+| BOTTOM       | from below (car rolled sideways, not end-over-end) | top edge     | width × depth  |
 
 Check each tile against the Front points column, using the faded underlay of
 the mirrored opposite behind the canvas. The pipeline accepts per-tile `rot`,
@@ -1074,7 +1075,8 @@ An axis that no view observes gets a resolution of 1, and the build warns.
 ### Coordinate conventions
 
 World: `+x` right, `+y` up, `+z` toward the camera/front. In a side (left)
-sprite the object's front is the left column; in a top sprite it is the top row.
+sprite the object's front is the left column; in a top sprite it is the top row,
+with the object's right side in the right column.
 See the engine's `views.js` for all six projection mappings.
 
 ---

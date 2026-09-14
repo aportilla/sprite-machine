@@ -111,22 +111,23 @@ export const VIEWS = {
     },
   },
   // TOP: looks toward -y and sees the +y face. Image is X by Z.
-  // v = nz-1-z puts the front (+z) on the top row.
+  // v = nz-1-z puts the front (+z) on the top row, and u = nx-1-x puts the
+  // object's right side (-x) in the right column.
   top: {
     imgW: (d) => d.nx,
     imgH: (d) => d.nz,
-    projectInto: (x, y, z, d, o) => ((o.u = x), (o.v = d.nz - 1 - z), o),
+    projectInto: (x, y, z, d, o) => ((o.u = d.nx - 1 - x), (o.v = d.nz - 1 - z), o),
     project(x, y, z, d) {
       return this.projectInto(x, y, z, d, { u: 0, v: 0 });
     },
   },
   // BOTTOM: looks toward +y and sees the -y face. The object is rolled about its
   // front-back axis, so the front stays on the top row as in TOP (v = nz-1-z)
-  // and only u flips (u = nx-1-x).
+  // and only u flips (u = x).
   bottom: {
     imgW: (d) => d.nx,
     imgH: (d) => d.nz,
-    projectInto: (x, y, z, d, o) => ((o.u = d.nx - 1 - x), (o.v = d.nz - 1 - z), o),
+    projectInto: (x, y, z, d, o) => ((o.u = x), (o.v = d.nz - 1 - z), o),
     project(x, y, z, d) {
       return this.projectInto(x, y, z, d, { u: 0, v: 0 });
     },
