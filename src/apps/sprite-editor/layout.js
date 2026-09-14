@@ -7,6 +7,8 @@
 // - zoomedBox(): a document window's zoomed box from its top-left.
 // - spriteHeightFor(), ringHeightFor(), ringWidthFor(): derived windoid sizes.
 // - paletteGrid(): the Color Palette's columns, rows and scrolled height.
+// - paletteFit(): the Color Palette's size snapped back to its whole cells.
+// - paletteStatus(): the Color Palette's status text.
 // - RING_FIELDS: the 3D Sprite Atlas controls layout. RING_STRIP and
 //   RING_MIN_WIDTH derive from it.
 // - FRAME_BANDS: the widened left, top and right bands of the resize frame, which
@@ -40,22 +42,38 @@ export const TOOLS_BOX = {
 
 // Color Palette: square swatch cells, as many columns as the body is wide, over
 // the kit's 15px vertical rail and 15px status strip. The chrome is 2 borders
-// and the rail across, and 12 bar + 2 borders + 15 status down. The width floor
-// fits the status label: "Color Palette" is 59 wide in the body face, after the
-// strip's 6px inset and before its 21px of grow box clearance. The height floor
-// shows two rows. The placement seeds five columns by three rows.
+// and the rail across, and 12 bar + 2 borders + 15 status down. The floor is one
+// column by two rows. The placement seeds five columns by three rows.
 export const PALETTE_CELL = 19;
 const PALETTE_CHROME = { w: 2 + 15, h: 12 + 2 + 15 };
-const PALETTE_LABEL_WIDTH = 59;
 const PALETTE_PITCH = PALETTE_CELL + 1;
 /** A window showing exactly `columns` × `rows` cells. */
 const paletteBox = (columns, rows) => ({
   width: columns * PALETTE_PITCH - 1 + PALETTE_CHROME.w,
   height: rows * PALETTE_PITCH - 1 + PALETTE_CHROME.h,
 });
-export const PALETTE_MIN_WIDTH = 2 + 6 + PALETTE_LABEL_WIDTH + 21;
-export const PALETTE_MIN_HEIGHT = paletteBox(1, 2).height;
+const PALETTE_MIN_COLUMNS = 1;
+const PALETTE_MIN_ROWS = 2;
+const PALETTE_MIN = paletteBox(PALETTE_MIN_COLUMNS, PALETTE_MIN_ROWS);
+export const PALETTE_MIN_WIDTH = PALETTE_MIN.width;
+export const PALETTE_MIN_HEIGHT = PALETTE_MIN.height;
 const PALETTE_BOX = paletteBox(5, 3);
+
+/**
+ * The Color Palette's status text for a window `width` wide listing `count`
+ * colors, or '' when the strip can't show it whole. The strip is 2 borders, a
+ * 6px inset and 21px of grow box clearance around the text. In the body face a
+ * digit is 6 wide, a space 3, "color" 23 and "colors" 28.
+ *
+ * @param {number} width
+ * @param {number} count
+ * @returns {string}
+ */
+export function paletteStatus(width, count) {
+  const one = count === 1;
+  const textWidth = 6 * String(count).length + 3 + (one ? 23 : 28);
+  return 2 + 6 + textWidth + 21 <= width ? `${count} ${one ? 'color' : 'colors'}` : '';
+}
 
 /**
  * The Color Palette's grid for a window `width` × `height` holding `count`
@@ -82,6 +100,23 @@ export function paletteGrid(width, height, count) {
   );
   const span = rows * PALETTE_PITCH;
   return { columns, rows, height: span <= body ? span : span - 1 };
+}
+
+/**
+ * The Color Palette's size snapped back to the whole columns and rows a
+ * `width` × `height` window shows, floored at the size floors.
+ *
+ * @param {number} width
+ * @param {number} height
+ * @returns {{width: number, height: number}}
+ */
+export function paletteFit(width, height) {
+  const columns = Math.floor((width - PALETTE_CHROME.w + 1) / PALETTE_PITCH);
+  const rows = Math.floor((height - PALETTE_CHROME.h + 1) / PALETTE_PITCH);
+  return paletteBox(
+    Math.max(PALETTE_MIN_COLUMNS, columns),
+    Math.max(PALETTE_MIN_ROWS, rows)
+  );
 }
 
 // Windoid header heights, including the header's 1px rule. windows.html authors
@@ -198,26 +233,20 @@ export function ringWidthFor(views, size) {
 }
 
 /** The height the bottom band takes off the vacancy, GAP included: the taller
- *  of the shown strip and the shown Color Palette, or 0 with neither shown. */
-function bottomBand({ ringSize, ringShown, paletteShown }) {
-  const h = Math.max(
-    ringShown ? ringHeightFor(ringSize) : 0,
-    paletteShown ? PALETTE_BOX.height : 0
-  );
-  return h > 0 ? h + GAP : 0;
+ *  of the Color Palette and the shown strip. */
+function bottomBand({ ringSize, ringShown }) {
+  return Math.max(ringShown ? ringHeightFor(ringSize) : 0, PALETTE_BOX.height) + GAP;
 }
 
 /**
  * The boot arrangement for a desktopW × desktopH raster. ringViews and ringSize
  * size the 3D Sprite Atlas strip. The Color Palette and the strip share the
- * bottom band, the strip right of the Palette when paletteShown, and the doc box
- * leaves room for the band when either is shown. The Tools palette gets a
- * position only. Its size is TOOLS_BOX.
+ * bottom band, the strip right of the Palette, and the doc box leaves room for
+ * the band. The Tools palette gets a position only. Its size is TOOLS_BOX.
  *
  * @param {number} desktopW
  * @param {number} desktopH
- * @param {{ringViews?: number, ringSize?: number, ringShown?: boolean,
- *          paletteShown?: boolean}} [opts]
+ * @param {{ringViews?: number, ringSize?: number, ringShown?: boolean}} [opts]
  * @returns {{
  *   tools: {left: number, top: number},
  *   palette: {left: number, top: number, width: number, height: number},
@@ -230,7 +259,7 @@ function bottomBand({ ringSize, ringShown, paletteShown }) {
 export function initialPlacement(
   desktopW,
   desktopH,
-  { ringViews = 4, ringSize = 64, ringShown = false, paletteShown = false } = {}
+  { ringViews = 4, ringSize = 64, ringShown = false } = {}
 ) {
   const top = WINDOW_ORIGIN.top;
 
@@ -250,18 +279,17 @@ export function initialPlacement(
   // The vacant middle, between the Tools palette and the rail.
   const x0 = WINDOW_ORIGIN.left;
   const vacantW = Math.max(0, railLeft - EDGE - x0);
-  // The bottom band, both windoids on the bottom margin and placed even when
-  // hidden. The Color Palette is left-aligned with the doc box. The 3D Sprite
-  // Atlas strip starts there too, or EDGE right of a shown Palette. Its width is
-  // the natural row, capped at the room left of the rail and floored at
-  // RING_MIN_WIDTH.
+  // The bottom band, both windoids on the bottom margin, the strip placed even
+  // when hidden. The Color Palette is left-aligned with the doc box. The 3D Sprite
+  // Atlas strip starts EDGE right of the Palette. Its width is the natural row,
+  // capped at the room left of the rail and floored at RING_MIN_WIDTH.
   const palette = {
     left: x0,
     top: Math.max(top, desktopH - GAP - PALETTE_BOX.height),
     ...PALETTE_BOX,
   };
   const ringH = ringHeightFor(ringSize);
-  const ringLeft = paletteShown ? x0 + PALETTE_BOX.width + EDGE : x0;
+  const ringLeft = x0 + PALETTE_BOX.width + EDGE;
   const ring = {
     left: ringLeft,
     top: Math.max(top, desktopH - GAP - ringH),
@@ -271,12 +299,9 @@ export function initialPlacement(
     ),
     height: ringH,
   };
-  // A shown band comes off the vacancy before the cascade room, so every cascade
-  // slot stays above it.
-  const vacantH = Math.max(
-    0,
-    desktopH - GAP - top - bottomBand({ ringSize, ringShown, paletteShown })
-  );
+  // The band comes off the vacancy before the cascade room, so every cascade slot
+  // stays above it.
+  const vacantH = Math.max(0, desktopH - GAP - top - bottomBand({ ringSize, ringShown }));
   const doc = {
     left: x0,
     top,
@@ -289,24 +314,23 @@ export function initialPlacement(
 
 /**
  * A document window's zoomed box at `pos` on a desktopW × desktopH raster. The
- * top-left stays. The right edge stops at the rail's gutter, and the bottom at
- * the bottom margin or GAP above a shown bottom band. Both sides are floored at
- * DOC_MIN.
+ * top-left stays. The right edge stops at the rail's gutter, and the bottom GAP
+ * above the bottom band. Both sides are floored at DOC_MIN.
  *
  * @param {number} desktopW
  * @param {number} desktopH
  * @param {{left: number, top: number}} pos
- * @param {{ringShown?: boolean, ringSize?: number, paletteShown?: boolean}} [opts]
+ * @param {{ringShown?: boolean, ringSize?: number}} [opts]
  * @returns {{left: number, top: number, width: number, height: number}}
  */
 export function zoomedBox(
   desktopW,
   desktopH,
   pos,
-  { ringShown = false, ringSize = 64, paletteShown = false } = {}
+  { ringShown = false, ringSize = 64 } = {}
 ) {
   const railLeft = Math.max(0, desktopW - EDGE - SPRITE_WIDTH);
-  const bottom = desktopH - GAP - bottomBand({ ringSize, ringShown, paletteShown });
+  const bottom = desktopH - GAP - bottomBand({ ringSize, ringShown });
   return {
     left: pos.left,
     top: pos.top,

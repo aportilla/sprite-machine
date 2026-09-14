@@ -47,10 +47,10 @@ The app is a System 7 style desktop built with the
 kit. It has a menu bar, an options strip, one movable document window per open
 document, and floating utility windoids that serve the active document: the
 **Tools** palette, the **Full Sprite View** (the face picker over a clickable
-grid of the atlas's tiles), the **3D View**, and two toggleable windoids, the
-**3D Sprite Atlas** (the model rendered orthographically from a ring of
-angles, which File → Export Sprite Atlas… saves) and the **Color Palette**
-(the document's colors). Documents are files on the
+grid of the atlas's tiles), the **3D View**, the **Color Palette** (the
+document's colors), and one toggleable windoid, the **3D Sprite Atlas** (the
+model rendered orthographically from a ring of angles, which File → Export
+Sprite Atlas… saves). Documents are files on the
 desktop, saved in the browser and opened by double-clicking their icons.
 Folders hold them and the Trash deletes them. Read-me text files ship with the
 app and open in the Text Viewer (see [Text files](#text-files)). Clicking the
@@ -269,8 +269,8 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   same-hue pairs fall within the wedge merge tolerance (`sameMat`,
   `TOL2 = 12²`) and can merge into a wedge on a staircase. `lib/palette.js`
   lists them. No gray pair merges.
-- **The Color Palette** (View → Color Palette) is a grid of swatches at the
-  bottom left, one per color in the active document. Pressing a swatch sets the
+- **The Color Palette** is a grid of swatches at the bottom left, one per
+  color in the active document. Pressing a swatch sets the
   ink, and the ink's swatch is ringed. See [Windows](#windows).
 - **Face picker**: six cube icons over a radio row in the Full Sprite View's
   header pick the face the active document's window edits. Each document keeps
@@ -485,11 +485,10 @@ document to act on):
   active window's zoom box, so repeated ⌘J zooms and unzooms that window.
   `arranged()` compares each visible window with its placed box, ignoring
   hidden windows, the atlas strip's width, the Color Palette's size and which
-  document holds which cascade slot. After a separator, _3D Sprite Atlas_ and
-  _Color Palette_ each show or hide their windoid and are checked while it is
-  shown.
-  Both start off on every load, and a windoid's close box unchecks its item.
-  Neither has a key equivalent. After a second separator comes one item
+  document holds which cascade slot. After a separator, _3D Sprite Atlas_ shows
+  or hides its windoid and is checked while it is shown. It starts off on every
+  load, the windoid's close box unchecks it, and it has no key equivalent.
+  After a second separator comes one item
   per open document window, in creation order, named for the document with the
   active one checked. A pick brings that window forward. With no document open
   the section and its separator are absent. There is no Fullscreen item: the
@@ -580,9 +579,9 @@ are not documents.
   restores the recorded size, or the doc box size if none is recorded. ⌘J's
   zoom is the same toggle. A zoomed window's far edges are struts, so it stays
   zoomed across a browser resize.
-- **Utility windoids**: the Tools palette, Full Sprite View and 3D View have no
-  close box or menu toggle and are shown whenever the Sprite Editor is front.
-  The 3D Sprite Atlas and the Color Palette are toggleable. Windoids float above
+- **Utility windoids**: the Tools palette, Full Sprite View, 3D View and Color
+  Palette have no close box or menu toggle and are shown whenever the Sprite
+  Editor is front. The 3D Sprite Atlas is toggleable. Windoids float above
   document windows, never become active, and hide together when the
   application deactivates. Their controls act on click, except the Tools
   palette's cells and the Full Sprite View's face tiles, which pick on
@@ -647,38 +646,40 @@ header's height and the windoid's minimum width.
   size changes, its height re-fits with the top-left held. While hidden, it is
   re-placed instead. It resizes horizontally only. Its width is the user's,
   seeded with the row's width and floored at the header's. A wider row scrolls
-  horizontally. The placement docks it on the bottom margin, left-aligned with
-  the document window, or 14 px right of a shown Color Palette. While shown,
+  horizontally. The placement docks it on the bottom margin, 14 px right of the
+  Color Palette. While shown,
   its band is taken out of the vacancy, so new windows, Arrange and the zoom box
   stay clear of it. Showing it doesn't move other windows.
 
 **The Color Palette** lists the active document's colors, one `vf-swatch` per
 color in a grid of 19 px square cells (`paletteGrid`). The grid has as many
 columns as the window's width fits. Empty cells fill the rows the window holds
-past the swatches, and more rows than fit scroll vertically. It has no header. Its status strip reads "Color Palette".
+past the swatches, and more rows than fit scroll vertically. It has no header.
+Its status strip counts the swatches (`paletteStatus`).
 
 - **The colors** are every distinct RGB whose alpha is not 0, across the whole
   sheet, every layer and face (`documentColors` in `lib/palette.js`). Grays
   come first by lightness, then colors by hue in 30° bands, by lightness inside
   a band. The order depends only on which colors are present, so a swatch
   moves only when a color before it comes or goes. The list stops at 256
-  (`PALETTE_VIEW_MAX`). While the windoid is shown it rescans on every
-  structural and live change to the document, and re-renders when the list
-  changes.
+  (`PALETTE_VIEW_MAX`). It rescans on every structural and live change to the
+  active document, and re-renders when the list changes.
 - **A press** on a swatch sets the ink through `session.pickColor`, so the
   eraser becomes the pencil. Swatches pick on press, like the Tools palette's
   cells. The ink's swatch is ringed like the selected Desktop Patterns cell: 1px
   black over its white inset, 1px white inside. A picked color not yet painted
   marks nothing. A swatch's tooltip is its hex, after the Colors dialog's name
   when it has one.
-- **View → Color Palette** shows it and its close box hides it. It docks on
-  the bottom margin, left-aligned with the document window, sized to show five
-  columns by three rows, and the atlas strip moves to its right. It resizes in both
-  axes, floored at the width that shows the status label and two rows, and
-  Arrange Windows restores its size. While shown, its band is taken out of the
-  vacancy like the strip's, so new windows, Arrange and the zoom box stay clear
-  of it. Showing it doesn't move other windows. It keeps its size across a
-  browser resize, and a placed Color Palette stays docked.
+- **The window** has no close box or menu toggle. It docks on the bottom
+  margin, left-aligned with the document window, sized to show five columns by
+  three rows, with the atlas strip to its right. It resizes in both axes, and on
+  release the grow snaps back to the whole columns and rows the window shows
+  (`paletteFit`). It is floored at one column and two rows. Below the width
+  that shows the count whole, the status strip stays and its text empties.
+  Arrange Windows restores its size. Its band is taken out of the vacancy like
+  the strip's, so new windows, Arrange and the zoom box stay clear of it. It
+  keeps its size across a browser resize, and a placed Color Palette stays
+  docked.
 
 The Sprite Editor's placement is computed from the live raster
 (`apps/sprite-editor/layout.js`, pure). The Tools palette is at the top left.

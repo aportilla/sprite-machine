@@ -4,15 +4,14 @@
 // empty cells in the rows the swatches leave. The ink's swatch is ringed. A
 // swatch picks its color on pointerdown, like a Tools palette cell.
 //
-// The sheet is scanned on each doc notification while the Color Palette is
-// shown, and the component re-renders only when the list or the window's size
-// changes.
+// The sheet is scanned on each doc notification, and the component re-renders
+// only when the list or the window's size changes. A change in the number of
+// swatches fires sm-palette-count.
 
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { session } from '../state/session.js';
-import { prefs } from '../state/prefs.js';
 import { workspace, followActive } from '../state/workspace.js';
 import { StoreController } from '../state/store-controller.js';
 import { documentColors, paletteName } from '../lib/palette.js';
@@ -67,6 +66,11 @@ export class SmPaletteView extends LitElement {
     new StoreController(this, session.store);
   }
 
+  /** The number of swatches listed. */
+  get count() {
+    return this.#colors.length;
+  }
+
   connectedCallback() {
     super.connectedCallback();
     // vf-desktop reconnects a window when it re-orders them on a raise, so the
@@ -80,7 +84,6 @@ export class SmPaletteView extends LitElement {
       this.#scan();
       return () => unsubs.forEach((u) => u());
     });
-    const offPrefs = prefs.subscribe(() => this.#scan());
     // Arrange and a browser resize write the window's size without a vf-resize,
     // so the window's box is observed.
     const win = this.closest('vf-window');
@@ -97,7 +100,6 @@ export class SmPaletteView extends LitElement {
     fit();
     this.#stop = () => {
       stopFollow();
-      offPrefs();
       observer?.disconnect();
     };
   }
@@ -108,10 +110,9 @@ export class SmPaletteView extends LitElement {
     this.#stop = null;
   }
 
-  // Showing the Color Palette rescans, so a hidden one skips the scan.
   #scan() {
     const sheet = workspace.active()?.doc.get().atlasImage;
-    if (!sheet || !prefs.get().showPalette) return;
+    if (!sheet) return;
     const next = documentColors(sheet);
     const prev = this.#colors;
     if (
@@ -122,6 +123,9 @@ export class SmPaletteView extends LitElement {
     }
     this.#colors = next;
     this.requestUpdate();
+    if (next.length !== prev.length) {
+      this.dispatchEvent(new CustomEvent('sm-palette-count', { bubbles: true }));
+    }
   }
 
   willUpdate() {

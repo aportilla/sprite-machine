@@ -2,9 +2,8 @@
 // document.
 //
 // - The windoids come from windows.html and are appended hidden. They are shown
-//   while the Sprite Editor is front, and the 3D Sprite Atlas and the Color
-//   Palette also need their prefs. Hiding keeps them mounted, so canvas identity
-//   survives.
+//   while the Sprite Editor is front, and the 3D Sprite Atlas also needs its
+//   pref. Hiding keeps them mounted, so canvas identity survives.
 // - Document windows are reconciled from the workspace. A new context clones
 //   #tpl-document-window. A closed context removes its window.
 // - Placement comes from layout.js on the live raster at init, on each open and
@@ -21,8 +20,10 @@ import { cloneWindow, parseWindows } from '../../shell/windows.js';
 import {
   FRAME_BANDS,
   initialPlacement,
+  paletteFit,
   PALETTE_MIN_HEIGHT,
   PALETTE_MIN_WIDTH,
+  paletteStatus,
   ringHeightFor,
   RING_MIN_WIDTH,
   spriteHeightFor,
@@ -36,7 +37,7 @@ import {
 const WINDOIDS = ['tools', 'sprite', 'stage', 'ring', 'palette'];
 /** The windoids the View menu toggles, each by its prefs flag. They keep their
  *  close boxes. `ring` is the 3D Sprite Atlas. */
-const TOGGLED = { ring: 'showRing', palette: 'showPalette' };
+const TOGGLED = { ring: 'showRing' };
 /** The axes of a windoid's size that are the user's, which arranged() ignores. */
 const USER_AXES = { ring: ['width'], palette: ['width', 'height'] };
 
@@ -90,6 +91,35 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
   for (const id of WINDOIDS) {
     windows.adopt(byId[id], { app: SPRITE_EDITOR, policy: policies[id] ?? null });
   }
+  // Color Palette: a grow snaps back on release to the whole cells it shows. The
+  // window hears the commit before the desktop does, so the shell's layout
+  // signal reads the snapped size.
+  const onPaletteGrow = (e) => {
+    if (!(/** @type {CustomEvent} */ (e).detail?.commit)) return;
+    const win = byId.palette;
+    const fit = paletteFit(win.width ?? 0, win.height ?? 0);
+    win.width = fit.width;
+    win.height = fit.height;
+  };
+  byId.palette.addEventListener('vf-resize', onPaletteGrow);
+  // The status label counts the swatches, and empties below the width that shows
+  // the count whole. An empty label stays slotted, so the kit keeps the strip.
+  // Arrange and a browser resize write the size without a vf-resize, so the
+  // window's box is observed.
+  const paletteView =
+    /** @type {import('../../components/sm-palette-view.js').SmPaletteView} */ (
+      byId.palette.querySelector('sm-palette-view')
+    );
+  const paletteLabel = /** @type {HTMLElement} */ (
+    byId.palette.querySelector('[slot="status"]')
+  );
+  const fitPaletteLabel = () => {
+    paletteLabel.textContent = paletteStatus(byId.palette.width ?? 0, paletteView.count);
+  };
+  byId.palette.addEventListener('sm-palette-count', fitPaletteLabel);
+  const paletteObserver = new ResizeObserver(fitPaletteLabel);
+  paletteObserver.observe(byId.palette);
+  fitPaletteLabel();
 
   // The strip's settings default to the active document's. A window being opened
   // passes its own document's, since the open activates that document.
@@ -100,7 +130,6 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
       ringViews: r.views,
       ringSize: r.size,
       ringShown: ringShown(),
-      paletteShown: prefs.get().showPalette,
     });
 
   // Full Sprite View: fixed size. The height fits the 3×2 tile grid at the active
@@ -300,10 +329,6 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
       prefs.setShowRing(false);
       return;
     }
-    if (t === byId.palette) {
-      prefs.setShowPalette(false);
-      return;
-    }
     const key = keyOf(t);
     if (key != null) onDocumentClose(key);
   };
@@ -323,11 +348,7 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
       desktop.width,
       desktop.height,
       { left: win.left ?? 0, top: win.top ?? 0 },
-      {
-        ringShown: ringShown(),
-        ringSize: ring.get().size,
-        paletteShown: prefs.get().showPalette,
-      }
+      { ringShown: ringShown(), ringSize: ring.get().size }
     );
   /** The zoom toggle, shared by the zoom box and ⌘J (zoomActive). */
   const zoomToggle = (win) => {
@@ -432,6 +453,9 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
       for (const u of unsubs) u();
       desktop.removeEventListener('vf-close', onClose);
       desktop.removeEventListener('vf-zoom', onZoom);
+      byId.palette.removeEventListener('vf-resize', onPaletteGrow);
+      byId.palette.removeEventListener('sm-palette-count', fitPaletteLabel);
+      paletteObserver.disconnect();
       // HMR: the next init rebuilds every window, so release and remove them all.
       for (const win of byKey.values()) {
         windows.release(win);

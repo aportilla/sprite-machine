@@ -5,8 +5,8 @@
 <!-- Utility windoids -->
 <!-- Windoid geometry comes from layout.js. Only the Tools palette's size is
      authored here. windows.js sets closable=false on every windoid but the 3D
-     Sprite Atlas and the Color Palette. A windoid bar shows no title, so the
-     heading only names the window for assistive tech. -->
+     Sprite Atlas. A windoid bar shows no title, so the heading only names the
+     window for assistive tech. -->
 <!-- Each windoid's controls go in slot="header". header-height includes the
      header's 1px rule and matches layout.js (STAGE_STRIP, SPRITE_STRIP,
      RING_STRIP). -->
@@ -73,7 +73,8 @@
   scrollbars="vertical"
 >
   <sm-palette-view></sm-palette-view>
-  <vf-label slot="status">Color Palette</vf-label>
+  <!-- windows.js writes the swatch count. -->
+  <vf-label slot="status"></vf-label>
 </vf-window>
 
 <!-- Tools palette. Its size matches TOOLS_BOX in layout.js. Last in the markup,

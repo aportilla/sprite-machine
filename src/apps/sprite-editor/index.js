@@ -792,10 +792,6 @@ export const spriteEditor = {
           // windows.js shows the windoid from showRing. Its close box clears it.
           prefs.setShowRing(!prefs.get().showRing);
           break;
-        case 'palette':
-          // windows.js shows the windoid from showPalette. Its close box clears it.
-          prefs.setShowPalette(!prefs.get().showPalette);
-          break;
         case 'arrange':
           // syncArrange sets this value while a window is off its placement.
           windows.arrange();
@@ -993,12 +989,10 @@ export const spriteEditor = {
     teardown.push(session.subscribe(syncTools));
     syncTools();
 
-    // The 3D Sprite Atlas and Color Palette checkmarks follow their prefs.
+    // The 3D Sprite Atlas checkmark follows its pref.
     const itemRing = item(menuView, 'ring');
-    const itemPalette = item(menuView, 'palette');
     const syncView = () => {
       itemRing.checked = prefs.get().showRing;
-      itemPalette.checked = prefs.get().showPalette;
     };
     teardown.push(prefs.subscribe(syncView));
     syncView();
