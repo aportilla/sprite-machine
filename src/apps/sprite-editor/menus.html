@@ -26,11 +26,13 @@
   <vf-menu-item value="undo" shortcut="⌘Z" disabled>Undo</vf-menu-item>
   <vf-menu-item value="redo" shortcut="⇧⌘Z" disabled>Redo</vf-menu-item>
   <vf-separator></vf-separator>
-  <!-- Placeholders for a pixel clipboard. Disabled, so ⌘C, ⌘V and ⌘A reach the
-       browser. -->
+  <!-- Copy, Paste and Select All act on the active window's selection. index.js
+       disables all three during a drag and while a text control has focus, so
+       ⌘C, ⌘V and ⌘A reach the field, and Copy with no selection. Paste reads
+       the system clipboard at each pick. -->
   <vf-menu-item value="copy" shortcut="⌘C" disabled>Copy</vf-menu-item>
-  <vf-menu-item value="paste" shortcut="⌘V" disabled>Paste</vf-menu-item>
-  <vf-menu-item value="select-all" shortcut="⌘A" disabled>Select All</vf-menu-item>
+  <vf-menu-item value="paste" shortcut="⌘V">Paste</vf-menu-item>
+  <vf-menu-item value="select-all" shortcut="⌘A">Select All</vf-menu-item>
   <vf-separator></vf-separator>
   <vf-menu-item value="pick-color" shortcut="⌘K">Pick Color…</vf-menu-item>
   <!-- Retiles the active document as an undoable edit, applied on OK only. -->

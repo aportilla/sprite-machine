@@ -9,6 +9,9 @@ import {
   liftRect,
   clearRect,
   compositeFloat,
+  pasteOrigin,
+  floatFromImage,
+  sameArt,
 } from '../src/lib/select.js';
 
 // buffer: a transparent w×h RGBA buffer painted from a map of "x,y" → [r,g,b].
@@ -243,6 +246,85 @@ test('reversible: partially off-tile then back on-tile reproduces the full float
     'the float buffer was never clipped, only the composite'
   );
   assert.equal(float.opaque, 4);
+});
+
+test('pasteOrigin: a float that fits whole at its place keeps it; otherwise it centers, rounding toward the top left', () => {
+  // A 4×2 float on a 10×6 tile centers at (3, 2).
+  assert.deepEqual(pasteOrigin(4, 2, { x: 1, y: 2 }, 10, 6), { x: 1, y: 2 });
+  assert.deepEqual(
+    pasteOrigin(4, 2, { x: 6, y: 4 }, 10, 6),
+    { x: 6, y: 4 },
+    'flush with the far edges'
+  );
+  const center = { x: 3, y: 2 };
+  assert.deepEqual(pasteOrigin(4, 2, { x: 7, y: 0 }, 10, 6), center, 'crosses the right');
+  assert.deepEqual(
+    pasteOrigin(4, 2, { x: 0, y: 5 }, 10, 6),
+    center,
+    'crosses the bottom'
+  );
+  assert.deepEqual(pasteOrigin(4, 2, { x: -1, y: 2 }, 10, 6), center, 'a negative x');
+  assert.deepEqual(pasteOrigin(4, 2, { x: 2, y: -1 }, 10, 6), center, 'a negative y');
+  assert.deepEqual(pasteOrigin(4, 2, null, 10, 6), center, 'no place');
+  // (10 - 5) / 2 = 2.5 and (6 - 3) / 2 = 1.5.
+  assert.deepEqual(
+    pasteOrigin(5, 3, null, 10, 6),
+    { x: 2, y: 1 },
+    'halves round toward the top left'
+  );
+  // Larger than the tile: (10 - 13) / 2 = -1.5 and (6 - 9) / 2 = -1.5.
+  assert.deepEqual(
+    pasteOrigin(13, 2, { x: 0, y: 0 }, 10, 6),
+    { x: -2, y: 2 },
+    'wider than the tile'
+  );
+  assert.deepEqual(
+    pasteOrigin(4, 9, { x: 0, y: 0 }, 10, 6),
+    { x: 3, y: -2 },
+    'taller than the tile'
+  );
+});
+
+test('floatFromImage hardens at alpha 128: below is four zero bytes, at or above is 255 with its RGB', () => {
+  // 2×2: alpha 127, 128, 255 and 0 under stray RGB.
+  const src = new Uint8ClampedArray([
+    10, 20, 30, 127, 40, 50, 60, 128, 70, 80, 90, 255, 1, 2, 3, 0,
+  ]);
+  const before = src.slice();
+  const f = floatFromImage({ width: 2, height: 2, data: src });
+  assert.equal(f.width, 2);
+  assert.equal(f.height, 2);
+  assert.deepEqual(texel(f.data, 2, 0, 0), [0, 0, 0, 0], 'alpha 127 is clear');
+  assert.deepEqual(texel(f.data, 2, 1, 0), [40, 50, 60, 255], 'alpha 128 is opaque');
+  assert.deepEqual(texel(f.data, 2, 0, 1), [70, 80, 90, 255]);
+  assert.deepEqual(texel(f.data, 2, 1, 1), [0, 0, 0, 0], 'stray RGB under alpha 0 goes');
+  assert.equal(f.opaque, 2);
+  assert.deepEqual(src, before, 'the source is untouched');
+});
+
+test('sameArt: the same size, and every texel clear in both or opaque in both with the same RGB', () => {
+  // 2×1: a red texel, then a clear one.
+  const float = (bytes) => ({
+    width: 2,
+    height: 1,
+    data: new Uint8ClampedArray(bytes),
+    opaque: 1,
+  });
+  const a = float([255, 0, 0, 255, 0, 0, 0, 0]);
+  assert.ok(sameArt(a, float([255, 0, 0, 255, 0, 0, 0, 0])), 'equal floats');
+  assert.ok(
+    sameArt(a, float([255, 0, 0, 255, 9, 9, 9, 0])),
+    'a clear texel’s RGB is not art'
+  );
+  assert.ok(
+    !sameArt(a, { ...float([255, 0, 0, 255, 0, 0, 0, 0]), width: 1, height: 2 }),
+    'a different size'
+  );
+  assert.ok(!sameArt(a, float([255, 0, 1, 255, 0, 0, 0, 0])), 'one texel’s color');
+  assert.ok(
+    !sameArt(a, float([255, 0, 0, 255, 0, 0, 0, 255])),
+    'clear in one, opaque in the other'
+  );
 });
 
 test('compositeFloat may composite in place when out === base', () => {

@@ -10,6 +10,8 @@
 //   move lifts the texels into #selFloat and clears them in a copy of the buffer
 //   (#selBase). Each offset composites base and float into #work in place.
 //   Transparent float texels show the base. A buffer reset drops the selection.
+//   The Edit menu calls copySelection, pasteFloat (a float already lifted, over
+//   a base with no hole) and selectAll.
 // - State: everything the pointer paths touch is a private field, so a drag
 //   never schedules a render. Canvas backing stores are sized in JS. A
 //   template-bound width would clear them.
@@ -208,7 +210,10 @@ export class SmDrawCanvas extends LitElement {
   #rectNotified = null; // last box sent with sm-rect-drag
 
   // Selection. #sel is the marquee in tile texels, inclusive, at the lift
-  // origin. The current rectangle is #sel shifted by #selOffset (#selRect).
+  // origin. The current rectangle is #sel shifted by #selOffset (#selRect). A
+  // paste's lift origin is where it was pasted, which may be off the tile.
+  // #startMove lifts only when there is no float, so a paste is never lifted
+  // again.
   #sel = null; // {x0,y0,x1,y1} | null
   #selFloat = null; // {width,height,data,opaque}, lifted on the first move
   #selBase = null; // #work with the marquee cleared, fixed for the selection's life
@@ -296,9 +301,11 @@ export class SmDrawCanvas extends LitElement {
     if (changed.has('tileW') || changed.has('tileH') || changed.has('tile')) {
       this.#resetWorking();
     } else if (changed.has('tool')) {
-      // A tool change drops the selection, discards a rect drag and ends a
-      // pencil stroke, which still commits.
-      this.#dropSelection();
+      // A tool change discards a rect drag and ends a pencil stroke, which still
+      // commits. It drops the selection unless the new tool is the selection
+      // tool: a paste or Select All installs its selection before the canvas
+      // sees the tool.
+      if (this.tool !== 'select') this.#dropSelection();
       this.#cancelRect();
       this.#endGesture();
       this.#drawing = false;
@@ -578,11 +585,16 @@ export class SmDrawCanvas extends LitElement {
     this.#gestureChanged = false;
   }
 
-  // Emit sm-gesture when a drag starts or ends: a pencil or eraser stroke, a
-  // rect drag or a selection drag. Every handler that can start or end one
-  // calls this after it runs.
+  // A drag is in progress: a pencil or eraser stroke, a rect drag or a
+  // selection drag.
+  get #dragging() {
+    return this.#drawing || this.#rectDragging || this.#selDrag != null;
+  }
+
+  // Emit sm-gesture when a drag starts or ends. Every handler that can start or
+  // end one calls this after it runs.
   #notifyGesture() {
-    const active = this.#drawing || this.#rectDragging || this.#selDrag != null;
+    const active = this.#dragging;
     if (active === this.#gestureNotified) return;
     this.#gestureNotified = active;
     this.#emit('sm-gesture', { active });
@@ -1170,6 +1182,58 @@ export class SmDrawCanvas extends LitElement {
     const c = this.#canvas.value;
     if (c && c.getAttribute('data-vf-cursor') !== kind)
       c.setAttribute('data-vf-cursor', kind);
+  }
+
+  // Edit menu commands, called through <sm-editor>. Each does nothing during a
+  // drag.
+
+  /**
+   * The selection's texels and the top-left of its current rectangle, or null.
+   * @returns {{float: import('../lib/select.js').Float, x: number, y: number}|null}
+   */
+  copySelection() {
+    if (!this.#sel || this.#dragging) return null;
+    // A moved selection or a paste copies its whole float, off-tile texels too.
+    const f = this.#selFloat;
+    const float = f
+      ? { width: f.width, height: f.height, data: f.data.slice(), opaque: f.opaque }
+      : liftRect(this.#work, this.tileW, this.#sel);
+    const b = this.#selRect;
+    return { float, x: b.x0, y: b.y0 };
+  }
+
+  /**
+   * Install `float` at (x, y) as a lifted selection, written as one undo step.
+   * @param {import('../lib/select.js').Float} float @param {number} x @param {number} y
+   */
+  pasteFloat(float, x, y) {
+    if (this.#dragging || !this.#work || !this.tileW || !this.tileH) return;
+    this.#dropSelection();
+    this.#sel = { x0: x, y0: y, x1: x + float.width - 1, y1: y + float.height - 1 };
+    this.#selFloat = float;
+    this.#selBase = this.#work.slice();
+    if (float.opaque > 0) {
+      this.#beginGesture();
+      this.#compositeSelection();
+      // A paste that changes no byte writes nothing, so a derived face stays
+      // derived and the document stays clean.
+      const before = this.#gestureBefore;
+      if (this.#work.some((v, i) => v !== before[i])) this.#commitPixels();
+      this.#endGesture();
+    }
+    this.#startAnts();
+    this.#drawAnts();
+    this.#notifySelection();
+  }
+
+  /** Select the whole tile, not lifted. */
+  selectAll() {
+    if (this.#dragging || !this.#work || !this.tileW || !this.tileH) return;
+    this.#dropSelection();
+    this.#sel = { x0: 0, y0: 0, x1: this.tileW - 1, y1: this.tileH - 1 };
+    this.#startAnts();
+    this.#drawAnts();
+    this.#notifySelection();
   }
 
   // Sampling and fill

@@ -3,7 +3,10 @@
 // Bounds are an inclusive texel rectangle {x0,y0,x1,y1}. A move lifts the
 // marquee's texels into a float (liftRect), clears the hole (clearRect) and
 // composites the float over that base at each offset (compositeFloat), so a
-// drag never smears what it crosses.
+// drag never smears what it crosses. A paste puts its float at pasteOrigin, over
+// a base with no hole. floatFromImage hardens an image from the system clipboard
+// into a float, and sameArt matches the app's own copy after a browser
+// re-encodes it.
 //
 // Transparent float texels (alpha 0) never overwrite the base. Only the composite
 // clips, per texel on both axes. The float keeps its off-tile texels, and a texel
@@ -15,6 +18,9 @@ import { writeKey } from './fill.js';
 /** @typedef {{width:number,height:number,data:Uint8ClampedArray,opaque:number}} Float */
 
 const TRANSPARENT = { transparent: true };
+
+// The carve's alpha threshold: a texel at this alpha or above is solid.
+const SOLID = 128;
 
 /**
  * Two texel corners as inclusive bounds, top-left to bottom-right.
@@ -94,6 +100,60 @@ export function clearRect(data, w, b) {
     }
   }
   return changed;
+}
+
+/**
+ * The top-left of a pasted w×h float on the tile: `at` when the whole float fits
+ * there, else centered, rounding toward the top left.
+ * @param {number} w @param {number} h @param {{x:number,y:number}|null} at
+ * @param {number} tileW @param {number} tileH
+ * @returns {{x:number,y:number}}
+ */
+export function pasteOrigin(w, h, at, tileW, tileH) {
+  if (at && at.x >= 0 && at.y >= 0 && at.x + w <= tileW && at.y + h <= tileH) {
+    return { x: at.x, y: at.y };
+  }
+  return { x: Math.floor((tileW - w) / 2), y: Math.floor((tileH - h) / 2) };
+}
+
+/**
+ * A float from decoded RGBA, hardened: a solid texel becomes alpha 255 with its
+ * RGB, any other four zero bytes.
+ * @param {{width:number,height:number,data:ArrayLike<number>}} image
+ * @returns {Float}
+ */
+export function floatFromImage(image) {
+  const { width, height, data: src } = image;
+  const data = new Uint8ClampedArray(width * height * 4);
+  let opaque = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (src[i + 3] < SOLID) continue;
+    data[i] = src[i];
+    data[i + 1] = src[i + 1];
+    data[i + 2] = src[i + 2];
+    data[i + 3] = 255;
+    opaque++;
+  }
+  return { width, height, data, opaque };
+}
+
+/**
+ * Whether two floats hold the same art: the same size, and each texel clear in
+ * both, or solid in both with the same RGB.
+ * @param {Float} a @param {Float} b
+ */
+export function sameArt(a, b) {
+  if (a.width !== b.width || a.height !== b.height) return false;
+  const p = a.data;
+  const q = b.data;
+  for (let i = 0; i < p.length; i += 4) {
+    const solidA = p[i + 3] >= SOLID;
+    const solidB = q[i + 3] >= SOLID;
+    if (solidA !== solidB) return false;
+    if (solidA && (p[i] !== q[i] || p[i + 1] !== q[i + 1] || p[i + 2] !== q[i + 2]))
+      return false;
+  }
+  return true;
 }
 
 /**

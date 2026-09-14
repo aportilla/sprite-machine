@@ -1,9 +1,11 @@
-// <sm-editor>: a document window's body, holding <sm-draw-canvas>.
-// apps/sprite-editor/windows.js creates one per document and keeps it until the
-// document closes, so the canvas survives hides and DOM re-orders.
+// <sm-editor>: a document window's body, holding <sm-draw-canvas>, whose Edit
+// menu commands it forwards. apps/sprite-editor/windows.js creates one per
+// document and keeps it until the document closes, so the canvas survives hides
+// and DOM re-orders.
 
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
+import { createRef, ref } from 'lit/directives/ref.js';
 import { maxCornerRadius } from '../lib/rect.js';
 import { session } from '../state/session.js';
 import { workspace } from '../state/workspace.js';
@@ -68,6 +70,25 @@ export class SmEditor extends LitElement {
     super.disconnectedCallback();
     this.#unsubDoc?.();
     this.#unsubDoc = null;
+  }
+
+  /** @type {import('lit/directives/ref.js').Ref<import('./sm-draw-canvas.js').SmDrawCanvas>} */
+  #canvas = createRef();
+
+  /** The canvas's selection texels and place, or null. */
+  copySelection() {
+    return this.#canvas.value?.copySelection() ?? null;
+  }
+
+  /** Paste `float` at (x, y) as the canvas's selection.
+   *  @param {import('../lib/select.js').Float} float @param {number} x @param {number} y */
+  pasteFloat(float, x, y) {
+    this.#canvas.value?.pasteFloat(float, x, y);
+  }
+
+  /** Select the canvas's whole tile. */
+  selectAll() {
+    this.#canvas.value?.selectAll();
   }
 
   /** Whether this editor's window is the active document window. The canvas
@@ -137,6 +158,7 @@ export class SmEditor extends LitElement {
       <div class="editor">
         <div class="editor-drawbox">
           <sm-draw-canvas
+            ${ref(this.#canvas)}
             .tile=${vm.tile}
             .tileW=${d.tileW}
             .tileH=${d.tileH}

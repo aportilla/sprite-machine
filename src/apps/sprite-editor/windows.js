@@ -416,6 +416,11 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
       const win = byKey.get(key);
       if (win) desktop.bringToFront(win);
     },
+    /** A document window's editor, or null.
+     *  @returns {import('../../components/sm-editor.js').SmEditor|null} */
+    editor(key) {
+      return /** @type {any} */ (byKey.get(key)?.querySelector('sm-editor') ?? null);
+    },
     /** ⌘J once everything is arranged: toggles zoom on the active document
      *  window, if any. */
     zoomActive() {

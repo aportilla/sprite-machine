@@ -25,6 +25,9 @@ THE SPRITE EDITOR — a document window
 ⌃Q — Quit
 ⌘Z — Undo
 ⇧⌘Z — Redo
+⌘C — Copy the selected pixels
+⌘V — Paste as a selection
+⌘A — Select the whole tile
 ⌘K — Pick Color…
 ⌘J — Arrange Windows
 

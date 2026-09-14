@@ -16,7 +16,7 @@ import menus from './menus.html?raw';
 import { session } from '../../state/session.js';
 import { prefs } from '../../state/prefs.js';
 import { build } from '../../state/build.js';
-import { SPRITE_EDITOR } from '../../state/shell.js';
+import { shell, SPRITE_EDITOR } from '../../state/shell.js';
 import {
   ring,
   ringMetaChunks,
@@ -35,12 +35,21 @@ import {
   slugOf,
 } from '../../state/files.js';
 import { workspace, followActive } from '../../state/workspace.js';
+import { clipboard, pixelPasteSource } from '../../state/clipboard.js';
 import { TILE_MIN, TILE_MAX, LAYER_MAX, clampTile, setTextChunks } from 'sprite-machine';
 import { SAMPLES } from '../../lib/sprite-data.js';
+import { pasteOrigin, floatFromImage } from '../../lib/select.js';
 import { ringFrame, ringSheet, ringAnchor, ringYaws } from '../../lib/ring.js';
 import { zipStore } from '../../lib/zip.js';
 import { loadSample, loadBlank } from '../../loaders.js';
-import { downloadPngBytes, downloadBlob, canvasToPngBytes } from '../../image-io.js';
+import {
+  downloadPngBytes,
+  downloadBlob,
+  canvasToPngBytes,
+  bytesToImageData,
+  imageDataToPngBytes,
+} from '../../image-io.js';
+import { readSystemClipboard, pastedPng } from '../../system-clipboard.js';
 import { initEditorWindows } from './windows.js';
 
 /** @type {import('../index.js').App} */
@@ -512,6 +521,118 @@ export const spriteEditor = {
       }
     });
 
+    // Copy, Paste and Select All
+    // They act on the active window's canvas: its edited face of its edited
+    // layer. The clipboard slice is app-wide, so a copy pastes onto any face,
+    // layer or document. Each paste reads the system clipboard, and the slice
+    // keeps the copy's exact bytes and place.
+    const activeEditor = () => {
+      const ctx = workspace.active();
+      return ctx ? editorWindows.editor(ctx.key) : null;
+    };
+    /** @typedef {import('../../lib/select.js').Float} Float */
+
+    // The newest copy's system clipboard write while it is pending, else null. A
+    // paste waits for it, so its read sees that copy.
+    /** @type {Promise<void>|null} */
+    let writing = null;
+    function copyPixels() {
+      const copy = activeEditor()?.copySelection();
+      if (!copy) return;
+      clipboard.setPixels(copy.float, copy.x, copy.y);
+      const { pixels } = clipboard.get();
+      const write = writePixels(pixels.float).then((ok) => {
+        if (ok) clipboard.markWritten(pixels);
+        if (writing === write) writing = null;
+      });
+      writing = write;
+    }
+    // One image/png part, with no text/plain for a text target to paste instead.
+    // The part is the encode's promise, so write() is called in the menu pick's
+    // task, as Safari requires. Resolves whether the write succeeded.
+    /** @param {Float} float */
+    async function writePixels(float) {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined')
+        return false;
+      const png = imageDataToPngBytes(float).then(
+        (bytes) => new Blob([bytes], { type: 'image/png' })
+      );
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    // With no write pending, the read is called in the menu pick's task.
+    async function paste() {
+      if (writing) await writing;
+      const system = await readSystemClipboard();
+      dispatchPaste(system && { image: await decodeFloat(system.image) });
+    }
+    /** An image/png decoded and hardened, or null when absent or undecodable.
+     *  @param {Blob|null} blob */
+    async function decodeFloat(blob) {
+      if (!blob) return null;
+      try {
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        return floatFromImage(await bytesToImageData(bytes));
+      } catch {
+        return null;
+      }
+    }
+    /** @param {{image: Float|null}|null} system  null: unreadable */
+    function dispatchPaste(system) {
+      const slice = clipboard.get();
+      switch (pixelPasteSource(slice, system)) {
+        case 'pixels': {
+          const { float, x, y } = slice.pixels;
+          const { width, height, data, opaque } = float;
+          placeFloat({ width, height, data: data.slice(), opaque }, { x, y });
+          break;
+        }
+        case 'image':
+          placeFloat(system.image, null);
+          break;
+        // 'none': nothing to paste.
+      }
+    }
+    // Switches to the selection tool and pastes the float at `at` when it fits
+    // the tile there, else centered. The canvas keeps the float it is handed. A
+    // read resolves later, so the active window, a modal and a drag are checked
+    // here.
+    /** @param {Float} float  @param {{x: number, y: number}|null} at */
+    function placeFloat(float, at) {
+      const ctx = workspace.active();
+      const editor = ctx ? editorWindows.editor(ctx.key) : null;
+      if (!editor || modalOpen() || session.get().gesture) return;
+      const { tileW, tileH } = ctx.doc.get();
+      const { x, y } = pasteOrigin(float.width, float.height, at, tileW, tileH);
+      session.setTool('select');
+      editor.pasteFloat(float, x, y);
+    }
+
+    // The browser's own Edit → Paste fires a paste event with no key press. It is
+    // the only route for a copied file, and clipboardData is readable only during
+    // the event. The kit claims ⌘V while Paste is enabled, so a key press never
+    // also fires it.
+    on(document, 'paste', (e) => {
+      if (shell.get().frontApp !== SPRITE_EDITOR || itemPaste.disabled || modalOpen())
+        return;
+      const dt = /** @type {ClipboardEvent} */ (e).clipboardData;
+      if (!dt) return;
+      e.preventDefault();
+      decodeFloat(pastedPng(dt)).then((image) => dispatchPaste({ image }));
+    });
+
+    function selectAll() {
+      const editor = activeEditor();
+      if (!editor || session.get().gesture) return;
+      session.setTool('select');
+      editor.selectAll();
+    }
+
     // Menus
     on(menuFile, 'vf-menu-select', (e) => {
       if (modalOpen()) return;
@@ -583,7 +704,15 @@ export const spriteEditor = {
         case 'redo':
           workspace.active()?.history.redo();
           break;
-        // Copy, Paste and Select All are disabled placeholders.
+        case 'copy':
+          copyPixels();
+          break;
+        case 'paste':
+          paste();
+          break;
+        case 'select-all':
+          selectAll();
+          break;
         case 'pick-color':
           session.openPicker();
           break;
@@ -694,6 +823,46 @@ export const spriteEditor = {
       workspace.subscribe(syncEdit)
     );
     syncEdit();
+
+    // Copy, Paste and Select All are disabled during a canvas drag, and while a
+    // text control has focus so the field keeps its native keys. Focus is read
+    // from the composed path because kit fields keep their <input> in shadow
+    // DOM. Copy also needs a selection in the active window. Paste ignores the
+    // clipboard's contents, which cannot be read outside a pick. The selection's
+    // bounds change at pointer-move rate, so disabled is written only on change.
+    const itemCopy = item(menuEdit, 'copy');
+    const itemPaste = item(menuEdit, 'paste');
+    const itemSelectAll = item(menuEdit, 'select-all');
+    /** Whether the innermost focused element is a text control. */
+    let textFocused = false;
+    const setDisabled = (it, v) => {
+      if (it.disabled !== v) it.disabled = v;
+    };
+    const syncClipboard = () => {
+      const off = textFocused || session.get().gesture;
+      setDisabled(itemCopy, off || !workspace.active()?.selection.get().bounds);
+      setDisabled(itemPaste, off);
+      setDisabled(itemSelectAll, off);
+    };
+    teardown.push(
+      followActive(workspace, (ctx) =>
+        ctx ? ctx.selection.subscribe(syncClipboard) : undefined
+      ),
+      workspace.subscribe(syncClipboard),
+      session.subscribe(syncClipboard)
+    );
+    on(document, 'focusin', (e) => {
+      const t = e.composedPath()[0];
+      const tag = t instanceof Element ? t.tagName : '';
+      textFocused = tag === 'INPUT' || tag === 'TEXTAREA';
+      syncClipboard();
+    });
+    on(document, 'focusout', () => {
+      // A following focusin sets it again.
+      textFocused = false;
+      syncClipboard();
+    });
+    syncClipboard();
 
     // Arrange Windows (⌘J). The value is "zoom" when windows.arranged() holds, else
     // "arrange". The label does not change. A window zoomed from its slot, or

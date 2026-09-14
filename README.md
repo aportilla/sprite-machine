@@ -207,7 +207,31 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   edits only this face, which can break registration. The texels are lifted
   once, on the first move press, and each offset composites them over the base
   (`lib/select.js`), so a drag doesn't smear what it crosses.
-- **Undo**: a gesture (stroke, rect, fill, move) is one step, and an all-faces
+- **Copy, Paste and Select All** (Edit, ⌘C, ⌘V, ⌘A) work on the active
+  window's selection. Copy takes the selection's texels and the top-left of its
+  rectangle: a marquee's texels, or a moved selection's or a paste's whole
+  float, off-tile texels included. The selection stays. Paste switches to the
+  selection tool and puts the pixels on the edited face of the edited layer as
+  a selection already lifted, so the first drag moves them. They go where they
+  were copied from when they fit the tile there, else centered, rounding toward
+  the top left, and a float larger than the tile hangs off its edges. The paste
+  writes the pixels at once as one undo step, and its transparent texels leave
+  the art under them. From there it is an ordinary selection: a drag moves it
+  over the art it was pasted on, Esc or a click outside keeps its pixels, and
+  Undo takes back the move, then the paste. A second ⌘V drops the first paste
+  where it is and pastes on top of it. Select All switches to the selection
+  tool and selects the whole tile, not lifted. The clipboard is app-wide, so
+  ⌘A, ⌘C, a layer key and ⌘V copy a face to another layer in registration.
+- **The system clipboard**: Copy also writes the pixels as one `image/png`, so
+  other programs paste them. Each paste reads the system clipboard. An image
+  that matches the in-app copy, texel for texel as the carve reads alpha
+  (`sameArt`), pastes the in-app copy's bytes at its place. Any other image
+  pastes centered, with alpha 128 and up opaque and the rest clear
+  (`floatFromImage`), and text pastes nothing. When the system clipboard can't
+  be read, or holds no image after the write failed, the in-app copy pastes.
+  The browser's own Edit → Paste arrives as a `paste` event and takes the same
+  route. The browser prompts are as in the Finder (see [Folders](#folders)).
+- **Undo**: a gesture (stroke, rect, fill, move, paste) is one step, and an all-faces
   replace, a tile resize, New Layer, Delete Layer and each layer move are one
   whole-sheet step that also restores the layer names. Rename Layer… is a step of its own.
   An undo lands on the layer and face it recorded without switching the editor
@@ -432,11 +456,14 @@ document to act on):
 - **Edit**: _Undo_ ⌘Z, _Redo_ ⇧⌘Z; _Copy_ ⌘C, _Paste_ ⌘V, _Select All_ ⌘A;
   _Pick Color…_ ⌘K, _Tile Size…_, with rules between the groups. Undo and Redo
   act on the active document's history and are disabled until it has a step,
-  so ⌘Z reaches a focused field. Copy, Paste and Select All are greyed
-  placeholders for a pixel clipboard, and their keys reach the browser.
-  _Tile Size…_ sets the active document's square tile size in a dialog that
-  applies on OK as one undo step (see [Drawing editor](#drawing-editor)). No
-  Cut or Clear.
+  so ⌘Z reaches a focused field. Copy, Paste and Select All act on the active
+  window's selection (see [Drawing editor](#drawing-editor)). Copy is greyed
+  while the window has no selection. All three are greyed during a drag and
+  while a text control has focus, so the field keeps native ⌘C / ⌘V / ⌘A.
+  Otherwise Paste is always live, because the system clipboard can't be read
+  before a pick, and a paste with nothing to paste does nothing. _Tile Size…_
+  sets the active document's square tile size in a dialog that applies on OK
+  as one undo step (see [Drawing editor](#drawing-editor)). No Cut or Clear.
 - **View**: _Arrange Windows_ ⌘J comes first. Its label is fixed and its
   command depends on the windows. If any visible window is off its placement,
   it arranges: the boot placement re-runs on the current raster and document
@@ -762,14 +789,16 @@ scrollbars="both"`, created on open and removed by its close box. Its header
   renamed: its own name if free among items of its kind, else _«name» copy_,
   _«name» copy 2_, and so on. A reference to a record emptied from the Trash is
   skipped. Paste is not undoable.
-- **Pasting an outside image** (an `image/png` the app didn't write) first
+- **Pasting an outside image** (an `image/png` the Finder didn't write) first
   checks `lib/sheet-shape.js`: a `3t × 2tN` sheet of square tiles, `t` from 1 to
   64 and N from 1 to 8 layers, stricter than the drop. A valid image is saved as
   a new document of N layers where Paste lands, re-encoded, with its title,
   transforms, ring settings and layer names read from its chunks. It lands
   selected. Without a `Title` it is named _untitled_ (counted
   per container) and opens for rename. No window opens. An invalid image shows
-  the paste alert with the rule and its dimensions.
+  the paste alert with the rule and its dimensions. The Sprite Editor's pixel
+  copy is such an image: it shows the alert with the selection's size, or saves
+  a new document when that size is a sheet's, such as 3 × 2 or 6 × 4 texels.
 - **Clipboard routes**: ⌘V and the menu pick use the Async Clipboard API.
   Chrome asks for permission once, and Safari and Firefox show a Paste button
   for content copied elsewhere. The browser's own Edit → Paste arrives as a
@@ -1127,8 +1156,9 @@ src/shell/      shared by every application: layout (desktop geometry, the casca
                 menu-bar (Sprite Machine menu, shared dialogs, menu swap),
                 desktop-pattern, desktop-state, url-state, clock
 src/            main (composition root), boot/ (params, curtain), loaders,
-                drop-target, shortcuts, image-io, style.css, components/ (Lit, shadow
-                DOM except sm-color-picker)
+                drop-target, shortcuts, image-io, system-clipboard (the paste
+                reads), style.css, components/ (Lit, shadow DOM except
+                sm-color-picker)
 src/assets/     raster art at 1:1: tool icons (22×19), face cubes (21×26) and the
                 selected dither, application icon (32×32), folder, text file, the
                 Trash's cans and 12×12 indicator, the Car sample's atlas
@@ -1209,9 +1239,9 @@ release, and a layer key waits while it is set.
   changes, and untitled windows don't survive a reload.
 - **Selection.** A registered move: an "on all faces" checkbox, like the fill
   tool's, that moves the matching texels on every face (a FRONT rect's columns on
-  TOP/BOTTOM, its rows on LEFT/RIGHT, its mirror on BACK). A lasso. Cut, Copy,
-  Paste, Clear and Select All over the selection, with a pasted PNG arriving as a
-  floating selection.
+  TOP/BOTTOM, its rows on LEFT/RIGHT, its mirror on BACK), and the same for a
+  paste onto every face at once. A lasso. Cut ⌘X and Clear over the selection,
+  with the Delete key as Clear. A size cap on a pasted image.
 - **Eyedropper.** Sample a texel in the edge hints.
 - **Finder.** Duplicate ⌘D for the selected icons, into their own container and
   named like a paste.
@@ -1222,7 +1252,9 @@ release, and a layer key waits while it is set.
 - **Menu bar.** An Application menu at the bar's right end that switches
   applications.
 - **Clipboard.** Write a document's bytes as `web application/x-sprite-machine`
-  beside `image/png` and prefer it on paste, so its chunks survive.
+  beside `image/png` and prefer it on paste, so its chunks survive. The same for
+  a pixel copy, with the float's bytes and its place, so a browser's re-encode
+  never changes a pasted color.
 - **Structure.** Dialogs move from index.html into each application's directory.
   The stage and rebuilder move out of `main.js`, and the editor's components into
   `apps/sprite-editor/`. The options strip moves into that app's markup once the

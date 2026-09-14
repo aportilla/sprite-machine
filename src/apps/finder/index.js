@@ -29,6 +29,7 @@ import { readSheetMeta, missingDefaults, restoreDefaultFiles } from '../../loade
 import { SAMPLES } from '../../lib/sprite-data.js';
 import { TEXTS } from '../../texts/index.js';
 import { bytesToImageData } from '../../image-io.js';
+import { readSystemClipboard, pastedPng } from '../../system-clipboard.js';
 import { initFolderWindows } from './windows.js';
 import { initIcons } from './icons.js';
 
@@ -161,27 +162,8 @@ export const finder = {
       await navigator.clipboard.write([new ClipboardItem(parts)]);
     }
 
-    // Returns null when the clipboard cannot be read. pasteSource then uses the
-    // slice.
-    async function readSystemClipboard() {
-      if (!navigator.clipboard?.read) return null;
-      try {
-        const items = await navigator.clipboard.read();
-        let text = null;
-        let image = null;
-        for (const it of items) {
-          if (text == null && it.types.includes('text/plain')) {
-            text = await (await it.getType('text/plain')).text();
-          }
-          if (image == null && it.types.includes('image/png')) {
-            image = await it.getType('image/png');
-          }
-        }
-        return { text, image };
-      } catch {
-        return null;
-      }
-    }
+    // An unreadable system clipboard reads as null, and pasteSource then uses
+    // the slice.
     async function paste() {
       if (!files.get().available) {
         showStorage();
@@ -331,22 +313,7 @@ export const finder = {
       const dt = /** @type {ClipboardEvent} */ (e).clipboardData;
       if (!dt) return;
       const text = dt.getData('text/plain') || null;
-      /** @type {Blob|null} */
-      let image = null;
-      for (const f of dt.files) {
-        if (f.type === 'image/png') {
-          image = f;
-          break;
-        }
-      }
-      if (!image) {
-        for (const it of dt.items) {
-          if (it.kind === 'file' && it.type === 'image/png') {
-            image = it.getAsFile();
-            break;
-          }
-        }
-      }
+      const image = pastedPng(dt);
       if (text == null && image == null) return;
       e.preventDefault();
       if (!files.get().available) {
