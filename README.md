@@ -173,8 +173,9 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
 - **The options strip** is a kit band (`pattern="white" rule="bottom"`) with
   the current-ink swatch and the tool's options. It has no tool-name caption,
   and no label is dimmed. A dotted `<vf-separator vertical>` stands between
-  the swatch and the options, and between the rect's radius field and its size
-  readout. A control and its own readout have no separator.
+  the swatch and the options, between the rect's radius field and its size
+  readout, and between the selection's size readout and its flip buttons. A
+  control and its own readout have no separator.
 - **Pencil**: a tip-shape popup (`circle` / `square`, circle at every load), a
   size slider (1 to the tile size) and an `N px` readout. The circle tip is the
   disc inscribed in the N×N box, the square the whole box. `brushRows` defines
@@ -207,6 +208,19 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   edits only this face, which can break registration. The texels are lifted
   once, on the first move press, and each offset composites them over the base
   (`lib/select.js`), so a drag doesn't smear what it crosses.
+- **Flip Horizontal** and **Flip Vertical** follow the selection's `W × H` in
+  the options strip and are greyed while the window has no selection. The
+  readout keeps room for `64 × 64`, so the buttons hold still as the size
+  changes, and a wider size pushes them right. A flip mirrors the selection
+  within its rectangle, left to right or top to bottom, as one undo step, and
+  the selection stays up. A marquee flips its texels in place. A moved
+  selection or a paste flips its whole float, off-tile texels included, and its
+  transparent texels show the art under them, as in a move.
+- **Delete or Backspace** clears the selection as one undo step and drops it.
+  A marquee's texels go transparent. A moved selection or a paste removes its
+  own pixels, and the art under them shows. The key does nothing during a
+  drag, with ⌘, ⌃ or ⌥ held, while a menu or dialog is open, or while a text
+  field has focus.
 - **Copy, Paste and Select All** (Edit, ⌘C, ⌘V, ⌘A) work on the active
   window's selection. Copy takes the selection's texels and the top-left of its
   rectangle: a marquee's texels, or a moved selection's or a paste's whole
@@ -231,7 +245,7 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   be read, or holds no image after the write failed, the in-app copy pastes.
   The browser's own Edit → Paste arrives as a `paste` event and takes the same
   route. The browser prompts are as in the Finder (see [Folders](#folders)).
-- **Undo**: a gesture (stroke, rect, fill, move, paste) is one step, and an all-faces
+- **Undo**: a gesture (stroke, rect, fill, move, paste, flip, delete) is one step, and an all-faces
   replace, a tile resize, New Layer, Delete Layer and each layer move are one
   whole-sheet step that also restores the layer names. Rename Layer… is a step of its own.
   An undo lands on the layer and face it recorded without switching the editor
@@ -1240,8 +1254,8 @@ release, and a layer key waits while it is set.
 - **Selection.** A registered move: an "on all faces" checkbox, like the fill
   tool's, that moves the matching texels on every face (a FRONT rect's columns on
   TOP/BOTTOM, its rows on LEFT/RIGHT, its mirror on BACK), and the same for a
-  paste onto every face at once. A lasso. Cut ⌘X and Clear over the selection,
-  with the Delete key as Clear. A size cap on a pasted image.
+  paste onto every face at once. A lasso. Cut ⌘X and an Edit → Clear item over
+  the selection. A size cap on a pasted image.
 - **Eyedropper.** Sample a texel in the edge hints.
 - **Finder.** Duplicate ⌘D for the selected icons, into their own container and
   named like a paste.

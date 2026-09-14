@@ -4,9 +4,9 @@
 // marquee's texels into a float (liftRect), clears the hole (clearRect) and
 // composites the float over that base at each offset (compositeFloat), so a
 // drag never smears what it crosses. A paste puts its float at pasteOrigin, over
-// a base with no hole. floatFromImage hardens an image from the system clipboard
-// into a float, and sameArt matches the app's own copy after a browser
-// re-encodes it.
+// a base with no hole. flipRect mirrors a marquee in the buffer, or a whole
+// float. floatFromImage hardens an image from the system clipboard into a float,
+// and sameArt matches the app's own copy after a browser re-encodes it.
 //
 // Transparent float texels (alpha 0) never overwrite the base. Only the composite
 // clips, per texel on both axes. The float keeps its off-tile texels, and a texel
@@ -100,6 +100,32 @@ export function clearRect(data, w, b) {
     }
   }
   return changed;
+}
+
+/**
+ * Mirror the rect's texels in place, left to right or top to bottom. Whole
+ * texels move, RGB under alpha 0 included. Bounds must lie inside the buffer.
+ * @param {Uint8ClampedArray} data @param {number} w @param {Bounds} b
+ * @param {'horizontal'|'vertical'} axis
+ */
+export function flipRect(data, w, b, axis) {
+  const swap = (i, j) => {
+    for (let k = 0; k < 4; k++) {
+      const v = data[i + k];
+      data[i + k] = data[j + k];
+      data[j + k] = v;
+    }
+  };
+  if (axis === 'horizontal') {
+    for (let y = b.y0; y <= b.y1; y++) {
+      for (let l = b.x0, r = b.x1; l < r; l++, r--)
+        swap((y * w + l) * 4, (y * w + r) * 4);
+    }
+  } else {
+    for (let t = b.y0, u = b.y1; t < u; t++, u--) {
+      for (let x = b.x0; x <= b.x1; x++) swap((t * w + x) * 4, (u * w + x) * 4);
+    }
+  }
 }
 
 /**

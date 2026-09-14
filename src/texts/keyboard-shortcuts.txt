@@ -70,6 +70,7 @@ Right-click — erase with whichever tool you are holding, while the button is d
 Option — sample a color without leaving the tool you are in
 Shift — square a rectangle, lock a move to one axis, toggle icons in a rubber band
 Esc — cancel a drag, drop a selection, dismiss a dialog
+Delete or Backspace — clear the selected pixels
 
 ONE COMMAND OVER THE WHOLE SCREEN
 

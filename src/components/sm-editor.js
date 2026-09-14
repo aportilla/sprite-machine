@@ -1,5 +1,5 @@
-// <sm-editor>: a document window's body, holding <sm-draw-canvas>, whose Edit
-// menu commands it forwards. apps/sprite-editor/windows.js creates one per
+// <sm-editor>: a document window's body, holding <sm-draw-canvas>, whose
+// selection commands it forwards. apps/sprite-editor/windows.js creates one per
 // document and keeps it until the document closes, so the canvas survives hides
 // and DOM re-orders.
 
@@ -89,6 +89,12 @@ export class SmEditor extends LitElement {
   /** Select the canvas's whole tile. */
   selectAll() {
     this.#canvas.value?.selectAll();
+  }
+
+  /** Mirror the canvas's selection.
+   *  @param {'horizontal'|'vertical'} axis */
+  flipSelection(axis) {
+    this.#canvas.value?.flipSelection(axis);
   }
 
   /** Whether this editor's window is the active document window. The canvas

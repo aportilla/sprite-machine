@@ -1,7 +1,7 @@
 // <sm-draw-canvas>: the Sprite Editor's pixel canvas. It holds the working
 // buffer, runs the tool gestures (select, pencil, eraser, rect, fill,
-// eyedropper), fits the canvas to whole system px and handles the gesture keys
-// (Esc, Shift and the tool letters).
+// eyedropper), fits the canvas to whole system px and handles the gesture and
+// selection keys (Esc, Shift, Delete, Backspace and the tool letters).
 //
 // - The stack: the edge-hint frame (lib/edges.js) behind four canvases: the
 //   underlay (the other layers and the mirrored opposite face), the pixel
@@ -11,7 +11,8 @@
 //   (#selBase). Each offset composites base and float into #work in place.
 //   Transparent float texels show the base. A buffer reset drops the selection.
 //   The Edit menu calls copySelection, pasteFloat (a float already lifted, over
-//   a base with no hole) and selectAll.
+//   a base with no hole) and selectAll, and the options strip calls
+//   flipSelection.
 // - State: everything the pointer paths touch is a private field, so a drag
 //   never schedules a render. Canvas backing stores are sized in JS. A
 //   template-bound width would clear them.
@@ -40,6 +41,7 @@ import { keyAt, floodFill, replaceColor } from '../lib/fill.js';
 import {
   liftRect,
   clearRect,
+  flipRect,
   compositeFloat,
   normalizeBounds,
   boundsContain,
@@ -585,6 +587,14 @@ export class SmDrawCanvas extends LitElement {
     this.#gestureChanged = false;
   }
 
+  // Commit an in-gesture write only if a byte changed since #beginGesture, so a
+  // write that changes nothing keeps a derived face derived and the document
+  // clean.
+  #commitChanged() {
+    const before = this.#gestureBefore;
+    if (before && this.#work.some((v, i) => v !== before[i])) this.#commitPixels();
+  }
+
   // A drag is in progress: a pencil or eraser stroke, a rect drag or a
   // selection drag.
   get #dragging() {
@@ -604,9 +614,10 @@ export class SmDrawCanvas extends LitElement {
   // Checked in order:
   // 1. A selection drag: Esc cancels, Shift toggles the axis lock, a tool
   //    letter cancels.
-  // 2. A selection with no drag: Esc drops it. The selection can outlive
-  //    dialogs, menus and window changes, so this checks for the active
-  //    window, an open dialog and a focused text field. It never calls
+  // 2. A selection with no drag: Esc drops it, and Delete or Backspace clears
+  //    it. The selection can outlive dialogs, menus and window changes, so
+  //    both check for the active window, an open dialog and a focused text
+  //    field, and a clear also for an open menu. Esc never calls
   //    preventDefault: a prevented Esc suppresses a dialog's cancel event and
   //    keeps an open menu from closing.
   // 3. A rect drag: Esc cancels, Shift square-locks, a tool letter cancels.
@@ -675,15 +686,24 @@ export class SmDrawCanvas extends LitElement {
   }
 
   // A selection with no drag: Esc drops it, without preventDefault (see
-  // #onKeyDown).
+  // #onKeyDown). Delete or Backspace clears it.
   #onSelectionUpKey(e) {
-    if (e.key !== 'Escape') return;
+    const clear = e.key === 'Delete' || e.key === 'Backspace';
+    if (e.key !== 'Escape' && !clear) return;
     if (!this.active) return;
-    if (document.querySelector('vf-dialog[open]')) return; // the dialog handles Esc
+    if (document.querySelector('vf-dialog[open]')) return; // the dialog takes its keys
     const target = e.composedPath ? e.composedPath()[0] : e.target;
     const tag = target && /** @type {Element} */ (target).tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-    this.#dropSelection();
+    if (!clear) {
+      this.#dropSelection();
+      return;
+    }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // A key typed while a menu is open is meant for the menu.
+    if (document.querySelector('vf-menu[open]')) return;
+    e.preventDefault();
+    this.#clearSelection();
   }
 
   // Releasing Shift ends the rect's square lock or the move's axis lock.
@@ -1140,6 +1160,17 @@ export class SmDrawCanvas extends LitElement {
     this.#notifySelection();
   }
 
+  // Clear the selection as one undo step, then drop it. A marquee's texels go
+  // transparent. A lifted selection leaves its base, so the art under it shows.
+  #clearSelection() {
+    this.#beginGesture();
+    if (this.#selFloat) this.#work.set(this.#selBase);
+    else clearRect(this.#work, this.tileW, this.#sel);
+    this.#commitChanged();
+    this.#endGesture();
+    this.#dropSelection();
+  }
+
   #releaseSelPointer() {
     if (this.#selPointer != null) {
       this.#canvas.value?.releasePointerCapture?.(this.#selPointer);
@@ -1184,8 +1215,8 @@ export class SmDrawCanvas extends LitElement {
       c.setAttribute('data-vf-cursor', kind);
   }
 
-  // Edit menu commands, called through <sm-editor>. Each does nothing during a
-  // drag.
+  // Selection commands from the Edit menu and the options strip, called through
+  // <sm-editor>. Each does nothing during a drag.
 
   /**
    * The selection's texels and the top-left of its current rectangle, or null.
@@ -1215,10 +1246,7 @@ export class SmDrawCanvas extends LitElement {
     if (float.opaque > 0) {
       this.#beginGesture();
       this.#compositeSelection();
-      // A paste that changes no byte writes nothing, so a derived face stays
-      // derived and the document stays clean.
-      const before = this.#gestureBefore;
-      if (this.#work.some((v, i) => v !== before[i])) this.#commitPixels();
+      this.#commitChanged();
       this.#endGesture();
     }
     this.#startAnts();
@@ -1234,6 +1262,26 @@ export class SmDrawCanvas extends LitElement {
     this.#startAnts();
     this.#drawAnts();
     this.#notifySelection();
+  }
+
+  /**
+   * Mirror the selection within its rectangle, as one undo step. A marquee flips
+   * in the buffer. A lifted selection flips its whole float over the same base.
+   * @param {'horizontal'|'vertical'} axis
+   */
+  flipSelection(axis) {
+    if (!this.#sel || this.#dragging) return;
+    this.#beginGesture();
+    const f = this.#selFloat;
+    if (f) {
+      const whole = { x0: 0, y0: 0, x1: f.width - 1, y1: f.height - 1 };
+      flipRect(f.data, f.width, whole, axis);
+      if (f.opaque > 0) this.#compositeSelection();
+    } else {
+      flipRect(this.#work, this.tileW, this.#sel, axis);
+    }
+    this.#commitChanged();
+    this.#endGesture();
   }
 
   // Sampling and fill

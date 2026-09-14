@@ -1,8 +1,8 @@
 // <sm-tool-options>: the per-tool controls in the options strip. Props carry
 // the clamp bounds, and the session actions do the clamping. Emits
 // sm-set-pencil-size {n}, sm-set-pencil-shape {shape}, sm-set-eraser-size {n},
-// sm-set-eraser-shape {shape}, sm-set-corner-radius {n} and
-// sm-set-fill-opts {contiguous?, allFaces?}.
+// sm-set-eraser-shape {shape}, sm-set-corner-radius {n},
+// sm-set-fill-opts {contiguous?, allFaces?} and sm-flip-selection {axis}.
 //
 // live() bindings re-sync the controls after typing or a rejected pick.
 // A vertical separator goes only between different things, such as the rect's
@@ -32,6 +32,12 @@ export class SmToolOptions extends LitElement {
       .editor-size-slider {
         flex: 1;
         max-width: calc(var(--vf-scale, 1) * 130px);
+      }
+      /* Room for "64 × 64" in the display face (8 px digits, 15 px for " × "),
+         so the flip buttons hold still. A wider size pushes them right. */
+      .editor-select-size {
+        flex: none;
+        min-width: calc(var(--vf-scale, 1) * 47px);
       }
     `,
   ];
@@ -173,8 +179,19 @@ export class SmToolOptions extends LitElement {
     if (this.tool === 'select') {
       // The full marquee size, including any part moved off the tile.
       return html`
-        <vf-label title="selection: width × height (texels)"
+        <vf-label class="editor-select-size" title="selection: width × height (texels)"
           >${SmToolOptions.size(this.selection)}</vf-label
+        >
+        <vf-separator vertical></vf-separator>
+        <vf-button
+          ?disabled=${!this.selection}
+          @click=${() => this.#emit('sm-flip-selection', { axis: 'horizontal' })}
+          >Flip Horizontal</vf-button
+        >
+        <vf-button
+          ?disabled=${!this.selection}
+          @click=${() => this.#emit('sm-flip-selection', { axis: 'vertical' })}
+          >Flip Vertical</vf-button
         >
       `;
     }

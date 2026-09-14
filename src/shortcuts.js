@@ -1,6 +1,6 @@
 // Document-level keys: S, B, R, G, E and I pick a tool, and 1 to LAYER_MAX pick
-// the active document's layer. Gesture keys (Esc, Shift) live in
-// <sm-draw-canvas>.
+// the active document's layer. Gesture and selection keys (Esc, Shift, Delete,
+// Backspace) live in <sm-draw-canvas>.
 
 import { LAYER_MAX } from 'sprite-machine';
 import { session } from './state/session.js';

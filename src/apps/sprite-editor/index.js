@@ -633,6 +633,13 @@ export const spriteEditor = {
       editor.selectAll();
     }
 
+    // Flip Horizontal and Flip Vertical, the selection tool's buttons in the
+    // options strip. They act on the active window's selection.
+    on($('sm-options-bar'), 'sm-flip-selection', (e) => {
+      if (modalOpen()) return;
+      activeEditor()?.flipSelection(/** @type {CustomEvent} */ (e).detail.axis);
+    });
+
     // Menus
     on(menuFile, 'vf-menu-select', (e) => {
       if (modalOpen()) return;

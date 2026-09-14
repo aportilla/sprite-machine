@@ -8,6 +8,7 @@ import {
   constrainAxis,
   liftRect,
   clearRect,
+  flipRect,
   compositeFloat,
   pasteOrigin,
   floatFromImage,
@@ -132,6 +133,47 @@ test('clearRect zeroes all four bytes of the rect and reports whether anything c
     false,
     'an already-transparent rect reports no change'
   );
+});
+
+test('flipRect mirrors the rect across its middle in place: whole texels, RGB under alpha 0 included, nothing outside', () => {
+  const W = 6;
+  const H = 5;
+  // Texel (x, y) holds [x, y, 9, alpha], with alpha 0 on every other texel.
+  const alpha = (x, y) => ((x + y) % 2 ? 255 : 0);
+  const grid = () => {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) d.set([x, y, 9, alpha(x, y)], (y * W + x) * 4);
+    return d;
+  };
+  // A 4 × 3 rect flush with the right edge and a 3 × 4 rect at the origin, so
+  // each axis mirrors an even span and an odd one, whose middle stays.
+  const rects = [
+    { x0: 2, y0: 1, x1: 5, y1: 3 },
+    { x0: 0, y0: 0, x1: 2, y1: 3 },
+  ];
+  for (const b of rects) {
+    for (const axis of ['horizontal', 'vertical']) {
+      const d = grid();
+      flipRect(d, W, b, axis);
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          let [fx, fy] = [x, y];
+          if (boundsContain(b, x, y)) {
+            if (axis === 'horizontal') fx = b.x0 + b.x1 - x;
+            else fy = b.y0 + b.y1 - y;
+          }
+          assert.deepEqual(
+            texel(d, W, x, y),
+            [fx, fy, 9, alpha(fx, fy)],
+            `${axis} over ${JSON.stringify(b)}: ${x},${y} holds ${fx},${fy}`
+          );
+        }
+      }
+      flipRect(d, W, b, axis);
+      assert.deepEqual(d, grid(), `${axis} twice is the identity`);
+    }
+  }
 });
 
 test('identity: lift → clear → composite at the origin reproduces the buffer byte-for-byte', () => {

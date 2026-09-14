@@ -1,6 +1,7 @@
 // <sm-options-bar>: the settings strip under the menu bar. It holds the
 // current-ink swatch and <sm-tool-options>, with a dotted vertical separator
-// between them when both are shown.
+// between them when both are shown. It dispatches sm-flip-selection {axis} again
+// from its host, where the Sprite Editor flips the active window's selection.
 //
 // The band is a 36 system px vf-container with a bottom rule inside that
 // height, so it ends at TOP_RESERVE (shell/layout.js).
@@ -104,6 +105,7 @@ export class SmOptionsBar extends LitElement {
         @sm-set-corner-radius=${(e) =>
           session.setCornerRadius(e.detail.n, this.#radiusMax)}
         @sm-set-fill-opts=${this.#onFillOpts}
+        @sm-flip-selection=${this.#onFlip}
       ></sm-tool-options>
     `;
   }
@@ -139,6 +141,13 @@ export class SmOptionsBar extends LitElement {
     const { contiguous, allFaces } = e.detail;
     if (contiguous !== undefined) session.setFillContiguous(contiguous);
     if (allFaces !== undefined) session.setFillAllFaces(allFaces);
+  };
+
+  // The event stops at this shadow root, so the host sends it on.
+  #onFlip = (e) => {
+    this.dispatchEvent(
+      new CustomEvent('sm-flip-selection', { detail: e.detail, bubbles: true })
+    );
   };
 }
 
