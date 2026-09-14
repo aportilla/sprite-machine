@@ -338,3 +338,43 @@ test('unionVoxels: a layer with views on one plane is a slab on the lattice face
   assert.deepEqual([at(top, 3, 3, 1), at(top, 3, 0, 1)], [1, 0], 'top-only: y = 3');
   assertSurfaceColored(top);
 });
+
+test('unionVoxels only: a one-plane layer keeps the union’s lattice and its place in it', () => {
+  const body = buildVoxels(LEFT_RED);
+  const mark = buildVoxels({ front: img(['..GG', '..GG', '....', '....']) });
+  const u = unionVoxels([body, mark], { only: 1 });
+  const at = (x, y, z) => u.solid[voxIndex(x, y, z, u.dims)];
+  assert.deepEqual(u.dims, { nx: 4, ny: 4, nz: 4 });
+  assert.equal(u.solidCount, 4, 'none of the body');
+  assert.deepEqual([at(2, 2, 3), at(3, 2, 3), at(2, 3, 3), at(3, 3, 3)], [1, 1, 1, 1]);
+  assert.deepEqual(
+    [u.palette, u.providedViews, u.warnings],
+    [mark.palette, ['front'], mark.warnings.map((w) => `Layer 2: ${w}`)]
+  );
+  assertSurfaceColored(u);
+});
+
+test('unionVoxels only: the layer colors its own faces, including faces the union buries', () => {
+  const cube = buildVoxels(CUBE_BLUE);
+  const half = buildVoxels(LEFT_RED);
+  const under = unionVoxels([cube, half], { only: 0 });
+  assert.equal(colorOf(under, 0, 3, 0, 'py'), pk('B'), 'the union colors it red');
+  assertSurfaceColored(under);
+
+  const over = unionVoxels([cube, half], { only: 1 });
+  assert.equal(colorOf(over, 1, 3, 0, 'px'), pk('R'), 'buried in the union');
+  assert.deepEqual(
+    [over.solid, over.surfaceMask, over.faceColor],
+    [half.solid, half.surfaceMask, half.faceColor],
+    'a layer observing every axis is its own result'
+  );
+});
+
+test('unionVoxels only: a blank layer is its own result, and an index past the results throws', () => {
+  const blank = buildVoxels({});
+  const a = buildVoxels(LEFT_RED);
+  const u = unionVoxels([blank, a], { only: 0 });
+  assert.equal(u, blank);
+  assert.deepEqual(u.providedViews, []);
+  assert.throws(() => unionVoxels([blank, a], { only: 2 }), RangeError);
+});

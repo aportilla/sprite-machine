@@ -96,19 +96,33 @@ function layerOffset(r, dims) {
  *     `layers` holds the results, null where dropped.
  * One result, or none with a provided view, returns the first result untouched.
  * No results is one empty layer.
+ *
+ * `only` keeps the union's lattice and placement but builds the solid from that
+ * layer alone, so the model is the layer where it sits in the union. Its
+ * palette, views and warnings are that layer's. A dropped layer returns its
+ * result untouched, and an index with no result throws a RangeError.
  * @param {VoxelResult[]} results  one per layer, in block order
+ * @param {{only?: number}} [opts]
  */
-export function unionVoxels(results) {
+export function unionVoxels(results, { only } = {}) {
+  if (only != null && !(Number.isInteger(only) && only >= 0 && only < results.length)) {
+    throw new RangeError(`unionVoxels: no layer ${only} among ${results.length}`);
+  }
   if (results.length === 0) return buildVoxels({});
   const kept = results.map((r) => (r.providedViews.length > 0 ? r : null));
   const live = kept.filter((r) => r != null);
+  if (only != null && !kept[only]) return results[only];
   if (results.length === 1 || live.length === 0) return results[0];
 
   const dims = { nx: 1, ny: 1, nz: 1 };
   for (const r of live) {
     for (const [dim] of AXES) dims[dim] = Math.max(dims[dim], r.dims[dim]);
   }
-  const placed = live.map((r) => ({ r, off: layerOffset(r, dims) }));
+  // The layers the solid is built from, null where dropped or not shown.
+  const shown = kept.map((r, k) => (only == null || k === only ? r : null));
+  const placed = shown
+    .filter((r) => r != null)
+    .map((r) => ({ r, off: layerOffset(r, dims) }));
 
   const n = dims.nx * dims.ny * dims.nz;
   const solid = new Uint8Array(n);
@@ -149,12 +163,12 @@ export function unionVoxels(results) {
     surfaceCount: count,
     solidCount,
     faceColor,
-    palette: [...new Set(live.flatMap((r) => r.palette))],
-    warnings: kept.flatMap((r, k) =>
+    palette: [...new Set(placed.flatMap(({ r }) => r.palette))],
+    warnings: shown.flatMap((r, k) =>
       r ? r.warnings.map((w) => `Layer ${k + 1}: ${w}`) : []
     ),
     providedViews: VIEW_NAMES.filter((v) =>
-      live.some((r) => r.providedViews.includes(v))
+      placed.some(({ r }) => r.providedViews.includes(v))
     ),
     layers: kept,
   };

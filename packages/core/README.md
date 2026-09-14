@@ -159,7 +159,8 @@ Without `layers`, a sheet is one block. A document PNG names its blocks in a
 whose length is the layer count. The parts are exported too: `sliceLayers`,
 `buildLayeredVoxels`, `unionVoxels`, `LAYERS_CHUNK`, `layersChunk`,
 `parseLayersChunk`, `layerCount` and `LAYER_MAX` (8, the app's cap, which the
-chunk parser also holds to).
+chunk parser also holds to). `unionVoxels(results, { only: k })` keeps the
+union's lattice and builds layer `k` alone, where it sits in the whole model.
 
 ## The technique: multi-view visual-hull voxelization
 
