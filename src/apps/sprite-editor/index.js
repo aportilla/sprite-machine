@@ -720,9 +720,6 @@ export const spriteEditor = {
         case 'select-all':
           selectAll();
           break;
-        case 'pick-color':
-          session.openPicker();
-          break;
         case 'tile-size':
           showTileDialog();
           break;

@@ -468,16 +468,16 @@ document to act on):
   - Both exports work whenever a model exists, whether or not the windoid is
     shown.
 - **Edit**: _Undo_ ⌘Z, _Redo_ ⇧⌘Z; _Copy_ ⌘C, _Paste_ ⌘V, _Select All_ ⌘A;
-  _Pick Color…_ ⌘K, _Tile Size…_, with rules between the groups. Undo and Redo
-  act on the active document's history and are disabled until it has a step,
-  so ⌘Z reaches a focused field. Copy, Paste and Select All act on the active
-  window's selection (see [Drawing editor](#drawing-editor)). Copy is greyed
-  while the window has no selection. All three are greyed during a drag and
-  while a text control has focus, so the field keeps native ⌘C / ⌘V / ⌘A.
-  Otherwise Paste is always live, because the system clipboard can't be read
-  before a pick, and a paste with nothing to paste does nothing. _Tile Size…_
-  sets the active document's square tile size in a dialog that applies on OK
-  as one undo step (see [Drawing editor](#drawing-editor)). No Cut or Clear.
+  _Tile Size…_, with rules between the groups. Undo and Redo act on the active
+  document's history and are disabled until it has a step, so ⌘Z reaches a
+  focused field. Copy, Paste and Select All act on the active window's
+  selection (see [Drawing editor](#drawing-editor)). Copy is greyed while the
+  window has no selection. All three are greyed during a drag and while a text
+  control has focus, so the field keeps native ⌘C / ⌘V / ⌘A. Otherwise Paste is
+  always live, because the system clipboard can't be read before a pick, and a
+  paste with nothing to paste does nothing. _Tile Size…_ sets the active
+  document's square tile size in a dialog that applies on OK as one undo step
+  (see [Drawing editor](#drawing-editor)). No Cut or Clear.
 - **View**: _Arrange Windows_ ⌘J comes first. Its label is fixed and its
   command depends on the windows. If any visible window is off its placement,
   it arranges: the boot placement re-runs on the current raster and document
