@@ -41,7 +41,7 @@ export function createStage(canvas, { cam = null } = {}) {
 
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
-  controls.target.set(0, 0.9, 0);
+  controls.target.set(0, 0, 0);
 
   // Render on demand: the 2048² PCF shadow map is too costly to redraw every
   // frame while idle. OrbitControls emits 'change' through drags and damping.
@@ -80,15 +80,25 @@ export function createStage(canvas, { cam = null } = {}) {
     // longest axis, X and Z centered, Y from 0.
     const s = DEFAULT_WORLD_SIZE / Math.max(dims.nx, dims.ny, dims.nz);
     const size = new THREE.Vector3(dims.nx, dims.ny, dims.nz).multiplyScalar(s);
-    const center = new THREE.Vector3(0, size.y / 2, 0);
     const r = size.length() / 2; // the box's bounding sphere radius
     // The narrower of the vertical and horizontal half-angles, so a tall view
     // keeps the box's sides.
-    const v = (camera.fov * Math.PI) / 360;
-    const half = Math.min(v, Math.atan(Math.tan(v) * camera.aspect));
-    const dist = (r / Math.sin(half)) * 1.25;
-    controls.target.copy(center);
-    camera.position.copy(center).addScaledVector(ISO_DIR, dist);
+    const halfFov = (camera.fov * Math.PI) / 360;
+    const half = Math.min(halfFov, Math.atan(Math.tan(halfFov) * camera.aspect));
+    const dist = (r / Math.sin(half)) * 1.25; // camera to the box's center
+    // Orbit around the middle of the box's floor, and hold the camera's depth
+    // to the box's center at `dist` so the box keeps its size on screen.
+    controls.target.set(0, 0, 0);
+    camera.position
+      .copy(controls.target)
+      .addScaledVector(ISO_DIR, dist + ISO_DIR.y * (size.y / 2));
+    // The box's center rides above the view axis now that the axis meets the
+    // floor. A lens shift, in fractions of the frame so a resize keeps it, puts
+    // the center back in the picture's middle. setViewOffset writes
+    // camera.aspect from the full size, so the full size carries the aspect.
+    const rise = (size.y / 2) * Math.sqrt(1 - ISO_DIR.y ** 2);
+    const shift = -rise / (2 * dist * Math.tan(halfFov));
+    camera.setViewOffset(camera.aspect, 1, 0, shift, camera.aspect, 1);
     camera.far = Math.max(FAR, 2 * (dist + r));
     camera.updateProjectionMatrix();
     controls.update();
