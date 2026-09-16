@@ -571,15 +571,16 @@ are not documents.
 - **Document windows**: one per open document, cloned from a template by
   `apps/sprite-editor/windows.js`. A window is created on open at the doc box,
   cascaded into the first free slot, and removed on close. Each is
-  `movable resizable zoomable`, titled with the document's name, with a status
-  strip naming the edited face, led by the edited layer's name when the
-  document has more than one (`Layer 2, Front Face`). The **zoom box** toggles
-  size with the
-  top-left held. It grows the window right and down to the vacant middle's
-  edges and records the previous size. On a window already at that size it
-  restores the recorded size, or the doc box size if none is recorded. ⌘J's
-  zoom is the same toggle. A zoomed window's far edges are struts, so it stays
-  zoomed across a browser resize.
+  `movable resizable zoomable`, titled with the document's name. Its status
+  strip names the edited face, led by a small layer popup
+  (`vf-select size="small" no-shadow`) when the document has more than one
+  layer: the layers in block order with the edited one set. A pick switches
+  the window's layer, like the Layer menu's list. The **zoom box** toggles
+  size with the top-left held. It grows the window right and down to the
+  vacant middle's edges and records the previous size. On a window already at
+  that size it restores the recorded size, or the doc box size if none is
+  recorded. ⌘J's zoom is the same toggle. A zoomed window's far edges are
+  struts, so it stays zoomed across a browser resize.
 - **Utility windoids**: the Tools palette, Full Sprite View, 3D View and Color
   Palette have no close box or menu toggle and are shown whenever the Sprite
   Editor is front. The 3D Sprite Atlas is toggleable. Windoids float above
