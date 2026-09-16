@@ -17,7 +17,7 @@ export const TOP_RESERVE = 56;
 export const MENU_BAR = 20;
 
 // Where an application's first window opens, and the base of every window
-// cascade. The 52px left inset holds the Tools palette: 14 + 24 wide + 14.
+// cascade.
 export const WINDOW_ORIGIN = { left: 52, top: TOP_RESERVE + 8 };
 
 export const CASCADE_STEP = 24;

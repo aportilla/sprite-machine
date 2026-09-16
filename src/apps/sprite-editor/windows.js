@@ -55,7 +55,7 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
     host.querySelector('#tpl-document-window')
   );
 
-  // Widen the frame's top and right bands for the rail before any window re-pins.
+  // Widen the frame's bands for the docked windoids before any window re-pins.
   windows.setFrameBands(FRAME_BANDS);
 
   // Utility windoids

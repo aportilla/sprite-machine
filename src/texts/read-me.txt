@@ -15,7 +15,7 @@ DRAWING
 
 Double-click a document to open it, or choose File → New… (⌃N). The Tools palette holds the selection, pencil, rectangle, fill, eraser and eyedropper; the strip under the menu bar holds the live tool's options, and the current ink is the swatch at its left — click it, or choose Edit → Pick Color… (⌘K), for the Colors dialog.
 
-The Color Palette at the bottom left has a swatch for every color in the document. Press a swatch to paint with its color; the ink's swatch is ringed. Widen the window for more columns.
+The Color Palette under the Tools palette has a swatch for every color in the document. Press a swatch to paint with its color; the ink's swatch is ringed. Widen the window for more columns.
 
 The Full Sprite View shows all six faces in a row; click a tile, or a cube in its header, to switch the face you are editing. The 3D View rebuilds as you draw. The faded art behind the canvas is the opposite face, and the strips just outside its edges are the neighbouring faces' nearest lines — line your pixels up against them.
 

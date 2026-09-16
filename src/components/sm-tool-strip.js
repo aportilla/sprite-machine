@@ -1,5 +1,5 @@
-// <sm-tool-strip>: the Tools palette's cells, a one-column vf-grid. Emits
-// sm-pick-tool {tool}.
+// <sm-tool-strip>: the Tools palette's cells, a TOOL_GRID vf-grid filled row by
+// row. Emits sm-pick-tool {tool}.
 //
 // Each cell is its icon, a 22×19 1-bit PNG in src/assets/tools/ drawn at
 // TOOL_CELL (apps/sprite-editor/layout.js). The art must stay pure black on
@@ -12,7 +12,7 @@
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
-import { TOOL_CELL } from '../apps/sprite-editor/layout.js';
+import { TOOL_CELL, TOOL_GRID } from '../apps/sprite-editor/layout.js';
 import { baseStyles } from './base-styles.js';
 import selectUrl from '../assets/tools/select.png';
 import pencilUrl from '../assets/tools/pencil.png';
@@ -99,7 +99,7 @@ export class SmToolStrip extends LitElement {
     return html`
       <vf-grid
         class="editor-toolstrip"
-        columns="1"
+        columns=${TOOL_GRID.cols}
         cell-width=${TOOL_CELL.width}
         cell-height=${TOOL_CELL.height}
         frameless

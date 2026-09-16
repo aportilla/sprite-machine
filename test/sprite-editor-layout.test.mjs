@@ -48,27 +48,26 @@ test('placement: a tiny raster still yields finite, usable boxes; a zero-sized o
   assert.ok(Object.values(rp).every(Number.isFinite));
 });
 
-test('placement: the Color Palette and the strip share the bottom band, the strip right of the Palette; the doc box and its zoom stay above the band', () => {
+test('placement: the Color Palette sits centered under the Tools palette, the strip at the bottom under the doc box; the doc box and its zoom clear both', () => {
   const hidden = initialPlacement(W, H);
   const shown = initialPlacement(W, H, { ringShown: true });
-  const { palette, ring } = shown;
+  const { tools, palette, ring } = shown;
   assert.deepEqual(hidden.ring, ring, 'the strip placed alike, shown or hidden');
-  assert.equal(palette.left, shown.doc.left, 'left-aligned with the doc box');
-  assert.ok(ring.left >= palette.left + palette.width, 'the strip right of the Palette');
+  const offCenter = palette.left + palette.width / 2 - (tools.left + TOOLS.width / 2);
+  assert.ok(Math.abs(offCenter) <= 0.5, 'centered under the Tools palette');
+  assert.ok(palette.top > tools.top + TOOLS.height, 'under the Tools palette');
+  assert.equal(ring.left, shown.doc.left, 'the strip left-aligned with the doc box');
   assert.ok(ring.left + ring.width <= shown.sprite.left, 'the strip clears the rail');
-  assert.equal(
-    palette.top + palette.height,
-    ring.top + ring.height,
-    'level at the bottom'
-  );
-  assert.ok(palette.top + palette.height <= H, 'on the raster');
+  assert.ok(ring.top + ring.height <= H, 'on the raster');
   for (const opts of [{}, { ringShown: true }]) {
     const p = initialPlacement(W, H, opts);
-    const bandTop = Math.min(p.palette.top, opts.ringShown ? p.ring.top : H);
+    const bandTop = opts.ringShown ? p.ring.top : H;
     const tag = JSON.stringify(opts);
-    assert.ok(p.doc.top + p.doc.height <= bandTop, `the doc box clears ${tag}`);
-    const z = zoomedBox(W, H, p.doc, opts);
-    assert.ok(z.top + z.height <= bandTop, `the zoom clears ${tag}`);
+    for (const b of [p.doc, zoomedBox(W, H, p.doc, opts)]) {
+      assert.ok(b.left >= tools.left + TOOLS.width, `clears the Tools palette ${tag}`);
+      assert.ok(b.left >= palette.left + palette.width, `clears the Palette ${tag}`);
+      assert.ok(b.top + b.height <= bandTop, `clears the bottom ${tag}`);
+    }
   }
 });
 
@@ -160,8 +159,8 @@ test('pin: the placement is a fixed point — a resize lands the windoids where 
         `sprite ${JSON.stringify([r0, r1])}`
       );
       // The 3D Sprite Atlas strip has a fixed height and a width floored at
-      // RING_MIN_WIDTH. Its left, top and height are a fixed point beside the
-      // Color Palette. Its width springs but stays clear of the rail. Tile sizes
+      // RING_MIN_WIDTH. Its left, top and height are a fixed point under the doc
+      // box. Its width springs but stays clear of the rail. Tile sizes
       // stay small: a tall strip's top on a short raster falls in the top band
       // and pins near. The Palette keeps its size.
       for (const views of [4, 16]) {

@@ -165,10 +165,10 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   at full opacity, on white, so the dithered rectangle is exactly the drawable
   area. They take no pointer input. A stroke never changes them, since a
   face's neighbours exclude the face and its opposite.
-- **Tools**: six 22×19 cells in a column, **selection** `S`, **pencil** `B`,
-  **rect** `R`, **fill** `G`, **eraser** `E`, **eyedropper** `I`. Each cell is
-  a 1-bit PNG drawn 1:1 through `vf-img` (`TOOL_CELL`, from which `TOOLS_BOX`
-  derives). The selected cell inverts with a CSS `invert`, exact only for pure
+- **Tools**: six 22×19 cells, three across and two down, **selection** `S`,
+  **pencil** `B`, **rect** `R` on top, **fill** `G`, **eraser** `E`,
+  **eyedropper** `I` below. Each cell is a 1-bit PNG drawn 1:1 through `vf-img`
+  (`TOOL_CELL` and `TOOL_GRID`, from which `TOOLS_BOX` derives). The selected cell inverts with a CSS `invert`, exact only for pure
   black art. A cell picks on press, not on click.
 - **The options strip** is a kit band (`pattern="white" rule="bottom"`) with
   the current-ink swatch and the tool's options. It has no tool-name caption,
@@ -269,7 +269,7 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   same-hue pairs fall within the wedge merge tolerance (`sameMat`,
   `TOL2 = 12²`) and can merge into a wedge on a staircase. `lib/palette.js`
   lists them. No gray pair merges.
-- **The Color Palette** is a grid of swatches at the bottom left, one per
+- **The Color Palette** is a grid of swatches under the Tools palette, one per
   color in the active document. Pressing a swatch sets the
   ink, and the ink's swatch is ringed. See [Windows](#windows).
 - **Face picker**: six cube icons over a radio row in the Full Sprite View's
@@ -563,8 +563,8 @@ resize, and the catalog item it shows. The front application is the active
 window's application. One resize rule re-pins every window. Arrange Windows
 runs each application's arrangement group, then re-applies every window's own
 placement. `shell/layout.js` holds the desktop's geometry: the menu bar and
-options strip bands, `WINDOW_ORIGIN` (where document, folder and read-me
-windows open), the cascade, the nearness test and the nine-slice pin.
+options strip bands, `WINDOW_ORIGIN` (where folder and read-me windows
+open), the cascade, the nearness test and the nine-slice pin.
 
 The Sprite Editor has two tiers of window. Other applications' windows (the
 Desktop Patterns panel, folder windows, text windows) are document tier but
@@ -650,9 +650,8 @@ header's height and the windoid's minimum width.
   size changes, its height re-fits with the top-left held. While hidden, it is
   re-placed instead. It resizes horizontally only. Its width is the user's,
   seeded with the row's width and floored at the header's. A wider row scrolls
-  horizontally. The placement docks it on the bottom margin, 14 px right of the
-  Color Palette. While shown,
-  its band is taken out of the vacancy, so new windows, Arrange and the zoom box
+  horizontally. The placement docks it on the bottom margin, left-aligned with
+  the document window. While shown, its band is taken out of the vacancy, so new windows, Arrange and the zoom box
   stay clear of it. Showing it doesn't move other windows.
 
 **The Color Palette** lists the active document's colors, one `vf-swatch` per
@@ -674,25 +673,23 @@ Its status strip counts the swatches (`paletteStatus`).
   black over its white inset, 1px white inside. A picked color not yet painted
   marks nothing. A swatch's tooltip is its hex, after the Colors dialog's name
   when it has one.
-- **The window** has no close box or menu toggle. It docks on the bottom
-  margin, left-aligned with the document window, sized to show five columns by
-  three rows, with the atlas strip to its right. It resizes in both axes, and on
-  release the grow snaps back to the whole columns and rows the window shows
-  (`paletteFit`). It is floored at one column and two rows. Below the width
-  that shows the count whole, the status strip stays and its text empties.
-  Arrange Windows restores its size. Its band is taken out of the vacancy like
-  the strip's, so new windows, Arrange and the zoom box stay clear of it. It
-  keeps its size across a browser resize, and a placed Color Palette stays
-  docked.
+- **The window** has no close box or menu toggle. It sits 8 px under the Tools
+  palette, centered on it, sized to show two columns by five rows. The
+  document window opens right of the wider of the two. It resizes in both axes,
+  and on release the grow snaps back to the whole columns and rows the window
+  shows (`paletteFit`). It is floored at one column and two rows. Below the
+  width that shows "N colors" whole, the status strip shows the bare count, and
+  below the count's own width its text empties. Arrange Windows restores its size. It keeps its size across a
+  browser resize, and a placed Color Palette stays under the Tools palette.
 
 The Sprite Editor's placement is computed from the live raster
-(`apps/sprite-editor/layout.js`, pure). The Tools palette is at the top left.
-The Full Sprite View sits over the 3D View as a right-hand rail, both
-right-aligned at one width. The 3D View is square, shortened to end above
-the bottom margin on a short raster, down to its size floor. The Color
-Palette and the 3D Sprite Atlas strip share the bottom band. The document
-window is at `WINDOW_ORIGIN` beside the Tools palette and fills the vacant
-middle, less the cascade room at the right and bottom. Further document
+(`apps/sprite-editor/layout.js`, pure). The Tools palette is at the top left
+over the Color Palette. The Full Sprite View sits over the 3D View as a
+right-hand rail, both right-aligned at one width. The 3D View is square,
+shortened to end above the bottom margin on a short raster, down to its size
+floor. The 3D Sprite Atlas strip docks on the bottom margin. The document
+window opens right of the left column, level with the Tools palette's top, and
+fills the vacant middle, less the cascade room at the right and bottom. Further document
 windows open at the same size, cascaded down-right into the first of five
 slots no open window holds. A closed or
 moved window frees its slot, and a full cascade wraps to the first.
@@ -705,8 +702,9 @@ window boxes do persist.
 When the browser window resizes, every window moves by one rule, the
 **nine-slice pin** (`pinOf`/`pinTo`). The open area below the options strip
 has outer bands around a middle. The bottom band is 100 system px. The others
-are wider, to hold the rail at the top and right and the Color Palette with the
-strip's left edge at the left (the Sprite Editor declares them at init). An edge in a band is a **strut**: its offset from that
+are wider, to hold the rail at the top and right and the left column with the
+document window's and the strip's left edges at the left (the Sprite Editor
+declares them at init). An edge in a band is a **strut**: its offset from that
 raster edge holds. An edge in the middle is a **spring**: its fraction of the
 middle holds. So a window against an edge stays against it, and one spanning
 the middle scales with it. Placed windoids are all struts, so a resize puts
