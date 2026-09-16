@@ -32,8 +32,9 @@ Read `README.md` first; it is the spec. The testing policy is
   never reaches for the DOM; app code never reaches into `packages/core`
   except through its published entries. `npm test` runs both packages' suites.
 - Commit messages: a one-line subject, then one or two short paragraphs
-  (what, why, the decisions, tests), no counts, and the
-  `Claude-Session:` trailer. Commit and push on the user's word only.
+  (what, why, the decisions, tests), no counts. Never a Claude trailer or
+  attribution: no `Claude-Session:`, no `Co-Authored-By:`, no "Generated
+  with" line. Commit and push on the user's word only.
 
 ## Applications and the shell
 
