@@ -18,8 +18,9 @@ export function mirrorImage(img, axis) {
  *   - `wasDerived`: the face has no art of its own. It stays derived until a
  *     pixel changes.
  *   - `onionBehind`: the underlay, one composited tile: the layer's opposite
- *     face mirrored, then each other layer's art on this face in block order,
- *     later over earlier. Null when all of those are empty.
+ *     face mirrored, then each other layer in block order, its opposite face
+ *     mirrored under its art on this face, as the model colors it. Later over
+ *     earlier. Null when all of those are empty.
  *   - `edgeHints`: the layer's four neighbouring faces' edge texels, one texel
  *     deep around the tile (lib/edges.js). Other layers never show there.
  * A stroke on this face of this layer changes none of the underlay or hints,
@@ -34,7 +35,8 @@ export function editorViewModel(docState, face, layer) {
   const { layers, tileW, tileH } = docState;
   const views = layers[layer] ?? {};
   const existing = views[face] || null;
-  const oppArt = views[VIEW_OPPOSITE[face]];
+  const opposite = VIEW_OPPOSITE[face];
+  const mirrored = (art) => (art ? mirrorImage(art, MIRROR_AXIS) : null);
   return {
     tile: existing || {
       width: tileW,
@@ -43,8 +45,10 @@ export function editorViewModel(docState, face, layer) {
     },
     wasDerived: existing == null,
     onionBehind: compositeTiles([
-      oppArt ? mirrorImage(oppArt, MIRROR_AXIS) : null,
-      ...layers.map((other, k) => (k === layer ? null : other[face] || null)),
+      mirrored(views[opposite]),
+      ...layers.flatMap((other, k) =>
+        k === layer ? [] : [mirrored(other[opposite]), other[face] || null]
+      ),
     ]),
     edgeHints: edgeHintFrame(views, tileW, tileH, face),
   };

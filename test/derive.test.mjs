@@ -47,7 +47,7 @@ test('editorViewModel: own art by IDENTITY; no art a fresh blank tile, derived; 
   assert.equal(vm2.onionBehind, null, 'bottom has no art of its own');
 });
 
-test('editorViewModel on a layer: its tile and edge hints are the layer’s own; the underlay is the other layers’ same face over its mirrored opposite', () => {
+test('editorViewModel on a layer: its tile and edge hints are the layer’s own; the underlay is its mirrored opposite, then each other layer’s same face over that layer’s mirrored opposite', () => {
   const front0 = tile(2, 2);
   setPx(front0, 0, 0, RED);
   const back0 = tile(2, 2);
@@ -57,8 +57,13 @@ test('editorViewModel on a layer: its tile and edge hints are the layer’s own;
   const front1 = tile(2, 2);
   setPx(front1, 0, 1, BLUE);
   setPx(front1, 1, 0, BLUE);
+  const back1 = tile(2, 2);
+  setPx(back1, 0, 0, RED); // mirrors to (1,0), under front1
   const doc = {
-    layers: [{ front: front0, back: back0, right: right0 }, { front: front1 }],
+    layers: [
+      { front: front0, back: back0, right: right0 },
+      { front: front1, back: back1 },
+    ],
     tileW: 2,
     tileH: 2,
   };
@@ -66,17 +71,18 @@ test('editorViewModel on a layer: its tile and edge hints are the layer’s own;
   const on0 = editorViewModel(doc, 'front', 0);
   assert.equal(on0.tile, front0);
   assert.deepEqual(px(on0.onionBehind, 0, 1), BLUE, 'layer 1 over the mirrored back');
-  assert.deepEqual(px(on0.onionBehind, 1, 0), BLUE);
+  assert.deepEqual(
+    px(on0.onionBehind, 1, 0),
+    BLUE,
+    'layer 1’s front over its mirrored back'
+  );
   assert.equal(alphaAt(on0.onionBehind, 0, 0), 0, 'never the layer’s own art');
 
   const on1 = editorViewModel(doc, 'front', 1);
   assert.equal(on1.tile, front1);
   assert.deepEqual(px(on1.onionBehind, 0, 0), RED, 'layer 0’s front');
-  assert.equal(
-    alphaAt(on1.onionBehind, 0, 1),
-    0,
-    'layer 0’s back mirrors only for layer 0'
-  );
+  assert.deepEqual(px(on1.onionBehind, 0, 1), GREEN, 'layer 0’s back, mirrored');
+  assert.deepEqual(px(on1.onionBehind, 1, 0), RED, 'layer 1’s own back, mirrored');
 
   const painted = (frame) => frame.data.some((v, i) => i % 4 === 3 && v !== 0);
   assert.equal(painted(on0.edgeHints), true, 'layer 0’s side runs along its front');

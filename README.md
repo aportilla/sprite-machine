@@ -295,9 +295,11 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
 There is no automatic ground rest: an object sits at whatever Y you paint it.
 Two aids help registration. The faded **underlay** behind the canvas is one
 composited tile drawn at `ONION_ALPHA` (`lib/layers.js`): the edited layer's
-opposite face, mirrored, then every other layer's art on the same face in block
-order, later over earlier. It shows the art on the other side and the art in
-the other layers. The edge hints outside the canvas show what the edited
+opposite face, mirrored, then each other layer in block order, later over
+earlier. Each other layer is its opposite face mirrored under its art on the
+same face, as colorize fills a face with no art, so a layer drawn on one side
+shows on both. It shows the art on the other side and the art in the other
+layers. The edge hints outside the canvas show what the edited
 layer's art meets past each edge.
 
 **Dev hooks**, parsed in `src/boot/params.js`: `?sample=<index|name>` opens a
