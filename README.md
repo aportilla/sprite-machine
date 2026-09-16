@@ -686,8 +686,8 @@ Its status strip counts the swatches (`paletteStatus`).
 The Sprite Editor's placement is computed from the live raster
 (`apps/sprite-editor/layout.js`, pure). The Tools palette is at the top left.
 The Full Sprite View sits over the 3D View as a right-hand rail, both
-right-aligned at one width. The 3D View's canvas is square, shortened to end
-above the bottom margin on a short raster, down to its size floor. The Color
+right-aligned at one width. The 3D View is square, shortened to end above
+the bottom margin on a short raster, down to its size floor. The Color
 Palette and the 3D Sprite Atlas strip share the bottom band. The document
 window is at `WINDOW_ORIGIN` beside the Tools palette and fills the vacant
 middle, less the cascade room at the right and bottom. Further document

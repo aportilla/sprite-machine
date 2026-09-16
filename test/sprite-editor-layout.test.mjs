@@ -10,7 +10,6 @@ import {
   PALETTE_MIN_WIDTH,
   spriteHeightFor,
   SPRITE_WIDTH,
-  stageHeightFor,
   STAGE_MIN_HEIGHT,
   ringHeightFor,
   RING_MIN_WIDTH,
@@ -74,7 +73,6 @@ test('placement: the Color Palette and the strip share the bottom band, the stri
 });
 
 test('placement: the 3D View is square under the Full Sprite View, shortened to fit the raster down to its floor', () => {
-  const square = stageHeightFor(SPRITE_WIDTH);
   let squares = 0;
   let fitted = 0;
   for (let h = 300; h <= 1400; h += 25) {
@@ -86,10 +84,10 @@ test('placement: the 3D View is square under the Full Sprite View, shortened to 
       stage.top > sprite.top + sprite.height,
       `${tag} under the Full Sprite View`
     );
-    assert.ok(stage.height <= square, `${tag} taller than square`);
+    assert.ok(stage.height <= stage.width, `${tag} taller than square`);
     assert.ok(stage.height >= STAGE_MIN_HEIGHT, `${tag} under the floor`);
     const bottom = stage.top + stage.height;
-    if (stage.height === square) {
+    if (stage.height === stage.width) {
       assert.ok(bottom <= h - 8, `${tag} square past the bottom margin`);
       squares++;
     } else if (stage.height > STAGE_MIN_HEIGHT) {
