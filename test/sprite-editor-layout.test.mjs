@@ -10,6 +10,8 @@ import {
   PALETTE_MIN_WIDTH,
   spriteHeightFor,
   SPRITE_WIDTH,
+  stageHeightFor,
+  STAGE_MIN_HEIGHT,
   ringHeightFor,
   RING_MIN_WIDTH,
   TOOLS_BOX,
@@ -71,6 +73,33 @@ test('placement: the Color Palette and the strip share the bottom band, the stri
   }
 });
 
+test('placement: the 3D View is square under the Full Sprite View, shortened to fit the raster down to its floor', () => {
+  const square = stageHeightFor(SPRITE_WIDTH);
+  let squares = 0;
+  let fitted = 0;
+  for (let h = 300; h <= 1400; h += 25) {
+    const { sprite, stage } = initialPlacement(W, h);
+    const tag = `raster height ${h}`;
+    assert.equal(stage.left, sprite.left, `${tag} left`);
+    assert.equal(stage.width, sprite.width, `${tag} width`);
+    assert.ok(
+      stage.top > sprite.top + sprite.height,
+      `${tag} under the Full Sprite View`
+    );
+    assert.ok(stage.height <= square, `${tag} taller than square`);
+    assert.ok(stage.height >= STAGE_MIN_HEIGHT, `${tag} under the floor`);
+    const bottom = stage.top + stage.height;
+    if (stage.height === square) {
+      assert.ok(bottom <= h - 8, `${tag} square past the bottom margin`);
+      squares++;
+    } else if (stage.height > STAGE_MIN_HEIGHT) {
+      assert.equal(bottom, h - 8, `${tag} shortened short of the bottom margin`);
+      fitted++;
+    }
+  }
+  assert.ok(squares > 0 && fitted > 0, 'the sweep reaches both cases');
+});
+
 test('paletteFit: a grow snaps back to the cells the window shows, with no spare pixel', () => {
   const cells = (b) => {
     const { columns, rows } = paletteGrid(b.width, b.height, 0);
@@ -105,18 +134,18 @@ test('pin: the placement is a fixed point — a resize lands the windoids where 
       bands.top <= home.stage.top - TOP_RESERVE + 8
   );
   assert.ok(bands.right > W - home.stage.left && bands.right <= W - home.stage.left + 14);
-  // Every placed windoid re-pins onto another raster exactly where
-  // initialPlacement puts it. The document window's top-left is a fixed point
-  // too. Its right and bottom edges spring but stay clear of the rail and the
-  // bottom edge.
+  // Every placed windoid but the 3D View re-pins onto another raster exactly
+  // where initialPlacement puts it. The 3D View holds its placement through
+  // `keep` instead. The document window's top-left is a fixed point too. Its
+  // right and bottom edges spring but stay clear of the rail and the bottom
+  // edge.
   const rasters = [
     { width: 980, height: 830 },
     { width: 760, height: 620 },
     { width: 1400, height: 1000 },
-    { width: 1001, height: 831 }, // odd, for the 2px snap check below
+    { width: 1001, height: 831 },
   ];
   const spriteSize = { width: SPRITE_WIDTH, height: spriteHeightFor(SPRITE_WIDTH) };
-  const stageMin = { width: 164, height: 160 };
   for (const r0 of rasters) {
     const p0 = initialPlacement(r0.width, r0.height);
     for (const r1 of rasters) {
@@ -131,11 +160,6 @@ test('pin: the placement is a fixed point — a resize lands the windoids where 
         roundTrip(p0.sprite, r0, r1, WINDOW_FRAME, { size: spriteSize }),
         p1.sprite,
         `sprite ${JSON.stringify([r0, r1])}`
-      );
-      assert.deepEqual(
-        roundTrip(p0.stage, r0, r1, WINDOW_FRAME, { min: stageMin }),
-        p1.stage,
-        `stage ${JSON.stringify([r0, r1])}`
       );
       // The 3D Sprite Atlas strip has a fixed height and a width floored at
       // RING_MIN_WIDTH. Its left, top and height are a fixed point beside the
@@ -177,19 +201,4 @@ test('pin: the placement is a fixed point — a resize lands the windoids where 
       assert.ok(doc.top + doc.height <= r1.height - 8, 'doc runs off the bottom');
     }
   }
-  // Snapped to a 2px lattice, every stage edge is still a strut.
-  const odd = rasters[3];
-  const p = initialPlacement(odd.width, odd.height);
-  const snap2 = (v) => Math.round(v / 2) * 2;
-  const stage = {
-    left: snap2(p.stage.left),
-    top: snap2(p.stage.top),
-    width: snap2(p.stage.width),
-    height: snap2(p.stage.height),
-  };
-  const pin = pinOf(stage, odd, WINDOW_FRAME);
-  assert.deepEqual(
-    [pin.x[0].kind, pin.x[1].kind, pin.y[0].kind, pin.y[1].kind],
-    ['far', 'far', 'near', 'far']
-  );
 });

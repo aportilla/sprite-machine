@@ -685,11 +685,13 @@ Its status strip counts the swatches (`paletteStatus`).
 The Sprite Editor's placement is computed from the live raster
 (`apps/sprite-editor/layout.js`, pure). The Tools palette is at the top left.
 The Full Sprite View sits over the 3D View as a right-hand rail, both
-right-aligned at one width. The Color Palette and the 3D Sprite Atlas strip
-share the bottom band. The document window is at `WINDOW_ORIGIN` beside the
-Tools palette and fills the vacant middle, less the cascade room at the right
-and bottom. Further document windows open at the same size, cascaded
-down-right into the first of five slots no open window holds. A closed or
+right-aligned at one width. The 3D View's canvas is square, shortened to end
+above the bottom margin on a short raster, down to its size floor. The Color
+Palette and the 3D Sprite Atlas strip share the bottom band. The document
+window is at `WINDOW_ORIGIN` beside the Tools palette and fills the vacant
+middle, less the cascade room at the right and bottom. Further document
+windows open at the same size, cascaded down-right into the first of five
+slots no open window holds. A closed or
 moved window frees its slot, and a full cascade wraps to the first.
 
 Windoid and document window geometry doesn't persist across sessions. Within
@@ -705,7 +707,9 @@ strip's left edge at the left (the Sprite Editor declares them at init). An edge
 raster edge holds. An edge in the middle is a **spring**: its fraction of the
 middle holds. So a window against an edge stays against it, and one spanning
 the middle scales with it. Placed windoids are all struts, so a resize puts
-them where Arrange Windows would. A placed document window's top-left is
+them where Arrange Windows would. The placed 3D View's bottom edge is not a
+strut, so it holds its placement instead: while it sits there, a resize gives
+it the placement for the new raster. A placed document window's top-left is
 struts and its far edges spring. A fixed-size axis, or a resizable one below
 its minimum, resolves through an anchor rule: the left or top edge holds if
 it is a strut, else the right or bottom edge if it is a strut, else the

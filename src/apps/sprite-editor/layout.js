@@ -1,11 +1,12 @@
 // Sprite Editor window geometry (pure). All values are whole system px.
 //
-// - initialPlacement(): the Tools palette top-left, the Full Sprite View over the
-//   3D View as a right-hand rail, the Color Palette and the 3D Sprite Atlas strip
-//   docked at the bottom, and the document box in the vacant middle, leaving
-//   room for the cascade.
+// - initialPlacement(): the Tools palette top-left, the Full Sprite View over a
+//   square 3D View as a right-hand rail, the Color Palette and the 3D Sprite
+//   Atlas strip docked at the bottom, and the document box in the vacant middle,
+//   leaving room for the cascade.
 // - zoomedBox(): a document window's zoomed box from its top-left.
-// - spriteHeightFor(), ringHeightFor(), ringWidthFor(): derived windoid sizes.
+// - spriteHeightFor(), stageHeightFor(), ringHeightFor(), ringWidthFor():
+//   derived windoid sizes.
 // - paletteGrid(): the Color Palette's columns, rows and scrolled height.
 // - paletteFit(): the Color Palette's size snapped back to its whole cells.
 // - paletteStatus(): the Color Palette's status text.
@@ -159,6 +160,11 @@ const STAGE_CANVAS_MIN = 107;
 export const STAGE_MIN_WIDTH = STAGE_CHROME.w + STAGE_ROW; // 187
 export const STAGE_MIN_HEIGHT = STAGE_CHROME.h + STAGE_CANVAS_MIN; // 160
 
+/** The 3D View's height for a square canvas in a window `width` wide. */
+export function stageHeightFor(width) {
+  return width - STAGE_CHROME.w + STAGE_CHROME.h;
+}
+
 // Full Sprite View: fixed size. The tile row sets the width, and the height is
 // derived so the row fills the body below the header. The chrome is 2 across and
 // 12 bar + 2 borders + SPRITE_STRIP down, with no status bar.
@@ -275,8 +281,9 @@ export function initialPlacement(
 ) {
   const top = WINDOW_ORIGIN.top;
 
-  // Right rail: the Full Sprite View at its fixed size over the 3D View, which
-  // takes the remaining height.
+  // Right rail: the Full Sprite View at its fixed size over the 3D View. The 3D
+  // View's canvas is square, shortened to end above the bottom margin, down to
+  // the size floor.
   const span = desktopH - top - GAP; // rail height
   const spriteH = spriteHeightFor(SPRITE_WIDTH);
   const railLeft = Math.max(0, desktopW - EDGE - SPRITE_WIDTH);
@@ -285,7 +292,10 @@ export function initialPlacement(
     left: railLeft,
     top: top + spriteH + GAP,
     width: SPRITE_WIDTH,
-    height: Math.max(100, span - spriteH - GAP), // floor on a short raster
+    height: Math.max(
+      STAGE_MIN_HEIGHT,
+      Math.min(stageHeightFor(SPRITE_WIDTH), span - spriteH - GAP)
+    ),
   };
 
   // The vacant middle, between the Tools palette and the rail.

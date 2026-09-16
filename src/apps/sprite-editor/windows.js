@@ -88,8 +88,16 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
     ring: (cur) => ({ size: { height: cur.height }, min: { width: RING_MIN_WIDTH } }),
     palette: (cur) => ({ size: { width: cur.width, height: cur.height } }),
   };
+  // Boxes held across a browser resize while the windoid sits at them. The 3D
+  // View follows its placement, so it stays square and refits a short raster.
+  /** @type {Record<string, (w: number, h: number) => {left: number, top: number, width: number, height: number}>} */
+  const keeps = { stage: (w, h) => initialPlacement(w, h).stage };
   for (const id of WINDOIDS) {
-    windows.adopt(byId[id], { app: SPRITE_EDITOR, policy: policies[id] ?? null });
+    windows.adopt(byId[id], {
+      app: SPRITE_EDITOR,
+      policy: policies[id] ?? null,
+      keep: keeps[id] ?? null,
+    });
   }
   // Color Palette: a grow snaps back on release to the whole cells it shows. The
   // window hears the commit before the desktop does, so the shell's layout
