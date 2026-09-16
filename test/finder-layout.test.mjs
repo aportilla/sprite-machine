@@ -50,13 +50,15 @@ test('icon pin: the frame is the desktop below the MENU BAR, uniform bands, a fi
     );
   }
   // The window frame's top band extends through the Sprite Editor's rail
-  // head. The icon frame's is only the band below the menu bar. A box 220px
-  // down is a strut in the window frame and a spring in the icon frame.
-  const b = { left: 16, top: 220, ...cell };
+  // head. The icon frame's is only the band below the menu bar. A box at the
+  // window band's last row is a strut in the window frame and a spring in the
+  // icon frame.
+  const top = WINDOW_FRAME.reserve + WINDOW_FRAME.bands.top - 1;
+  const b = { left: 16, top, ...cell };
   const wide = { width: 1000, height: 820 };
   const tall = { width: 1000, height: 1620 };
-  assert.equal(roundTrip(b, wide, tall, WINDOW_FRAME, { size: cell }).top, 220);
-  assert.ok(roundTrip(b, wide, tall, ICON_FRAME, { size: cell }).top > 220);
+  assert.equal(roundTrip(b, wide, tall, WINDOW_FRAME, { size: cell }).top, top);
+  assert.ok(roundTrip(b, wide, tall, ICON_FRAME, { size: cell }).top > top);
 });
 
 test('clean up: every icon on a cell, one icon per cell, a tidy set held', () => {

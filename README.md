@@ -47,7 +47,7 @@ The app is a System 7 style desktop built with the
 kit. It has a menu bar, an options strip, one movable document window per open
 document, and floating utility windoids that serve the active document: the
 **Tools** palette, the **Full Sprite View** (the face picker over a clickable
-grid of the atlas's tiles), the **3D View**, the **Color Palette** (the
+row of the atlas's tiles), the **3D View**, the **Color Palette** (the
 document's colors), and one toggleable windoid, the **3D Sprite Atlas** (the
 model rendered orthographically from a ring of angles, which File → Export
 Sprite Atlas… saves). Documents are files on the
@@ -274,7 +274,8 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   ink, and the ink's swatch is ringed. See [Windows](#windows).
 - **Face picker**: six cube icons over a radio row in the Full Sprite View's
   header pick the face the active document's window edits. Each document keeps
-  its own face. The icons sit in mirror pairs and pick on click. They are
+  its own face. The icons sit in mirror pairs, each over its tile, and pick on
+  click. They are
   21×26 1-bit PNGs: the visible faces fill black, the hidden faces show a
   sliver along the edge they hide behind, and the checked face gets a 50%
   dither. Left and right are the object's own sides, so `left` is the cube's
@@ -588,16 +589,16 @@ are not documents.
   mouse-down. A windoid's controls sit in its window header, outside the scroll
   area. Each `header-height` in `windows.html` must match its `layout.js`
   number.
-- **The Full Sprite View** has the face picker in its header, over a 3×2 grid
-  of live canvases, one per face, drawn nearest-neighbor on `gray-12` paper.
-  The picker box declares `pattern="white"`, because a bare `vf-container`
-  inherits the desktop pattern. Each cell shows the edited layer's tile at full
-  opacity over the other layers' art on that face, composited in block order
-  and faded to `ONION_ALPHA`, so a sparse layer keeps the map recognizable. The
-  grid follows the active document's live channel at rAF rate and repaints on a
-  layer switch. Pressing a tile selects that face, and the selected tile
-  has a black outline. The window is movable, not resizable. Its width is the
-  grid's, and its height follows the active tile's ratio.
+- **The Full Sprite View** has the face picker in its header, over a row of
+  six live canvases, one per face in the picker's order, drawn
+  nearest-neighbor on `gray-12` paper. Each picker icon is centered over its
+  tile. The picker box declares `pattern="white"`, because a bare
+  `vf-container` inherits the desktop pattern. Each cell shows the edited
+  layer's tile alone; the faded art of other layers shows only behind the
+  canvas. The row follows the active document's live channel at rAF rate and
+  repaints on a layer switch. Pressing a tile selects that face, and the
+  selected tile has a black outline. The window is movable, not resizable. Its
+  width is the row's, and its height follows the active tile's ratio.
 - **The 3D View** has two checkboxes in its header, **rotate** (auto-spin) and
   **single layer**, both off on every load, over the THREE canvas in a kit
   pattern well. The renderer clears transparent, so the model and its shadow

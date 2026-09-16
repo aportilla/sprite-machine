@@ -119,15 +119,30 @@ export function paletteFit(width, height) {
   );
 }
 
+// The Full Sprite View's face order, in the picker and in the tile row: mirror
+// pairs side by side.
+export const FACE_ROW = ['left', 'right', 'front', 'back', 'top', 'bottom'];
+// sm-atlas-view's row of face tiles, `cell` px wide with 1px rules between. The
+// cell height follows the active tile's ratio. `cell` is odd, so each picker icon
+// centers on its tile in whole px.
+export const ATLAS_GRID = { cols: FACE_ROW.length, rows: 1, cell: 35 };
+const ATLAS_PITCH = ATLAS_GRID.cell + 1;
+
 // Windoid header heights, including the header's 1px rule. windows.html authors
 // the same values as header-height.
 //
 // 3D View: the kit's 20px checkbox row centered in 23, plus the rule.
 export const STAGE_STRIP = 24;
-// Full Sprite View: the face picker (six 21×26 cube icons with 12px gaps, 186
-// wide, over the kit's 19px radio row, 45 tall), with 8px above and below, plus
-// the rule.
-export const SPRITE_PICKER = { width: 186, height: 45 };
+// Full Sprite View: the face picker (six 21×26 cube icons over the kit's 19px
+// radio row, 45 tall), with 8px above and below, plus the rule. The icons step
+// at the tile pitch, so each sits over its tile.
+const FACE_ICON_WIDTH = 21;
+const SPRITE_PICKER_GAP = ATLAS_PITCH - FACE_ICON_WIDTH; // 15
+export const SPRITE_PICKER = {
+  width: FACE_ROW.length * ATLAS_PITCH - SPRITE_PICKER_GAP, // 201
+  height: 45,
+  gap: SPRITE_PICKER_GAP,
+};
 const SPRITE_PICKER_PAD = 8;
 export const SPRITE_STRIP =
   SPRITE_PICKER_PAD + SPRITE_PICKER.height + SPRITE_PICKER_PAD + 1;
@@ -144,15 +159,12 @@ const STAGE_CANVAS_MIN = 107;
 export const STAGE_MIN_WIDTH = STAGE_CHROME.w + STAGE_ROW; // 187
 export const STAGE_MIN_HEIGHT = STAGE_CHROME.h + STAGE_CANVAS_MIN; // 160
 
-// Full Sprite View: fixed size. The atlas grid sets the width, and the height is
-// derived so the grid fills the body below the header. The chrome is 2 across and
+// Full Sprite View: fixed size. The tile row sets the width, and the height is
+// derived so the row fills the body below the header. The chrome is 2 across and
 // 12 bar + 2 borders + SPRITE_STRIP down, with no status bar.
 export const SPRITE_CHROME = { w: 2, h: 12 + 2 + SPRITE_STRIP };
-// sm-atlas-view's 3×2 grid of face tiles, `cell` px wide with 1px rules between.
-// The cell height follows the active tile's ratio.
-export const ATLAS_GRID = { cols: 3, rows: 2, cell: 70 };
-// Three 70px cells, two 1px rules and two borders.
-export const SPRITE_WIDTH = 214;
+// The cells, the rules between them and the borders.
+export const SPRITE_WIDTH = ATLAS_GRID.cols * ATLAS_PITCH - 1 + SPRITE_CHROME.w; // 217
 // The face picker's position in the header, centered across the interior.
 export const SPRITE_PICKER_AT = {
   left: (SPRITE_WIDTH - SPRITE_CHROME.w - SPRITE_PICKER.width) / 2,

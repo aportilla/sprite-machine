@@ -8,12 +8,13 @@ import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { workspace } from '../state/workspace.js';
 import { StoreController } from '../state/store-controller.js';
-import { SPRITE_PICKER, SPRITE_PICKER_AT } from '../apps/sprite-editor/layout.js';
+import {
+  FACE_ROW,
+  SPRITE_PICKER,
+  SPRITE_PICKER_AT,
+} from '../apps/sprite-editor/layout.js';
 import './sm-face-picker.js'; // registers <sm-face-picker>
 import { baseStyles } from './base-styles.js';
-
-// Row order: mirror pairs side by side.
-const FACES = ['left', 'right', 'front', 'back', 'top', 'bottom'];
 
 export class SmAtlasControls extends LitElement {
   static styles = [
@@ -43,7 +44,8 @@ export class SmAtlasControls extends LitElement {
         pattern="white"
       >
         <sm-face-picker
-          .faces=${FACES}
+          .faces=${FACE_ROW}
+          .gap=${SPRITE_PICKER.gap}
           .selected=${face}
           @sm-select-face=${this.#onSelectFace}
         ></sm-face-picker>

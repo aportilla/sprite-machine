@@ -132,7 +132,7 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
       ringShown: ringShown(),
     });
 
-  // Full Sprite View: fixed size. The height fits the 3×2 tile grid at the active
+  // Full Sprite View: fixed size. The height fits the tile row at the active
   // document's tile ratio, or square with no document open.
   const spriteRatio = () => {
     const s = workspace.active()?.doc.get();

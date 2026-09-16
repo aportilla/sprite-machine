@@ -1,5 +1,6 @@
-// <sm-face-picker>: a vf-radio-group of cube icons, one per face in `faces`.
-// A pick dispatches a bubbling `sm-select-face` event with {face}.
+// <sm-face-picker>: a vf-radio-group of cube icons, one per face in `faces`,
+// `gap` px apart. A pick dispatches a bubbling `sm-select-face` event with
+// {face}.
 //
 // The cube art uses the object's own left and right, not the viewer's: `left`
 // is the cube's lower-right quad.
@@ -57,6 +58,7 @@ export class SmFacePicker extends LitElement {
 
   static properties = {
     faces: { attribute: false },
+    gap: { type: Number },
     selected: {},
   };
 
@@ -64,6 +66,7 @@ export class SmFacePicker extends LitElement {
     super();
     /** @type {string[]|null} */
     this.faces = null;
+    this.gap = 12;
     this.selected = '';
   }
 
@@ -98,7 +101,7 @@ export class SmFacePicker extends LitElement {
         .value=${this.selected}
         @vf-change=${this.#onPick}
       >
-        <vf-stack direction="row" gap="12">
+        <vf-stack direction="row" gap=${this.gap}>
           ${faces.map(
             (f) => html`
               <vf-stack

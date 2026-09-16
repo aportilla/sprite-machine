@@ -140,8 +140,8 @@ test('pin: the placement is a fixed point — a resize lands the windoids where 
       // The 3D Sprite Atlas strip has a fixed height and a width floored at
       // RING_MIN_WIDTH. Its left, top and height are a fixed point beside the
       // Color Palette. Its width springs but stays clear of the rail. Tile sizes
-      // stay small: at 255 the strip's top on the 620 raster falls in the top
-      // band and pins near. The Palette keeps its size.
+      // stay small: a tall strip's top on a short raster falls in the top band
+      // and pins near. The Palette keeps its size.
       for (const views of [4, 16]) {
         for (const size of [64, 128]) {
           const opts = { ringViews: views, ringSize: size };

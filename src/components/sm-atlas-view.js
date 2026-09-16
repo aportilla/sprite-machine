@@ -1,9 +1,8 @@
-// <sm-atlas-view>: the Full Sprite View window's body. A 3×2 vf-grid with one
-// canvas per face of the active document, each at tile resolution and scaled
-// nearest-neighbor. A cell shows the edited layer's tile over the other
-// layers' art on that face, composited in block order and faded. The cell
-// height follows the tile's aspect ratio. A tile picks its face on
-// pointerdown, like the Tools palette.
+// <sm-atlas-view>: the Full Sprite View window's body. A one-row vf-grid with
+// one canvas per face of the active document, in the face picker's order, each
+// at tile resolution and scaled nearest-neighbor. A cell shows the edited
+// layer's tile alone. The cell height follows the tile's aspect ratio. A tile
+// picks its face on pointerdown, like the Tools palette.
 //
 // With no active document the cells keep their last pixels. The windoid is
 // hidden then.
@@ -15,15 +14,15 @@ import { createRef, ref } from 'lit/directives/ref.js';
 import { workspace, followActive } from '../state/workspace.js';
 import { StoreController } from '../state/store-controller.js';
 import { DEFAULT_ATLAS_LAYOUT } from 'sprite-machine';
-import { ATLAS_GRID } from '../apps/sprite-editor/layout.js';
-import { ONION_ALPHA } from '../lib/layers.js';
+import { ATLAS_GRID, FACE_ROW } from '../apps/sprite-editor/layout.js';
 import { baseStyles } from './base-styles.js';
 import { parsePatternAttr } from './ui-bits.js';
 
-// Each face with its row and column in the sheet, row-major.
-const GRID_CELLS = DEFAULT_ATLAS_LAYOUT.flatMap((row, r) =>
-  row.map((face, c) => ({ face, r, c }))
-);
+// Each face in row order, with its row and column in the sheet.
+const GRID_CELLS = FACE_ROW.map((face) => {
+  const r = DEFAULT_ATLAS_LAYOUT.findIndex((row) => row.includes(face));
+  return { face, r, c: DEFAULT_ATLAS_LAYOUT[r].indexOf(face) };
+});
 
 export class SmAtlasView extends LitElement {
   static properties = {
@@ -221,10 +220,8 @@ export class SmAtlasView extends LitElement {
     this.#paint();
   }
 
-  // Each cell draws the other layers' tiles for its face at full opacity, in
-  // block order, fades them to ONION_ALPHA with destination-in, then draws the
-  // edited layer's tile over them. The live channel fires after the sheet
-  // blit, so the atlas is current here.
+  // Each cell draws the edited layer's tile for its face. The live channel
+  // fires after the sheet blit, so the atlas is current here.
   #paint() {
     const active = workspace.active();
     const s = active?.doc.get();
@@ -243,23 +240,12 @@ export class SmAtlasView extends LitElement {
     scratch.getContext('2d').putImageData(id, 0, 0);
     const w = this.#tileW;
     const h = this.#tileH;
-    const count = s.layers.length;
-    const layer = Math.min(active.layer, count - 1);
+    const layer = Math.min(active.layer, s.layers.length - 1);
     for (const { face, r, c } of GRID_CELLS) {
       const g = this.#cellCanvas.get(face).value?.getContext('2d');
       if (!g) continue;
-      const blit = (k) =>
-        g.drawImage(scratch, c * w, (s.rows * k + r) * h, w, h, 0, 0, w, h);
-      g.globalCompositeOperation = 'source-over';
       g.clearRect(0, 0, w, h);
-      if (count > 1) {
-        for (let k = 0; k < count; k++) if (k !== layer) blit(k);
-        g.globalCompositeOperation = 'destination-in';
-        g.fillStyle = `rgba(0, 0, 0, ${ONION_ALPHA})`;
-        g.fillRect(0, 0, w, h);
-        g.globalCompositeOperation = 'source-over';
-      }
-      blit(layer);
+      g.drawImage(scratch, c * w, (s.rows * layer + r) * h, w, h, 0, 0, w, h);
     }
   }
 }
