@@ -32,8 +32,9 @@ desktop switches to the Finder: the Sprite Editor deactivates and its windoids
 hide. The menu bar shows the front application's menus. See
 [The desktop](#the-desktop).
 
-The first boot seeds three starter documents, Car, Truck and Cube, and the built-in text
-files (`src/texts/`: Read Me and Keyboard Shortcuts) as ordinary saved files.
+The first boot seeds three starter documents, Car, Truck and Cube, as ordinary
+saved files, and the built-in text files (`src/texts/`: Read Me and Keyboard
+Shortcuts) as files that always open the app's current text.
 Seeding runs once per profile, recorded by the `seeded` and `seededTexts`
 flags. `seeded` is written only after every built-in is stored, so a first boot
 cut short by a reload finishes seeding on the next load. A deleted built-in, or
@@ -400,11 +401,12 @@ Desktop Patterns  │ Sprite Machine  File  View                             10:
   short pause follows. Under reduced motion they all land at once. A press
   anywhere or Escape lands the rest immediately. Then _Empty Trash…_ (see
   [The Trash](#the-trash)), greyed while the Trash is empty. After a rule,
-  _Restore Default Files_ stores the built-in documents and read-me files
-  missing from the library, matched by name (see
-  [Desktop icons & state](#desktop-icons--state)). A file with a built-in's
-  name, including one in the Trash, is left alone. It is greyed while nothing
-  is missing or storage is unavailable.
+  _Restore Default Files_ stores the built-in documents missing from the
+  library, matched by name, and the read-me files, matched by key (see
+  [Desktop icons & state](#desktop-icons--state) and
+  [Text files](#text-files)). A document with a built-in's name and a read-me
+  with a built-in's key, including one in the Trash or renamed, are left
+  alone. It is greyed while nothing is missing or storage is unavailable.
 
 New Folder and the Special menu have no key equivalents.
 
@@ -855,20 +857,30 @@ read-only documents with a newspaper icon (`src/assets/text-file.png`) that
 open in a Text Viewer window.
 
 - **Storage.** A text file is a record in IndexedDB's `texts` store (id, name,
-  text, timestamps, `folder`). It files like a document: it drags into a
+  timestamps, `folder`) with its `text`, or with `builtin`, a built-in's key,
+  and no text. It files like a document: it drags into a
   folder or the Trash, moves and copies with its folder, and Empty Trash…
   counts its bytes and removes it. Its icon is `selectable movable editable`,
   and a rename retitles an open window. Copy and Paste carry it like a
   document (a paste makes a new file, named by the same counting); only its
   name reaches the system clipboard. It has no `?file=`, Duplicate or Download.
 - **The built-ins** are the `.txt` files in `src/texts/`, imported whole and
-  listed in `TEXTS`: **Read Me**, a tour of the app, and **Keyboard
-  Shortcuts**, every key equivalent by application. They are seeded once under
-  their own `seededTexts` flag and are ordinary files after that. To add one,
-  put a `.txt` in `src/texts/` and list it in `TEXTS`; an existing profile gets
-  it from **Special → Restore Default Files**. Not yet: updating an
-  already-seeded file on an existing profile (the restore goes by name and
-  skips files that exist), dropping or pasting a `.txt`, and editing.
+  listed in `TEXTS` with a key that never changes: **Read Me** (`read-me`), a
+  tour of the app, and **Keyboard Shortcuts** (`keyboard-shortcuts`), every
+  key equivalent by application. They are seeded once under their own
+  `seededTexts` flag, skipping keys already stored. A seeded record holds the
+  key, and the files slice reads its text and size from `TEXTS`
+  (`builtinText`, passed through `files.init`), so an app update reaches every
+  profile. The user owns the name, the folder and the Trash: a rename, move,
+  copy or paste keeps the key, and so the current text. A record whose key the
+  app no longer ships is left out of the listing and stays in storage. To add
+  one, put a `.txt` in `src/texts/` and list it in `TEXTS` with a new key; an
+  existing profile gets it from **Special → Restore Default Files**.
+- **Older profiles** stored the text itself. Every boot, before seeding, a
+  record with no key whose name is a built-in's, exactly or as a copy name
+  ("Read Me copy 2"), gets that key and loses its text (`builtinLinks`,
+  `files.linkTexts`). A file renamed to another name keeps its old text. Not
+  yet: dropping or pasting a `.txt`, and editing.
 - **The window** (`apps/text-viewer/windows.js`, `#tpl-text-window` in its
   `windows.html`) is a 440 × 320 document-tier window with
   `movable resizable zoomable scrollbars="vertical"`. The body is the file's
@@ -970,8 +982,9 @@ The built-in documents are seeded at first boot through the ⌘S save path while
 the `seeded` flag is unset. The flag is written after the last one is stored,
 so an interrupted boot seeds again, skipping names already stored. Seeded
 documents are ordinary documents after that. Only **Special → Restore Default
-Files** adds built-ins again: it stores the built-in documents and text files
-whose names are missing from the library and changes nothing else.
+Files** adds built-ins again: it stores the built-in documents whose names and
+the text files whose keys are missing from the library, and changes nothing
+else.
 
 **Double-click** opens an icon; there is no Open command. An open document's
 window comes forward. Icons deselect when an application becomes active, and

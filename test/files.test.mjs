@@ -17,6 +17,8 @@ import {
   nextFolderName,
   nextDocName,
   copyName,
+  missingBuiltins,
+  builtinLinks,
 } from '../src/state/files.js';
 import { readTextChunks } from 'sprite-machine';
 import { fakeScheduler, memStorage, encodeAtlas, decodeAtlas } from './helpers.mjs';
@@ -41,7 +43,11 @@ const sheet = (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * 
 
 // Harness
 
-function makeWorld({ storage = memStorage(), icon = 'data:icon' } = {}) {
+function makeWorld({
+  storage = memStorage(),
+  icon = 'data:icon',
+  builtinText = undefined,
+} = {}) {
   const frames = fakeScheduler();
   const doc = createDoc(frames);
   let t = 1000;
@@ -51,6 +57,7 @@ function makeWorld({ storage = memStorage(), icon = 'data:icon' } = {}) {
     encodeAtlas,
     decodeAtlas,
     makeIcon: async () => icon,
+    builtinText,
     now: () => t++,
     newId: () => `id-${++n}`,
   });
@@ -426,6 +433,91 @@ test('a text file is its text: it lists, files, renames, copies with the countin
   assert.equal(removed.texts.length, 3);
   assert.deepEqual([...storage.texts.keys()], [copy.id], 'the copy on the desktop alone');
   assert.equal(await files.textOf(made.id), null);
+});
+
+test('a built-in text file reads the app’s text: the row sizes it, a rename, move or copy keeps the key, and an unknown key leaves the listing', async () => {
+  /** @type {Record<string, string>} */
+  const shipped = { 'read-me': 'Hello.' };
+  const { files, storage } = makeWorld({ builtinText: (key) => shipped[key] ?? null });
+  await files.refresh();
+  const made = await files.createText({ name: 'Read Me', builtin: 'read-me' });
+  assert.equal('text' in storage.texts.get(made.id), false, 'no text stored');
+  assert.equal(await files.textOf(made.id), 'Hello.');
+  assert.equal(files.textRec(made.id).builtin, 'read-me');
+  assert.equal(files.textRec(made.id).size, 6);
+
+  shipped['read-me'] = 'Hello again.';
+  await files.refresh();
+  assert.equal(
+    await files.textOf(made.id),
+    'Hello again.',
+    'a new text reaches the file'
+  );
+  assert.equal(files.textRec(made.id).size, 12);
+
+  await files.renameText(made.id, 'Help');
+  const box = await files.createFolder({ name: 'Box' });
+  await files.moveText(made.id, box.id);
+  const copy = await files.copyText(made.id, { folder: null });
+  const boxCopy = await files.copyFolder(box.id, { parent: null });
+  const inBoxCopy = childrenOf(files.get(), boxCopy.id).texts[0];
+  for (const id of [made.id, copy.id, inBoxCopy.id]) {
+    assert.equal(files.textRec(id).builtin, 'read-me');
+    assert.equal(await files.textOf(id), 'Hello again.');
+  }
+
+  delete shipped['read-me'];
+  await files.refresh();
+  assert.equal(files.get().texts.length, 0, 'an unknown key leaves the listing');
+  assert.equal(await files.textOf(made.id), null);
+  assert.equal(storage.texts.size, 3, 'the records stay in storage');
+});
+
+test('builtinLinks pairs an unlinked text with the built-in its name or copy name carries; linkTexts drops the stored text; missingBuiltins goes by key', async () => {
+  const shipped = { 'read-me': 'New.', keys: 'Keys.' };
+  const { files, storage } = makeWorld({ builtinText: (key) => shipped[key] ?? null });
+  const builtins = [
+    { key: 'read-me', name: 'Read Me' },
+    { key: 'keys', name: 'Keyboard Shortcuts' },
+  ];
+  await files.refresh();
+  const old = await files.createText({ name: 'Read Me', text: 'Old.' });
+  const oldCopy = await files.createText({ name: 'Read Me copy 2', text: 'Old.' });
+  const renamed = await files.createText({ name: 'Help', text: 'Old.' });
+  await files.createText({ name: 'Read Me First', text: 'Old.' });
+  await files.createText({ name: 'Keyboard Shortcuts copy', builtin: 'keys' });
+
+  assert.deepEqual(
+    missingBuiltins(files.get(), builtins).map((b) => b.key),
+    ['read-me'],
+    'a copy carrying the key is present; a file by name alone is not'
+  );
+
+  const links = builtinLinks(files.get(), builtins);
+  assert.deepEqual(links, [
+    { id: old.id, key: 'read-me' },
+    { id: oldCopy.id, key: 'read-me' },
+  ]);
+  await files.linkTexts(links);
+  assert.equal(await files.textOf(old.id), 'New.');
+  assert.equal(await files.textOf(oldCopy.id), 'New.');
+  assert.equal('text' in storage.texts.get(old.id), false, 'the stored text is gone');
+  assert.equal(await files.textOf(renamed.id), 'Old.', 'a renamed file keeps its text');
+  assert.deepEqual(builtinLinks(files.get(), builtins), [], 'nothing left to link');
+
+  await files.moveText(old.id, TRASH);
+  await files.renameText(oldCopy.id, 'Notes');
+  assert.deepEqual(
+    missingBuiltins(files.get(), builtins),
+    [],
+    'a trashed or renamed built-in is present'
+  );
+  await files.emptyTrash();
+  await files.removeText(oldCopy.id);
+  assert.deepEqual(
+    missingBuiltins(files.get(), builtins).map((b) => b.key),
+    ['read-me']
+  );
 });
 
 // Copies

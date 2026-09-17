@@ -9,7 +9,7 @@ import './style.css';
 import 'vintage-frames';
 import { applyCursor, onScaleChange } from 'vintage-frames';
 import { SAMPLES } from './lib/sprite-data.js';
-import { TEXTS } from './texts/index.js';
+import { TEXTS, builtinText } from './texts/index.js';
 import { files, isTrashed } from './state/files.js';
 import { workspace } from './state/workspace.js';
 import { parseBootParams } from './boot/params.js';
@@ -18,7 +18,12 @@ import { initRebuilder } from './scene/rebuilder.js';
 import { createRingRenderer } from './scene/ring-renderer.js';
 import { initRing } from './scene/ring.js';
 import { initModelExport } from './scene/model-export.js';
-import { loadSample, seedDefaultDocs, seedDefaultTexts } from './loaders.js';
+import {
+  loadSample,
+  seedDefaultDocs,
+  seedDefaultTexts,
+  linkDefaultTexts,
+} from './loaders.js';
 import { initDropTarget } from './drop-target.js';
 import { initShortcuts } from './shortcuts.js';
 import { createStorageIfAvailable } from './storage/db.js';
@@ -90,6 +95,7 @@ files.init({
   makeIcon: async (state) =>
     docIcons.render(state.atlasImage, state.transforms, state.layers.length) ??
     genericDocIconDataUri(),
+  builtinText,
 });
 const dstate = createDesktopState(boot.fresh);
 
@@ -190,9 +196,11 @@ if (hot) {
 // Boot documents, in order of precedence:
 //   1. Dev (?fresh or ?sample): open the sample as an untitled document from
 //      memory. No seeding.
-//   2. Unseeded profile: store the built-in documents and text files, skipping
-//      names already stored, then set the seeded flag. The flag is written
-//      after the last save, so an interrupted seeding runs again next boot.
+//   2. Link the text files an older profile stored in full to their built-ins.
+//      Unseeded profile: store the built-in documents and text files, skipping
+//      names (documents) and keys (text files) already stored, then set the
+//      seeded flag. The flag is written after the last save, so an
+//      interrupted seeding runs again next boot.
 //   3. ?file names a stored document: open it on its remembered face and
 //      layer. Otherwise show the About box, unless Show at startup is off.
 async function bootDocuments() {
@@ -209,8 +217,10 @@ async function bootDocuments() {
     await seedDefaultDocs(SAMPLES, new Set(files.get().list.map((r) => r.name)));
     dstate.markSeeded();
   }
+  // A failed link leaves those files their stored text.
+  if (files.get().available) await linkDefaultTexts(TEXTS).catch(() => {});
   if (files.get().available && !dstate.seededTexts()) {
-    await seedDefaultTexts(TEXTS, new Set(files.get().texts.map((t) => t.name)));
+    await seedDefaultTexts(TEXTS);
     dstate.markSeededTexts();
   }
 

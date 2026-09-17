@@ -12,7 +12,7 @@ import {
 import { urlToBytes, bytesToImageData } from './image-io.js';
 import { workspace } from './state/workspace.js';
 import { createDoc } from './state/doc.js';
-import { files } from './state/files.js';
+import { files, missingBuiltins, builtinLinks } from './state/files.js';
 import { build } from './state/build.js';
 import {
   RING_CHUNK_KEY,
@@ -185,15 +185,14 @@ export async function seedDefaultDocs(samples, existing = new Set()) {
 }
 
 /**
- * Store each built-in text file on the desktop, skipping names in existing.
- * @param {{name: string, text: string}[]} texts
- * @param {Set<string>} [existing]  text file names already stored
+ * Store each built-in text file on the desktop by key, skipping keys already
+ * stored.
+ * @param {{key: string, name: string}[]} texts
  */
-export async function seedDefaultTexts(texts, existing = new Set()) {
-  for (const t of texts) {
-    if (existing.has(t.name)) continue;
+export async function seedDefaultTexts(texts) {
+  for (const t of missingBuiltins(files.get(), texts)) {
     try {
-      await files.createText({ name: t.name, text: t.text });
+      await files.createText({ name: t.name, builtin: t.key });
     } catch {
       // A failed seed skips only that text file.
     }
@@ -202,29 +201,36 @@ export async function seedDefaultTexts(texts, existing = new Set()) {
 }
 
 /**
- * The built-in documents and text files whose names are not in the library.
- * Trashed files count as present, so a restore never duplicates a name. Pure.
+ * Give the text files an older profile stored in full their built-in's key.
+ * @param {{key: string, name: string}[]} texts
+ */
+export const linkDefaultTexts = (texts) =>
+  files.linkTexts(builtinLinks(files.get(), texts));
+
+/**
+ * The built-in documents whose names are not in the library, and the built-in
+ * text files whose keys are not. Trashed files count as present, so a restore
+ * never duplicates one. Pure.
  * @param {import('./state/files.js').FilesState} state
  * @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}[]} samples
- * @param {{name: string, text: string}[]} texts
+ * @param {{key: string, name: string}[]} texts
  */
 export function missingDefaults(state, samples, texts) {
   const docNames = new Set(state.list.map((r) => r.name));
-  const textNames = new Set(state.texts.map((t) => t.name));
   return {
     docs: samples.filter((s) => !docNames.has(s.name)),
-    texts: texts.filter((t) => !textNames.has(t.name)),
+    texts: missingBuiltins(state, texts),
   };
 }
 
 /**
  * Special → Restore Default Files: store the built-in files missing from the
- * library. A file that already has a built-in's name is left alone.
+ * library. A document that already has a built-in's name is left alone.
  * @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}[]} samples
- * @param {{name: string, text: string}[]} texts
+ * @param {{key: string, name: string}[]} texts
  */
 export async function restoreDefaultFiles(samples, texts) {
   const missing = missingDefaults(files.get(), samples, texts);
   await seedDefaultDocs(missing.docs);
-  await seedDefaultTexts(missing.texts);
+  await seedDefaultTexts(texts);
 }

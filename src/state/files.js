@@ -16,8 +16,10 @@
 //   cannot be renamed, moved, removed or copied. Folders, text files and copies
 //   cannot be made in it. Deleting is a move into it. emptyTrash() removes its
 //   subtree.
-// - A text file is a record {id, name, text, createdAt, modifiedAt, folder}.
-//   The listing omits the text; textOf reads it.
+// - A text file is a record {id, name, createdAt, modifiedAt, folder} with
+//   either `text` or `builtin`, a built-in's key. A built-in's text is the
+//   app's (deps.builtinText) and is never stored. The listing omits the text;
+//   textOf reads it. A row whose key the app does not ship is left out.
 
 import { createStore } from './store.js';
 import {
@@ -76,8 +78,10 @@ export const modelFilename = (name) => `${slugOf(name)}.glb`;
  * @typedef {{id: string, name: string, parent: string|null,
  *   createdAt: number, modifiedAt: number}} FolderRow
  * @typedef {{id: string, name: string, createdAt: number, modifiedAt: number,
- *   folder: string|null, size: number}} TextRow
+ *   folder: string|null, builtin: string|null, size: number}} TextRow
+ *   builtin: the built-in's key, or null for a stored text.
  *   size: the text's UTF-8 byte length.
+ * @typedef {{key: string, name: string}} Builtin
  * @typedef {{available: boolean, list: DocRow[], folders: FolderRow[],
  *   texts: TextRow[]}} FilesState
  */
@@ -219,6 +223,37 @@ export function nextDocName(state, folder) {
   }
 }
 
+/** A name without a trailing " copy" or " copy N". @param {string} name */
+const copyBase = (name) => name.replace(/ copy( \d+)?$/, '');
+
+/**
+ * The built-ins no text row carries the key of. A trashed or renamed built-in
+ * is present.
+ * @template {Builtin} T
+ * @param {FilesState} state @param {T[]} builtins
+ * @returns {T[]}
+ */
+export function missingBuiltins(state, builtins) {
+  const keys = new Set(state.texts.map((t) => t.builtin));
+  return builtins.filter((b) => !keys.has(b.key));
+}
+
+/**
+ * The text rows with no key whose name is a built-in's, exactly or as a copy
+ * name, each paired with that built-in's key.
+ * @param {FilesState} state @param {Builtin[]} builtins
+ * @returns {{id: string, key: string}[]}
+ */
+export function builtinLinks(state, builtins) {
+  const links = [];
+  for (const t of state.texts) {
+    if (t.builtin != null) continue;
+    const b = builtins.find((x) => x.name === copyBase(t.name));
+    if (b) links.push({ id: t.id, key: b.key });
+  }
+  return links;
+}
+
 /**
  * The name for a copy in `folder`. `name` itself if no item of `kind` there
  * has it. Otherwise the base name (without a trailing " copy" or " copy N")
@@ -232,7 +267,7 @@ export function copyName(state, folder, name, kind = 'doc') {
     kind === 'folder' ? kids.folders : kind === 'text' ? kids.texts : kids.docs;
   const used = new Set(rows.map((x) => x.name));
   if (!used.has(name)) return name;
-  const base = name.replace(/ copy( \d+)?$/, '');
+  const base = copyBase(name);
   const first = `${base} copy`;
   if (!used.has(first)) return first;
   for (let n = 2; ; n++) {
@@ -252,6 +287,7 @@ export function copyName(state, folder, name, kind = 'doc') {
  *   encodeAtlas: (img: object) => Promise<Uint8Array>,
  *   decodeAtlas: (bytes: Uint8Array) => Promise<{width: number, height: number, data: Uint8ClampedArray}>,
  *   makeIcon?: (docState: object) => Promise<string|null>,
+ *   builtinText?: (key: string) => string|null,
  *   now?: () => number,
  *   newId?: () => string,
  * }|null} [deps]  Passed here or later through init().
@@ -273,6 +309,11 @@ export function createFiles(deps = null) {
   const newId = () => (d?.newId ? d.newId() : crypto.randomUUID());
   const byCreation = (a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1);
   const textSize = (text) => new TextEncoder().encode(String(text ?? '')).byteLength;
+  /** A text record's text: the app's for a built-in, null for an unknown key. */
+  const bodyOf = (rec) =>
+    rec.builtin != null
+      ? (d?.builtinText?.(rec.builtin) ?? null)
+      : String(rec.text ?? '');
   /** The state when storage is missing or unreadable. */
   const NOTHING = () => ({ available: false, list: [], folders: [TRASH_ROW], texts: [] });
 
@@ -345,13 +386,16 @@ export function createFiles(deps = null) {
           }))
           .sort(byCreation);
         const texts = textRecords
-          .map(({ id, name, createdAt, modifiedAt, folder, text }) => ({
+          .map((rec) => ({ rec, body: bodyOf(rec) }))
+          .filter(({ body }) => body != null)
+          .map(({ rec: { id, name, createdAt, modifiedAt, folder, builtin }, body }) => ({
             id,
             name,
             createdAt,
             modifiedAt,
             folder: folder ?? null,
-            size: textSize(text),
+            builtin: builtin ?? null,
+            size: textSize(body),
           }))
           .sort(byCreation);
         store.patch({ available: true, list, folders: [TRASH_ROW, ...folders], texts });
@@ -681,11 +725,13 @@ export function createFiles(deps = null) {
     // Text files
 
     /**
-     * Store a new text file in a container (`folder` null: the desktop).
-     * Resolves `{id, name}`, or null for a trashed target.
-     * @param {{name: string, text: string, folder?: string|null}} init
+     * Store a new text file in a container (`folder` null: the desktop): its
+     * `text`, or with `builtin` the built-in's key alone. Resolves
+     * `{id, name}`, or null for a trashed target.
+     * @param {{name: string, text?: string, builtin?: string|null,
+     *          folder?: string|null}} init
      */
-    async createText({ name, text, folder = null }) {
+    async createText({ name, text, builtin = null, folder = null }) {
       const state = store.get();
       const target = containerOf(state, folder);
       if (isTrashed(state, target)) return null;
@@ -694,7 +740,7 @@ export function createFiles(deps = null) {
       await d.storage.putText({
         id,
         name,
-        text: String(text ?? ''),
+        ...(builtin != null ? { builtin } : { text: String(text ?? '') }),
         createdAt: t,
         modifiedAt: t,
         folder: target,
@@ -703,13 +749,30 @@ export function createFiles(deps = null) {
       return { id, name };
     },
 
-    /** A stored text file's text. Null when the id is gone or storage is
-     *  unavailable. @param {string} id
+    /** A text file's text. Null when the id is gone, its key is unknown or
+     *  storage is unavailable. @param {string} id
      *  @returns {Promise<string|null>} */
     async textOf(id) {
       if (!d?.storage?.getText) return null;
       const rec = await d.storage.getText(id).catch(() => null);
-      return rec ? String(rec.text ?? '') : null;
+      return rec ? bodyOf(rec) : null;
+    },
+
+    /**
+     * Give each text record its built-in's key and drop its stored text.
+     * `modifiedAt` is unchanged.
+     * @param {{id: string, key: string}[]} links
+     */
+    async linkTexts(links) {
+      if (!links.length) return;
+      for (const { id, key } of links) {
+        const rec = await d.storage.getText(id);
+        if (!rec) continue;
+        const next = { ...rec, builtin: key };
+        delete next.text;
+        await d.storage.putText(next);
+      }
+      await this.refresh();
     },
 
     /** A text file's listing row by id (the record without its text). */

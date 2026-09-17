@@ -1,18 +1,22 @@
-// Built-in text files, imported whole with Vite's ?raw. Each is stored as an
-// ordinary text file once per profile at boot, in this order
-// (loaders.js seedDefaultTexts, tracked by desktop-state.js seededTexts).
-// Special → Restore Default Files adds any that are missing by name. A revised
-// file does not reach a profile that already has it.
+// Built-in text files, imported whole with Vite's ?raw. A seeded record stores
+// the key alone, so every file opens the text shipped here (files.js
+// builtinText). A key never changes once shipped; a record whose key is gone
+// leaves the desktop.
 //
-// To add one, put the .txt here and list it below with its desktop name.
+// To add one, put the .txt here and list it below with a new key and its
+// desktop name. An existing profile gets it from Special → Restore Default
+// Files.
 
 import readMe from './read-me.txt?raw';
 import keyboardShortcuts from './keyboard-shortcuts.txt?raw';
 
-/** @typedef {{name: string, text: string}} TextSeed */
+/** @typedef {{key: string, name: string, text: string}} TextSeed */
 
 /** @type {TextSeed[]} */
 export const TEXTS = [
-  { name: 'Read Me', text: readMe },
-  { name: 'Keyboard Shortcuts', text: keyboardShortcuts },
+  { key: 'read-me', name: 'Read Me', text: readMe },
+  { key: 'keyboard-shortcuts', name: 'Keyboard Shortcuts', text: keyboardShortcuts },
 ];
+
+/** A built-in's text by key, or null. @param {string} key */
+export const builtinText = (key) => TEXTS.find((t) => t.key === key)?.text ?? null;

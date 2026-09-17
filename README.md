@@ -430,7 +430,9 @@ The clock at the right end of the menu bar shows the date when you click it.
 ### Read-me files
 
 **Read Me** and **Keyboard Shortcuts** are text files on the desktop.
-Double-click one to read it. Select text with the mouse and copy it with ⌘C;
+Double-click one to read it. You can rename, move, copy or trash them, and
+they always show the text for the version of Sprite Machine you are running.
+Select text with the mouse and copy it with ⌘C;
 ⌘A selects all of it. The zoom box widens the window into a reading column,
 and ⌃W closes it.
 

@@ -7,7 +7,8 @@
 //   for the desktop.
 // - `folders`: `{id, name, parent, createdAt, modifiedAt}`. `parent` is a folder
 //   id, or null for the desktop.
-// - `texts`: `{id, name, text, createdAt, modifiedAt, folder}`.
+// - `texts`: `{id, name, createdAt, modifiedAt, folder}` with either `text` or
+//   `builtin`, the key of a text the app ships.
 //
 // The schema is STORES, with no fixed version number. The database opens at the
 // profile's current version. If a store is missing, it reopens one version up and
@@ -31,8 +32,9 @@ const STORES = [DOCS, FOLDERS, TEXTS];
  *             folder?: string|null}} DocRecord */
 /** @typedef {{id: string, name: string, parent: string|null,
  *             createdAt: number, modifiedAt: number}} FolderRecord */
-/** @typedef {{id: string, name: string, text: string, createdAt: number,
- *             modifiedAt: number, folder?: string|null}} TextRecord */
+/** @typedef {{id: string, name: string, text?: string, builtin?: string,
+ *             createdAt: number, modifiedAt: number,
+ *             folder?: string|null}} TextRecord */
 
 const reqToPromise = (req) =>
   new Promise((resolve, reject) => {
