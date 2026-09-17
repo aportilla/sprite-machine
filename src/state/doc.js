@@ -256,15 +256,20 @@ export function createDoc(scheduler = {}) {
       return true;
     },
 
-    // Append a transparent layer named by lib/layers.js nextLayerName. Returns
-    // whether the sheet changed: false with no sheet or at LAYER_MAX.
-    addLayer() {
+    // Append a transparent layer named `name`, or by lib/layers.js nextLayerName
+    // when it is blank. Returns whether the sheet changed: false with no sheet
+    // or at LAYER_MAX.
+    /** @param {string} [name] */
+    addLayer(name) {
       const s0 = store.get();
       if (!s0.atlasImage || s0.layers.length >= LAYER_MAX) return false;
       this.drain();
       const s = store.get();
       const atlasImage = appendBlock(s.atlasImage, s.rows * s.tileH);
-      const names = [...s.names, nextLayerName(s.names)];
+      const names = [
+        ...s.names,
+        String(name ?? '').trim() ? name : nextLayerName(s.names),
+      ];
       store.patch({ atlasImage, names, ...slicedPatch(atlasImage, names.length) });
       return true;
     },

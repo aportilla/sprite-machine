@@ -483,13 +483,14 @@ document to act on):
   the section and its separator are absent. There is no Fullscreen item: the
   Fullscreen API takes Esc from the editor, and Chrome's top layer covers the
   kit's page-drawn cursor.
-- **Layer**: _New Layer_, _Delete Layer_, _Rename Layer…_; _Move Layer Up_,
-  _Move Layer Down_; then after a rule one item per layer of the active
+- **Layer**: _New Layer…_ ⌘K, _Delete Layer_, _Rename Layer…_; _Move Layer
+  Up_, _Move Layer Down_; then after a rule one item per layer of the active
   document in block order, named for the layer, with the edited one checked
   and `1` to `8` shown as the keys.
-  - _New Layer_ appends a transparent layer, named _Layer n_ for the first
-    number free counting from its own, and edits it. It is greyed at eight
-    layers.
+  - _New Layer…_ opens the name prompt on _Layer n_, the first number free
+    counting from the new layer's own. On OK it appends a transparent layer
+    with the trimmed name and edits it. Cancel adds nothing. It is greyed at
+    eight layers.
   - _Delete Layer_ removes the edited layer and edits the one above it, or
     Layer 1. It is greyed while the document has one layer.
   - _Move Layer Up_ swaps the edited layer's block and name with the layer
@@ -502,7 +503,7 @@ document to act on):
   - A pick from the list, or its digit key, switches the layer the window
     edits. A switch never dirties the document. The digit keys follow the tool
     keys' rules and wait while a stroke or drag is in progress.
-  - The five commands have no key equivalents. See [Layers](#input-a-32-atlas)
+  - The other four commands have no key equivalents. See [Layers](#input-a-32-atlas)
     for the sheet.
 - **Tools** lists the six tools with the active one checked. The menu, the
   Tools palette and the S/B/R/G/E/I keys set the same tool.

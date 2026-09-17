@@ -53,9 +53,10 @@
 </vf-menu>
 <!-- New, Delete and each move are one undo step, and so is a rename. index.js
      syncLayers greys New Layer at LAYER_MAX, Delete Layer with one layer, and
-     Move Layer Up and Down on the first and last layers. Up is toward Layer 1. -->
+     Move Layer Up and Down on the first and last layers. Up is toward Layer 1.
+     New Layer adds the layer on OK in the name prompt. -->
 <vf-menu data-menu="layer" label="Layer">
-  <vf-menu-item value="layer-new">New Layer</vf-menu-item>
+  <vf-menu-item value="layer-new" shortcut="⌘K">New Layer…</vf-menu-item>
   <vf-menu-item value="layer-delete">Delete Layer</vf-menu-item>
   <vf-menu-item value="layer-rename">Rename Layer…</vf-menu-item>
   <vf-separator></vf-separator>

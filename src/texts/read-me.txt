@@ -20,7 +20,7 @@ Pick a tool in the Tools window or with its key: Selection (S), Pencil (B), Rect
 
 LAYERS
 
-A part that would get joined to the rest if drawn with it, such as wheels under a car, goes on its own layer. Layer → New Layer adds one. Switch layers with the keys 1 to 8, the Layer menu's list, or the popup at the bottom of the document window. Check "single layer" in the 3D View to see only the layer you are editing.
+A part that would get joined to the rest if drawn with it, such as wheels under a car, goes on its own layer. Layer → New Layer… (⌘K) adds one. Switch layers with the keys 1 to 8, the Layer menu's list, or the popup at the bottom of the document window. Check "single layer" in the 3D View to see only the layer you are editing.
 
 SAVING
 

@@ -224,8 +224,8 @@ overlap, the colors of the layer lower in the Layer menu's list show.
 
 The Layer menu:
 
-- **New Layer** adds an empty layer, named Layer 2, Layer 3 and so on, and
-  switches to it.
+- **New Layer…** (⌘K) asks for a name, then adds an empty layer and switches
+  to it. The name starts as Layer 2, Layer 3 and so on.
 - **Delete Layer**, **Rename Layer…**, **Move Layer Up** and **Move Layer
   Down** act on the layer you are editing.
 - The list at the bottom of the menu switches layers. So do the keys 1 to 8.
@@ -498,6 +498,7 @@ in front.
 | ⌘Z, ⇧⌘Z     | Undo, Redo              |                         |                     |
 | ⌘C, ⌘V, ⌘A  | Copy, Paste, Select All | The same, on icons      | Copy, Select All    |
 | ⌘J          | Arrange Windows         | Arrange Windows         | Arrange Windows     |
+| ⌘K          | New Layer…              |                         |                     |
 | S B R G E I | The tools               |                         |                     |
 | 1 to 8      | Edit that layer         |                         |                     |
 

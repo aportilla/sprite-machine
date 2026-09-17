@@ -27,6 +27,7 @@ EDITOR
 ⌘V — Paste
 ⌘A — Select All
 ⌘J — Arrange Windows
+⌘K — New Layer
 
 S — Selection
 B — Pencil

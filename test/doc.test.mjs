@@ -281,6 +281,14 @@ test('addLayer and removeLayer change the count without a new sheet generation, 
   assert.equal(doc.addLayer(), false, 'not past LAYER_MAX');
 });
 
+test('addLayer takes a name, and a blank one gives the default', () => {
+  const doc = createDoc(fakeScheduler());
+  doc.loadAtlas(carSheet());
+  assert.equal(doc.addLayer('Wheels'), true);
+  assert.equal(doc.addLayer('  '), true);
+  assert.deepEqual(doc.get().names, ['Layer 1', 'Wheels', 'Layer 3']);
+});
+
 test('moveLayer moves a block and its name without a new sheet generation, a pending stroke moving with it', () => {
   const doc = createDoc(fakeScheduler());
   assert.equal(doc.moveLayer(0, 1), false, 'no sheet yet');

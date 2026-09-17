@@ -38,6 +38,7 @@ import { workspace, followActive } from '../../state/workspace.js';
 import { clipboard, pixelPasteSource } from '../../state/clipboard.js';
 import { TILE_MIN, TILE_MAX, LAYER_MAX, clampTile, setTextChunks } from 'sprite-machine';
 import { SAMPLES } from '../../lib/sprite-data.js';
+import { nextLayerName } from '../../lib/layers.js';
 import { pasteOrigin, floatFromImage } from '../../lib/select.js';
 import { ringFrame, ringSheet, ringAnchor, ringYaws } from '../../lib/ring.js';
 import { zipStore } from '../../lib/zip.js';
@@ -165,24 +166,25 @@ export const spriteEditor = {
       }
     });
 
-    // The name prompt for a first save, a rename or a layer rename. It resolves
-    // only in vf-close, to the trimmed name or to null on Cancel or Escape. The
-    // plain frame draws heading as a title, so the per-use text goes in the
-    // caption and the label.
+    // The name prompt for a first save, a rename, a new layer or a layer
+    // rename. It resolves only in vf-close, to the trimmed name or to null on
+    // Cancel or Escape. The plain frame draws heading as a title, so the per-use
+    // text goes in the caption and the label.
     const nameField = $('#name-field');
     const nameCaption = $('#name-caption');
     const btnNameOk = $('#btn-name-ok');
     const NAME_PROMPTS = {
       save: { label: 'Save', caption: 'Save document as:', ok: 'Save' },
-      rename: { label: 'Rename', caption: 'Rename document to:', ok: 'Rename' },
-      layer: { label: 'Rename Layer', caption: 'Rename layer to:', ok: 'Rename' },
+      rename: { label: 'Rename', caption: 'Rename document to:', ok: 'OK' },
+      'new-layer': { label: 'New Layer', caption: 'Name the new layer:', ok: 'OK' },
+      layer: { label: 'Rename Layer', caption: 'Rename layer to:', ok: 'OK' },
     };
     const nameValid = () => String(nameField.value ?? '').trim() !== '';
     const syncNameOk = () => {
       btnNameOk.disabled = !nameValid();
     };
     let namePending = null; // { resolve, value } while open
-    /** @param {'save'|'rename'|'layer'} use  @param {string} initial */
+    /** @param {'save'|'rename'|'new-layer'|'layer'} use  @param {string} initial */
     function promptName(use, initial) {
       const p = NAME_PROMPTS[use];
       dlgName.label = p.label;
@@ -733,10 +735,13 @@ export const spriteEditor = {
       const v = String(menuDetail(e).value ?? '');
       switch (v) {
         case 'layer-new':
-          // The new layer becomes the edited one.
-          if (ctx.history.withAtlasSnapshot(() => ctx.doc.addLayer())) {
-            workspace.setLayer(ctx.key, ctx.doc.get().layers.length - 1);
-          }
+          // Added on OK. The new layer becomes the edited one.
+          promptName('new-layer', nextLayerName(ctx.doc.get().names)).then((name) => {
+            if (name == null) return;
+            if (ctx.history.withAtlasSnapshot(() => ctx.doc.addLayer(name))) {
+              workspace.setLayer(ctx.key, ctx.doc.get().layers.length - 1);
+            }
+          });
           break;
         case 'layer-delete': {
           // The layer above the deleted one becomes the edited one, or Layer 1.
