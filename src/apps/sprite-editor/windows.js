@@ -115,6 +115,44 @@ export function initEditorWindows(
   /** @type {Record<string, import('../../shell/layout.js').Pin | null>} */
   const windoidPins = {};
   for (const id of WINDOIDS) windoidPins[id] = savedPin(`windoid:${id}`);
+  // Full Sprite View: fixed size. The height fits the tile row at the active
+  // document's tile ratio, or square with no document open.
+  const spriteRatio = () => {
+    const s = workspace.active()?.doc.get();
+    return s && s.tileW > 0 && s.tileH > 0 ? s.tileH / s.tileW : undefined;
+  };
+  const fitSprite = () => {
+    byId.sprite.width = SPRITE_WIDTH;
+    byId.sprite.height = spriteHeightFor(SPRITE_WIDTH, spriteRatio());
+  };
+  // 3D Sprite Atlas: the height is ringHeightFor(size), locked on the grow box by
+  // min-height = max-height, so only the width resizes. The size rect bounds only
+  // the drag, so floorRingWidth covers programmatic writes. fitRing keeps the
+  // top-left, so a larger tile grows the window downward, except that the clamp
+  // slides a strip docked at the bottom up instead of letting it overhang.
+  const floorRingWidth = () => {
+    if ((byId.ring.width ?? 0) < RING_MIN_WIDTH) byId.ring.width = RING_MIN_WIDTH;
+  };
+  /** Sets the grow box's size rect for a strip of height h. */
+  const declareRingRect = (h) => {
+    byId.ring.minWidth = RING_MIN_WIDTH;
+    byId.ring.minHeight = h;
+    byId.ring.maxHeight = h;
+  };
+  const fitRing = () => {
+    const win = byId.ring;
+    const h = ringHeightFor(ring.get().size);
+    win.top = windows.clamped(win, {
+      left: win.left ?? 0,
+      top: win.top ?? 0,
+      width: win.width ?? 0,
+      height: h,
+    }).top;
+    win.height = h;
+    declareRingRect(h);
+    floorRingWidth();
+  };
+
   // The Color Palette's size is the user's, and its policy holds the live one
   // across a resize, so its saved size is read back from the pin before the
   // adopt, snapped to whole cells.
@@ -126,6 +164,11 @@ export function initEditorWindows(
     byId.palette.width = fit.width;
     byId.palette.height = fit.height;
   }
+  // The Full Sprite View's and the 3D Sprite Atlas's sizes are derived, and
+  // their policies hold the live one, so both are written before the adopt: a
+  // policy read from an undeclared size pins a saved box to its far edge.
+  fitSprite();
+  fitRing();
   for (const id of WINDOIDS) {
     windows.adopt(byId[id], {
       app: SPRITE_EDITOR,
@@ -172,36 +215,6 @@ export function initEditorWindows(
       ringShown: ringShown(),
       paletteCount,
     });
-
-  // Full Sprite View: fixed size. The height fits the tile row at the active
-  // document's tile ratio, or square with no document open.
-  const spriteRatio = () => {
-    const s = workspace.active()?.doc.get();
-    return s && s.tileW > 0 && s.tileH > 0 ? s.tileH / s.tileW : undefined;
-  };
-  const fitSprite = () => {
-    byId.sprite.width = SPRITE_WIDTH;
-    byId.sprite.height = spriteHeightFor(SPRITE_WIDTH, spriteRatio());
-  };
-  // 3D Sprite Atlas: the height is ringHeightFor(size), locked on the grow box by
-  // min-height = max-height, so only the width resizes. The size rect bounds only
-  // the drag, so floorRingWidth covers programmatic writes. fitRing keeps the
-  // top-left, so a larger tile grows the window downward.
-  const floorRingWidth = () => {
-    if ((byId.ring.width ?? 0) < RING_MIN_WIDTH) byId.ring.width = RING_MIN_WIDTH;
-  };
-  /** Sets the grow box's size rect for a strip of height h. */
-  const declareRingRect = (h) => {
-    byId.ring.minWidth = RING_MIN_WIDTH;
-    byId.ring.minHeight = h;
-    byId.ring.maxHeight = h;
-  };
-  const fitRing = () => {
-    const h = ringHeightFor(ring.get().size);
-    byId.ring.height = h;
-    declareRingRect(h);
-    floorRingWidth();
-  };
 
   // windoidBox computes a windoid's target box without writing it. placeWindoid
   // writes it, and arranged() compares windows against the same boxes.
@@ -251,7 +264,6 @@ export function initEditorWindows(
   for (const id of WINDOIDS) {
     if (!windoidPins[id]) placeWindoid(id, openingLayout);
   }
-  if (windoidPins.ring) fitRing();
 
   // The Color Palette's placed rows follow the active document's swatch count. A
   // palette near its placed box for the last count moves to the new count's.

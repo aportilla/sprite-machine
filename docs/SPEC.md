@@ -644,7 +644,8 @@ default row.
   world on an offscreen canvas into one sheet canvas, which the cells slice and
   Export encodes as is. It renders only while shown, or for an export.
 - **View → 3D Sprite Atlas** shows it and its close box hides it. When the tile
-  size changes, its height re-fits with the top-left held. While hidden, it is
+  size changes, its height re-fits with the top-left held, sliding up only when
+  the taller strip would run past the bottom edge. While hidden, it is
   re-placed instead. It resizes horizontally only. Its width is the user's,
   seeded with the row's width and floored at the header's. A wider row scrolls
   horizontally. The placement docks it on the bottom margin, left-aligned with
