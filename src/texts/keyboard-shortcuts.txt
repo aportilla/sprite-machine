@@ -1,12 +1,12 @@
 Keyboard Shortcuts
 
-The menu bar belongs to the front application, and a key equivalent belongs to the menu it is on: the Sprite Editor's ⌘S does nothing in the Finder, exactly as it did on a Mac. Click a document window and the editor's keys are live; click the desktop and the Finder's are.
+A key belongs to the menu it is on, so it works while that kind of window is in front. Click a document window and the document's keys are live; click the desktop and the desktop's are.
 
 WHY CONTROL, NOT COMMAND
 
-New, Close and Quit answer ⌃N, ⌃W and ⌃Q — the Control key, not ⌘. The browser takes ⌘N, ⌘W and ⌘Q before the page ever sees them, and ⌃W is the one W chord a Mac browser leaves to us. So ⌘W closes the browser tab rather than the document window; if any open document has unsaved changes the browser asks before it goes. Off a Mac, Ctrl+W and Ctrl+N are the browser's own Close Tab and New Window: the items show the keys there and never fire.
+New, Close and Quit answer ⌃N, ⌃W and ⌃Q, the Control key, because the browser takes ⌘N, ⌘W and ⌘Q before the page sees them. ⌘W closes the browser tab, and the browser asks first if any open document has unsaved changes. On Windows and Linux, Ctrl stands in for ⌘, and Ctrl+N and Ctrl+W belong to the browser, so use the File menu for New and Close there.
 
-THE FINDER — the desktop, a folder window
+ON THE DESKTOP AND IN A FOLDER WINDOW
 
 ⌃N — New Sprite
 ⌃W — Close the front folder window
@@ -15,20 +15,19 @@ THE FINDER — the desktop, a folder window
 ⌘A — Select All
 ⌘J — Arrange Windows
 
-THE SPRITE EDITOR — a document window
+IN A DOCUMENT WINDOW
 
 ⌃N — New…
-⌃W — Close the active document
+⌃W — Close the document
 ⌘S — Save
 ⌘D — Duplicate
-⇧⌘E — Download the sheet as a .png
+⇧⌘E — Download the document as a .png
 ⌃Q — Quit
 ⌘Z — Undo
 ⇧⌘Z — Redo
 ⌘C — Copy the selected pixels
 ⌘V — Paste as a selection
-⌘A — Select the whole tile
-⌘K — Pick Color…
+⌘A — Select the whole face
 ⌘J — Arrange Windows
 
 THE TOOLS
@@ -40,7 +39,7 @@ G — Fill
 E — Eraser
 I — Eyedropper
 
-A tool key works while a document window is front and nothing is being typed into.
+A tool key works while a document window is in front and nothing is being typed into.
 
 THE LAYERS
 
@@ -48,15 +47,15 @@ THE LAYERS
 
 A layer key works where a tool key does, and waits while a stroke or a drag is in progress.
 
-THE TEXT VIEWER — a read-me window
+IN A READ-ME WINDOW
 
 ⌃W — Close
-⌃Q — Quit
-⌘C — Copy the selected prose
+⌃Q — Close every read-me
+⌘C — Copy the selected text
 ⌘A — Select All
 ⌘J — Arrange Windows
 
-DESKTOP PATTERNS — the control panel
+IN DESKTOP PATTERNS
 
 ⌃W — Close
 ⌃Q — Quit
@@ -66,12 +65,12 @@ THE MOUSE AND THE MODIFIERS
 
 Double-click — open a document, a folder or a read-me
 Return — rename the selected icon; in a dialog, the default button
-Right-click — erase with whichever tool you are holding, while the button is down
-Option — sample a color without leaving the tool you are in
-Shift — square a rectangle, lock a move to one axis, toggle icons in a rubber band
-Esc — cancel a drag, drop a selection, dismiss a dialog
+Right button — erase with the pencil, rectangle or fill while the button is down
+Option — pick up a color without leaving the tool you are in
+Shift — square a rectangle, move a selection in a straight line, toggle icons in a box
+Esc — cancel a drag, let go of a selection, dismiss a dialog
 Delete or Backspace — clear the selected pixels
 
-ONE COMMAND OVER THE WHOLE SCREEN
+ARRANGE WINDOWS
 
-⌘J is in every application's View menu and means the same thing wherever you are. With anything out of place it arranges the screen; with everything already arranged it zooms the front document window, so pressing it again toggles that one window and moves nothing else.
+⌘J is in every View menu and means the same thing everywhere. With anything out of place it puts every window back where it started. In a document, with everything already in place, it zooms the document window instead, so pressing it again toggles that one window and moves nothing else.

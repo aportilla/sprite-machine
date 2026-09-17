@@ -1,7 +1,7 @@
 # sprite-machine
 
-Read `README.md` first; it is the spec. The testing policy is
-`docs/TESTING.md`, and it is binding. The short form:
+Read `docs/SPEC.md` first; it is the spec. `README.md` is the user guide. The
+testing policy is `docs/TESTING.md`, and it is binding. The short form:
 
 - Unit tests only, and only for pure logic: the engine's suite stays
   dense (it is the published package), the app's covers its pure rules.
