@@ -138,8 +138,9 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   neighbours are the edited layer's own, and other layers never show there. The
   corners stay empty. The strips sit on the canvas's texel lattice with no gap,
   at full opacity, on white, so the dithered rectangle is exactly the drawable
-  area. They take no pointer input. A stroke never changes them, since a
-  face's neighbours exclude the face and its opposite.
+  area. Nothing draws there, but the band takes a press for the eyedropper
+  (below). A stroke never changes the strips, since a face's neighbours exclude
+  the face and its opposite.
 - **Tools**: six 22×19 cells, three across and two down, **selection** `S`,
   **pencil** `B`, **rect** `R` on top, **fill** `G`, **eraser** `E`,
   **eyedropper** `I` below. Each cell is a 1-bit PNG drawn 1:1 through `vf-img`
@@ -237,7 +238,10 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   a momentary erase with the pencil, rect and fill.
 - **Eyedropper** (`I`) stays selected. A click on a painted texel sets the
   ink, and a click on empty space selects the eraser. Ants ring the texel under
-  the pointer. Holding Alt samples with any tool without switching. While
+  the pointer. A painted texel in the edge-hint band sets the ink too: the
+  frame's container takes the press, the band claims the crosshair only while a
+  press would sample, and an empty strip texel picks nothing, having no art to
+  erase. Holding Alt samples with any tool without switching. While
   Alt is held outside a drag, the hover preview is the eyedropper's, and a
   drag keeps its own tool's preview until it ends. The press reads its own
   `altKey`. `session.option` holds the key for the palette and the preview.
@@ -1280,7 +1284,6 @@ release, and a layer key waits while it is set.
   TOP/BOTTOM, its rows on LEFT/RIGHT, its mirror on BACK), and the same for a
   paste onto every face at once. A lasso. Cut ⌘X and an Edit → Clear item over
   the selection. A size cap on a pasted image.
-- **Eyedropper.** Sample a texel in the edge hints.
 - **Finder.** Duplicate ⌘D for the selected icons, into their own container and
   named like a paste.
 - **Alerts.** A 32×32 1-bit caution icon in the Empty Trash, unsaved-changes and

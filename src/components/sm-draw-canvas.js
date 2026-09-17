@@ -5,7 +5,9 @@
 //
 // - The stack: the edge-hint frame (lib/edges.js) behind four canvases: the
 //   underlay (the other layers and the mirrored opposite face), the pixel
-//   canvas, the cursor overlay and the selection's ants.
+//   canvas, the cursor overlay and the selection's ants. The frame's band takes
+//   pointer input for sampling alone: a press there picks a strip texel's color
+//   and nothing draws.
 // - Selection: drag a marquee, then drag inside it to move the pixels. The first
 //   move lifts the texels into #selFloat and clears them in a copy of the buffer
 //   (#selBase). Each offset composites base and float into #work in place.
@@ -28,7 +30,8 @@
 //   sm-commit             { before, after }  one gesture's snapshot copies
 //   sm-selection          { bounds | null }  the selection outline, on change
 //   sm-rect-drag          { bounds | null }  the rect drag's box, on change
-//   sm-pick-color         { rgb }            an eyedrop on a painted texel
+//   sm-pick-color         { rgb }            an eyedrop on a painted texel, in
+//                                            the art or the edge-hint band
 //   sm-pick-transparent                      an eyedrop on empty space
 //   sm-replace-all-tiles  { target, fill }   a non-contiguous fill on all faces
 //   sm-gesture            { active }         a drag started or ended
@@ -109,6 +112,14 @@ export class SmDrawCanvas extends LitElement {
         height: 100%;
         image-rendering: pixelated;
         image-rendering: crisp-edges;
+        pointer-events: none;
+      }
+      /* The band's hover ants, over the strips, at system-px res. */
+      .editor-canvas-band {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
         pointer-events: none;
       }
       /* The four layers fill the stack. The pixel canvas is native tile res.
@@ -209,6 +220,7 @@ export class SmDrawCanvas extends LitElement {
   #gestureBefore = null;
   #gestureChanged = false;
   #hoverTexel = null; // last hovered texel, for the hover preview
+  #bandTexel = null; // last hovered edge-hint pick {px,py,rgb}, in frame texels
   // Rect drag
   #rectDragging = false;
   #rectStart = null; // anchor corner texel {px,py}
@@ -260,6 +272,8 @@ export class SmDrawCanvas extends LitElement {
   /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
   #hintCanvas = createRef();
   /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
+  #bandCanvas = createRef();
+  /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
   #bg = createRef();
   /** @type {import('lit/directives/ref.js').Ref<HTMLCanvasElement>} */
   #canvas = createRef();
@@ -270,6 +284,7 @@ export class SmDrawCanvas extends LitElement {
   #ctx = null;
   #cursorCtx = null;
   #antsCtx = null;
+  #bandCtx = null;
 
   // Lifecycle
   connectedCallback() {
@@ -327,6 +342,7 @@ export class SmDrawCanvas extends LitElement {
     this.#ctx = this.#canvas.value.getContext('2d');
     this.#cursorCtx = this.#cursor.value.getContext('2d');
     this.#antsCtx = this.#antsLayer.value.getContext('2d');
+    this.#bandCtx = this.#bandCanvas.value.getContext('2d');
     this.#observeResize();
   }
 
@@ -379,6 +395,7 @@ export class SmDrawCanvas extends LitElement {
     this.#prev = null;
     this.#forceErase = false;
     this.#hoverTexel = null;
+    this.#bandTexel = null;
     this.#rectDragging = false;
     this.#rectStart = null;
     this.#rectEnd = null;
@@ -518,6 +535,9 @@ export class SmDrawCanvas extends LitElement {
     stack.height = sysH;
     hints.width = fitW * k;
     hints.height = fitH * k;
+    // The band's ants layer covers the whole frame, at system-px res.
+    this.#bandCanvas.value.width = fitW * k;
+    this.#bandCanvas.value.height = fitH * k;
     // System-res backings: hairlines are 1 system px.
     this.#bg.value.width = this.#sysW;
     this.#bg.value.height = this.#sysH;
@@ -535,13 +555,23 @@ export class SmDrawCanvas extends LitElement {
   // The well holds two placed vf-containers: the edge-hint frame and, over it,
   // the canvas stack. Both containers declare a pattern so the desktop's
   // pattern doesn't leak in (see PAPER). Backing stores are set in
-  // #applyGeometry() and #layout(), never bound here. Lit sets the static
-  // data-vf-cursor once, so #setCursorClaim's changes persist across renders.
+  // #applyGeometry() and #layout(), never bound here. Lit sets each static
+  // data-vf-cursor once, so the claims set in code (#setCursorClaim for the
+  // canvas, #drawBandCursor for the band) persist across renders.
   render() {
     return html`
       <div class="editor-canvas-wrap" ${ref(this.#wrap)}>
-        <vf-container class="editor-canvas-hints" pattern="white" ${ref(this.#hints)}>
+        <vf-container
+          class="editor-canvas-hints"
+          pattern="white"
+          data-vf-cursor="arrow"
+          ${ref(this.#hints)}
+          @pointerdown=${this.#onBandDown}
+          @pointermove=${this.#onBandMove}
+          @pointerleave=${this.#onBandLeave}
+        >
           <canvas class="editor-canvas-hint" ${ref(this.#hintCanvas)}></canvas>
+          <canvas class="editor-canvas-band" ${ref(this.#bandCanvas)}></canvas>
         </vf-container>
         <vf-container class="editor-canvas-stack" pattern=${PAPER} ${ref(this.#stack)}>
           <canvas class="editor-canvas-bg" ${ref(this.#bg)}></canvas>
@@ -783,9 +813,15 @@ export class SmDrawCanvas extends LitElement {
     return !!this.#hoverTexel && (this.#erasing || this.#sampling);
   }
 
+  // Whether the band shows its hover ants: the pointer is over a strip texel a
+  // press would pick, and it would sample.
+  get #bandAntsUp() {
+    return !!this.#bandTexel && this.#sampling;
+  }
+
   // Run the ticker only while some ants are up. Stopping resets the phase.
   #syncAnts() {
-    if (this.#sel || this.#cursorAntsUp) this.#startAnts();
+    if (this.#sel || this.#cursorAntsUp || this.#bandAntsUp) this.#startAnts();
     else this.#stopAnts();
   }
 
@@ -953,9 +989,12 @@ export class SmDrawCanvas extends LitElement {
 
   // Redraw the cursor layer: the rect preview while dragging, else the hover
   // preview.
+  // Repaint the hover previews: the cursor overlay over the art, the ants over
+  // the band.
   #redrawCursorLayer() {
     if (this.#rectDragging) this.#drawRectPreview();
     else this.#drawCursor(this.#hoverTexel);
+    this.#drawBandCursor();
   }
 
   // Selection
@@ -1209,7 +1248,7 @@ export class SmDrawCanvas extends LitElement {
     this.#antsTimer = setInterval(() => {
       this.#antsPhase = (this.#antsPhase + 1) % ANTS_PERIOD;
       if (this.#sel) this.#drawAnts();
-      if (this.#cursorAntsUp) this.#redrawCursorLayer();
+      if (this.#cursorAntsUp || this.#bandAntsUp) this.#redrawCursorLayer();
     }, ANTS_MS);
   }
 
@@ -1509,6 +1548,89 @@ export class SmDrawCanvas extends LitElement {
   };
 
   #onContextMenu = (e) => e.preventDefault(); // right-click erases
+
+  // The edge-hint band
+  // The strips lie outside the pixel canvas, so the hint frame's container
+  // carries their pointer input. It is sampling only: nothing there draws.
+
+  // The pick under a pointer event: a strip texel and its color, or null off
+  // the frame, over the art, or on an empty strip texel. The frame's corners
+  // are always empty, so they never pick.
+  /** @returns {{px:number,py:number,rgb:{r:number,g:number,b:number}}|null} */
+  #bandPickAt(e) {
+    const f = this.edgeHints;
+    const c = this.#hintCanvas.value;
+    if (!f || !c) return null;
+    const rect = c.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const px = Math.floor(((e.clientX - rect.left) / rect.width) * f.width);
+    const py = Math.floor(((e.clientY - rect.top) / rect.height) * f.height);
+    if (px < 0 || py < 0 || px >= f.width || py >= f.height) return null;
+    const onArt =
+      px >= EDGE_HINT &&
+      py >= EDGE_HINT &&
+      px < f.width - EDGE_HINT &&
+      py < f.height - EDGE_HINT;
+    if (onArt) return null;
+    const i = (py * f.width + px) * 4;
+    if (f.data[i + 3] === 0) return null;
+    return { px, py, rgb: { r: f.data[i], g: f.data[i + 1], b: f.data[i + 2] } };
+  }
+
+  // A press samples by the canvas's rule: the eyedropper, or Alt with any tool.
+  // An empty texel picks nothing, since there is no art out here to erase.
+  #onBandDown = (e) => {
+    if (this.#dragging) return;
+    if (this.tool !== 'eyedropper' && !(e.button !== 2 && e.altKey)) return;
+    const pick = this.#bandPickAt(e);
+    if (!pick) return;
+    e.preventDefault();
+    this.#bandTexel = pick;
+    this.#drawBandCursor();
+    this.#emit('sm-pick-color', { rgb: pick.rgb });
+  };
+
+  #onBandMove = (e) => {
+    this.#bandTexel = this.#bandPickAt(e);
+    this.#drawBandCursor();
+  };
+
+  #onBandLeave = () => {
+    this.#bandTexel = null;
+    this.#drawBandCursor();
+  };
+
+  // The system-px view over the whole frame, for the band's ants.
+  get #bandOverlayView() {
+    const f = this.edgeHints;
+    const k = this.#texelSys;
+    return {
+      tileW: f.width,
+      tileH: f.height,
+      scale: k,
+      sysW: f.width * k,
+      sysH: f.height * k,
+    };
+  }
+
+  // The band's ants and its cursor claim. The crosshair shows only while a
+  // press would sample, so the strips never look drawable.
+  #drawBandCursor() {
+    const hints = this.#hints.value;
+    const kind = this.edgeHints && this.#sampling ? 'crosshair' : 'arrow';
+    if (hints && hints.getAttribute('data-vf-cursor') !== kind)
+      hints.setAttribute('data-vf-cursor', kind);
+    const c = this.#bandCanvas.value;
+    const g = this.#bandCtx;
+    if (!g || !c) return;
+    if (!this.edgeHints) {
+      g.clearRect(0, 0, c.width, c.height);
+      return;
+    }
+    const t = this.#bandAntsUp ? this.#bandTexel : null;
+    drawFootprintAnts(g, this.#bandOverlayView, t, 1, this.#antsPhase);
+    this.#syncAnts();
+  }
 }
 
 // Guarded against a second define when Vite's HMR re-runs the module.

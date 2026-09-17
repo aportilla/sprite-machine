@@ -10,7 +10,7 @@ THE SIX FACES
 
 A document is one object drawn from six directions: Front, Back, Left, Right, Top and Bottom. The line at the bottom of the document window names the face you are on. Draw each face as you would see it standing there. On the Left face the object's front points left, on the Right face it points right, and on the Top face it is at the top of the square.
 
-The model is built as if carving a block: the Front face cuts away everything outside its outline, then the side face, then the Top. So the faces have to agree. A car 14 pixels long in the Left face is 14 pixels long in the Top face too. The faint picture behind the canvas is the opposite face, mirrored, and the strips along the edges show where the neighboring faces have pixels. Use them to line things up. You do not have to draw all six faces. An empty face is filled in from its opposite, and most objects need only the Front, one side and the Top.
+The model is built as if carving a block: the Front face cuts away everything outside its outline, then the side face, then the Top. So the faces have to agree. A car 14 pixels long in the Left face is 14 pixels long in the Top face too. The faint picture behind the canvas is the opposite face, mirrored, and the strips along the edges show where the neighboring faces have pixels. Use them to line things up, and pick up their colors with the eyedropper. You do not have to draw all six faces. An empty face is filled in from its opposite, and most objects need only the Front, one side and the Top.
 
 Both sides of a step in one color make a smooth slope, like a windshield. Two colors keep a sharp edge.
 

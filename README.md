@@ -155,7 +155,8 @@ To change it:
   box for a hex code such as `#ff8800`. Click **OK**.
 - Click a color in the **Color Palette** window. It shows every color already
   in the document, and the current one has a ring around it.
-- Use the eyedropper, or Option-click a pixel with any tool.
+- Use the eyedropper, or Option-click a pixel with any tool. It works on
+  the strips along the edges as well as on your drawing.
 
 There is no palette import. New colors come from the Colors dialog, or from
 an image you paste in. Pixels are either fully solid or fully clear; there is
@@ -171,7 +172,7 @@ While you draw one face, the canvas shows two helpers:
 - **The strips along the four edges** show where the neighboring faces have
   pixels. On the Front face, the strip on the left is the front edge of the
   Left face, and the strip on top is the front edge of the Top face. Line
-  your pixels up with them.
+  your pixels up with them. The eyedropper picks up their colors too.
 
 ### Undo
 
