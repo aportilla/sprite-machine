@@ -1,36 +1,32 @@
 Keyboard Shortcuts
 
-A key belongs to the menu it is on, so it works while that kind of window is in front. Click a document window and the document's keys are live; click the desktop and the desktop's are.
-
-WHY CONTROL, NOT COMMAND
-
-New, Close and Quit answer ⌃N, ⌃W and ⌃Q, the Control key, because the browser takes ⌘N, ⌘W and ⌘Q before the page sees them. ⌘W closes the browser tab, and the browser asks first if any open document has unsaved changes. On Windows and Linux, Ctrl stands in for ⌘, and Ctrl+N and Ctrl+W belong to the browser, so use the File menu for New and Close there.
-
-ON THE DESKTOP AND IN A FOLDER WINDOW
+FINDER
 
 ⌃N — New Sprite
-⌃W — Close the front folder window
-⌘C — Copy the selected icons
+⌃W — Close
+⌘C — Copy
 ⌘V — Paste
 ⌘A — Select All
 ⌘J — Arrange Windows
+Return — Rename
+Double-click — Open
+Shift-drag — Add or remove icons
+Esc — Cancel a drag
 
-IN A DOCUMENT WINDOW
+EDITOR
 
 ⌃N — New…
-⌃W — Close the document
+⌃W — Close
 ⌘S — Save
 ⌘D — Duplicate
-⇧⌘E — Download the document as a .png
+⇧⌘E — Download
 ⌃Q — Quit
 ⌘Z — Undo
 ⇧⌘Z — Redo
-⌘C — Copy the selected pixels
-⌘V — Paste as a selection
-⌘A — Select the whole face
+⌘C — Copy
+⌘V — Paste
+⌘A — Select All
 ⌘J — Arrange Windows
-
-THE TOOLS
 
 S — Selection
 B — Pencil
@@ -38,39 +34,18 @@ R — Rectangle
 G — Fill
 E — Eraser
 I — Eyedropper
+1 to 8 — Layer
 
-A tool key works while a document window is in front and nothing is being typed into.
+Option-click — Pick a color
+Right button — Erase
+Shift-drag — Square a rectangle, move in a line
+Esc — Cancel a drag, drop the selection
+Delete — Clear the selection
 
-THE LAYERS
-
-1 to 8 — Edit that layer of the document
-
-A layer key works where a tool key does, and waits while a stroke or a drag is in progress.
-
-IN A READ-ME WINDOW
-
-⌃W — Close
-⌃Q — Close every read-me
-⌘C — Copy the selected text
-⌘A — Select All
-⌘J — Arrange Windows
-
-IN DESKTOP PATTERNS
+READER
 
 ⌃W — Close
 ⌃Q — Quit
+⌘C — Copy
+⌘A — Select All
 ⌘J — Arrange Windows
-
-THE MOUSE AND THE MODIFIERS
-
-Double-click — open a document, a folder or a read-me
-Return — rename the selected icon; in a dialog, the default button
-Right button — erase with the pencil, rectangle or fill while the button is down
-Option — pick up a color without leaving the tool you are in
-Shift — square a rectangle, move a selection in a straight line, toggle icons in a box
-Esc — cancel a drag, let go of a selection, dismiss a dialog
-Delete or Backspace — clear the selected pixels
-
-ARRANGE WINDOWS
-
-⌘J is in every View menu and means the same thing everywhere. With anything out of place it puts every window back where it started. In a document, with everything already in place, it zooms the document window instead, so pressing it again toggles that one window and moves nothing else.
