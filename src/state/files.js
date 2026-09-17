@@ -20,6 +20,8 @@
 //   either `text` or `builtin`, a built-in's key. A built-in's text is the
 //   app's (deps.builtinText) and is never stored. The listing omits the text;
 //   textOf reads it. A row whose key the app does not ship is left out.
+// - A backup is the whole library as an archive (state/backup.js):
+//   clearLibrary and importArchive are its two ends.
 
 import { createStore } from './store.js';
 import {
@@ -30,6 +32,7 @@ import {
   parseLayersChunk,
 } from 'sprite-machine';
 import { RING_CHUNK_KEY, ringChunk, parseRingChunk } from './ring-settings.js';
+import { sheetShape } from '../lib/sheet-shape.js';
 
 export const UNTITLED = 'untitled';
 /** A new folder's default name. */
@@ -287,6 +290,7 @@ export function copyName(state, folder, name, kind = 'doc') {
  *   encodeAtlas: (img: object) => Promise<Uint8Array>,
  *   decodeAtlas: (bytes: Uint8Array) => Promise<{width: number, height: number, data: Uint8ClampedArray}>,
  *   makeIcon?: (docState: object) => Promise<string|null>,
+ *   iconFromBytes?: (bytes: Uint8Array, image: {width: number, height: number, data: Uint8ClampedArray}) => Promise<string|null>,
  *   builtinText?: (key: string) => string|null,
  *   now?: () => number,
  *   newId?: () => string,
@@ -719,6 +723,129 @@ export function createFiles(deps = null) {
         docs: docs.map((r) => r.id),
         folders: folders.map((f) => f.id),
         texts: texts.map((t) => t.id),
+      };
+    },
+
+    // Backups
+
+    /**
+     * Remove every document, folder and text file, the Trash included. Reads
+     * the stored listings rather than the slice, so a record the listing leaves
+     * out goes too. Resolves the removed document ids.
+     * @param {{refresh?: boolean}} [opts]
+     * @returns {Promise<string[]>}
+     */
+    async clearLibrary({ refresh = true } = {}) {
+      if (!d?.storage) return [];
+      const docs = await d.storage.list();
+      const texts = d.storage.listTexts ? await d.storage.listTexts() : [];
+      const folders = d.storage.listFolders ? await d.storage.listFolders() : [];
+      for (const r of docs) await d.storage.remove(r.id);
+      for (const t of texts) await d.storage.removeText(t.id);
+      for (const f of folders) await d.storage.removeFolder(f.id);
+      if (refresh) await this.refresh();
+      return docs.map((r) => r.id);
+    },
+
+    /**
+     * Write a backup into storage (state/backup.js reads one). `replace`
+     * clears the library first and keeps the archive's ids, so a backup
+     * restored over the profile that wrote it finds its icon positions again.
+     * `merge` mints fresh ids and remaps the containers, so the same archive
+     * can be added twice. Both keep the archive's names and times, duplicates
+     * and all. A document whose bytes do not decode, or whose shape is not a
+     * sheet, is skipped and counted. Every document is read before anything is
+     * removed, and an archive nothing came through from leaves the library
+     * alone, so a replace from an unreadable backup cannot empty the desktop.
+     * @param {import('./backup.js').BackupArchive} archive
+     * @param {{mode?: 'merge'|'replace'}} [opts]
+     * @returns {Promise<{docs: number, folders: number, texts: number,
+     *   skipped: number, untethered: string[]}|null>}
+     *   untethered: removed documents the archive did not bring back.
+     */
+    async importArchive(archive, { mode = 'merge' } = {}) {
+      if (!d?.storage) return null;
+      const replace = mode === 'replace';
+      /** @type {Map<string, string>} the archive's folder id -> the id written */
+      const map = new Map();
+      for (const f of archive.folders) map.set(f.id, replace ? f.id : newId());
+      // Mapped in full first, so a manifest whose folders are out of order
+      // still nests. An unknown container is the desktop.
+      const into = (ref) =>
+        ref == null || ref === TRASH ? (ref ?? null) : (map.get(ref) ?? null);
+
+      // Read every document first: decode for the shape and the dimensions,
+      // and render the icon. `from` is the archive's id, for the untethering.
+      const records = [];
+      let skipped = 0;
+      for (const r of archive.docs) {
+        let image;
+        try {
+          image = await d.decodeAtlas(r.bytes);
+        } catch {
+          skipped++;
+          continue;
+        }
+        if (!sheetShape(image.width, image.height).tile) {
+          skipped++;
+          continue;
+        }
+        const icon = d.iconFromBytes
+          ? await d.iconFromBytes(r.bytes, image).catch(() => null)
+          : null;
+        records.push({
+          from: r.id,
+          id: replace ? r.id : newId(),
+          png: r.bytes,
+          name: r.name,
+          createdAt: r.createdAt,
+          modifiedAt: r.modifiedAt,
+          icon,
+          w: image.width,
+          h: image.height,
+          folder: into(r.folder),
+        });
+      }
+
+      // Nothing came through: a replace would only empty the library, so it
+      // stands and the caller reports what could not be read.
+      if (!records.length && !archive.folders.length && !archive.texts.length) {
+        return { docs: 0, folders: 0, texts: 0, skipped, untethered: [] };
+      }
+
+      const removed = replace ? await this.clearLibrary({ refresh: false }) : [];
+      for (const f of archive.folders) {
+        await d.storage.putFolder({
+          id: map.get(f.id),
+          name: f.name,
+          parent: into(f.parent),
+          createdAt: f.createdAt,
+          modifiedAt: f.modifiedAt,
+        });
+      }
+      for (const { from: _from, ...rec } of records) await d.storage.put(rec);
+      // A built-in's key is kept only while the app still ships that text;
+      // otherwise the archived text is stored, so nothing is lost.
+      for (const t of archive.texts) {
+        const known = t.builtin != null && d.builtinText?.(t.builtin) != null;
+        await d.storage.putText({
+          id: replace ? t.id : newId(),
+          name: t.name,
+          ...(known ? { builtin: t.builtin } : { text: t.text }),
+          createdAt: t.createdAt,
+          modifiedAt: t.modifiedAt,
+          folder: into(t.folder),
+        });
+      }
+
+      await this.refresh();
+      const kept = new Set(records.map((r) => r.from));
+      return {
+        docs: records.length,
+        folders: archive.folders.length,
+        texts: archive.texts.length,
+        skipped,
+        untethered: removed.filter((id) => !kept.has(id)),
       };
     },
 

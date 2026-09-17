@@ -47,6 +47,7 @@ function makeWorld({
   storage = memStorage(),
   icon = 'data:icon',
   builtinText = undefined,
+  iconFromBytes = undefined,
 } = {}) {
   const frames = fakeScheduler();
   const doc = createDoc(frames);
@@ -57,6 +58,7 @@ function makeWorld({
     encodeAtlas,
     decodeAtlas,
     makeIcon: async () => icon,
+    iconFromBytes,
     builtinText,
     now: () => t++,
     newId: () => `id-${++n}`,
@@ -724,4 +726,232 @@ test('refresh resolves availability: present storage true, broken false, none fa
   const none = createFiles({ storage: null, encodeAtlas, decodeAtlas });
   await none.refresh();
   assert.equal(none.get().available, false);
+});
+
+// Backups
+
+/** A read archive: two folders, a document in the nested one, one on the
+ *  desktop, one in the Trash, a built-in text file, and two unusable
+ *  documents. */
+async function archive() {
+  const png = await encodeAtlas(sheet(6, 4));
+  const row = (id, name, folder, extra = {}) => ({
+    id,
+    name,
+    folder,
+    createdAt: 10,
+    modifiedAt: 20,
+    path: `${id}.png`,
+    bytes: png,
+    ...extra,
+  });
+  return {
+    folders: [
+      {
+        id: 'af2',
+        name: 'Big Rigs',
+        parent: 'af1',
+        createdAt: 1,
+        modifiedAt: 1,
+        path: '',
+      },
+      {
+        id: 'af1',
+        name: 'Vehicles',
+        parent: null,
+        createdAt: 2,
+        modifiedAt: 2,
+        path: '',
+      },
+    ],
+    docs: [
+      row('ad1', 'Car', null),
+      row('ad2', 'Truck', 'af2'),
+      row('ad3', 'Old Car', TRASH),
+      row('ad4', 'Wrong Shape', null, { bytes: await encodeAtlas(sheet(5, 4)) }),
+      row('ad5', 'Not A PNG', null, { bytes: new Uint8Array([1, 2, 3]) }),
+    ],
+    texts: [
+      {
+        id: 'at1',
+        name: 'Read Me',
+        folder: null,
+        builtin: 'read-me',
+        text: 'stale copy',
+        createdAt: 3,
+        modifiedAt: 3,
+        path: 'read-me.txt',
+      },
+      {
+        id: 'at2',
+        name: 'Notes',
+        folder: 'af1',
+        builtin: 'gone',
+        text: 'kept',
+        createdAt: 4,
+        modifiedAt: 4,
+        path: 'notes.txt',
+      },
+    ],
+  };
+}
+
+test('importArchive merges with fresh ids, keeping names, times and nesting', async () => {
+  const { files, storage } = makeWorld({
+    builtinText: (key) => (key === 'read-me' ? 'Hello.' : null),
+    iconFromBytes: async () => 'data:restored',
+  });
+  await files.refresh();
+  const res = await files.importArchive(await archive(), { mode: 'merge' });
+  assert.deepEqual(res, {
+    docs: 3,
+    folders: 2,
+    texts: 2,
+    skipped: 2,
+    untethered: [],
+  });
+
+  const st = files.get();
+  const folder = (name) => st.folders.find((f) => f.name === name);
+  assert.equal(folder('Vehicles').parent, null);
+  assert.equal(
+    folder('Big Rigs').parent,
+    folder('Vehicles').id,
+    'a child folder ahead of its parent in the manifest still nests'
+  );
+  for (const f of ['Vehicles', 'Big Rigs']) {
+    assert.ok(!['af1', 'af2'].includes(folder(f).id), 'a merge mints ids');
+  }
+
+  const doc = (name) => st.list.find((r) => r.name === name);
+  assert.equal(doc('Car').folder, null);
+  assert.equal(doc('Truck').folder, folder('Big Rigs').id);
+  assert.equal(doc('Old Car').folder, TRASH);
+  assert.equal(doc('Car').createdAt, 10, 'the archive’s times are kept');
+  assert.equal(doc('Car').modifiedAt, 20);
+  assert.equal(doc('Car').icon, 'data:restored');
+  assert.equal(doc('Car').w, 6);
+  assert.equal(doc('Car').h, 4);
+  assert.equal(doc('Wrong Shape'), undefined, 'a sheet of the wrong shape is skipped');
+  assert.equal(doc('Not A PNG'), undefined, 'bytes that do not decode are skipped');
+
+  const text = (name) => st.texts.find((t) => t.name === name);
+  assert.equal(text('Read Me').builtin, 'read-me');
+  assert.equal(await files.textOf(text('Read Me').id), 'Hello.', 'the app’s text wins');
+  assert.equal(
+    'text' in storage.texts.get(text('Read Me').id),
+    false,
+    'a known key stores no text'
+  );
+  assert.equal(text('Notes').builtin, null);
+  assert.equal(
+    await files.textOf(text('Notes').id),
+    'kept',
+    'an unknown key falls back to the archived text'
+  );
+
+  // The same archive again is additive.
+  await files.importArchive(await archive(), { mode: 'merge' });
+  assert.equal(files.get().list.filter((r) => r.name === 'Car').length, 2);
+  assert.equal(files.get().folders.filter((f) => f.name === 'Vehicles').length, 2);
+});
+
+test('importArchive replaces: the library is cleared first and the ids come back', async () => {
+  const { files, doc } = makeWorld({ iconFromBytes: async () => 'data:restored' });
+  await files.refresh();
+  const before = await files.save(doc, { name: 'Sunk' });
+  await files.createFolder({ name: 'Old Folder' });
+  await files.createText({ name: 'Old Notes', text: 'x' });
+
+  const res = await files.importArchive(await archive(), { mode: 'replace' });
+  assert.deepEqual(res.untethered, [before.id], 'the sunk document is reported');
+
+  const st = files.get();
+  assert.deepEqual(
+    st.list.map((r) => r.id).sort(),
+    ['ad1', 'ad2', 'ad3'],
+    'the archive’s own document ids'
+  );
+  assert.deepEqual(
+    st.folders.map((f) => f.id).sort(),
+    ['af1', 'af2', TRASH],
+    'the archive’s own folder ids, beside the Trash row'
+  );
+  assert.deepEqual(
+    st.texts.map((t) => t.id),
+    ['at1', 'at2']
+  );
+  assert.equal(
+    st.list.find((r) => r.id === 'ad2').folder,
+    'af2',
+    'nesting survives with the kept ids'
+  );
+  assert.equal(
+    st.folders.some((f) => f.name === 'Old Folder'),
+    false
+  );
+  assert.equal(
+    st.texts.some((t) => t.name === 'Old Notes'),
+    false
+  );
+
+  // A document the archive brings back under its own id is not reported as
+  // untethered: restoring your own backup keeps the window tethered.
+  const second = await files.importArchive(await archive(), { mode: 'replace' });
+  assert.deepEqual(second.untethered, []);
+});
+
+test('a replace nothing came through from leaves the library alone', async () => {
+  const { files, doc } = makeWorld();
+  await files.refresh();
+  const mine = await files.save(doc, { name: 'Mine' });
+  const junk = {
+    folders: [],
+    texts: [],
+    docs: [
+      {
+        id: 'x',
+        name: 'Junk',
+        folder: null,
+        createdAt: 1,
+        modifiedAt: 1,
+        path: 'x.png',
+        bytes: new Uint8Array([1, 2, 3]),
+      },
+    ],
+  };
+  const res = await files.importArchive(junk, { mode: 'replace' });
+  assert.deepEqual(res, { docs: 0, folders: 0, texts: 0, skipped: 1, untethered: [] });
+  assert.deepEqual(
+    files.get().list.map((r) => r.id),
+    [mine.id],
+    'the desktop is not emptied for an archive that holds nothing usable'
+  );
+});
+
+test('clearLibrary empties storage, listing or not, and reports the document ids', async () => {
+  const { files, storage, doc } = makeWorld({ builtinText: () => null });
+  await files.refresh();
+  const made = await files.save(doc, { name: 'Car' });
+  await files.createFolder({ name: 'Vehicles' });
+  // A text whose key the app does not ship: stored, but never in the listing.
+  await storage.putText({
+    id: 'ghost',
+    name: 'Ghost',
+    builtin: 'nope',
+    createdAt: 1,
+    modifiedAt: 1,
+  });
+  await files.refresh();
+  assert.equal(files.get().texts.length, 0);
+
+  assert.deepEqual(await files.clearLibrary(), [made.id]);
+  assert.equal(storage.map.size, 0);
+  assert.equal(storage.folders.size, 0);
+  assert.equal(storage.texts.size, 0, 'a record the listing leaves out goes too');
+  assert.equal(files.get().list.length, 0);
+  assert.deepEqual(
+    files.get().folders.map((f) => f.id),
+    [TRASH]
+  );
 });

@@ -32,6 +32,7 @@ import { bytesToImageData } from '../../image-io.js';
 import { readSystemClipboard, pastedPng } from '../../system-clipboard.js';
 import { initFolderWindows } from './windows.js';
 import { initIcons } from './icons.js';
+import { downloadBackup, readBackup } from './backup.js';
 
 /** @type {import('../index.js').App} */
 export const finder = {
@@ -99,6 +100,138 @@ export const finder = {
       workspace
         .emptyTrash()
         .catch((err) => build.setError(`Empty Trash failed: ${err.message}`));
+    });
+
+    // Back Up All Files, and Restore from Backup… or a dropped zip (main.js).
+    // The archive waits in `pending` for the Restore question's answer.
+    const dlgRestore = $('#dlg-restore-backup');
+    const restoreMsg = $('#restore-backup-msg');
+    const btnRestoreReplace = $('#btn-restore-replace');
+    const dlgRestoreFailed = $('#dlg-restore-failed');
+    const restoreFailedMsg = $('#restore-failed-msg');
+    /** @type {Awaited<ReturnType<typeof readBackup>>|null} */
+    let pending = null;
+
+    const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    /** @param {string} msg */
+    const showRestoreFailed = (msg) => {
+      restoreFailedMsg.textContent = msg;
+      dlgRestoreFailed.show();
+    };
+    on($('#btn-restore-failed-ok'), 'click', () => dlgRestoreFailed.close());
+
+    /** Everything stored anywhere, the Trash and the folders included. */
+    const libraryCount = () => {
+      const st = files.get();
+      return st.list.length + st.texts.length + st.folders.length - 1; // less the Trash row
+    };
+
+    function backUp() {
+      if (!files.get().available) {
+        showStorage();
+        return;
+      }
+      downloadBackup({ app: __APP_VERSION__ }).catch((err) =>
+        build.setError(`Back Up All Files failed: ${err.message}`)
+      );
+    }
+
+    /** "3 documents, 1 folder and 2 read-me files", leaving out what is not
+     *  there. */
+    function archivePhrase(archive) {
+      const parts = [];
+      if (archive.docs.length)
+        parts.push(plural(archive.docs.length, 'document', 'documents'));
+      if (archive.folders.length)
+        parts.push(plural(archive.folders.length, 'folder', 'folders'));
+      if (archive.texts.length)
+        parts.push(plural(archive.texts.length, 'read-me file', 'read-me files'));
+      return parts.length > 1
+        ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+        : parts[0];
+    }
+
+    function restoreQuestion(name, archive) {
+      const when = archive.exportedAt ? new Date(archive.exportedAt) : null;
+      const saved =
+        when && !Number.isNaN(when.getTime())
+          ? `, saved ${when.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
+          : '';
+      const head = `“${name}” holds ${archivePhrase(archive)}${saved}.`;
+      const here = libraryCount();
+      if (!here) return `${head} Add them to the desktop?`;
+      const t = descendantsOf(files.get(), TRASH);
+      const trashed = t.docs.length + t.folders.length + t.texts.length;
+      return (
+        `${head} Add them to the desktop, or replace the ` +
+        `${plural(here, 'item', 'items')} on it${trashed ? ', the Trash included' : ''}?`
+      );
+    }
+
+    /** A dropped zip or a picked one. @param {File} file */
+    async function receiveArchive(file) {
+      if (modalOpen()) return;
+      if (!files.get().available) {
+        showStorage();
+        return;
+      }
+      let archive;
+      try {
+        archive = await readBackup(file);
+      } catch (err) {
+        showRestoreFailed(
+          `“${file.name}” isn’t a backup this app can read: ${err.message}.`
+        );
+        return;
+      }
+      if (!archive.docs.length && !archive.folders.length && !archive.texts.length) {
+        showRestoreFailed(`“${file.name}” holds no files.`);
+        return;
+      }
+      pending = archive;
+      restoreMsg.textContent = restoreQuestion(file.name, archive);
+      btnRestoreReplace.disabled = libraryCount() === 0;
+      dlgRestore.show();
+    }
+
+    /** @param {'merge'|'replace'} mode */
+    function restore(mode) {
+      const archive = pending;
+      pending = null;
+      dlgRestore.close();
+      if (!archive) return;
+      workspace
+        .importArchive(archive, { mode })
+        .then((res) => {
+          const unread = (res?.skipped ?? 0) + archive.missing;
+          if (unread) {
+            showRestoreFailed(
+              `The backup was restored, but ${plural(unread, 'item', 'items')} in it couldn’t be read.`
+            );
+          }
+        })
+        .catch((err) => build.setError(`Restore failed: ${err.message}`));
+    }
+    on($('#btn-restore-cancel'), 'click', () => {
+      pending = null;
+      dlgRestore.close();
+    });
+    on(btnRestoreReplace, 'click', () => restore('replace'));
+    on($('#btn-restore-add'), 'click', () => restore('merge'));
+
+    // Restore from Backup… reaches the same handler through a file picker. It
+    // sits off-screen rather than hidden, so click() opens it in every browser.
+    const picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = '.zip,application/zip';
+    picker.style.position = 'fixed';
+    picker.style.left = '-9999px';
+    document.body.append(picker);
+    teardown.push(() => picker.remove());
+    on(picker, 'change', () => {
+      const f = picker.files?.[0];
+      picker.value = ''; // so picking the same file again still fires change
+      if (f) receiveArchive(f);
     });
 
     // Clipboard.
@@ -302,6 +435,12 @@ export const finder = {
             build.setError(`Restore Default Files failed: ${err.message}`)
           );
           break;
+        case 'back-up':
+          backUp();
+          break;
+        case 'restore-backup':
+          picker.click();
+          break;
       }
     });
 
@@ -387,6 +526,17 @@ export const finder = {
     teardown.push(files.subscribe(syncRestore));
     syncRestore();
 
+    // Back Up needs something to write; Restore needs somewhere to put it.
+    const itemBackUp = item(menuSpecial, 'back-up');
+    const itemRestoreBackup = item(menuSpecial, 'restore-backup');
+    const syncBackup = () => {
+      const st = files.get();
+      itemBackUp.disabled = !st.available || libraryCount() === 0;
+      itemRestoreBackup.disabled = !st.available;
+    };
+    teardown.push(files.subscribe(syncBackup));
+    syncBackup();
+
     // The stores feed the window placement. windows.onLayout covers geometry.
     const itemArrange = item(menuView, 'arrange');
     const syncArrange = () => {
@@ -408,6 +558,8 @@ export const finder = {
         pins: () => folders.pins(),
         /** Opens a folder's window, or brings it forward. */
         openFolder: (id) => folders.open(id),
+        /** Asks whether to add or replace, for a zip dropped on the page. */
+        receiveArchive: (file) => receiveArchive(file),
         /** Subscribes to icon moves that end without a gesture, such as a
          *  Clean Up walk. Returns the unsubscribe. @param {() => void} fn */
         onMoved: (fn) => icons.onMoved(fn),

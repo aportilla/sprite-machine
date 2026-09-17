@@ -283,13 +283,32 @@ the browser keeps ⌘N, ⌘W and ⌘Q for itself: ⌘W closes the browser tab.
 
 **File → Download** (⇧⌘E) saves the open document to your disk as a PNG
 named after it, such as `car.png`. The file holds the drawing, its name, its
-layers and its sprite atlas settings. Folders, icon positions and the desktop
-pattern are not in it. Download works on one document at a time, so to back
-up everything, open each document and download it.
+layers and its sprite atlas settings. Download works on one document at a
+time.
 
 To bring a file back, on any computer, drag it anywhere onto the page. It
 opens in a window; press ⌘S to put it on the desktop. Drop one file at a
 time.
+
+**Special → Back Up All Files…** saves everything at once: every document,
+folder and read-me file, the Trash included, in one zip named for the day,
+such as `sprite-machine-backup-2026-09-17.zip`. Unzip it and you get your
+folders as folders, your documents as the same PNGs Download writes, and your
+read-me files as plain text, so the backup is worth keeping and worth reading.
+Window positions and the desktop pattern are not in it.
+
+To restore one, drag the zip anywhere onto the page, or choose **Special →
+Restore from Backup…** and pick it. Either way you are asked what to do with
+it:
+
+- **Add** puts everything in the backup on the desktop beside what is already
+  there. Files keep their names, so you may end up with two documents called
+  Car.
+- **Replace** clears the desktop first, the Trash included, and puts the
+  backup in its place. On the computer the backup came from, the icons land
+  where they were.
+
+Cancel leaves everything alone. Nothing is changed until you answer.
 
 A private browsing window cannot save, and the app says so when you try.
 Everything else works there, and Download keeps your work.
@@ -406,6 +425,9 @@ A document's icon is a small picture of its model, drawn each time you save.
   first. Before that, you can drag things back out.
 - **Special → Restore Default Files** brings back any sample document or
   read-me that is gone, once the Trash has been emptied.
+- **Special → Back Up All Files…** and **Special → Restore from Backup…** save
+  and bring back the whole desktop; see
+  [Download and back up](#download-and-back-up).
 
 ### Windows
 

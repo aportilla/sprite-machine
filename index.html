@@ -260,6 +260,50 @@
         </vf-button-group>
       </vf-dialog>
 
+      <!-- Restore from Backup question (apps/finder). The message is written at
+           show, and Replace is disabled on an empty desktop. -->
+      <vf-dialog
+        id="dlg-restore-backup"
+        frame="plain"
+        label="Restore"
+        width="400"
+        height="180"
+      >
+        <vf-paragraph
+          face="display"
+          id="restore-backup-msg"
+          width="360"
+          left="19"
+          top="16"
+        ></vf-paragraph>
+        <vf-button-group origin="bottom right" left="374" top="154">
+          <vf-button id="btn-restore-cancel">Cancel</vf-button>
+          <vf-button id="btn-restore-replace">Replace</vf-button>
+          <vf-button id="btn-restore-add" variant="default">Add</vf-button>
+        </vf-button-group>
+      </vf-dialog>
+
+      <!-- Restore alert (apps/finder) for a file that is not a backup, or a
+           backup with items in it that could not be read. -->
+      <vf-dialog
+        id="dlg-restore-failed"
+        frame="plain"
+        label="Restore"
+        width="380"
+        height="160"
+      >
+        <vf-paragraph
+          face="display"
+          id="restore-failed-msg"
+          width="340"
+          left="19"
+          top="16"
+        ></vf-paragraph>
+        <vf-button-group origin="bottom right" left="354" top="134">
+          <vf-button id="btn-restore-failed-ok" variant="default">OK</vf-button>
+        </vf-button-group>
+      </vf-dialog>
+
       <vf-dialog
         id="dlg-storage"
         heading="Storage Unavailable"

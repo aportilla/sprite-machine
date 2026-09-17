@@ -1,10 +1,12 @@
-// Store-only ZIP writer and reader. File → Export Sprite Atlas… uses it to
-// download the sheet PNG and its TexturePacker JSON as one file.
+// Store-only ZIP writer, and a reader for stored or deflated archives. File →
+// Export Sprite Atlas… and Special → Back Up All Files write one; a dropped
+// backup is read with unzip(), which also takes an archive another program
+// wrote and deflated.
 //
 // Layout (PKWARE APPNOTE, little-endian): a local header and data per entry,
-// the central directory, then the end-of-central-directory record. Method 0
-// (stored), with no data descriptors, extra fields, comments or ZIP64. Names are
-// ASCII, so the UTF-8 flag stays clear.
+// the central directory, then the end-of-central-directory record. What we
+// write is method 0 (stored), with no data descriptors, extra fields, comments
+// or ZIP64. Names are ASCII, so the UTF-8 flag stays clear.
 
 /** @typedef {{name: string, bytes: Uint8Array}} ZipEntry */
 
@@ -12,6 +14,8 @@ const SIG_LOCAL = 0x04034b50;
 const SIG_CENTRAL = 0x02014b50;
 const SIG_END = 0x06054b50;
 const VERSION = 20; // 2.0, the minimum version for a stored entry
+const METHOD_STORE = 0;
+const METHOD_DEFLATE = 8;
 
 // CRC-32 table (IEEE 802.3 polynomial, reflected).
 const CRC_TABLE = (() => {
@@ -130,13 +134,14 @@ export function zipStore(entries, opts = {}) {
   return out;
 }
 
-/**
- * Read a stored ZIP: every entry in directory order, with the CRC from its
- * header. Throws on anything but a stored, single-part archive.
- * @param {Uint8Array} zip
- * @returns {(ZipEntry & {crc: number})[]}
- */
-export function zipEntries(zip) {
+/** @typedef {{name: string, method: number, crc: number, size: number,
+ *             csize: number, dataAt: number}} ZipRecord */
+
+/** Every central-directory record in directory order: the name, the method and
+ *  where the entry's data sits. Names are decoded as UTF-8, which is ASCII for
+ *  anything zipStore wrote.
+ *  @param {Uint8Array} zip @returns {ZipRecord[]} */
+function zipRecords(zip) {
   const v = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
   // The end record is the last 22 bytes unless the archive has a comment, so
   // scan back for its signature.
@@ -145,12 +150,13 @@ export function zipEntries(zip) {
   if (end < 0) throw new Error('not a zip: no end-of-central-directory record');
   const count = v.getUint16(10 + end, true);
   let at = v.getUint32(16 + end, true);
-  const entries = [];
-  const text = new TextDecoder('ascii');
+  const records = [];
+  const text = new TextDecoder();
   for (let i = 0; i < count; i++) {
     if (v.getUint32(at, true) !== SIG_CENTRAL) throw new Error('bad central directory');
-    if (v.getUint16(at + 10, true) !== 0) throw new Error('not a stored entry');
+    const method = v.getUint16(at + 10, true);
     const crc = v.getUint32(at + 16, true);
+    const csize = v.getUint32(at + 20, true);
     const size = v.getUint32(at + 24, true);
     const nameLen = v.getUint16(at + 28, true);
     const extraLen = v.getUint16(at + 30, true);
@@ -159,10 +165,58 @@ export function zipEntries(zip) {
     const name = text.decode(zip.subarray(at + 46, at + 46 + nameLen));
     if (v.getUint32(local, true) !== SIG_LOCAL)
       throw new Error(`bad local header: ${name}`);
+    // The local header's own name and extra lengths, which may differ from the
+    // central record's.
     const dataAt =
       local + 30 + v.getUint16(local + 26, true) + v.getUint16(local + 28, true);
-    entries.push({ name, bytes: zip.slice(dataAt, dataAt + size), crc });
+    records.push({ name, method, crc, size, csize, dataAt });
     at += 46 + nameLen + extraLen + commentLen;
+  }
+  return records;
+}
+
+/**
+ * Read a stored ZIP: every entry in directory order, with the CRC from its
+ * header. Throws on anything but a stored, single-part archive.
+ * @param {Uint8Array} zip
+ * @returns {(ZipEntry & {crc: number})[]}
+ */
+export function zipEntries(zip) {
+  return zipRecords(zip).map(({ name, method, crc, size, dataAt }) => {
+    if (method !== METHOD_STORE) throw new Error('not a stored entry');
+    return { name, bytes: zip.slice(dataAt, dataAt + size), crc };
+  });
+}
+
+/** Inflate a raw deflate stream through the platform's DecompressionStream.
+ *  @param {Uint8Array} bytes @returns {Promise<Uint8Array>} */
+async function inflateRaw(bytes) {
+  const stream = new Blob([bytes])
+    .stream()
+    .pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/**
+ * Read a ZIP whoever wrote it: every entry in directory order, stored or
+ * deflated. A name ending in `/` is a directory entry and has no bytes. Throws
+ * on a malformed archive or any other compression method.
+ * @param {Uint8Array} zip
+ * @returns {Promise<(ZipEntry & {crc: number, dir: boolean})[]>}
+ */
+export async function unzip(zip) {
+  const entries = [];
+  for (const { name, method, crc, size, csize, dataAt } of zipRecords(zip)) {
+    const dir = name.endsWith('/');
+    const raw = zip.slice(dataAt, dataAt + (method === METHOD_STORE ? size : csize));
+    if (dir) {
+      entries.push({ name, bytes: new Uint8Array(0), crc, dir });
+      continue;
+    }
+    if (method !== METHOD_STORE && method !== METHOD_DEFLATE)
+      throw new Error(`unsupported compression in "${name}": method ${method}`);
+    const bytes = method === METHOD_DEFLATE ? await inflateRaw(raw) : raw;
+    entries.push({ name, bytes, crc, dir });
   }
   return entries;
 }

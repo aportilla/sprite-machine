@@ -1,18 +1,55 @@
-Sprite Machine Read Me
+SPRITE MACHINE lets you create a 3D model by drawing the 2D faces of the object with simple pixel-art tools.  
 
-Draw an object from the front, the side and the top with pixel-art tools, and Sprite Machine turns the drawings into a blocky 3D model. Spin it around, save it for a game engine, or turn it into a sprite atlas: a sheet of the object seen from every angle.
+The 3D model can exported as a .glb model file or as a sprite atlas of orthographic rotated views for use in a game engine.
 
-QUICK START
+We also have a published Sprite Machine npm package that can be used to headlessly create 3D models or Sprite Atlases from the raw PNG Sprite Machine format. This means your game can store its 3D assets as tiny pngs and lazily inflate them into the runtime assets your program needs.
 
-Double-click Car on the desktop. Its window opens on the car's left side, and four small windows appear around it: the tools at the top left, the Color Palette under them, the Full Sprite View at the top right with the car's six faces in a row, and the 3D View under that. Draw on the car and the 3D View changes with every stroke. ⌘Z undoes. Check "rotate" at the top of the 3D View to spin the model. Click another face in the Full Sprite View to draw on it. ⌘S saves.
 
-THE SIX FACES
+ - - - - NAVIGATING THE APP - - - -
 
-A document is one object drawn from six directions: Front, Back, Left, Right, Top and Bottom. The line at the bottom of the document window names the face you are on. Draw each face as you would see it standing there. On the Left face the object's front points left, on the Right face it points right, and on the Top face it is at the top of the square.
+You'll have noticed by now that this app is presented within a classic Macintosh system UI.  This means your files appear as icons on the desktop and you can move them around, rename them, and organize them into folders however you like. 
 
-The model is built as if carving a block: the Front face cuts away everything outside its outline, then the side face, then the Top. So the faces have to agree. A car 14 pixels long in the Left face is 14 pixels long in the Top face too. The faint picture behind the canvas is the opposite face, mirrored, and the strips along the edges show where the neighboring faces have pixels. Use them to line things up, and pick up their colors with the eyedropper. You do not have to draw all six faces. An empty face is filled in from its opposite, and most objects need only the Front, one side and the Top.
+ - - - - FILE STORAGE - - - -
 
-Both sides of a step in one color make a smooth slope, like a windshield. Two colors keep a sharp edge.
+Your desktop state is preserved via localstorage and the browsers local IndexedDB so your files are all privately saved within your browser and nothing is ever sent to the cloud.
+
+You can use the File > Download menu action to download your file to the desktop as a .png image that can be dragged back into Sprite Machine at any time.
+
+You can also use Special → Back Up All Files… menu action to download a .zip of all of your files. The backup can be dropped into Sprite Machine to restore them.
+
+
+ - - - - EDITING A FILE - - - -
+
+Double click one of your files to open it in the editor.
+
+The editor has several windows: 
+
+  DOCUMENT
+  The drawing canvas for the 2D pixel art faces.
+  
+  TOOLS
+  Basic pixel art tools.
+  
+  COLORS
+  A palette of the colors used in the document.
+  
+  FACE PICKER
+  for choosing which face of the object to display and edit in the document window.
+  
+  3D MODEL
+  for inspecting the current model.
+
+
+EXPORTING
+
+
+
+BACKING UP YOUR FILESYSTEM
+
+Special → Back Up All Files… saves everything at once - every file, every folder and the Trash - as one zip named for the day. Unzip it and you get your folders as folders, your files as .png images and your read-me files as plain text.
+
+To bring a backup back, drag the zip onto the page or choose Special → Restore from Backup… and pick it. You are then asked what to do with it: Add puts the backup's files on the desktop beside the ones already there, and Replace clears the desktop first and puts the backup in its place. Cancel leaves everything as it is.
+
 
 DRAWING
 

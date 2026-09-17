@@ -24,7 +24,9 @@ import {
   seedDefaultDocs,
   seedDefaultTexts,
   linkDefaultTexts,
+  readSheetMeta,
 } from './loaders.js';
+import { sheetLayers } from './lib/sheet-shape.js';
 import { initDropTarget } from './drop-target.js';
 import { initShortcuts } from './shortcuts.js';
 import { createStorageIfAvailable } from './storage/db.js';
@@ -97,6 +99,14 @@ files.init({
   makeIcon: async (state) =>
     docIcons.render(state.atlasImage, state.transforms, state.layers.length) ??
     genericDocIconDataUri(),
+  // A restored document's icon, from its own bytes: the chunks hold the
+  // transforms and the shape holds the layer count.
+  iconFromBytes: async (bytes, image) =>
+    docIcons.render(
+      image,
+      readSheetMeta(bytes).transforms,
+      sheetLayers(image.width, image.height)
+    ) ?? genericDocIconDataUri(),
   builtinText,
 });
 const dstate = createDesktopState(boot.fresh);
@@ -160,6 +170,7 @@ const rebuilder = initRebuilder(stage, {
 
 const disposeDrop = initDropTarget({
   onLoaded: (ctx) => menuBar.apps[SPRITE_EDITOR].showDocument(ctx.key),
+  onArchive: (file) => finder.receiveArchive(file),
 });
 // Tool keys. Menu key equivalents are declared on the menu items.
 const disposeShortcuts = initShortcuts();

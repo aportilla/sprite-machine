@@ -1,6 +1,7 @@
-// Whole-page drag and drop for sprite sheets, plus the drop overlay. A depth
-// counter keeps the overlay steady while dragenter and dragleave bubble from
-// descendants. body.app-drag shows the overlay (style.css).
+// Whole-page drag and drop for sprite sheets and backups, plus the drop
+// overlay. A depth counter keeps the overlay steady while dragenter and
+// dragleave bubble from descendants. body.app-drag shows the overlay
+// (style.css).
 
 import { html, render } from 'lit';
 import { loadFile } from './loaders.js';
@@ -9,11 +10,15 @@ import { label } from './components/ui-bits.js';
 const dragHasFiles = (e) =>
   !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
 
+/** A backup archive, by name or type. @param {File} f */
+const isArchive = (f) => /\.zip$/i.test(f.name) || f.type === 'application/zip';
+
 /**
- * @param {{onLoaded?: (ctx: object) => void}} [opts]  onLoaded receives the
- *   context a drop opened.
+ * @param {{onLoaded?: (ctx: object) => void, onArchive?: (file: File) => void}} [opts]
+ *   onLoaded receives the context a dropped sheet opened; onArchive a dropped
+ *   backup, which the Finder answers for.
  */
-export function initDropTarget({ onLoaded } = {}) {
+export function initDropTarget({ onLoaded, onArchive } = {}) {
   const body = document.body;
 
   // Render once into a mount that is reused across HMR re-runs.
@@ -25,7 +30,7 @@ export function initDropTarget({ onLoaded } = {}) {
   }
   render(
     html`<div class="drop-overlay">
-      <div class="drop-overlay-msg">${label('Drop a sprite sheet to load')}</div>
+      <div class="drop-overlay-msg">${label('Drop a sprite sheet or a backup')}</div>
     </div>`,
     mount
   );
@@ -50,6 +55,10 @@ export function initDropTarget({ onLoaded } = {}) {
     body.classList.remove('app-drag');
     const f = e.dataTransfer?.files?.[0];
     if (!f) return;
+    if (isArchive(f)) {
+      onArchive?.(f);
+      return;
+    }
     const ctx = await loadFile(f);
     if (ctx) onLoaded?.(ctx);
   };

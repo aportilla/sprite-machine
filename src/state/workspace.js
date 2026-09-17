@@ -340,6 +340,17 @@ export function createWorkspace(deps = {}) {
       return removed;
     },
 
+    /** Restore a backup (files.importArchive). An open context whose document
+     *  the restore removed and did not bring back is handled as in
+     *  removeStored. Resolves the counts.
+     *  @param {import('./backup.js').BackupArchive} archive
+     *  @param {{mode?: 'merge'|'replace'}} [opts] */
+    async importArchive(archive, opts) {
+      const res = await files.importArchive(archive, opts);
+      if (res?.untethered.length) forgetStored(res.untethered);
+      return res;
+    },
+
     /** The bytes File → Download saves for a context. */
     async exportOf(key) {
       const ctx = byKey(key);
