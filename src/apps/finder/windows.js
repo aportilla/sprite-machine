@@ -3,7 +3,8 @@
 // folder's children.
 //
 // A window's box persists as a nine-slice pin, keyed like the folder's icon. It
-// is kept at close() for the session and handed to desktop-state.js by pins().
+// is kept at close() for the session and handed to desktop-state.js by pins(),
+// which also reports the open windows' depth, so the boot reopens them.
 
 import { VfWindow } from 'vintage-frames';
 import markup from './windows.html?raw';
@@ -219,14 +220,12 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
     },
     /** Refit a field's size after its icons change. */
     fit,
-    /** Every known folder window pin by item key: open windows read live, over
-     *  those closed this session.
-     *  @returns {Record<string, import('../../shell/layout.js').Pin>} */
+    /** Every known folder window by item key, for the desktop state: the open
+     *  ones read live, over the boxes of those closed this session. */
     pins() {
-      /** @type {Record<string, import('../../shell/layout.js').Pin>} */
       const out = {};
-      for (const [id, pin] of remembered) out[keyOf(id)] = pin;
-      for (const [id, win] of wins) out[keyOf(id)] = windows.pinOf(win);
+      for (const [id, pin] of remembered) out[keyOf(id)] = { pin };
+      for (const [id, win] of wins) out[keyOf(id)] = windows.record(win);
       return out;
     },
     /** A window opened or closed. Returns the unsubscribe. */

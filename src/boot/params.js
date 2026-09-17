@@ -1,29 +1,18 @@
 // Parses URL params into the boot options. Pure (no DOM).
-// ?file=<name> or #<name> opens a saved document. ?sample, ?edit and ?fresh
-// put a known document on screen from a clean profile (tools/capture.sh).
-// ?flat, ?diag and ?cam are mesh and camera debug flags.
+// ?file=<name> opens a saved document over the restored desktop. ?sample, ?edit
+// and ?fresh put a known document on screen from a clean profile
+// (tools/capture.sh). ?flat, ?diag and ?cam are mesh and camera debug flags.
 
 import { VIEW_NAMES } from 'sprite-machine';
 
 /**
  * @param {string} search  location.search (with or without the leading '?')
- * @param {{sampleNames?: string[], hash?: string}} [opts]  sampleNames is
- *   injected because the samples module imports a PNG only Vite can load.
- *   hash is location.hash.
+ * @param {{sampleNames?: string[]}} [opts]  sampleNames is injected because the
+ *   samples module imports a PNG only Vite can load.
  */
-export function parseBootParams(search, { sampleNames = [], hash = '' } = {}) {
+export function parseBootParams(search, { sampleNames = [] } = {}) {
   const params = new URLSearchParams(search);
-
-  // ?file wins over the hash.
-  let file = (params.get('file') ?? '').trim();
-  if (!file && hash) {
-    const frag = hash.replace(/^#/, '');
-    try {
-      file = decodeURIComponent(frag).trim();
-    } catch {
-      file = frag.trim(); // a malformed %-escape reads literally
-    }
-  }
+  const file = (params.get('file') ?? '').trim();
 
   // ?sample=<index|name>: a matching name, else a clamped index, else 0.
   let sampleIndex = 0;

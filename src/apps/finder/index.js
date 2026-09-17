@@ -406,6 +406,8 @@ export const finder = {
         positions: () => icons.positions(),
         /** Folder window pins by key, for the snapshot. */
         pins: () => folders.pins(),
+        /** Opens a folder's window, or brings it forward. */
+        openFolder: (id) => folders.open(id),
         /** Subscribes to icon moves that end without a gesture, such as a
          *  Clean Up walk. Returns the unsubscribe. @param {() => void} fn */
         onMoved: (fn) => icons.onMoved(fn),

@@ -1,6 +1,9 @@
 // Text Viewer windows: one vf-window per open text file, cloned from
-// #tpl-text-window. The body shows the file's text, read-only. Nothing about a
-// text window persists.
+// #tpl-text-window. The body shows the file's text, read-only.
+//
+// A window's box persists as a nine-slice pin, keyed like the file's icon. It is
+// kept at close() for the session, and pins() hands it to desktop-state.js with
+// the open windows' depth, so the boot reopens them where they were.
 //
 // The zoom box toggles between the expandedTextBox column and the previous box.
 // nearBox reads the state at the click. The previous box is saved as a
@@ -22,13 +25,18 @@ const itemOf = (id) => `text:${id}`;
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
  * @param {ReturnType<typeof import('../../shell/windows.js').initWindows>} windows
+ * @param {{savedPin?: (key: string) => import('../../shell/layout.js').Pin | null}} [opts]
+ *   savedPin: a saved pin by item key (desktop-state.js windowPin), or null.
  */
-export function initTextWindows(desktop, windows) {
+export function initTextWindows(desktop, windows, { savedPin = () => null } = {}) {
   const tpl = /** @type {HTMLTemplateElement} */ (
     parseWindows(markup).querySelector('#tpl-text-window')
   );
   /** @type {Map<string, VfWindow>} text id -> window */
   const wins = new Map();
+  /** @type {Map<string, import('../../shell/layout.js').Pin>} text id -> the pin
+   *  its window closed at this session */
+  const remembered = new Map();
 
   const bodyOf = (win) => /** @type {any} */ (win.querySelector('.text-body'));
   /** The text id a window shows, or null. */
@@ -102,12 +110,15 @@ export function initTextWindows(desktop, windows) {
     // connected element.
     desktop.append(win);
     wins.set(id, win);
+    // This session's pin, else the saved pin, else the cascade.
     windows.adopt(win, {
       app: TEXT_VIEWER,
       place: (w, h) => cascadedBox(w, h, size, n),
+      pin: remembered.get(id) ?? savedPin(itemOf(id)),
       keep: expandedTextBox,
       item: itemOf(id),
     });
+    remembered.delete(id);
     desktop.bringToFront(win);
     return win;
   }
@@ -115,6 +126,7 @@ export function initTextWindows(desktop, windows) {
   function close(id) {
     const win = wins.get(id);
     if (!win) return;
+    remembered.set(id, windows.pinOf(win));
     windows.release(win);
     win.remove(); // the kit picks the next active window
     wins.delete(id);
@@ -149,6 +161,14 @@ export function initTextWindows(desktop, windows) {
     close,
     closeAll() {
       for (const id of [...wins.keys()]) close(id);
+    },
+    /** Every known window by item key, for the desktop state: the open ones
+     *  read live, over the boxes of those closed this session. */
+    pins() {
+      const out = {};
+      for (const [id, pin] of remembered) out[itemOf(id)] = { pin };
+      for (const [id, win] of wins) out[itemOf(id)] = windows.record(win);
+      return out;
     },
     /** The text id of the active window, or null. */
     activeText() {

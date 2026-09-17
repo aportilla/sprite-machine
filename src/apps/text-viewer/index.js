@@ -15,7 +15,7 @@ export const textViewer = {
   menus,
   init({ menus, deps }) {
     const { desktop, windows, modalOpen } = deps;
-    const texts = initTextWindows(desktop, windows);
+    const texts = initTextWindows(desktop, windows, { savedPin: deps.windowPin });
     const menu = (name) => {
       const m = menus.find((el) => el.dataset.menu === name);
       if (!m) throw new Error(`apps/text-viewer: missing menu ${name}`);
@@ -102,6 +102,8 @@ export const textViewer = {
       actions: {
         /** Opens a text file's window or brings it forward. */
         open: (id) => texts.open(id),
+        /** Window geometry by key, for the desktop state snapshot (main.js). */
+        pins: () => texts.pins(),
       },
       dispose() {
         for (const fn of teardown) fn();

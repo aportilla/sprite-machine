@@ -328,12 +328,30 @@ export function initWindows(desktop) {
     pinOf(win) {
       return pinOf(boxOf(win), raster(), frame);
     },
-    /** A pin re-expressed on the live raster with `win`'s resize policy, then
-     *  clamped.
+    /** A pin re-expressed on the live raster, then clamped. The window's own
+     *  resize policy applies unless one is passed: a policy that pins the size
+     *  holds the live one, so reading a saved size back takes a policy that
+     *  does not.
      *  @param {VfWindow} win
-     *  @param {import('./layout.js').Pin} pin */
-    fromPin(win, pin) {
-      return pinnedBox(win, pin);
+     *  @param {import('./layout.js').Pin} pin
+     *  @param {import('./layout.js').Policy} [policy] */
+    fromPin(win, pin, policy) {
+      return policy
+        ? clampedBox(desktop, win, pinTo(pin, raster(), frame, policy))
+        : pinnedBox(win, pin);
+    },
+    /** A window's saved geometry: its pin, its depth among the desktop's
+     *  windows (0 is the bottom) and whether it is the active window. An
+     *  application reports these for its own windows, and shell/desktop-state.js
+     *  writes them.
+     *  @param {VfWindow} win */
+    record(win) {
+      const all = [...desktop.querySelectorAll(':scope > vf-window')];
+      return {
+        pin: pinOf(boxOf(win), raster(), frame),
+        z: all.indexOf(win),
+        active: desktop.activeWindow === win,
+      };
     },
     /** An adopted window's `place` on the live raster, clamped, or null.
      *  @param {VfWindow} win */

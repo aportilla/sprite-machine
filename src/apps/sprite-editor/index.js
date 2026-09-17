@@ -66,6 +66,7 @@ export const spriteEditor = {
         const ctx = workspace.byKey(key);
         if (ctx) closeContext(ctx);
       },
+      savedPin: deps.windowPin,
     });
     const $ = (sel) => {
       const el = desktop.querySelector(sel);
@@ -1032,6 +1033,8 @@ export const spriteEditor = {
         openDoc,
         /** Brings an open document's window forward. */
         showDocument: (key) => editorWindows.showDocument(key),
+        /** Window geometry by key, for the desktop state snapshot (main.js). */
+        pins: () => editorWindows.pins(),
         confirmDiscard,
         closeContext,
         saveThen,

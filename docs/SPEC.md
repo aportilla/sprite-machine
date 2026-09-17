@@ -42,17 +42,18 @@ one added to the app after a profile's first boot, is stored only by the
 Finder's **Special → Restore Default Files** (see [Menu bar](#menu-bar) and
 [Desktop icons & state](#desktop-icons--state)).
 
-Each load opens the About box while its **Show at startup** checkbox is checked
-(the default). Otherwise it shows the bare desktop. OK or a click outside the
-box closes it (see [The About box](#the-about-box)). A URL that names a saved
-document (`?file=Cube` or `#Cube`) opens that file on its last edited face
-instead. The match is case-insensitive, and the most recently modified document
-wins a collision. Windows from a previous session do not reopen, and every
-application window is placed fresh from the live raster (see
-[Windows](#windows)). The desktop icons and each folder window's box, as a
-nine-slice pin, are restored. Opening, saving or switching to a saved document
-writes its name into the URL fragment with `replaceState`, and an untitled
-document clears it, so a reload restores what is on screen. The starter
+Each load reopens the windows the last session left open — saved documents,
+folder windows and text files — deepest first, each at its saved box, and
+brings the window that was active forward (`src/boot/restore.js`). A document
+that has been deleted or moved to the Trash since is skipped. The desktop icons
+and the windoids come back at their boxes too. With nothing to reopen, the load
+opens the About box while its **Show at startup** checkbox is checked (the
+default), and otherwise shows the bare desktop. OK or a click outside the box
+closes it (see [The About box](#the-about-box)). A URL naming a saved document
+(`?file=Cube`) opens that file over the restored desktop, in front, on its last
+edited face. The match is case-insensitive, and the most recently modified
+document wins a collision. The address bar holds no session of its own: a
+fragment left by an older version is cleared at boot. The starter
 documents are also templates in File → New…. A 3×2 sprite sheet PNG dropped
 anywhere on the page opens as a new document.
 
@@ -294,8 +295,8 @@ layer's art meets past each edge.
 **Dev hooks**, parsed in `src/boot/params.js`: `?sample=<index|name>` opens a
 built-in sample as an untitled document from memory, skipping seeding, `?file`
 and the About greeting. `?edit=<face>` picks its face. `?fresh=1` also opens
-the sample, with storage ignored: no desktop-state restore or writes, no URL
-updates, no stored item icons (only the Trash) and no seeding. `?flat=1`,
+the sample, with storage ignored: no desktop-state restore or writes, no stored
+item icons (only the Trash) and no seeding. `?flat=1`,
 `?diag=1` and `?cam=<preset>` are the mesh and camera debug flags.
 
 ---
@@ -692,10 +693,11 @@ windows open at the same size, cascaded down-right into the first of five
 slots no open window holds. A closed or
 moved window frees its slot, and a full cascade wraps to the first.
 
-Windoid and document window geometry doesn't persist across sessions. Within
-a session a dragged window stays put until the page reloads or View → Arrange
-Windows re-runs the placement. The Finder's desktop icon positions and folder
-window boxes do persist.
+Every window's box persists as a nine-slice pin in the desktop state, with the
+desktop icon positions: the windoids, the document windows by file id, the
+folder windows and the text windows. A window opens at its saved box — at boot,
+and again when it is reopened later in the session — and View → Arrange Windows
+re-runs the placement. An untitled document has no file id and no saved box.
 
 When the browser window resizes, every window moves by one rule, the
 **nine-slice pin** (`pinOf`/`pinTo`). The open area below the options strip
@@ -1034,14 +1036,17 @@ nine-slice pin in `ICON_FRAME` (uniform 100 px bands) without clamping, so a
 shrink-then-grow returns every icon exactly. **Special → Clean Up** moves the
 front container's icons to the nearest free lattice cells.
 
-One versioned localStorage key (`shell/desktop-state.js`, v3) holds icon
-positions, folder window pins, the open saved documents' edited faces and
-layers and which was active, the desktop pattern, `greet`, and the `seeded` and
-`seededTexts` flags. It is written on change and on exit. A v1 or v2 blob
-migrates and drops its window geometry. Application windows are not stored.
-Icons restore at boot. Documents do not reopen at boot; a saved document the
-URL opens takes its remembered face and layer. Untitled windows do not survive
-a reload (no autosave).
+One versioned localStorage key (`shell/desktop-state.js`, v4) holds icon
+positions, every window's box as a nine-slice pin, the open saved documents'
+edited faces and layers, the active window, the 3D Sprite Atlas toggle, the
+desktop pattern, `greet`, and the `seeded` and `seededTexts` flags. It is
+written on change and on exit. Each application reports its own windows
+(`pins()`), and a window entry carries a `z`, its depth in the stacking order,
+only while it is open: a box with no depth is one the boot does not reopen — a
+window closed earlier, or a windoid, which the Sprite Editor places itself. A
+v3 blob keeps its folder boxes without a depth, so the first load after the
+upgrade opens nothing; v1 and v2 drop their window geometry. Untitled windows do
+not survive a reload (no autosave).
 
 ---
 
@@ -1193,7 +1198,7 @@ src/scene/      stage (the 3D View's renderer, camera, lights, ground, framing,
 src/shell/      shared by every application: layout (desktop geometry, the cascade,
                 nearness, the nine-slice pin), windows (the window manager),
                 menu-bar (Sprite Machine menu, shared dialogs, menu swap),
-                desktop-pattern, desktop-state, url-state, clock
+                desktop-pattern, desktop-state, clock
 src/            main (composition root), boot/ (params, curtain), loaders,
                 drop-target, shortcuts, image-io, system-clipboard (the paste
                 reads), style.css, components/ (Lit, shadow DOM except

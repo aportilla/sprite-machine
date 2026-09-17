@@ -4,11 +4,17 @@
 // - icons: positions by item key ("doc:<id>", "folder:<id>"), in the
 //   coordinates of the item's current container (the desktop or a folder
 //   window).
-// - windows: folder window boxes as nine-slice pins (layout.js pinOf), keyed
-//   like icons, so they stay on screen after a browser resize.
-// - docs, activeFileId: each open saved document's edited face and layer, and
-//   the active one. Documents are not reopened at boot. An entry restores the
-//   face and layer when its document opens.
+// - windows: every window's box as a nine-slice pin (layout.js pinOf), keyed
+//   like icons ("doc:<id>", "folder:<id>", "text:<id>", "windoid:<id>"), so
+//   they stay on screen after a browser resize. An entry with a `z` was open at
+//   the write, at that depth in the stacking order. An entry without one is a
+//   box alone, which boot/restore.js never opens: a window closed in an earlier
+//   session, or a windoid, which its application places itself. Depth belongs
+//   to the windows open at the write, so closing one drops it.
+// - active: the active window's key, or null.
+// - docs: each open saved document's edited face and layer, restored when the
+//   document opens.
+// - showRing: whether the 3D Sprite Atlas was showing.
 // - pattern: the desktop pattern.
 // - greet: whether a load with no document to open shows the About box.
 //   A blob without it reads true.
@@ -20,18 +26,46 @@
 // markSeeded, markSeededTexts and setGreet write at once, so an immediate
 // reload still finds them. Other changes write after a debounce, and hiding or
 // leaving the page writes at once. ?fresh=1 neither reads nor writes.
+//
+// The boot holds every write until it has reopened the session: a write while
+// restore.js is still opening windows would drop the depth of the ones it has
+// not reached, and they would not reopen next time.
 
 import { files } from '../state/files.js';
+import { prefs } from '../state/prefs.js';
 import { shell } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
 import { isPin } from './layout.js';
 
 const KEY = 'sprite-machine:desktop';
-const VERSION = 3;
+const VERSION = 4;
 const WRITE_DEBOUNCE_MS = 400;
+
+/** A saved window: its pin, and its depth while it was open.
+ *  @typedef {{pin: import('./layout.js').Pin, z?: number}} WindowEntry */
 
 function docEntry(d) {
   return { fileId: d.fileId, face: d.face ?? null, layer: d.layer ?? null };
+}
+
+/** A window entry with a valid pin, or null.
+ *  @returns {WindowEntry|null} */
+function windowEntry(e) {
+  if (isPin(e)) return { pin: e }; // v3 held bare pins
+  if (!isPin(e?.pin)) return null;
+  return Number.isInteger(e.z) ? { pin: e.pin, z: e.z } : { pin: e.pin };
+}
+
+/** Every valid window entry of a parsed map.
+ *  @returns {Record<string, WindowEntry>} */
+function windowEntries(windows) {
+  /** @type {Record<string, WindowEntry>} */
+  const out = {};
+  for (const [key, e] of Object.entries(windows ?? {})) {
+    const w = windowEntry(e);
+    if (w) out[key] = w;
+  }
+  return out;
 }
 
 /**
@@ -47,12 +81,31 @@ export function migrateDesktopState(parsed) {
       seededTexts: parsed.seededTexts === true,
     };
   }
+  // v3 held bare folder pins and named the active document. Its boxes keep
+  // their windows' places; none has a depth, so the first boot after the
+  // upgrade opens nothing.
+  if (parsed?.v === 3) {
+    return {
+      v: VERSION,
+      docs: (parsed.docs ?? []).filter((d) => d && d.fileId).map(docEntry),
+      active: parsed.activeFileId ? `doc:${parsed.activeFileId}` : null,
+      icons: parsed.icons ?? {},
+      windows: windowEntries(parsed.windows),
+      showRing: false,
+      pattern: parsed.pattern ?? null,
+      greet: parsed.greet !== false,
+      seeded: parsed.seeded !== false,
+      seededTexts: parsed.seededTexts === true,
+    };
+  }
   if (parsed?.v === 2) {
     return {
       v: VERSION,
       docs: (parsed.docs ?? []).filter((d) => d && d.fileId).map(docEntry),
-      activeFileId: parsed.activeFileId ?? null,
+      active: parsed.activeFileId ? `doc:${parsed.activeFileId}` : null,
       icons: parsed.icons ?? {},
+      windows: {},
+      showRing: false,
       seeded: true,
       seededTexts: false,
     };
@@ -61,8 +114,10 @@ export function migrateDesktopState(parsed) {
     return {
       v: VERSION,
       docs: parsed.lastDocId ? [docEntry({ fileId: parsed.lastDocId })] : [],
-      activeFileId: parsed.lastDocId ?? null,
+      active: parsed.lastDocId ? `doc:${parsed.lastDocId}` : null,
       icons: parsed.icons ?? {},
+      windows: {},
+      showRing: false,
       seeded: true,
       seededTexts: false,
     };
@@ -84,12 +139,26 @@ export function createDesktopState(fresh) {
   let seeded = saved?.seeded === true;
   let seededTexts = saved?.seededTexts === true;
   let greet = saved?.greet !== false;
+  /** Whether writes are held (see hold). */
+  let held = false;
   /** The synchronous writer, once start() has set one. */
   let writeNow = () => {};
 
   return {
     /** The restored state, or null. */
     saved,
+
+    /** Holds every write until release(). The boot holds while it reopens the
+     *  session. */
+    hold() {
+      held = true;
+    },
+
+    /** Releases the hold and writes what is on screen. */
+    release() {
+      held = false;
+      writeNow();
+    },
 
     /** Whether the built-in documents have been stored. */
     seeded: () => seeded,
@@ -126,13 +195,42 @@ export function createDesktopState(fresh) {
       return Number.isFinite(p?.left) && Number.isFinite(p?.top) ? p : null;
     },
 
-    /** A saved folder window's pin by key ("folder:<id>"), or null when
-     *  missing or not a valid pin.
+    /** A saved window's pin by key ("folder:<id>", "windoid:tools"), or null
+     *  when missing or not a valid pin.
      *  @param {string} key
      *  @returns {import('./layout.js').Pin | null} */
     windowPin(key) {
-      const p = saved?.windows?.[key];
-      return isPin(p) ? p : null;
+      return windowEntry(saved?.windows?.[key])?.pin ?? null;
+    },
+
+    /** The windows that were open, deepest first. boot/restore.js reopens them
+     *  in this order.
+     *  @returns {{key: string, pin: import('./layout.js').Pin}[]} */
+    openWindows() {
+      const out = [];
+      for (const [key, e] of Object.entries(saved?.windows ?? {})) {
+        const w = windowEntry(e);
+        if (w && Number.isInteger(w.z)) out.push({ key, pin: w.pin, z: w.z });
+      }
+      out.sort((a, b) => a.z - b.z);
+      return out.map(({ key, pin }) => ({ key, pin }));
+    },
+
+    /** The active window's saved key, or null. */
+    activeWindow() {
+      const k = saved?.active;
+      return typeof k === 'string' && k ? k : null;
+    },
+
+    /** A saved document's remembered face and layer, or null.
+     *  @param {string} fileId */
+    docState(fileId) {
+      return saved?.docs?.find((d) => d?.fileId === fileId) ?? null;
+    },
+
+    /** Whether the 3D Sprite Atlas was showing. */
+    showRing() {
+      return saved?.showRing === true;
     },
 
     /** The saved desktop pattern, or null. shell/desktop-pattern.js validates
@@ -148,16 +246,21 @@ export function createDesktopState(fresh) {
      * keep their entries. A null position (an item filed away and not yet
      * rendered in its new container) removes its entry. onMoved subscribes to
      * moves that end without a pointerup, such as Clean Up.
+     *
+     * readWindows reports every window its application has open, with `z` its
+     * depth among the desktop's windows and `active` for the active one, plus
+     * any box it remembers for a window closed this session, without a `z`.
      * @param {{readIcons: () => Record<string, {left:number, top:number}|null>,
-     *          readWindows?: () => Record<string, import('./layout.js').Pin>,
+     *          readWindows?: () => Record<string, {pin: import('./layout.js').Pin,
+     *                                              z?: number, active?: boolean}>,
      *          onMoved?: (fn: () => void) => () => void}} inputs
      */
     start({ readIcons, readWindows = () => ({}), onMoved = () => () => {} }) {
       if (fresh) return () => {};
       /** @type {Record<string, {left:number, top:number}>} */
       let known = { ...(saved?.icons ?? {}) };
-      /** @type {Record<string, import('./layout.js').Pin>} */
-      let knownWindows = { ...(saved?.windows ?? {}) };
+      /** @type {Record<string, WindowEntry>} */
+      let knownWindows = windowEntries(saved?.windows);
 
       function snapshot() {
         const docs = [];
@@ -172,14 +275,27 @@ export function createDesktopState(fresh) {
           else delete icons[key];
         }
         known = icons;
-        const windows = { ...knownWindows, ...readWindows() };
+        // A known window keeps its box and loses its depth: only the windows
+        // open at this write carry a `z`, and one of them the active flag.
+        /** @type {Record<string, WindowEntry>} */
+        const windows = {};
+        for (const [key, e] of Object.entries(knownWindows))
+          windows[key] = { pin: e.pin };
+        let active = null;
+        for (const [key, e] of Object.entries(readWindows())) {
+          const w = windowEntry(e);
+          if (!w) continue;
+          windows[key] = w;
+          if (e.active) active = key;
+        }
         knownWindows = windows;
         return {
           v: VERSION,
           docs,
-          activeFileId: workspace.active()?.fileId ?? null,
+          active,
           icons,
           windows,
+          showRing: prefs.get().showRing,
           pattern: shell.get().desktopPattern,
           seeded,
           seededTexts,
@@ -188,6 +304,7 @@ export function createDesktopState(fresh) {
       }
 
       const write = () => {
+        if (held) return;
         try {
           localStorage.setItem(KEY, JSON.stringify(snapshot()));
         } catch {
@@ -206,6 +323,7 @@ export function createDesktopState(fresh) {
         files.subscribe(writeSoon),
         workspace.subscribe(writeSoon),
         shell.subscribe(writeSoon),
+        prefs.subscribe(writeSoon),
         onMoved(writeSoon),
       ];
       const onPointerUp = () => writeSoon();

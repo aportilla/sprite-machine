@@ -3,11 +3,16 @@
 //
 // - The windoids come from windows.html and are appended hidden. They are shown
 //   while the Sprite Editor is front, and the 3D Sprite Atlas also needs its
-//   pref. Hiding keeps them mounted, so canvas identity survives.
+//   pref. Hiding keeps them mounted, so canvas identity survives. Each opens at
+//   its saved box, or at its placement without one.
 // - Document windows are reconciled from the workspace. A new context clones
-//   #tpl-document-window. A closed context removes its window.
+//   #tpl-document-window. A closed context removes its window, and its box is
+//   kept for the session, over the saved pin the boot restores.
 // - Placement comes from layout.js on the live raster at init, on each open and
-//   on Arrange Windows. Nothing is restored from a prior session.
+//   on Arrange Windows.
+// - pins() reports both kinds for the desktop state, the windoids by id and the
+//   document windows by file id. An untitled document has no key and is not
+//   saved.
 
 import { VfWindow } from 'vintage-frames';
 import markup from './windows.html?raw';
@@ -44,10 +49,16 @@ const USER_AXES = { ring: ['width'], palette: ['width', 'height'] };
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
  * @param {ReturnType<typeof import('../../shell/windows.js').initWindows>} windows
- * @param {{onDocumentClose(key: string): void}} opts
+ * @param {{onDocumentClose(key: string): void,
+ *          savedPin?: (key: string) => import('../../shell/layout.js').Pin | null}} opts
  *   onDocumentClose: the dirty-checking close for a context key.
+ *   savedPin: a saved window pin by item key (desktop-state.js windowPin).
  */
-export function initEditorWindows(desktop, windows, { onDocumentClose }) {
+export function initEditorWindows(
+  desktop,
+  windows,
+  { onDocumentClose, savedPin = () => null }
+) {
   /** @type {(() => void)[]} */
   const unsubs = [];
   const host = parseWindows(markup);
@@ -101,11 +112,26 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
     palette: (w, h) =>
       initialPlacement(w, h, { paletteCount: paletteView.count }).palette,
   };
+  /** @type {Record<string, import('../../shell/layout.js').Pin | null>} */
+  const windoidPins = {};
+  for (const id of WINDOIDS) windoidPins[id] = savedPin(`windoid:${id}`);
+  // The Color Palette's size is the user's, and its policy holds the live one
+  // across a resize, so its saved size is read back from the pin before the
+  // adopt, snapped to whole cells.
+  if (windoidPins.palette) {
+    const box = windows.fromPin(byId.palette, windoidPins.palette, {
+      min: { width: PALETTE_MIN_WIDTH, height: PALETTE_MIN_HEIGHT },
+    });
+    const fit = paletteFit(box.width, box.height);
+    byId.palette.width = fit.width;
+    byId.palette.height = fit.height;
+  }
   for (const id of WINDOIDS) {
     windows.adopt(byId[id], {
       app: SPRITE_EDITOR,
       policy: policies[id] ?? null,
       keep: keeps[id] ?? null,
+      pin: windoidPins[id],
     });
   }
   // Color Palette: a grow snaps back on release to the whole cells it shows. The
@@ -219,7 +245,13 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
     });
   };
   const placeDoc = (win, slot) => windows.write(win, docBox(win, smartLayout(), slot));
-  placeUtility();
+  // A windoid with a saved box keeps it; the rest take their placement. The 3D
+  // Sprite Atlas's height is derived either way, and its grow box with it.
+  const openingLayout = smartLayout();
+  for (const id of WINDOIDS) {
+    if (!windoidPins[id]) placeWindoid(id, openingLayout);
+  }
+  if (windoidPins.ring) fitRing();
 
   // The Color Palette's placed rows follow the active document's swatch count. A
   // palette near its placed box for the last count moves to the new count's.
@@ -294,6 +326,9 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
   // Document windows
   /** @type {Map<string, VfWindow>} ctx key -> window */
   const byKey = new Map();
+  /** @type {Map<string, import('../../shell/layout.js').Pin>} file id -> the pin
+   *  its window closed at this session */
+  const remembered = new Map();
   const keyOf = (win) => {
     for (const [key, w] of byKey) if (w === win) return key;
     return null;
@@ -326,20 +361,33 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
     /** @type {any} */ (win.querySelector('sm-status-line')).ctx = ctx;
     desktop.append(win); // the kit stacks only direct vf-window children
     byKey.set(ctx.key, win);
-    windows.adopt(win, { app: SPRITE_EDITOR });
+    // This session's pin, else the saved one, else the cascade. adopt() writes
+    // a pin itself.
+    const pin = ctx.fileId
+      ? (remembered.get(ctx.fileId) ?? savedPin(`doc:${ctx.fileId}`))
+      : null;
+    windows.adopt(win, { app: SPRITE_EDITOR, pin });
+    if (ctx.fileId) remembered.delete(ctx.fileId);
     // Clamp after the append: clamped() reads the lattice from a connected element.
-    windows.write(win, windows.clamped(win, g));
+    if (!pin) windows.write(win, windows.clamped(win, g));
     // Appending after the windoids leaves DOM order out of step with z-order.
     // bringToFront syncs it and activates the window, which brings the Sprite
     // Editor forward.
     desktop.bringToFront(win);
   }
 
+  /** @type {Map<string, string>} ctx key -> file id, kept up to date so a
+   *  window whose context has gone is still filed under its document. */
+  const docIds = new Map();
+
   const syncDocs = () => {
     const contexts = workspace.get().contexts;
     const live = new Set(contexts.map((c) => c.key));
     for (const [key, win] of byKey) {
       if (!live.has(key)) {
+        const fileId = docIds.get(key);
+        if (fileId) remembered.set(fileId, windows.pinOf(win));
+        docIds.delete(key);
         windows.release(win);
         win.remove(); // the kit updates the active window
         byKey.delete(key);
@@ -349,6 +397,7 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
       if (!byKey.has(ctx.key)) createDocWindow(ctx);
       const win = byKey.get(ctx.key);
       if (win.heading !== ctx.name) win.heading = ctx.name;
+      if (ctx.fileId) docIds.set(ctx.key, ctx.fileId);
     }
     windows.layoutChanged();
   };
@@ -465,6 +514,19 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
   );
 
   return {
+    /** Every window's saved geometry by desktop-state key: the windoids as
+     *  boxes alone, since the application places them itself, and each saved
+     *  document's window with its depth. */
+    pins() {
+      const out = {};
+      for (const id of WINDOIDS) out[`windoid:${id}`] = { pin: windows.pinOf(byId[id]) };
+      for (const [fileId, pin] of remembered) out[`doc:${fileId}`] = { pin };
+      for (const [key, win] of byKey) {
+        const fileId = workspace.byKey(key)?.fileId;
+        if (fileId) out[`doc:${fileId}`] = windows.record(win);
+      }
+      return out;
+    },
     /** Brings a document window to the front, which also activates the Sprite
      *  Editor. */
     showDocument(key) {

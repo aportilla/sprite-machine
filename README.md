@@ -265,6 +265,10 @@ name, and the document's icon appears on the desktop. A document that has
 never been saved is lost if you reload the page, so save early. The browser
 warns you before you leave with unsaved changes.
 
+**Coming back.** Reload the page and the desktop is as you left it: the same
+documents, folders and read-me windows open, in the same places, with the same
+window in front. A document you deleted meanwhile simply does not come back.
+
 **Rename.** Choose **File → Rename…**, or select the icon and press Return.
 
 **Duplicate.** Choose **File → Duplicate** (⌘D). A copy called "Car copy" is

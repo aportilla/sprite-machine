@@ -11,6 +11,7 @@ import { applyCursor, onScaleChange } from 'vintage-frames';
 import { SAMPLES } from './lib/sprite-data.js';
 import { TEXTS, builtinText } from './texts/index.js';
 import { files, isTrashed } from './state/files.js';
+import { prefs } from './state/prefs.js';
 import { workspace } from './state/workspace.js';
 import { parseBootParams } from './boot/params.js';
 import { createStage } from './scene/stage.js';
@@ -36,11 +37,11 @@ import { createIconRenderer } from './scene/icon-renderer.js';
 import { initWindows } from './shell/windows.js';
 import { initMenuBar } from './shell/menu-bar.js';
 import { APPS, DEFAULT_APP } from './apps/index.js';
-import { FINDER, SPRITE_EDITOR } from './state/shell.js';
+import { FINDER, SPRITE_EDITOR, TEXT_VIEWER } from './state/shell.js';
 import { initClock } from './shell/clock.js';
 import { initDesktopPattern } from './shell/desktop-pattern.js';
 import { createDesktopState } from './shell/desktop-state.js';
-import { initUrlState } from './shell/url-state.js';
+import { restoreSession } from './boot/restore.js';
 import './components/sm-editor.js';
 import './components/sm-color-picker.js';
 import './components/sm-desktop-patterns.js';
@@ -54,13 +55,14 @@ import './components/sm-ring-view.js';
 import './components/sm-status-line.js';
 import './components/sm-stage-controls.js';
 
-// Boot params. ?file or #name names the boot document. ?sample, ?edit and
-// ?fresh are dev hooks. ?flat, ?diag and ?cam are debug flags. See
-// boot/params.js.
+// Boot params. ?file names a document to open. ?sample, ?edit and ?fresh are
+// dev hooks. ?flat, ?diag and ?cam are debug flags. See boot/params.js.
 const boot = parseBootParams(location.search, {
   sampleNames: SAMPLES.map((s) => s.name),
-  hash: location.hash,
 });
+// The session is the desktop state, not the address. A #name left by an older
+// version would otherwise sit in the bar meaning nothing.
+if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 
 // Desktop raster and cursor. fitWithin() fits the largest whole raster to the
 // viewport on resize and scale change, and each fit re-pins windows and icons.
@@ -98,6 +100,12 @@ files.init({
   builtinText,
 });
 const dstate = createDesktopState(boot.fresh);
+// No writes until bootDocuments() has reopened the session.
+dstate.hold();
+// The 3D Sprite Atlas is a window, so it comes back with them. Set before the
+// applications wire up, since the Sprite Editor reads it as it shows its
+// windoids.
+prefs.setShowRing(dstate.showRing());
 
 // Shell.
 const windows = initWindows(desktop);
@@ -127,13 +135,14 @@ repinDesktop = (before) => windows.onDesktopResized(before);
 const finder = menuBar.apps[FINDER];
 const stopPersist = dstate.start({
   readIcons: () => finder.positions(),
-  readWindows: () => finder.pins(),
+  // Each application reports its own windows. The keys are disjoint.
+  readWindows: () => ({
+    ...finder.pins(),
+    ...menuBar.apps[SPRITE_EDITOR].pins(),
+    ...menuBar.apps[TEXT_VIEWER].pins(),
+  }),
   onMoved: (fn) => finder.onMoved(fn),
 });
-// The address bar mirrors the active saved document (#<name>), so a reload
-// restores it. ?fresh leaves the URL untouched.
-const stopUrlState = boot.fresh ? () => {} : initUrlState();
-
 // Scene. Built after the menu bar: the Sprite Editor's init appends the windoid
 // that holds #viewport.
 const stage = createStage(
@@ -185,7 +194,6 @@ if (hot) {
     clock.dispose();
     desktopPattern.dispose();
     stopPersist();
-    stopUrlState();
     window.removeEventListener('resize', fitDesktop);
     window.removeEventListener('beforeunload', onBeforeUnload);
     offScale();
@@ -201,9 +209,23 @@ if (hot) {
 //      names (documents) and keys (text files) already stored, then set the
 //      seeded flag. The flag is written after the last save, so an
 //      interrupted seeding runs again next boot.
-//   3. ?file names a stored document: open it on its remembered face and
-//      layer. Otherwise show the About box, unless Show at startup is off.
+//   3. Reopen the windows the last session left open, deepest first, each at
+//      its saved pin (boot/restore.js).
+//   4. ?file names a stored document: open it over them, in front, on its
+//      remembered face and layer. With nothing opened at all, show the About
+//      box, unless Show at startup is off.
+//
+// The desktop state is held throughout and released at the end, however this
+// goes, so no half-restored desktop is written.
 async function bootDocuments() {
+  try {
+    await openBootDocuments();
+  } finally {
+    dstate.release();
+  }
+}
+
+async function openBootDocuments() {
   if (boot.fresh || boot.sampleExplicit) {
     // Not awaited: the dev boot must not wait on IndexedDB, which can stall
     // capture.sh's virtual-time budget.
@@ -224,6 +246,13 @@ async function bootDocuments() {
     dstate.markSeededTexts();
   }
 
+  const restored = await restoreSession(dstate.openWindows(), dstate.activeWindow(), {
+    docState: dstate.docState,
+    showDocument: (key) => menuBar.apps[SPRITE_EDITOR].showDocument(key),
+    openFolder: (id) => finder.openFolder(id),
+    openText: (id) => menuBar.apps[TEXT_VIEWER].open(id),
+  });
+
   if (boot.file && files.get().available) {
     const q = boot.file.toLowerCase();
     const st = files.get();
@@ -239,19 +268,21 @@ async function bootDocuments() {
     if (match) {
       const res = await workspace.openStored(match.id).catch(() => null);
       if (res) {
-        const remembered = dstate.saved?.docs?.find((d) => d.fileId === match.id);
+        const remembered = dstate.docState(match.id);
         // ?edit overrides the remembered face.
         const face = boot.edit ?? remembered?.face ?? null;
         if (face) workspace.setFace(res.ctx.key, face);
         if (Number.isInteger(remembered?.layer)) {
           workspace.setLayer(res.ctx.key, remembered.layer);
         }
+        // The named document comes forward, restored desktop or not.
+        menuBar.apps[SPRITE_EDITOR].showDocument(res.ctx.key);
         return;
       }
     }
   }
 
-  if (dstate.greet()) menuBar.showAbout();
+  if (!restored && dstate.greet()) menuBar.showAbout();
 }
 
 bootDocuments();

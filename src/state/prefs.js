@@ -1,4 +1,5 @@
-// Prefs slice: view toggles. Nothing persists. Every load starts at the defaults.
+// Prefs slice: view toggles. Only the 3D Sprite Atlas is restored, by main.js
+// from the desktop state; the rest start at their defaults every load.
 
 import { createStore } from './store.js';
 

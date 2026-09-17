@@ -24,7 +24,7 @@ A part that would get joined to the rest if drawn with it, such as wheels under 
 
 SAVING
 
-Documents are saved in your browser and live as icons on the desktop. File → Save (⌘S) saves; the first save asks you to confirm the name. A document that has never been saved is lost if you reload the page. File → Download saves the document to your disk as a .png that holds everything. Drag it onto the page on any computer to open it again.
+Documents are saved in your browser and live as icons on the desktop. File → Save (⌘S) saves; the first save asks you to confirm the name. A document that has never been saved is lost if you reload the page. Everything saved comes back: reload and the same windows are open, in the same places. File → Download saves the document to your disk as a .png that holds everything. Drag it onto the page on any computer to open it again.
 
 Drag icons into folders, rename them with Return, and drag them to the Trash to delete them. Special → Empty Trash… is what removes them for good.
 
