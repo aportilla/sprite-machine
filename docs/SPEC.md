@@ -593,11 +593,14 @@ are not documents.
   **single layer**, both off on every load, over the THREE canvas in a kit
   pattern well. The renderer clears transparent, so the model and its shadow
   sit on the pattern. When a document loads or its window becomes active, the
-  camera frames the full tile volume, the model's lattice box, fitting the
-  narrower of the view's two angles. A model drawn in part of its tile shows
-  smaller, and a stroke, Tile Size…, a layer switch or a checkbox never moves
-  the camera. The status strip shows only the triangle count of the mesh in
-  view, updated on each rebuild.
+  camera frames the whole model's bounds, every layer's, fitting the narrower
+  of the view's two angles, then dollies in toward the orbit target, as the
+  scroll wheel does, until a corner of the bounds comes within 5% of the
+  frame's edge. A document that builds empty frames its full tile volume, the
+  lattice box, at its first real build instead, so a first stroke doesn't fill
+  the view. A stroke, Tile Size…, a layer switch or a checkbox never moves the
+  camera. The status strip shows only the triangle count of the mesh in view,
+  updated on each rebuild.
 - **Single layer** shows the edited layer alone, in place in the whole model's
   lattice, and follows a layer switch. An empty layer shows the empty well and
   `0 triangles`. The checkbox is greyed while the active document has one

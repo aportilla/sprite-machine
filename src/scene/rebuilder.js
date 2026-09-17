@@ -15,9 +15,10 @@
 // keeps the whole model.
 //
 // A new sheet generation or a newly activated document frames the camera on
-// the whole model's lattice. A new mesh in the stage otherwise takes the
+// the whole model's bounds. A new mesh in the stage otherwise takes the
 // previous auto-rotate angle. An empty build leaves the generation unconsumed,
-// so the first real build of a fresh sheet still frames.
+// so the first real build of a fresh sheet still frames, on the whole lattice
+// so its first stroke does not fill the view.
 //
 // onMesh receives each new mesh of the whole model with the mesher's record and
 // the dims, and null before the old mesh is disposed, so a consumer's
@@ -64,13 +65,16 @@ const disposeMesh = (obj) =>
 export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}) {
   let activeCtx = null;
   let framedSheet = 0; // active doc's sheet generation at the last framed build
+  let emptySheet = -1; // active doc's sheet generation at its last empty build
   /** @type {(ReturnType<typeof buildVoxels>|null)[]} per layer, null until built */
   let cache = [];
   /** @type {object[]|null} the doc's `layers` the cache was built from */
   let cachedLayers = null;
   /**
-   * The whole model's mesh and readout, or null while no layer has a view.
+   * The whole model's mesh, bounds and readout, or null while no layer has a
+   * view. The bounds are null for a mesh with no triangles.
    * @type {{mesh: import('three').Object3D, triangles: number,
+   *         bounds: {min: number[], max: number[]}|null,
    *         stats: {dims: {nx: number, ny: number, nz: number}, voxels: number,
    *                 warnings: string[]}}|null}
    */
@@ -138,6 +142,7 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
         whole = {
           mesh: toMesh(model),
           triangles: model.triangles,
+          bounds: model.triangles > 0 ? model.geometry.bounds : null,
           stats: {
             dims: result.dims,
             voxels: result.solidCount,
@@ -154,6 +159,7 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     }
 
     if (!whole) {
+      emptySheet = d.sheet;
       build.setStats(NO_STATS);
       stage.requestRender(); // redraw after removing the old mesh
       return;
@@ -173,7 +179,7 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
       }
     }
     if (d.sheet !== framedSheet) {
-      stage.frameLattice(whole.stats.dims);
+      stage.frame(whole.stats.dims, d.sheet === emptySheet ? null : whole.bounds);
       framedSheet = d.sheet;
       spinY = 0;
     }
@@ -191,6 +197,7 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
   const stopFollow = followActive(workspace, (ctx) => {
     activeCtx = ctx;
     framedSheet = -1;
+    emptySheet = -1;
     cache = [];
     cachedLayers = null;
     if (!ctx) {

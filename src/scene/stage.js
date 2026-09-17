@@ -1,7 +1,8 @@
 // THREE stage for the 3D View: renderer, scene, orbit camera, lights, ground,
 // framing, resize handling and the on-demand render loop. The rebuilder adds and
-// removes meshes. The camera frames the lattice box, the full tile volume. A
-// frame asked for while the canvas has no size waits until it has one.
+// removes meshes. The camera frames the model's bounds, or the lattice box, the
+// full tile volume, when it is given none. A frame asked for while the canvas
+// has no size waits until it has one.
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -10,6 +11,14 @@ import { prefs } from '../state/prefs.js';
 
 const RENDER_SCALE = 0.5; // half-resolution render, upscaled by CSS
 const FAR = 100; // the camera's far plane, unless a fit needs it farther
+const FRAME_INSET = 0.05; // the framed box's least gap to an edge, over the frame's size
+
+/** @typedef {{min: number[], max: number[]}} Box  [x, y, z] in world units */
+
+// A box's corners, as 0 for its min and 1 for its max on each axis.
+const BOX_CORNERS = [0, 1].flatMap((x) =>
+  [0, 1].flatMap((y) => [0, 1].map((z) => [x, y, z]))
+);
 
 // Camera direction presets for the ?cam= dev flag (default: three-quarter iso).
 const CAM_DIRS = {
@@ -74,12 +83,24 @@ export function createStage(canvas, { cam = null } = {}) {
   scene.add(ground);
 
   const ISO_DIR = new THREE.Vector3(...(CAM_DIRS[cam] || [1, 0.8, 1])).normalize();
-  /** Fit the camera to the lattice box of `dims`. Reads the camera's aspect. */
-  function fitLattice(dims) {
-    // The box where the mesher puts the lattice: DEFAULT_WORLD_SIZE over the
-    // longest axis, X and Z centered, Y from 0.
-    const s = DEFAULT_WORLD_SIZE / Math.max(dims.nx, dims.ny, dims.nz);
-    const size = new THREE.Vector3(dims.nx, dims.ny, dims.nz).multiplyScalar(s);
+  /**
+   * The box where the mesher puts the lattice of `dims`: DEFAULT_WORLD_SIZE
+   * over the longest axis, X and Z centered, Y from 0.
+   * @param {{nx: number, ny: number, nz: number}} dims
+   * @returns {Box}
+   */
+  function latticeBox({ nx, ny, nz }) {
+    const s = DEFAULT_WORLD_SIZE / Math.max(nx, ny, nz);
+    return {
+      min: [(-nx * s) / 2, 0, (-nz * s) / 2],
+      max: [(nx * s) / 2, ny * s, (nz * s) / 2],
+    };
+  }
+
+  /** Fit the camera to `box`. Reads the camera's aspect. @param {Box} box */
+  function fitBox(box) {
+    const lo = new THREE.Vector3(...box.min);
+    const size = new THREE.Vector3(...box.max).sub(lo);
     const r = size.length() / 2; // the box's bounding sphere radius
     // The narrower of the vertical and horizontal half-angles, so a tall view
     // keeps the box's sides.
@@ -88,7 +109,7 @@ export function createStage(canvas, { cam = null } = {}) {
     const dist = (r / Math.sin(half)) * 1.25; // camera to the box's center
     // Orbit around the middle of the box's floor, and hold the camera's depth
     // to the box's center at `dist` so the box keeps its size on screen.
-    controls.target.set(0, 0, 0);
+    controls.target.set(lo.x + size.x / 2, lo.y, lo.z + size.z / 2);
     camera.position
       .copy(controls.target)
       .addScaledVector(ISO_DIR, dist + ISO_DIR.y * (size.y / 2));
@@ -99,12 +120,35 @@ export function createStage(canvas, { cam = null } = {}) {
     const rise = (size.y / 2) * Math.sqrt(1 - ISO_DIR.y ** 2);
     const shift = -rise / (2 * dist * Math.tan(halfFov));
     camera.setViewOffset(camera.aspect, 1, 0, shift, camera.aspect, 1);
-    camera.far = Math.max(FAR, 2 * (dist + r));
+    // Then dolly in as the scroll wheel does, toward the target with the shift
+    // held, to the nearest distance that keeps every corner of the box inside
+    // the inset frame. A dolly changes a corner's depth alone, and the shift
+    // moves its NDC y by 2 * shift.
+    camera.lookAt(controls.target);
+    camera.updateMatrixWorld();
+    const fitDist = camera.position.distanceTo(controls.target);
+    const tanY = Math.tan(halfFov);
+    const tanX = tanY * camera.aspect;
+    const edge = 1 - 2 * FRAME_INSET; // in NDC
+    const p = new THREE.Vector3();
+    let snug = 0;
+    for (const [x, y, z] of BOX_CORNERS) {
+      p.set(x, y, z).multiply(size).add(lo).applyMatrix4(camera.matrixWorldInverse);
+      const depth = Math.max(
+        camera.near,
+        Math.abs(p.x) / (edge * tanX),
+        p.y / ((edge - 2 * shift) * tanY),
+        -p.y / ((edge + 2 * shift) * tanY)
+      );
+      snug = Math.max(snug, fitDist + p.z + depth); // p.z is minus the depth at fitDist
+    }
+    camera.position.sub(controls.target).setLength(snug).add(controls.target);
+    camera.far = Math.max(FAR, 2 * (snug + r));
     camera.updateProjectionMatrix();
     controls.update();
   }
 
-  /** @type {{nx: number, ny: number, nz: number}|null} dims waiting for a canvas size */
+  /** @type {Box|null} a box waiting for a canvas size */
   let pendingFrame = null;
 
   // The mesh auto-rotate spins, or null.
@@ -129,7 +173,7 @@ export function createStage(canvas, { cam = null } = {}) {
       changed = true;
     }
     if (pendingFrame && w > 0 && h > 0) {
-      fitLattice(pendingFrame);
+      fitBox(pendingFrame);
       pendingFrame = null;
       changed = true;
     }
@@ -160,11 +204,13 @@ export function createStage(canvas, { cam = null } = {}) {
   return {
     scene,
     /**
-     * Frame the lattice box of `dims`, now or once the canvas has a size.
+     * Frame `bounds`, or the lattice box of `dims` without them, now or once the
+     * canvas has a size.
      * @param {{nx: number, ny: number, nz: number}} dims
+     * @param {Box|null} [bounds]
      */
-    frameLattice(dims) {
-      pendingFrame = dims;
+    frame(dims, bounds = null) {
+      pendingFrame = bounds ?? latticeBox(dims);
       resize();
     },
     requestRender,

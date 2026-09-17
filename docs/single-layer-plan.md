@@ -336,7 +336,9 @@ App: none.
    camera. Decided 2026-09-13: the full tile volume, per _"yes, we want to open
    the the full tile volume... models may draw smaller - but that's ok, the
    user can zoom and rotate this view. and the smallness is an indicator of
-   truth about how the model is fit within the tile."_
+   truth about how the model is fit within the tile."_ Reversed 2026-09-17: the
+   whole model's bounds, per _"we want dynamic dolly based on actual model
+   size"_. A document that builds empty still frames its tile volume.
 4. **The engine option.** `unionVoxels(results, { only })`, one layer index.
    Recommended: it has one meaning, the one the view needs. The alternative is
    a per-layer visibility mask the hidden-layer next step could share, which
