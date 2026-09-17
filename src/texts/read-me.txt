@@ -1,26 +1,15 @@
-SPRITE MACHINE lets you create a 3D model by drawing the 2D faces of the object with simple pixel-art tools.  
+SPRITE MACHINE lets you create a 3D model by drawing the 2D faces of the object with simple pixel-art tools.
 
-The 3D model can exported as a .glb model file or as a sprite atlas of orthographic rotated views for use in a game engine.
+The finished model can be exported as a .glb model file, or as a sprite atlas for use in a game engine.
 
-We also have a published Sprite Machine npm package that can be used to headlessly create 3D models or Sprite Atlases from the raw PNG Sprite Machine format. This means your game can store its 3D assets as tiny pngs and lazily inflate them into the runtime assets your program needs.
+We also publish Sprite Machine as an npm package (npm install sprite-machine) that builds models and atlases headlessly from the raw PNG Sprite Machine format. This means your game can store its 3D assets as tiny pngs and lazily inflate them into the runtime assets your program needs.
 
+Sprite Machine is presented within a classic Macintosh system UI. This means your files appear as icons on the desktop and you can move them around, rename them, and organize them into folders however you like.
 
- - - - - NAVIGATING THE APP - - - -
+––––––––––––––––––––––––––––––––––
+EDITING A FILE
 
-You'll have noticed by now that this app is presented within a classic Macintosh system UI.  This means your files appear as icons on the desktop and you can move them around, rename them, and organize them into folders however you like. 
-
- - - - - FILE STORAGE - - - -
-
-Your desktop state is preserved via localstorage and the browsers local IndexedDB so your files are all privately saved within your browser and nothing is ever sent to the cloud.
-
-You can use the File > Download menu action to download your file to the desktop as a .png image that can be dragged back into Sprite Machine at any time.
-
-You can also use Special → Back Up All Files… menu action to download a .zip of all of your files. The backup can be dropped into Sprite Machine to restore them.
-
-
- - - - - EDITING A FILE - - - -
-
-Double click one of your files to open it in the editor.
+Double-click one of your files to open it in the editor.
 
 The editor has several windows: 
 
@@ -34,39 +23,35 @@ The editor has several windows:
   A palette of the colors used in the document.
   
   FACE PICKER
-  for choosing which face of the object to display and edit in the document window.
+  For choosing which face of the object to display and edit in the document window.
   
   3D MODEL
-  for inspecting the current model.
+  For inspecting the current model.
 
-
-EXPORTING
-
-
-
-BACKING UP YOUR FILESYSTEM
-
-Special → Back Up All Files… saves everything at once - every file, every folder and the Trash - as one zip named for the day. Unzip it and you get your folders as folders, your files as .png images and your read-me files as plain text.
-
-To bring a backup back, drag the zip onto the page or choose Special → Restore from Backup… and pick it. You are then asked what to do with it: Add puts the backup's files on the desktop beside the ones already there, and Replace clears the desktop first and puts the backup in its place. Cancel leaves everything as it is.
-
-
-DRAWING
-
-Pick a tool in the Tools window or with its key: Selection (S), Pencil (B), Rectangle (R), Fill (G), Eraser (E) and Eyedropper (I). The bar under the menu bar shows the tool's settings, with the current color at its left. Click the color to change it, click a swatch in the Color Palette, or Option-click a pixel. Edit → Tile Size… changes the size of the faces, from 1 to 64 pixels.
-
+––––––––––––––––––––––––––––––––––
 LAYERS
 
-A part that would get joined to the rest if drawn with it, such as wheels under a car, goes on its own layer. Layer → New Layer… (⌘K) adds one. Switch layers with the keys 1 to 8, the Layer menu's list, or the popup at the bottom of the document window. Check "single layer" in the 3D View to see only the layer you are editing.
+For more complex models, Sprite Machine supports layers.  Each layer contains the 6 faces of a 3D shape.  The voxel union of all the layer shapes is what defines the final exported 3D model.
 
-SAVING
+Layers allow you to create shapes that would otherwise be impossible to achieve through simple un-projection of a single set of 6 faces.  See the 'Truck' file for an example of a layered document.
 
-Documents are saved in your browser and live as icons on the desktop. File → Save (⌘S) saves; the first save asks you to confirm the name. A document that has never been saved is lost if you reload the page. Everything saved comes back: reload and the same windows are open, in the same places. File → Download saves the document to your disk as a .png that holds everything. Drag it onto the page on any computer to open it again.
-
-Drag icons into folders, rename them with Return, and drag them to the Trash to delete them. Special → Empty Trash… is what removes them for good.
-
+––––––––––––––––––––––––––––––––––
 EXPORTING
 
-File → Export 3D Model… saves a .glb file, which Unity, Godot, Unreal, Blender and most 3D tools open. File → Export Sprite Atlas… draws the model from a ring of angles and saves the pictures with a data file for 2D engines. View → 3D Sprite Atlas shows the ring before you export.
+File → Download
+Download your file to the desktop as a Sprite Machine formatted PNG image that can be dragged back into Sprite Machine at any time. It holds every face and every layer.
 
-The full guide is at https://github.com/aportilla/sprite-machine
+File → Export 3D Model…
+Download a .glb model file, which Unity, Godot, Unreal, Blender, three.js and most other 3D tools open with your colors built in. Scale is in voxels per meter, a voxel being the cube one pixel becomes, so at 10 a car 40 pixels long arrives 4 meters long. The 'Lit' export option lets your game's lights shade the model. 'Unlit' keeps your flat colors exactly as drawn. The model's zero point is the middle of the drawing area's floor and Y points up.
+
+File → Export Sprite Atlas…
+Download a .zip containing PNG sprite atlas of orthographic views of your 3D model, as well as a TexturePacker JSON file so your sprite can be used in any number of other tools. View → 3D Sprite Atlas shows the row of views, and its settings, before you export.
+
+––––––––––––––––––––––––––––––––––
+BACKING UP YOUR FILESYSTEM
+
+Your desktop state is preserved only in localstorage and the browsers local IndexedDB so your files are all privately saved within your browser and nothing is ever sent to the cloud.
+
+Special → Back Up All Files… saves your entire filesystem as one zip named for the day. Unzip it and you get your folders as folders, your files as .png images and your read-me files as plain text.
+
+To bring a backup back, drag the zip onto the page or choose Special → Restore from Backup… and pick it.
