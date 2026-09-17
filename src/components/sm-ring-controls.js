@@ -1,6 +1,7 @@
 // <sm-ring-controls>: the 3D Sprite Atlas window's header controls. Four
 // captioned number fields (views, elev, from, size) bound live to the ring
-// slice, placed at RING_FIELDS (apps/sprite-editor/layout.js) in system px.
+// slice, and an Export button that fires sm-export-atlas, placed at RING_FIELDS
+// (apps/sprite-editor/layout.js) in system px.
 // The header-height in the Sprite Editor's windows.html must match RING_STRIP.
 
 import 'vintage-frames';
@@ -63,6 +64,14 @@ export class SmRingControls extends LitElement {
         label: `size (${RING_MIN_SIZE}–${RING_MAX_SIZE}): the tile's edge in px`,
         set: (v) => ring.setSize(v),
       })}
+      <vf-button
+        class="ring-export"
+        left=${RING_FIELDS.button.left}
+        top=${RING_FIELDS.button.top}
+        @click=${() =>
+          this.dispatchEvent(new CustomEvent('sm-export-atlas', { bubbles: true }))}
+        >Export…</vf-button
+      >
     `;
   }
 

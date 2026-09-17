@@ -462,6 +462,11 @@ export const spriteEditor = {
       seedRingDialog();
       dlgExportAtlas.show();
     }
+    // The 3D Sprite Atlas windoid's Export button opens the same dialog.
+    on($('sm-ring-controls'), 'sm-export-atlas', () => {
+      if (modalOpen()) return;
+      showRingDialog();
+    });
     teardown.push(ring.subscribe(syncRingDialog), build.subscribe(syncRingDialog));
     // Each setter ignores NaN and clamps. syncRingDialog shows the stored value.
     on(atlasViews, 'vf-change', (e) => {

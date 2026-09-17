@@ -376,7 +376,8 @@ engine where each picture is.
 To see the pictures before you export, choose **View → 3D Sprite Atlas**. A
 window opens showing the row, with the same four settings at the top, named
 **views**, **elev**, **from** and **size**. Change them there or in the
-dialog; they are the same numbers, and they are saved with the document.
+dialog; they are the same numbers, and they are saved with the document. The
+**Export…** button beside them opens the same dialog.
 
 The pictures start at the front and go around the object's right side to the
 back and the left side. The whole drawing area is scaled to fit each

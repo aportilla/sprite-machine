@@ -616,8 +616,10 @@ are not documents.
 model orthographically from evenly stepped yaws at one elevation, as a row of
 tiles at 1:1 with no rules between them. Its header has four number fields:
 `views` (1–16, a 360/n step), `elev` (0–90°), `from` (the first yaw,
-0–359°) and `size` (the tile's edge, 2–255). Their layout arithmetic sets the
-header's height and the windoid's minimum width.
+0–359°) and `size` (the tile's edge, 2–255), and an `Export…` button right of
+them that opens the Export Sprite Atlas dialog. Their layout arithmetic sets
+the header's height and the windoid's minimum width, which is wider than the
+default row.
 
 - **Defaults**: four views, 45° up, from the front, 64 px tiles, white paper.
   Yaw runs front, right, back, left (yaw 0 puts the camera on `+z`). The frame

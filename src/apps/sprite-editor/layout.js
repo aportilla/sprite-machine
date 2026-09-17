@@ -210,38 +210,54 @@ export function spriteHeightFor(width, ratio = TILE_RATIO) {
 // - Down: 4px above, between and below the rows (62), plus the 1px rule. A
 //   caption sits (25 − 16) / 2 = 4 below its row's top, which aligns baselines.
 // - Across: 8 inset, 40 caption, 6 gap, 74 field, 6 gap, 36 caption, 6 gap, 74
-//   field, 8 inset = 258. In Chicago 12, "views" is 40 wide and "elev" and "size"
-//   are 28. Captions are right-aligned and overflow when wider than their column,
-//   so a renamed caption or a new font needs these widths re-measured.
+//   field, 12 gap, 85 button, 8 inset = 355. In Chicago 12, "views" is 40 wide and
+//   "elev" and "size" are 28. Captions are right-aligned and overflow when wider
+//   than their column, so a renamed caption or a new font needs these widths
+//   re-measured.
+// - The Export button opens the export dialog. It is the kit's 20px face, as wide
+//   as its label between the kit's 14px pads, centered across the two rows.
 export const RING_FIELD = { width: 74, height: 25 };
 export const RING_CAPTION_HEIGHT = 16;
 const RING_INSET = 8;
 const RING_ROW_PAD = 4;
 const RING_GAP = 6;
 const RING_CAPTION_WIDTHS = [40, 36];
+// The gap before the button, wider than a caption's, so it reads apart from the
+// fields. In Chicago 12, "Export…" is 57 wide.
+const RING_BUTTON_GAP = 12;
+const RING_BUTTON = { width: 14 + 57 + 14, height: 20 };
 const ringRowTop = (i) => RING_ROW_PAD + i * (RING_FIELD.height + RING_ROW_PAD);
 const ringCaption0 = RING_INSET;
 const ringField0 = ringCaption0 + RING_CAPTION_WIDTHS[0] + RING_GAP;
 const ringCaption1 = ringField0 + RING_FIELD.width + RING_GAP;
 const ringField1 = ringCaption1 + RING_CAPTION_WIDTHS[1] + RING_GAP;
+const ringButtonLeft = ringField1 + RING_FIELD.width + RING_BUTTON_GAP;
 /** The controls layout: the header interior's box, each row's field top, the
- *  caption offset below a row, and per column the caption's left and width and
- *  the field's left. */
+ *  caption offset below a row, per column the caption's left and width and the
+ *  field's left, and the Export button's top-left. */
 export const RING_FIELDS = {
-  box: { width: ringField1 + RING_FIELD.width + RING_INSET, height: ringRowTop(2) },
+  box: {
+    width: ringButtonLeft + RING_BUTTON.width + RING_INSET,
+    height: ringRowTop(2),
+  },
   rows: [ringRowTop(0), ringRowTop(1)],
   captionDy: Math.floor((RING_FIELD.height - RING_CAPTION_HEIGHT) / 2),
   cols: [
     { caption: ringCaption0, width: RING_CAPTION_WIDTHS[0], field: ringField0 },
     { caption: ringCaption1, width: RING_CAPTION_WIDTHS[1], field: ringField1 },
   ],
+  button: {
+    left: ringButtonLeft,
+    top: Math.floor((ringRowTop(2) - RING_BUTTON.height) / 2),
+  },
 };
 // Header height: the controls plus the 1px rule. windows.html authors the same
 // value as header-height.
 export const RING_STRIP = RING_FIELDS.box.height + 1;
 export const RING_CHROME = { w: 2, h: 12 + 2 + RING_STRIP + 15 };
-// Minimum windoid width: the controls box plus the borders. Four 64px cells plus
-// the borders fall 2px short, so the default row seeds at this floor.
+// Minimum windoid width: the controls box plus the borders. A default row of four
+// 64px cells is narrower, so it seeds at this floor, with paper past its last
+// cell.
 export const RING_MIN_WIDTH = RING_FIELDS.box.width + RING_CHROME.w;
 
 /** The 3D Sprite Atlas windoid's height for a tile size: the chrome over one
