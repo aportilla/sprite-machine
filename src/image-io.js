@@ -16,10 +16,11 @@ async function bitmapToImageData(bmp) {
   return g.getImageData(0, 0, bmp.width, bmp.height);
 }
 
-export async function urlToImageData(url) {
+/** @param {string} url @returns {Promise<Uint8Array>} */
+export async function urlToBytes(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
-  return bytesToImageData(new Uint8Array(await res.arrayBuffer()));
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 /** An ImageData, or a plain {width, height, data} object, as PNG bytes. */

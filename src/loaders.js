@@ -9,12 +9,16 @@ import {
   LAYERS_CHUNK,
   parseLayersChunk,
 } from 'sprite-machine';
-import { urlToImageData, bytesToImageData } from './image-io.js';
+import { urlToBytes, bytesToImageData } from './image-io.js';
 import { workspace } from './state/workspace.js';
 import { createDoc } from './state/doc.js';
 import { files } from './state/files.js';
 import { build } from './state/build.js';
-import { RING_CHUNK_KEY, parseRingChunk } from './state/ring-settings.js';
+import {
+  RING_CHUNK_KEY,
+  parseRingChunk,
+  createRingSettings,
+} from './state/ring-settings.js';
 import { sheetLayers } from './lib/sheet-shape.js';
 
 // Returns the new context, or null with the error on the build slice. face and
@@ -45,30 +49,48 @@ export function openSheet(
  *  @param {{name?: string, face?: string}} [opts]
  *    the copy's name (default: the sample's) and starting face */
 export async function loadSample(sample, { name = sample.name, face } = {}) {
-  let image;
+  let sheet;
   try {
-    image = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
+    sheet = await sampleSheet(sample);
   } catch (err) {
     build.setError(`Couldn't load sample "${sample.name}": ${err.message}`);
     return null;
   }
-  const bad = validateSheet(image);
+  const bad = validateSheet(sheet.image);
   if (bad) {
     build.setError(`Sample "${sample.name}" is unusable: ${bad}`);
     return null;
   }
-  return openSheet(image, {
-    transforms: { ...(sample.transforms || {}) },
-    name,
-    face,
-  });
+  const { image, transforms, ring, names } = sheet;
+  return openSheet(image, { transforms, name, face, ring, names });
+}
+
+/**
+ * A sample's pixels and document metadata. A URL sample is a document PNG, so
+ * its chunks give the transforms, ring settings and layer names, as a dropped
+ * file's do. The sample's own transforms win.
+ * @param {{name:string, atlas:{image?:ImageData, url?:string}, transforms?:object}} sample
+ */
+async function sampleSheet(sample) {
+  const { image, url } = sample.atlas;
+  if (image) {
+    return { image, transforms: { ...sample.transforms }, ring: null, names: null };
+  }
+  const bytes = await urlToBytes(/** @type {string} */ (url));
+  const meta = readSheetMeta(bytes);
+  return {
+    image: await bytesToImageData(bytes),
+    transforms: { ...meta.transforms, ...sample.transforms },
+    ring: meta.ring,
+    names: meta.names,
+  };
 }
 
 /**
  * Read the document chunks from PNG bytes: Title, sprite-machine:transforms,
  * sprite-machine:ring and sprite-machine:layers. Best-effort: a non-PNG or a
- * bad chunk loses only that metadata, never the pixels. Used by loadFile and
- * the Finder's paste.
+ * bad chunk loses only that metadata, never the pixels. Used by loadFile, the
+ * samples and the Finder's paste.
  * @param {Uint8Array} bytes
  * @returns {{title: string|null, transforms: Record<string, object>,
  *   ring: Partial<import('./state/ring-settings.js').RingSettings>|null,
@@ -139,11 +161,18 @@ export async function seedDefaultDocs(samples, existing = new Set()) {
   for (const sample of samples) {
     if (existing.has(sample.name)) continue;
     try {
-      const image = sample.atlas.image ?? (await urlToImageData(sample.atlas.url));
+      const { image, transforms, ring, names } = await sampleSheet(sample);
       if (validateSheet(image)) continue;
       const doc = createDoc();
-      doc.loadAtlas(image, { ...(sample.transforms || {}) });
-      const res = await files.save(doc, { fileId: null, name: sample.name });
+      doc.loadAtlas(image, transforms, {
+        layers: sheetLayers(image.width, image.height),
+        names,
+      });
+      const res = await files.save(doc, {
+        fileId: null,
+        name: sample.name,
+        ring: ring ? createRingSettings(ring).get() : null,
+      });
       if (res && firstId == null) firstId = res.id;
     } catch {
       // A failed seed skips only that document.

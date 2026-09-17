@@ -1,9 +1,11 @@
-// Built-in samples and a grid-to-ImageData helper. Each sample is a 3×2 atlas:
-// left, front, top over right, back, bottom. A first boot saves each one as a
-// stored document (loaders.js seedDefaultDocs), and File → New… opens one as an
-// untitled copy. `tile` lets the dialog show the tile size without decoding.
+// Built-in samples and a grid-to-ImageData helper. Each sample is a sheet of
+// 3×2 atlases, one per layer: left, front, top over right, back, bottom. A
+// first boot saves each one as a stored document (loaders.js seedDefaultDocs),
+// and File → New… opens one as an untitled copy. `tile` lets the dialog show
+// the tile size without decoding.
 
 import carAtlasUrl from '../assets/car-atlas.png';
+import truckAtlasUrl from '../assets/truck-atlas.png';
 
 /** @returns {ImageData} */
 export function gridToImageData(rows, palette) {
@@ -65,6 +67,14 @@ export const CAR_ATLAS_SAMPLE = {
   tile: 40, // must match the shipped car-atlas.png (120×80 / 3×2)
 };
 
+// Truck: a pickup in six layers with 40×40 tiles. The PNG's chunks name the
+// layers and hold its 3D Sprite Atlas settings.
+export const TRUCK_SAMPLE = {
+  name: 'Truck',
+  atlas: { url: truckAtlasUrl },
+  tile: 40, // must match the shipped truck-atlas.png (120×480, six 3×2 blocks)
+};
+
 // Order is the New… dialog order and the seeding order. The first entry is the
 // default: a first boot opens it, and ?sample with no name loads it.
-export const SAMPLES = [CAR_ATLAS_SAMPLE, CUBE_SAMPLE];
+export const SAMPLES = [CAR_ATLAS_SAMPLE, TRUCK_SAMPLE, CUBE_SAMPLE];

@@ -58,7 +58,7 @@ desktop switches to the Finder: the Sprite Editor deactivates and its windoids
 hide. The menu bar shows the front application's menus. See
 [The desktop](#the-desktop).
 
-The first boot seeds two starter documents, Car and Cube, and the built-in text
+The first boot seeds three starter documents, Car, Truck and Cube, and the built-in text
 files (`src/texts/`: Read Me and Keyboard Shortcuts) as ordinary saved files.
 Seeding runs once per profile, recorded by the `seeded` and `seededTexts`
 flags. `seeded` is written only after every built-in is stored, so a first boot
@@ -862,7 +862,7 @@ it, are silent no-ops.
   from IndexedDB (`files.emptyTrash`, the app's one destructive operation): the
   icons go, the count reads 0 items, the icon shows the empty can, and a
   trashed folder's open window closes. The `seeded` flag stays set, so an
-  emptied Car or Cube does not return on the next boot.
+  emptied starter document does not return on the next boot.
 - **Open documents** can be trashed: the window stays, Save saves in place, and
   the icon shows the open ghost. Emptying the Trash reverts such a window to an
   unsaved, dirty document with the same pixels and name, and the URL hash
@@ -1119,6 +1119,7 @@ sharp, such as a roof/window seam, paint them differently. See the engine's
 Not every face has to be drawn. Mirror-fill is on for all three axes: a surface
 face with no view of its own takes its color from the mirrored opposite view.
 The built-in Cube draws only LEFT/FRONT/TOP. The Car draws every face but RIGHT.
+The Truck's six layers each draw only the faces their part needs.
 A blank tile counts as no view. A projection plane with no view carves nothing.
 An axis that no view observes gets a resolution of 1, and the build warns.
 
@@ -1182,7 +1183,7 @@ src/            main (composition root), boot/ (params, curtain), loaders,
                 sm-color-picker)
 src/assets/     raster art at 1:1: tool icons (22×19), face cubes (21×26) and the
                 selected dither, application icon (32×32), folder, text file, the
-                Trash's cans and 12×12 indicator, the Car sample's atlas
+                Trash's cans and 12×12 indicator, the Car and Truck sheets
 test/           the app's unit tests
 ```
 
@@ -1247,7 +1248,7 @@ release, and a layer key waits while it is set.
   mirror-derived one across layers, so a later layer's blank back never paints
   over the body's drawn back (`colorize` would report which rule colored each
   face). Hiding a layer from the union, a `hidden` flag per entry in the chunk. A
-  layered built-in sample and a `?layer=` dev hook. A Layers windoid. The layer
+  `?layer=` dev hook. A Layers windoid. The layer
   count in the glb's `extras`. A versioned re-seed of the text files, so an
   existing profile reads the Layers paragraph.
 - **Low-poly scope.** A convex staircase still steps, and a 3-D corner where two
