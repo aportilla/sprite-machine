@@ -81,8 +81,8 @@ document clears it, so a reload restores what is on screen. The starter
 documents are also templates in File → New…. A 3×2 sprite sheet PNG dropped
 anywhere on the page opens as a new document.
 
-Smooth slopes (low-poly additive 45° wedges) and the planar merge are always
-on. The 3D View's header has two controls, off on every load: **rotate**
+Smooth slopes (low-poly additive 45° and 1:2 wedges) and the planar merge are
+always on. The 3D View's header has two controls, off on every load: **rotate**
 (auto-spin) and **single layer**, which shows only the edited layer. Sprites
 are hard pixel art: every texel is fully opaque or fully transparent. A face
 with no view of its own is mirror-filled from its opposite at render time. The **face picker** selects which of the six faces you edit,
@@ -1090,29 +1090,37 @@ tread in another form a slope when their colors match.
 
 ### Render modes
 
-There is one: the low-poly mesh, the visual-hull voxel solid with 45° wedges
-over same-surface staircases. The 3D View, the 3D Sprite Atlas and the export all
+There is one: the low-poly mesh, the visual-hull voxel solid with 45° and 1:2
+wedges over same-surface staircases. The 3D View, the 3D Sprite Atlas and the export all
 render it.
 
 ### Low-poly (additive wedges)
 
-The mesh adds 45° wedges into concave unit-step notches, so a staircase of
-same-surface voxels becomes a ramp (windshield, roof, wheel arch). Wedges only
-fill notches. They never cut into the object, and a shape with no staircase gets
-none. Every vertex is on the integer lattice, so the mesh welds watertight.
+The mesh adds wedges into concave notches, so a staircase of same-surface
+voxels becomes a ramp (windshield, roof, wheel arch). A staircase of one-cell
+steps gets 45° wedges. A staircase of two-by-one steps, two across and one up
+or one across and two up, gets 1:2 wedges, each filling the notch and the cell
+beside it, so the ramp is one flat slope. Wedges only fill notches. They never
+cut into the object, and a shape with no staircase gets none. Every vertex is
+on the integer lattice, so the mesh welds watertight. A wedge whose end meets
+solid, such as another layer's, leaves the rest of that solid's face open.
 
 **The planar merge**. Wedges are found per notch cell and emitted per plane. A
-slope is one quad per block: the wedge cells of one 45° plane (one orientation,
-one intercept), greedy-merged on one color. A block's gable caps are traced into
-the region polygon of the plane they lie on. The T-junction repair runs after
-the merge and handles 45° edges.
+slope is one quad per block: the wedges of one slope plane (one orientation,
+one ratio, one intercept), greedy-merged on one color. A block's gable caps are
+traced into the region polygon of the plane they lie on. The T-junction repair
+runs after the merge and splits an edge at every lattice point on it.
 
-A wedge fires only when the two faces it would join, the corner's riser and
-tread, are the same color within `sameMat`'s tolerance. Otherwise the corner
-stays a step. To smooth a slope, paint both faces the same color (the top-view
-art over a windshield must match the glass down to its foot). To keep an edge
-sharp, such as a roof/window seam, paint them differently. See the engine's
-`wedge-mesh.js`.
+A wedge fires only when the faces it would join, the corner's riser and tread,
+are the same color within `sameMat`'s tolerance. Otherwise the corner stays a
+step. A 1:2 wedge also needs the second cell of its two-cell leg in that color,
+else the corner gets a 45° wedge. It fires on a step whose legs stop at two
+cells and one, or at the end of a run beside such a step, so a lone one-high
+ledge on a floor keeps its 45° wedge. Its two cells must meet the same thing
+at each end of the ridge, both solid or both not. To smooth a slope, paint both
+faces the same color (the top-view art over a windshield must match the glass
+down to its foot). To keep an edge sharp, such as a roof/window seam, paint
+them differently. See the engine's `wedge-mesh.js`.
 
 ### Missing faces
 
@@ -1252,7 +1260,10 @@ release, and a layer key waits while it is set.
   count in the glb's `extras`. A versioned re-seed of the text files, so an
   existing profile reads the Layers paragraph.
 - **Low-poly scope.** A convex staircase still steps, and a 3-D corner where two
-  ridges meet degrades to a step.
+  ridges meet degrades to a step. Steps of three or more cells ramp at 45° at
+  their corners, and a slope never crosses a color seam along its steps. Where
+  a 1:2 end meets a 45° end along the ridge, both keep their caps, which
+  overlap inside the solid instead of meeting on an exact trim.
 - **Perf.** The render loop redraws only on change, and the skin is rebaked per
   rebuild and disposed with the mesh. The carve is a synchronous O(n³) walk, so
   tiles are capped at 64 (`TILE_MAX`). To lift the cap, move `buildVoxels`

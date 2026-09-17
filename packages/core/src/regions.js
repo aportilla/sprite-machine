@@ -1,34 +1,38 @@
 // Coplanar regions: one plane's exposed unit faces plus the gable-cap half
 // faces of the wedge blocks, traced as boundary loops with collinear runs
-// merged. A wall beside a 45° slope gets one straight diagonal edge, so no
+// merged. A wall beside a slope gets one straight diagonal edge, so no
 // vertices land on the slope. wedge-mesh.js triangulates the regions.
 //
 // Pieces use the face's tangent coordinates: a along FACE_GEO[face].A, b along
 // .B. A cell is the unit square [a, a+1] × [b, b+1]. A half is the right
-// triangle in that square with its right angle at (a + hiA, b + hiB). Each
-// piece carries a packed color.
+// triangle in that square with its right angle at (a + hiA, b + hiB). A long
+// half (`run` 'a' or 'b') has a leg two cells long on that axis, over its cell
+// and the next one away from the right angle, which takes `color2`. Each piece
+// carries a packed color.
 //
-// Trace: each piece adds its directed edges, CCW in (a, b). An edge whose
-// reverse is also present is interior and cancels. The remaining edges chain
-// by the keep-left rule, taking the sharpest left turn at each vertex. Two
-// cells that touch only at a corner form two loops. A loop can pass through a
-// corner twice, which earcut handles. A loop with positive signed area is an
-// outer, negative a hole. Holes and pieces belong to the smallest outer that
-// contains a test point: a piece's centroid, or a point a quarter cell inside
-// a hole's first edge. Neither can lie on a lattice line or a piece's diagonal.
+// Trace: each piece adds its directed edges, CCW in (a, b), with a long leg
+// split at its midpoint. An edge whose reverse is also present is interior and
+// cancels. The remaining edges chain by the keep-left rule, taking the
+// sharpest left turn at each vertex. Two cells that touch only at a corner
+// form two loops. A loop can pass through a corner twice, which earcut
+// handles. A loop with positive signed area is an outer, negative a hole.
+// Holes and pieces belong to the smallest outer that contains a test point: a
+// piece's centroid, or a point just inside the midpoint of a hole's first
+// lattice step. Neither can lie on a lattice line or on a boundary edge.
 
 import { FACE_KEYS, FACE_NORMAL } from './views.js';
 import { FACE_GEO, idxFor } from './faces.js';
 
 /**
  * @typedef {{a:number, b:number, color:number}} Cell
- * @typedef {{a:number, b:number, hiA:boolean, hiB:boolean, color:number}} Half
+ * @typedef {{a:number, b:number, hiA:boolean, hiB:boolean, run?:'a'|'b',
+ *            color:number, color2?:number}} Half
  * @typedef {number[][]} Loop  vertices [a, b] in order, the closing vertex not repeated
  * @typedef {{outer:Loop, holes:Loop[], a:number, b:number, w:number, h:number,
  *            texels:Uint32Array, present:Uint8Array, uniform:number|null, area2:number}} Region2D
  *   loops, bounding box (a, b, w, h) in cells, a texel per box cell (`present`
  *   marks the pieces), the single color or null, and twice the area (a cell 2,
- *   a half 1).
+ *   a half 1, a long half 2).
  * @typedef {Region2D & {face:string, s:number, normal:number[]}} Region
  */
 
@@ -56,7 +60,7 @@ function inside(poly, x, y) {
   return c;
 }
 
-/** Drop collinear vertices. Edges are unit steps, so a step's sign is its direction. */
+/** Drop the vertices where a loop runs straight on. */
 function dropCollinear(ring) {
   const n = ring.length;
   const out = [];
@@ -64,13 +68,17 @@ function dropCollinear(ring) {
     const p = ring[(i - 1 + n) % n];
     const c = ring[i];
     const q = ring[(i + 1) % n];
-    const straight =
-      Math.sign(c[0] - p[0]) === Math.sign(q[0] - c[0]) &&
-      Math.sign(c[1] - p[1]) === Math.sign(q[1] - c[1]);
+    const ux = c[0] - p[0];
+    const uy = c[1] - p[1];
+    const vx = q[0] - c[0];
+    const vy = q[1] - c[1];
+    const straight = ux * vy - uy * vx === 0 && ux * vx + uy * vy > 0;
     if (!straight) out.push(c);
   }
   return out;
 }
+
+const gcd = (x, y) => (y ? gcd(y, x % y) : Math.abs(x));
 
 /**
  * Trace the regions of one plane from its pieces.
@@ -79,7 +87,7 @@ function dropCollinear(ring) {
  * @returns {Region2D[]}
  */
 export function traceRegions(cells, halves) {
-  /** @type {{poly:number[][], at:number[], color:number, a:number, b:number, half:boolean}[]} */
+  /** @type {{poly:number[][], at:number[], cells:Cell[], area2:number}[]} */
   const pieces = [];
   for (const c of cells) {
     pieces.push({
@@ -90,30 +98,36 @@ export function traceRegions(cells, halves) {
         [c.a, c.b + 1],
       ],
       at: [c.a + 0.5, c.b + 0.5],
-      color: c.color >>> 0,
-      a: c.a,
-      b: c.b,
-      half: false,
+      cells: [{ a: c.a, b: c.b, color: c.color >>> 0 }],
+      area2: 2,
     });
   }
   for (const h of halves) {
     const ca = h.a + (h.hiA ? 1 : 0); // the right angle's corner
     const cb = h.b + (h.hiB ? 1 : 0);
-    const qa = h.a + (h.hiA ? 0 : 1); // the legs' far ends
-    const sb = h.b + (h.hiB ? 0 : 1);
+    const da = h.hiA ? -1 : 1; // away from the right angle
+    const db = h.hiB ? -1 : 1;
+    const la = h.run === 'a' ? 2 : 1; // leg lengths
+    const lb = h.run === 'b' ? 2 : 1;
     let poly = [
       [ca, cb],
-      [qa, cb],
-      [ca, sb],
+      [ca + da, cb],
+      ...(la === 2 ? [[ca + 2 * da, cb]] : []),
+      ...(lb === 2 ? [[ca, cb + 2 * db]] : []),
+      [ca, cb + db],
     ];
-    if (area2(poly) < 0) poly = [poly[0], poly[2], poly[1]];
+    if (area2(poly) < 0) poly = [poly[0], ...poly.slice(1).reverse()];
+    const color = h.color >>> 0;
+    const color2 = (h.color2 ?? h.color) >>> 0;
     pieces.push({
       poly,
-      at: [(2 * ca + qa) / 3, (2 * cb + sb) / 3],
-      color: h.color >>> 0,
-      a: h.a,
-      b: h.b,
-      half: true,
+      at: [ca + (la * da) / 3, cb + (lb * db) / 3],
+      cells: [
+        { a: h.a, b: h.b, color },
+        ...(la === 2 ? [{ a: h.a + da, b: h.b, color: color2 }] : []),
+        ...(lb === 2 ? [{ a: h.a, b: h.b + db, color: color2 }] : []),
+      ],
+      area2: la * lb,
     });
   }
 
@@ -191,13 +205,14 @@ export function traceRegions(cells, halves) {
   const groups = outers.map((outer) => ({ outer, holes: [], pieces: [] }));
   for (const h of holes) {
     const [p, q] = h;
-    const dx = Math.sign(q[0] - p[0]);
-    const dy = Math.sign(q[1] - p[1]);
-    // A quarter cell to the right of the hole's first edge is inside the hole,
-    // since the region lies to the left of every loop.
-    groups[
-      owner((p[0] + q[0]) / 2 + 0.25 * dy, (p[1] + q[1]) / 2 - 0.25 * dx)
-    ].holes.push(h);
+    const g = gcd(q[0] - p[0], q[1] - p[1]);
+    const dx = (q[0] - p[0]) / g; // the edge's lattice step
+    const dy = (q[1] - p[1]) / g;
+    // The hole lies to the right of every edge of its loop. A sixteenth of the
+    // step, turned right from the step's midpoint, is inside it: no other
+    // lattice line of an axis, 1:1 or 1:2 direction comes that close to the
+    // midpoint.
+    groups[owner(p[0] + dx / 2 + dy / 16, p[1] + dy / 2 - dx / 16)].holes.push(h);
   }
   for (const pc of pieces) groups[owner(pc.at[0], pc.at[1])].pieces.push(pc);
 
@@ -220,12 +235,14 @@ export function traceRegions(cells, halves) {
     let mixed = false;
     let area = 0;
     for (const pc of pieces) {
-      const i = pc.a - a0 + (pc.b - b0) * w;
-      texels[i] = pc.color;
-      present[i] = 1;
-      area += pc.half ? 1 : 2;
-      if (uniform === null) uniform = pc.color;
-      else if (uniform !== pc.color) mixed = true;
+      area += pc.area2;
+      for (const c of pc.cells) {
+        const i = c.a - a0 + (c.b - b0) * w;
+        texels[i] = c.color;
+        present[i] = 1;
+        if (uniform === null) uniform = c.color;
+        else if (uniform !== c.color) mixed = true;
+      }
     }
     return {
       outer,

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildVoxels } from '../src/pipeline.js';
+import { buildVoxels, unionVoxels } from '../src/pipeline.js';
 import { wedgeMesh } from '../src/wedge-mesh.js';
 import { img, fill, oddEdges } from './helpers.mjs';
 
@@ -75,6 +75,23 @@ test('a slope is one quad: a ramp costs the same triangles 1 wide and 4 wide; a 
   );
 });
 
+test("a wedge run whose ends meet another layer's solid welds watertight", () => {
+  // A staircase along z between a front-only and a back-only slab layer.
+  const stairs = buildVoxels({
+    front: img(['...T', '..TT', '.TTT', 'TTTT']),
+    right: fill(4, 4, 'T'),
+    top: fill(4, 4, 'T'),
+  });
+  const front = buildVoxels({ front: fill(4, 4, 'T') });
+  const back = buildVoxels({ back: fill(4, 4, 'R') });
+  const one = wedgeMesh(unionVoxels([stairs, front]));
+  assert.equal(one.wedges, 9, 'the slab fills the front row of notches');
+  assert.equal(oddEdges(one.geometry), 0);
+  const both = wedgeMesh(unionVoxels([stairs, front, back]));
+  assert.equal(both.wedges, 6, 'the slabs fill the front and back rows');
+  assert.equal(oddEdges(both.geometry), 0);
+});
+
 test('a self-touching boundary triangulates whole and welds: a bay open at a corner, two holes meeting at one', () => {
   // A one-deep slab. The corner notch's riser (N) and tread (T) differ, so no
   // wedge fills it.
@@ -96,6 +113,99 @@ test('a self-touching boundary triangulates whole and welds: a bay open at a cor
   );
   assert.equal(holes.wedges, 0);
   assert.equal(oddEdges(holes.geometry), 0);
+});
+
+// A shallow 1:2 staircase, two-cell treads on one-cell risers, 4 deep.
+const shallow = (top = fill(6, 4, 'T')) => ({
+  front: img(['....TT', '..TTTT', 'TTTTTT']),
+  right: fill(4, 3, 'T'),
+  top,
+});
+
+test('a 1:2 staircase is one slope, shallow, steep or in plan, and costs the same triangles 1 wide and 4 wide', () => {
+  const cases = {
+    shallow: shallow(),
+    steep: {
+      right: img(['..T', '..T', '.TT', '.TT', 'TTT', 'TTT']),
+      front: fill(4, 6, 'T'),
+      top: fill(4, 3, 'T'),
+    },
+    plan: {
+      top: img(['....TT', '..TTTT', 'TTTTTT']),
+      front: fill(6, 4, 'T'),
+      right: fill(3, 4, 'T'),
+    },
+  };
+  for (const [name, views] of Object.entries(cases)) {
+    const built = wedgeMesh(buildVoxels(views));
+    assert.equal(built.wedges, 2 * 2 * 4, `${name}: two 1:2 steps of two cells, 4 deep`);
+    assert.equal(built.slopes, 1, name);
+    assert.equal(oddEdges(built.geometry), 0, name);
+  }
+  const wide = wedgeMesh(buildVoxels(shallow()));
+  const narrow = wedgeMesh(
+    buildVoxels({
+      front: img(['....TT', '..TTTT', 'TTTTTT']),
+      right: fill(1, 3, 'T'),
+      top: fill(6, 1, 'T'),
+    })
+  );
+  assert.equal(wide.wedges, 4 * narrow.wedges);
+  assert.equal(wide.triangles, narrow.triangles);
+});
+
+test('a 1:2 end step fires beside a strict step and not alone; a lone ledge on a floor stays 1:1', () => {
+  const cells = (rows) =>
+    wedgeCount({
+      front: img(rows),
+      right: fill(1, rows.length, 'T'),
+      top: fill(rows[0].length, 1, 'T'),
+    });
+  assert.equal(
+    cells(['...T', '...T', '..TT', '..TT', 'TTTT', 'TTTT']),
+    4,
+    'a steep step, and its foot on a floor that runs on'
+  );
+  assert.equal(cells(['..T', '..T', 'TTT', 'TTT']), 1, 'the foot alone');
+  assert.equal(cells(['...TTT', 'TTTTTT']), 1, 'a one-high ledge on a floor');
+  assert.equal(cells(['..TTTT', 'TTTTTT']), 2, 'a ledge on a floor two cells long');
+});
+
+test('a 1:2 over a second cell of another colour is a 1:1, and a 1:1 run beside a 1:2 run along the ridge welds', () => {
+  // The top view's column 3 is x = 2, the tread under the upper step's p.
+  const red = (rows) => img([...rows, ...Array(4 - rows.length).fill('TTTTTT')]);
+  assert.equal(wedgeCount(shallow()), 4 * (2 + 2));
+  assert.equal(
+    wedgeCount(shallow(red(['TTTRTT', 'TTTRTT', 'TTTRTT', 'TTTRTT']))),
+    4 * (1 + 2),
+    'the upper step is a 1:1 on every row'
+  );
+  const beside = wedgeMesh(buildVoxels(shallow(red(['TTTRTT', 'TTTRTT']))));
+  assert.equal(beside.wedges, 2 * (1 + 2) + 2 * (2 + 2));
+  assert.equal(oddEdges(beside.geometry), 0);
+});
+
+test('a 1:2 whose two cells differ at a ridge end is a 1:1', () => {
+  // A one-voxel layer on the front plane closes the upper step's notch cell
+  // but not the cell beside it.
+  const dot = buildVoxels({ front: img(['...T..', '......', '......']) });
+  const built = wedgeMesh(unionVoxels([buildVoxels(shallow()), dot]));
+  // Rows 0 and 1 keep both 1:2s. Row 2's upper step and the notch beside the
+  // dot on row 3 are 1:1s.
+  assert.equal(built.wedges, 2 * (2 + 2) + 2 * (1 + 2));
+  assert.equal(oddEdges(built.geometry), 0);
+});
+
+test('a curve of 1:2 and 1:1 steps welds watertight', () => {
+  const curve = wedgeMesh(
+    buildVoxels({
+      front: img(['.....T', '...TTT', '..TTTT', 'TTTTTT']),
+      right: fill(4, 4, 'T'),
+      top: fill(6, 4, 'T'),
+    })
+  );
+  assert.equal(curve.wedges, 4 * (2 + 1 + 2), 'a 1:2, a 1:1 and a 1:2 step');
+  assert.equal(oddEdges(curve.geometry), 0);
 });
 
 // A deterministic ±1 RGB perturbation of opaque pixels, like the canvas

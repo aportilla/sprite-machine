@@ -2,15 +2,18 @@
 //
 // Wedges: an empty cell with solid neighbors on two adjacent in-plane sides,
 // and empty cells on the other two, is the inner corner of a staircase. It is
-// filled with a triangular prism whose hypotenuse is a 45° slope. The two faces
-// it covers are culled and its open ends get triangular gable caps. A wedge
-// fires only when the two covered faces are the same material, so a color
-// boundary stays a step. Wedges only fill notches, so convex corners stay
-// sharp. One wedge per cell, and the first ridge in RIDGES wins.
+// filled with a triangular prism along the ridge axis. A 1:1 wedge fills the
+// cell under a 45° slope. A 1:2 wedge also fills the cell beside it along one
+// leg, so a staircase of two-cell steps is one slope. The faces a wedge covers
+// are culled and its open ends get triangular gable caps. A wedge fires only
+// when the faces it covers are the same material, so a color boundary stays a
+// step. Wedges only fill notches, so convex corners stay sharp. One wedge per
+// cell. The first ridge in RIDGES wins, and within a ridge a 1:2 wins over a
+// 1:1.
 //
 // Geometry is emitted per plane:
-// - Slopes: the wedge cells of one 45° plane form a grid, greedy-merged by
-//   color into one quad per block.
+// - Slopes: the wedges of one slope plane form a grid, greedy-merged by color
+//   into one quad per block.
 // - Base faces: coplanar regions (regions.js) of exposed faces and cap halves,
 //   triangulated with earcut.
 // Color comes from the skin (skin.js), so regions merge on occupancy alone.
@@ -48,6 +51,15 @@ const RIDGES = [
  *            chart:import('./skin.js').Chart|null,
  *            region:import('./regions.js').Region|null,
  *            swatch:number|null}} Tri
+ */
+
+/**
+ * A wedge cell: its notch's ridge and in-plane axes, the sides its solids are
+ * on, and the slope's color. A 1:2 has its long axis in `run` and a record for
+ * each cell: the notch q and the cell p beside it. A 1:1 has `run` null.
+ * @typedef {{x:number, y:number, z:number, R:string, A:string, B:string,
+ *            sA:number, sB:number, color:number, run:string|null,
+ *            role:'q'|'p'}} Wedge
  */
 
 /**
@@ -92,57 +104,134 @@ export function wedgeMesh(result, opts = {}) {
     return (A.r - B.r) ** 2 + (A.g - B.g) ** 2 + (A.b - B.b) ** 2 <= TOL2;
   };
 
-  const inBounds = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < nx && y < ny && z < nz;
-  const solidAt = (x, y, z) => inBounds(x, y, z) && solid[voxIndex(x, y, z, dims)];
-  const step = (x, y, z, ax, sg) => [
-    x + sg * +(ax === 'x'),
-    y + sg * +(ax === 'y'),
-    z + sg * +(ax === 'z'),
-  ];
+  const inLattice = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < nx && y < ny && z < nz;
+  /** @param {number[]} c  a cell [x, y, z] */
+  const inBounds = (c) => inLattice(c[0], c[1], c[2]);
+  /** @param {number[]} c */
+  const cellIdx = (c) => voxIndex(c[0], c[1], c[2], dims);
+  /** @param {number[]} c */
+  const solidAt = (c) => inBounds(c) && !!solid[cellIdx(c)];
+  /** @param {number[]} c @param {string} ax @param {number} d */
+  const step = (c, ax, d) => {
+    const n = c.slice();
+    n[AXI[ax]] += d;
+    return n;
+  };
+  // the key of cell c's face that points d along ax
+  const faceKey = (c, ax, d) => cellIdx(c) * 6 + FACE_INDEX[faceKeyOf(ax, d)];
+  // whether the cell d from c along axis index i is solid, with no allocation
+  const solidBeside = (c, i, d) => {
+    const x = i === 0 ? c[0] + d : c[0];
+    const y = i === 1 ? c[1] + d : c[1];
+    const z = i === 2 ? c[2] + d : c[2];
+    return inLattice(x, y, z) && !!solid[voxIndex(x, y, z, dims)];
+  };
+  // the side along ax of c's one solid neighbor on that axis, else 0
+  const side = (c, ax) => {
+    const hi = solidBeside(c, AXI[ax], 1);
+    return hi === solidBeside(c, AXI[ax], -1) ? 0 : hi ? 1 : -1;
+  };
 
-  // Scan for wedges.
-  const wedgeCell = new Map(); // cellIdx -> chosen {R,A,B,sA,sB,color}
+  // A 1:2 at notch q with its long leg along L (its solid on side sL) and its
+  // short leg along S (sS) also fills p = q − sL·L. It covers the short-leg
+  // face on q+sL·L and the long-leg faces on q+sS·S and p+sS·S. It needs p
+  // empty in the lattice with a solid at p+sS·S and empty cells at p−sL·L and
+  // p−sS·S, q and p alike at each ridge end, and, unless flat, the long-leg
+  // faces the short-leg face's material. It returns p, the covered face keys
+  // (short leg first) and whether each leg's faces run on past the step.
+  const fit12 = (q, R, L, S, sL, sS) => {
+    const p = step(q, L, -sL);
+    if (!inBounds(p) || solidAt(p) || !solidAt(step(p, S, sS))) return null;
+    if (solidAt(step(p, L, -sL)) || solidAt(step(p, S, -sS))) return null;
+    for (const d of [-1, 1])
+      if (solidAt(step(q, R, d)) !== solidAt(step(p, R, d))) return null;
+    const keys = [
+      faceKey(step(q, L, sL), L, -sL),
+      faceKey(step(q, S, sS), S, -sS),
+      faceKey(step(p, S, sS), S, -sS),
+    ];
+    const [c0, c1, c2] = keys.map((k) => faceColor.get(k));
+    if (!flat && !(sameMat(c0, c1) && sameMat(c0, c2))) return null;
+    return {
+      p,
+      keys,
+      shortOn: solidAt(step(step(q, L, sL), S, -sS)),
+      longOn: solidAt(step(step(p, L, -sL), S, sS)),
+    };
+  };
+  // Whether q is a notch of that orientation holding a 1:2 whose leg faces
+  // both stop at the step.
+  const strict12 = (q, R, L, S, sL, sS) => {
+    if (!inBounds(q) || solidAt(q) || side(q, L) !== sL || side(q, S) !== sS)
+      return false;
+    const f = fit12(q, R, L, S, sL, sS);
+    return !!f && !f.shortOn && !f.longOn;
+  };
+
+  // Scan for wedges. A notch is an empty, unclaimed cell with one solid
+  // neighbor along A and one along B, and empty cells opposite them. It takes
+  // a 1:2 with its long leg along A, else along B, else a 1:1. A 1:2 fires on a
+  // strict step, or when one leg's faces run on and the next step inward on
+  // its plane is strict.
+  /** @type {Map<number, Wedge>} */
+  const wedgeCell = new Map();
   const removed = new Set(); // base faces (idx*6+f) covered by a wedge
+  /** @type {Wedge[]} */
   const wedges = [];
+  const claim = (c, w, keys) => {
+    const cell = { x: c[0], y: c[1], z: c[2], ...w };
+    wedgeCell.set(cellIdx(c), cell);
+    wedges.push(cell);
+    for (const k of keys) removed.add(k);
+  };
 
-  for (const ridge of RIDGES) {
-    const { R, A, B } = ridge;
+  const at = [0, 0, 0]; // the scanned cell, reused
+  for (const { R, A, B } of RIDGES) {
     for (let z = 0; z < nz; z++)
       for (let y = 0; y < ny; y++)
         for (let x = 0; x < nx; x++) {
           const cidx = voxIndex(x, y, z, dims);
-          if (solid[cidx] || wedgeCell.has(cidx)) continue; // empty and unclaimed
-          for (const sA of [-1, 1]) {
-            let placed = false;
-            for (const sB of [-1, 1]) {
-              const aN = step(x, y, z, A, sA); // solid neighbor on A side
-              const bN = step(x, y, z, B, sB); // solid neighbor on B side
-              if (!solidAt(...aN) || !solidAt(...bN)) continue;
-              // opposite sides must be empty -> exactly two adjacent solids
-              if (solidAt(...step(x, y, z, A, -sA))) continue;
-              if (solidAt(...step(x, y, z, B, -sB))) continue;
+          if (solid[cidx] || wedgeCell.has(cidx)) continue;
+          at[0] = x;
+          at[1] = y;
+          at[2] = z;
+          const sA = side(at, A);
+          if (!sA) continue;
+          const sB = side(at, B);
+          if (!sB) continue;
+          const q = [x, y, z];
+          const notch = { R, A, B, sA, sB };
 
-              // the covered faces: each neighbor's face pointing back at the cell
-              const faceA = faceKeyOf(A, -sA);
-              const faceB = faceKeyOf(B, -sB);
-              const aKey = voxIndex(...aN, dims) * 6 + FACE_INDEX[faceA];
-              const bKey = voxIndex(...bN, dims) * 6 + FACE_INDEX[faceB];
-              const cA = faceColor.get(aKey);
-              const cB = faceColor.get(bKey);
-
-              // Gate: the covered riser (cA) and tread (cB) must be the same material.
-              if (!flat && !sameMat(cA, cB)) continue;
-              // cA and cB agree unless flat, where FLAT_COLOR replaces the color.
-              const color = (cA != null ? cA : cB) >>> 0;
-              wedgeCell.set(cidx, { R, A, B, sA, sB, color });
-              removed.add(aKey);
-              removed.add(bKey);
-              wedges.push({ x, y, z, R, A, B, sA, sB, color });
-              placed = true;
-              break;
-            }
-            if (placed) break;
+          let placed = false;
+          for (const { L, S, sL, sS } of [
+            { L: A, S: B, sL: sA, sS: sB },
+            { L: B, S: A, sL: sB, sS: sA },
+          ]) {
+            const f = fit12(q, R, L, S, sL, sS);
+            if (!f || wedgeCell.has(cellIdx(f.p)) || (f.shortOn && f.longOn)) continue;
+            if (f.shortOn && !strict12(step(step(q, L, -2 * sL), S, sS), R, L, S, sL, sS))
+              continue;
+            if (f.longOn && !strict12(step(step(q, L, 2 * sL), S, -sS), R, L, S, sL, sS))
+              continue;
+            // The slope takes the short-leg face's color.
+            const cs = f.keys.map((k) => faceColor.get(k));
+            const color = (cs[0] ?? cs[1] ?? cs[2]) >>> 0;
+            claim(q, { ...notch, color, run: L, role: 'q' }, f.keys);
+            claim(f.p, { ...notch, color, run: L, role: 'p' }, []);
+            placed = true;
+            break;
           }
+          if (placed) continue;
+
+          // A 1:1 covers the riser on q+sA·A and the tread on q+sB·B.
+          const aKey = faceKey(step(q, A, sA), A, -sA);
+          const bKey = faceKey(step(q, B, sB), B, -sB);
+          const cA = faceColor.get(aKey);
+          const cB = faceColor.get(bKey);
+          if (!flat && !sameMat(cA, cB)) continue;
+          // cA and cB agree unless flat, where FLAT_COLOR replaces the color.
+          const color = (cA ?? cB) >>> 0;
+          claim(q, { ...notch, color, run: null, role: 'q' }, [aKey, bKey]);
         }
   }
 
@@ -189,41 +278,48 @@ export function wedgeMesh(result, opts = {}) {
     p[AXI[a3]] = v3;
     return p;
   };
-  const axisVec = (a1, s1, a2, s2) => {
+  const axisVec = (a1, v1, a2, v2) => {
     const p = [0, 0, 0];
-    p[AXI[a1]] = s1;
-    if (a2) p[AXI[a2]] = s2;
+    p[AXI[a1]] = v1;
+    p[AXI[a2]] = v2;
     const L = Math.hypot(p[0], p[1], p[2]) || 1;
     return [p[0] / L, p[1] / L, p[2] / L];
   };
-  // a wedge cell's corners along A and B: c toward the two solids, o opposite
-  const cornersOf = (w) => {
-    const p = { x: w.x, y: w.y, z: w.z };
-    const aC = p[w.A];
-    const bC = p[w.B];
-    return {
-      Ac: w.sA < 0 ? aC : aC + 1,
-      Ao: w.sA < 0 ? aC + 1 : aC,
-      Bc: w.sB < 0 ? bC : bC + 1,
-      Bo: w.sB < 0 ? bC + 1 : bC,
-    };
+  // A wedge's legs: the long axis L (A for a 1:1) with its solid on side sL,
+  // the short axis S with sS, and the long leg's length n.
+  /** @param {Wedge} w */
+  const legs = (w) =>
+    w.run === w.B
+      ? { L: w.B, S: w.A, sL: w.sB, sS: w.sA, n: 2 }
+      : { L: w.A, S: w.B, sL: w.sA, sS: w.sB, n: w.run ? 2 : 1 };
+  // A wedge's slope ends, as (L, S) values: P, the far end of the long leg, and
+  // Q, the far end of the short leg. The right angle is at the filled corner
+  // (Lc, Sc) of q.
+  /** @param {Wedge} w */
+  const endsOf = (w) => {
+    const { L, S, sL, sS, n } = legs(w);
+    const q = [w.x, w.y, w.z];
+    const Lc = q[AXI[L]] + (sL > 0 ? 1 : 0);
+    const Sc = q[AXI[S]] + (sS > 0 ? 1 : 0);
+    return { P: [Lc - n * sL, Sc], Q: [Lc, Sc - sS] };
   };
 
-  // 1. Slopes, one quad per block. The cells of one 45° plane share an
-  // orientation (R, A, B, sA, sB) and an intercept sA·a + sB·b. They form a grid
-  // with t = sA·a up the staircase and r along the ridge, greedy-merged by
-  // color along r first. A block's quad runs from its first cell's corners to
-  // its last cell's, across its r range, and samples its color's swatch.
+  // 1. Slopes, one quad per block. A slope plane holds the points where
+  // sL·l + n·sS·s is constant. Its wedges share an orientation (R, L, sL, sS,
+  // n) and that intercept, and form a grid with t = −sS·s, which counts the
+  // steps, and r along the ridge, greedy-merged by color along r first. A
+  // block's quad runs from its first wedge's P to its last wedge's Q, across
+  // its r range, and samples its color's swatch.
   const planes = new Map(); // plane key -> Map<'t,r', {t, r, w}>
   for (const w of wedges) {
-    const p = { x: w.x, y: w.y, z: w.z };
-    const aC = p[w.A];
-    const bC = p[w.B];
-    const key = [w.R, w.A, w.B, w.sA, w.sB, w.sA * aC + w.sB * bC].join('|');
+    if (w.role === 'p') continue;
+    const { L, S, sL, sS, n } = legs(w);
+    const q = [w.x, w.y, w.z];
+    const key = [w.R, L, sL, sS, n, sL * q[AXI[L]] + n * sS * q[AXI[S]]].join('|');
     let grid = planes.get(key);
     if (!grid) planes.set(key, (grid = new Map()));
-    const t = w.sA * aC;
-    const r = p[w.R];
+    const t = -sS * q[AXI[S]];
+    const r = q[AXI[w.R]];
     grid.set(t + ',' + r, { t, r, w });
   }
   let slopes = 0;
@@ -247,49 +343,79 @@ export function wedgeMesh(result, opts = {}) {
       }
       for (let i = 0; i < tl; i++)
         for (let j = 0; j < rl; j++) used.add(c0.t + i + ',' + (c0.r + j));
-      const first = cornersOf(w0);
-      const last = cornersOf(grid.get(c0.t + tl - 1 + ',' + c0.r).w);
+      const { L, S, sL, sS, n } = legs(w0);
+      const { P } = endsOf(w0);
+      const { Q } = endsOf(grid.get(c0.t + tl - 1 + ',' + c0.r).w);
       const rLo = c0.r;
       const rHi = c0.r + rl;
-      const pt = (av, bv, rv) => mk(w0.A, av, w0.B, bv, w0.R, rv);
+      const pt = (ls, rv) => mk(L, ls[0], S, ls[1], w0.R, rv);
       pushQuad(
-        pt(first.Ao, first.Bc, rLo),
-        pt(first.Ao, first.Bc, rHi),
-        pt(last.Ac, last.Bo, rHi),
-        pt(last.Ac, last.Bo, rLo),
-        axisVec(w0.A, -w0.sA, w0.B, -w0.sB),
+        pt(P, rLo),
+        pt(P, rHi),
+        pt(Q, rHi),
+        pt(Q, rLo),
+        axisVec(L, -sL, S, -n * sS),
         { swatch: flat ? FLAT_COLOR : w0.color >>> 0 }
       );
       slopes++;
     }
   }
 
-  // 2. Gable caps, as half pieces of the planes they lie on. A cell end gets a
-  // cap unless it meets solid or a wedge of the same orientation. The cap is
-  // the right triangle in the cell's ±R face with its right angle at the filled
-  // corner (Ac, Bc), in that face's tangent frame.
+  // 2. Gable caps, as half pieces of the planes they lie on. A wedge's end gets
+  // a cap unless it meets a wedge of the same kind and orientation. The cap is
+  // the right triangle in the wedge's ±R face with its right angle at q's
+  // filled corner and a 1:2's long leg over p, in that face's tangent frame.
+  // An end against solid (a 1:2's two cells agree) gets the cap's complement
+  // on the solid's faces instead, which leave the base faces.
   /** @type {Map<string, import('./regions.js').Half[]>} */
   const halves = new Map();
+  const addHalf = (face, s, half) => {
+    const key = planeKey(face, s);
+    if (!halves.has(key)) halves.set(key, []);
+    halves.get(key).push(half);
+  };
   for (const w of wedges) {
-    const p = { x: w.x, y: w.y, z: w.z };
+    if (w.role === 'p') continue;
+    const { L, sL, sS, n } = legs(w);
+    const q = [w.x, w.y, w.z];
+    const far = step(q, L, (1 - n) * sL); // p, or q for a 1:1
     for (const sg of [-1, 1]) {
-      const [ex, ey, ez] = step(w.x, w.y, w.z, w.R, sg);
-      if (solidAt(ex, ey, ez)) continue; // internal against solid
-      if (inBounds(ex, ey, ez)) {
-        const wn = wedgeCell.get(voxIndex(ex, ey, ez, dims));
-        if (wn && wn.R === w.R && wn.sA === w.sA && wn.sB === w.sB) continue;
-      }
-      const face = faceKeyOf(w.R, sg);
-      const g = FACE_GEO[face];
-      const key = planeKey(face, p[w.R]);
-      if (!halves.has(key)) halves.set(key, []);
-      halves.get(key).push({
-        a: p[g.A],
-        b: p[g.B],
-        hiA: g.A === w.A ? w.sA > 0 : w.sB > 0,
-        hiB: g.B === w.A ? w.sA > 0 : w.sB > 0,
-        color: flat ? FLAT_COLOR : w.color >>> 0,
+      const g = FACE_GEO[faceKeyOf(w.R, sg)];
+      // a half on the cell at c, its right angle high on L and S as given
+      const half = (c, hiL, hiS, color, color2) => ({
+        a: c[AXI[g.A]],
+        b: c[AXI[g.B]],
+        hiA: g.A === L ? hiL : hiS,
+        hiB: g.B === L ? hiL : hiS,
+        ...(n === 2 ? { run: g.A === L ? 'a' : 'b', color2 } : {}),
+        color,
       });
+      const e = step(q, w.R, sg);
+      if (solidAt(e)) {
+        const kq = faceKey(e, w.R, -sg);
+        const kf = faceKey(step(far, w.R, sg), w.R, -sg);
+        removed.add(kq);
+        removed.add(kf);
+        const paint = (k) => (flat ? FLAT_COLOR : faceColor.get(k) >>> 0);
+        addHalf(
+          faceKeyOf(w.R, -sg),
+          e[AXI[w.R]],
+          half(far, sL < 0, sS < 0, paint(kf), paint(kq))
+        );
+        continue;
+      }
+      const wn = inBounds(e) ? wedgeCell.get(cellIdx(e)) : null;
+      if (
+        wn &&
+        wn.role === 'q' &&
+        wn.run === w.run &&
+        wn.R === w.R &&
+        wn.sA === w.sA &&
+        wn.sB === w.sB
+      )
+        continue;
+      const color = flat ? FLAT_COLOR : w.color >>> 0;
+      addHalf(faceKeyOf(w.R, sg), q[AXI[w.R]], half(q, sL > 0, sS > 0, color, color));
     }
   }
 

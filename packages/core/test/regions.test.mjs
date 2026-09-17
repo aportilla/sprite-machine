@@ -130,6 +130,91 @@ test('a staircase wall and its gable caps are one region with ONE straight diago
   assert.equal(two.texels[0], 9);
 });
 
+test('a 1:2 staircase wall and its long halves are one region with one diagonal edge, shallow or steep', () => {
+  // Columns 3, 3, 2, 2, 1, 1 high, and a long half over each notch pair with
+  // its right angle at the lower left.
+  const wall = cellsOf(['##....', '####..', '######'], 9);
+  const caps = [
+    { a: 2, b: 2 },
+    { a: 4, b: 1 },
+  ].map((c) => ({ ...c, hiA: false, hiB: false, run: 'a', color: 9 }));
+  const [r] = traceRegions(wall, caps);
+  assert.ok(
+    sameRing(r.outer, [
+      [0, 0],
+      [6, 0],
+      [6, 1],
+      [2, 3],
+      [0, 3],
+    ]),
+    `the steps are one diagonal: ${JSON.stringify(r.outer)}`
+  );
+  assert.deepEqual([r.holes.length, r.uniform, r.area2], [0, 9, 2 * 12 + 2 * 2]);
+
+  const [steep] = traceRegions(
+    wall.map((c) => ({ ...c, a: c.b, b: c.a })),
+    caps.map((h) => ({ ...h, a: h.b, b: h.a, run: 'b' }))
+  );
+  assert.ok(
+    sameRing(steep.outer, [
+      [0, 0],
+      [3, 0],
+      [3, 2],
+      [1, 6],
+      [0, 6],
+    ]),
+    `the wall on its side: ${JSON.stringify(steep.outer)}`
+  );
+  assert.equal(steep.area2, r.area2);
+
+  // A long half paints its second cell with color2.
+  const two = traceRegions(wall, [{ ...caps[0], color: 5, color2: 6 }, caps[1]])[0];
+  const texel = (g, a, b) => g.texels[a - g.a + (b - g.b) * g.w];
+  assert.equal(two.uniform, null);
+  assert.deepEqual([texel(two, 2, 2), texel(two, 3, 2), texel(two, 4, 1)], [5, 6, 9]);
+  assert.equal(presentCount(two), 12 + 2 * 2);
+});
+
+test('a corner where a 45° edge meets a 1:2 edge keeps its vertex', () => {
+  const [r] = traceRegions(cellsOf(['#...', '##..', '####'], 9), [
+    { a: 1, b: 2, hiA: false, hiB: false, color: 9 },
+    { a: 2, b: 1, hiA: false, hiB: false, run: 'a', color: 9 },
+  ]);
+  assert.ok(
+    sameRing(r.outer, [
+      [0, 0],
+      [4, 0],
+      [4, 1],
+      [2, 2],
+      [1, 3],
+      [0, 3],
+    ]),
+    JSON.stringify(r.outer)
+  );
+  assert.equal(r.area2, 2 * 7 + 1 + 2);
+});
+
+test('a hole whose first edge is a 1:2 diagonal belongs to the outer around it, not to an island on that edge', () => {
+  // A ring of cells, each two halves, around a 3×2 hole. A long half hangs
+  // from the hole's top-left corner, and an island half touches its far end.
+  const square = (a, b) => [
+    { a, b, hiA: false, hiB: false, color: 1 },
+    { a, b, hiA: true, hiB: true, color: 1 },
+  ];
+  const ring = [];
+  for (let b = 0; b < 4; b++)
+    for (let a = 0; a < 5; a++)
+      if (a === 0 || a === 4 || b === 0 || b === 3) ring.push(...square(a, b));
+  const long = { a: 1, b: 2, hiA: false, hiB: true, run: 'a', color: 1 };
+  const island = { a: 2, b: 2, hiA: true, hiB: false, color: 1 };
+  const regions = traceRegions([], [long, island, ...ring]);
+  assert.equal(regions.length, 2);
+  const big = regions.find((g) => g.area2 === 2 * 14 + 2);
+  const small = regions.find((g) => g.area2 === 1);
+  assert.ok(big && small, JSON.stringify(regions.map((g) => g.area2)));
+  assert.deepEqual([big.holes.length, small.holes.length], [1, 0]);
+});
+
 test('faceRegions: a solid cube is six quads, every exposed face in one region', () => {
   const r = buildVoxels(
     { front: fill(3, 3, 'M'), right: fill(3, 3, 'N'), top: fill(3, 3, 'T') },

@@ -2,8 +2,8 @@
 
 Turns a 3×2 sheet of pixel-art face sprites (left / front / top over right /
 back / bottom) into a low-poly, textured model: indexed triangle buffers and
-a skin bitmap, or a glTF 2.0 binary. One pixel is one voxel. 45° wedges
-smooth every same-colour staircase, and the colour comes from a
+a skin bitmap, or a glTF 2.0 binary. One pixel is one voxel. 45° and 1:2
+wedges smooth every same-colour staircase, and the colour comes from a
 nearest-sampled skin texture.
 
 This is the engine behind [Sprite Machine](https://aportilla.github.io/sprite-machine/),
@@ -176,10 +176,11 @@ union's lattice and builds layer `k` alone, where it sits in the whole model.
    palette. Faces no view sees fall back to the mirrored opposite, then the
    neighbour average, then the dominant body colour.
 6. **Mesh**: exposed faces merge on occupancy alone into coplanar regions (holes
-   included), triangulated by earcut. 45° wedges fill every concave
-   unit-step notch whose two faces share a material, one quad per slope
-   block, with the gable caps folded into the walls. A lattice-exact
-   T-junction repair keeps the mesh watertight. The colour is a skin: a
+   included), triangulated by earcut. Wedges fill every concave notch whose
+   covered faces share a material: a 45° wedge fills a one-by-one step, and
+   a 1:2 wedge fills a two-by-one step, the notch and the cell beside it.
+   Each slope block is one quad, and its gable caps fold into the walls. A
+   lattice-exact T-junction repair keeps the mesh watertight. The colour is a skin: a
    chart per multi-colour region and a swatch per colour, packed
    deterministically onto a power-of-two texture and sampled nearest.
 
@@ -188,7 +189,11 @@ largest lattice, extracts its surface again, and gives each exposed face the
 colour the last layer holding its voxel gave it. Step 6 meshes the union.
 
 The wedge gate is local. A riser and its tread painted the same colour get a
-ramp at the corner. Painted differently, they keep the step.
+ramp at the corner. Painted differently, they keep the step. A staircase of
+two-cell treads, or of two-cell risers, ramps at 1:2 where all three faces of
+a step share the colour, and at 45° otherwise. A 1:2 fires on a step whose
+legs stop at two cells and one, or at the end of a run beside such a step, so
+a lone one-high ledge on a floor keeps a 45° ramp.
 
 ## License
 

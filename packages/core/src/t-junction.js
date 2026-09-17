@@ -6,27 +6,25 @@
 // exact: split each triangle edge at every mesh vertex strictly inside it, then
 // re-triangulate the convex result with its own vertices.
 //
-// Only axis-aligned and 45° diagonal edges can carry interior vertices. Any
-// other edge is a triangulation chord across a region or slope, where a valid
-// surface has no vertex, so it is skipped.
+// Only an edge in a coordinate plane can carry interior vertices, at the
+// lattice points along it. An edge that changes all three coordinates is a
+// triangulation chord across a slope, where a valid surface has no vertex, so
+// it is skipped.
 //
 // UVs are computed from position after the repair (skin.js uvOfLattice).
 
 const key = (p) => p[0] + ',' + p[1] + ',' + p[2];
+const gcd = (x, y) => (y ? gcd(y, x % y) : x);
 
 // Vertices in `vset` strictly inside segment p->q, ordered p->q. Returns []
-// unless p->q is axis-aligned or a 45° diagonal.
+// when p->q changes all three coordinates.
 function interiorPointsOnEdge(p, q, vset) {
   const d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
-  const axes = [];
-  for (let i = 0; i < 3; i++) if (d[i] !== 0) axes.push(i);
-  if (axes.length === 0 || axes.length === 3) return []; // degenerate, or a chord
-  const n = Math.abs(d[axes[0]]);
-  if (axes.length === 2 && Math.abs(d[axes[1]]) !== n) return []; // not 45°
+  if (d[0] && d[1] && d[2]) return []; // a chord
+  const n = gcd(gcd(Math.abs(d[0]), Math.abs(d[1])), Math.abs(d[2])); // lattice steps
   const out = [];
   for (let t = 1; t < n; t++) {
-    const pt = [p[0], p[1], p[2]];
-    for (const i of axes) pt[i] += Math.sign(d[i]) * t;
+    const pt = [p[0] + (d[0] / n) * t, p[1] + (d[1] / n) * t, p[2] + (d[2] / n) * t];
     if (vset.has(key(pt))) out.push(pt);
   }
   return out;

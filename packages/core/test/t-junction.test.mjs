@@ -93,6 +93,23 @@ test('eliminateTJunctions splits a 45° diagonal edge at a lattice vertex on it'
   assert.ok(out.filter((t) => t.color === 1).length >= 3, 'the diagonal was subdivided');
 });
 
+test('eliminateTJunctions splits a 1:2 edge at the lattice vertex inside it', () => {
+  const N = [0, 0, 1];
+  const tris = [
+    // hypotenuse (0,0) -> (4,2), through the lattice point (2,1)
+    { a: [0, 0, 0], b: [4, 2, 0], c: [0, 2, 0], normal: N, color: 1 },
+    // below it, two triangles that meet at (2,1)
+    { a: [0, 0, 0], b: [4, 0, 0], c: [2, 1, 0], normal: N, color: 2 },
+    { a: [2, 1, 0], b: [4, 0, 0], c: [4, 2, 0], normal: N, color: 3 },
+  ];
+  assert.ok(hasTJunction(tris), 'setup: a vertex sits inside the 1:2 edge');
+  const out = eliminateTJunctions(tris);
+  assert.ok(!hasTJunction(out));
+  assert.ok(Math.abs(totalArea(tris) - totalArea(out)) < 1e-9);
+  for (const t of out) assert.ok(tri2Area(t) > 1e-9, 'no degenerate output triangle');
+  assert.equal(out.filter((t) => t.color === 1).length, 2, 'the 1:2 edge was split once');
+});
+
 // Several collinear points on one edge go through ear clipping's onSeg guard.
 test('eliminateTJunctions emits no degenerate tris on a collinear-heavy edge', () => {
   const N = [0, 0, 1];
