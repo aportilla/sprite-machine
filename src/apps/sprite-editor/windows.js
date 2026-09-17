@@ -15,7 +15,7 @@ import { shell, SPRITE_EDITOR } from '../../state/shell.js';
 import { prefs } from '../../state/prefs.js';
 import { ring } from '../../state/ring.js';
 import { workspace, followActive } from '../../state/workspace.js';
-import { cascadeFrom, cascadeSlot } from '../../shell/layout.js';
+import { cascadeFrom, cascadeSlot, nearBox } from '../../shell/layout.js';
 import { cloneWindow, parseWindows } from '../../shell/windows.js';
 import {
   FRAME_BANDS,
@@ -88,10 +88,19 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
     ring: (cur) => ({ size: { height: cur.height }, min: { width: RING_MIN_WIDTH } }),
     palette: (cur) => ({ size: { width: cur.width, height: cur.height } }),
   };
+  const paletteView =
+    /** @type {import('../../components/sm-palette-view.js').SmPaletteView} */ (
+      byId.palette.querySelector('sm-palette-view')
+    );
   // Boxes held across a browser resize while the windoid sits at them. The 3D
   // View follows its placement, so it stays square and refits a short raster.
+  // The Color Palette's rows refit the new raster's height.
   /** @type {Record<string, (w: number, h: number) => {left: number, top: number, width: number, height: number}>} */
-  const keeps = { stage: (w, h) => initialPlacement(w, h).stage };
+  const keeps = {
+    stage: (w, h) => initialPlacement(w, h).stage,
+    palette: (w, h) =>
+      initialPlacement(w, h, { paletteCount: paletteView.count }).palette,
+  };
   for (const id of WINDOIDS) {
     windows.adopt(byId[id], {
       app: SPRITE_EDITOR,
@@ -114,10 +123,6 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
   // the count whole. An empty label stays slotted, so the kit keeps the strip.
   // Arrange and a browser resize write the size without a vf-resize, so the
   // window's box is observed.
-  const paletteView =
-    /** @type {import('../../components/sm-palette-view.js').SmPaletteView} */ (
-      byId.palette.querySelector('sm-palette-view')
-    );
   const paletteLabel = /** @type {HTMLElement} */ (
     byId.palette.querySelector('[slot="status"]')
   );
@@ -132,12 +137,14 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
   // The strip's settings default to the active document's. A window being opened
   // passes its own document's, since the open activates that document.
   const ringShown = () => prefs.get().showRing;
-  /** @param {{views: number, size: number}} [r]  the strip's settings */
-  const smartLayout = (r = ring.get()) =>
+  /** @param {{views: number, size: number}} [r]  the strip's settings
+   *  @param {number} [paletteCount]  the Color Palette's swatches */
+  const smartLayout = (r = ring.get(), paletteCount = paletteView.count) =>
     initialPlacement(desktop.width, desktop.height, {
       ringViews: r.views,
       ringSize: r.size,
       ringShown: ringShown(),
+      paletteCount,
     });
 
   // Full Sprite View: fixed size. The height fits the tile row at the active
@@ -213,6 +220,25 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
   };
   const placeDoc = (win, slot) => windows.write(win, docBox(win, smartLayout(), slot));
   placeUtility();
+
+  // The Color Palette's placed rows follow the active document's swatch count. A
+  // palette near its placed box for the last count moves to the new count's.
+  let paletteCount = paletteView.count;
+  const followPaletteCount = () => {
+    const was = paletteCount;
+    paletteCount = paletteView.count;
+    const win = byId.palette;
+    const cur = {
+      left: win.left ?? 0,
+      top: win.top ?? 0,
+      width: win.width ?? 0,
+      height: win.height ?? 0,
+    };
+    if (nearBox(cur, windoidBox('palette', smartLayout(ring.get(), was)))) {
+      placeWindoid('palette', smartLayout());
+    }
+  };
+  byId.palette.addEventListener('sm-palette-count', followPaletteCount);
 
   // A document switch, tile resize or load can change the tile ratio. Re-fit the
   // Sprite View's height, writing only when it changes.
@@ -463,6 +489,7 @@ export function initEditorWindows(desktop, windows, { onDocumentClose }) {
       desktop.removeEventListener('vf-zoom', onZoom);
       byId.palette.removeEventListener('vf-resize', onPaletteGrow);
       byId.palette.removeEventListener('sm-palette-count', fitPaletteLabel);
+      byId.palette.removeEventListener('sm-palette-count', followPaletteCount);
       paletteObserver.disconnect();
       // HMR: the next init rebuilds every window, so release and remove them all.
       for (const win of byKey.values()) {

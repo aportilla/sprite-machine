@@ -43,7 +43,8 @@ export const TOOLS_BOX = {
 // Color Palette: square swatch cells, as many columns as the body is wide, over
 // the kit's 15px vertical rail and 15px status strip. The chrome is 2 borders
 // and the rail across, and 12 bar + 2 borders + 15 status down. The floor is one
-// column by two rows. The placement seeds two columns by five rows.
+// column by two rows. The placement is two columns by the rows the colors need,
+// at least five, cut at the bottom margin.
 export const PALETTE_CELL = 19;
 const PALETTE_CHROME = { w: 2 + 15, h: 12 + 2 + 15 };
 const PALETTE_PITCH = PALETTE_CELL + 1;
@@ -57,7 +58,15 @@ const PALETTE_MIN_ROWS = 2;
 const PALETTE_MIN = paletteBox(PALETTE_MIN_COLUMNS, PALETTE_MIN_ROWS);
 export const PALETTE_MIN_WIDTH = PALETTE_MIN.width;
 export const PALETTE_MIN_HEIGHT = PALETTE_MIN.height;
-const PALETTE_BOX = paletteBox(2, 5);
+const PALETTE_PLACED = { columns: 2, rows: 5 };
+const PALETTE_BOX = paletteBox(PALETTE_PLACED.columns, PALETTE_PLACED.rows);
+/** The placed Color Palette's rows for `count` colors in a column `room` px
+ *  tall. */
+const paletteRows = (count, room) => {
+  const fits = Math.floor((room - PALETTE_CHROME.h + 1) / PALETTE_PITCH);
+  const needed = Math.ceil(count / PALETTE_PLACED.columns);
+  return Math.max(PALETTE_PLACED.rows, Math.min(needed, fits));
+};
 
 // The left column holds the Tools palette over the Color Palette, each centered
 // in it. The doc box's left edge is EDGE right of it.
@@ -263,11 +272,12 @@ function bottomBand({ ringSize, ringShown }) {
 /**
  * The boot arrangement for a desktopW × desktopH raster. ringViews and ringSize
  * size the 3D Sprite Atlas strip, and the doc box leaves room for it only when
- * ringShown. The Tools palette gets a position only. Its size is TOOLS_BOX.
+ * ringShown. paletteCount sets the Color Palette's rows. The Tools palette gets
+ * a position only. Its size is TOOLS_BOX.
  *
  * @param {number} desktopW
  * @param {number} desktopH
- * @param {{ringViews?: number, ringSize?: number, ringShown?: boolean}} [opts]
+ * @param {{ringViews?: number, ringSize?: number, ringShown?: boolean, paletteCount?: number}} [opts]
  * @returns {{
  *   tools: {left: number, top: number},
  *   palette: {left: number, top: number, width: number, height: number},
@@ -280,7 +290,7 @@ function bottomBand({ ringSize, ringShown }) {
 export function initialPlacement(
   desktopW,
   desktopH,
-  { ringViews = 4, ringSize = 64, ringShown = false } = {}
+  { ringViews = 4, ringSize = 64, ringShown = false, paletteCount = 0 } = {}
 ) {
   const top = WINDOW_ORIGIN.top;
 
@@ -298,12 +308,17 @@ export function initialPlacement(
     height: Math.max(STAGE_MIN_HEIGHT, Math.min(SPRITE_WIDTH, span - spriteH - GAP)),
   };
 
-  // The left column: the Color Palette GAP under the Tools palette.
+  // The left column: the Color Palette GAP under the Tools palette, down to the
+  // bottom margin at most.
   const tools = { left: columnLeft(TOOLS_BOX.width), top };
+  const paletteTop = top + TOOLS_BOX.height + GAP;
   const palette = {
     left: columnLeft(PALETTE_BOX.width),
-    top: top + TOOLS_BOX.height + GAP,
-    ...PALETTE_BOX,
+    top: paletteTop,
+    ...paletteBox(
+      PALETTE_PLACED.columns,
+      paletteRows(paletteCount, desktopH - GAP - paletteTop)
+    ),
   };
 
   // The vacant middle, between the left column and the rail.

@@ -674,13 +674,17 @@ Its status strip counts the swatches (`paletteStatus`).
   marks nothing. A swatch's tooltip is its hex, after the Colors dialog's name
   when it has one.
 - **The window** has no close box or menu toggle. It sits 8 px under the Tools
-  palette, centered on it, sized to show two columns by five rows. The
-  document window opens right of the wider of the two. It resizes in both axes,
-  and on release the grow snaps back to the whole columns and rows the window
-  shows (`paletteFit`). It is floored at one column and two rows. Below the
-  width that shows "N colors" whole, the status strip shows the bare count, and
-  below the count's own width its text empties. Arrange Windows restores its size. It keeps its size across a
-  browser resize, and a placed Color Palette stays under the Tools palette.
+  palette, centered on it, two columns wide. Its placed height shows every
+  swatch, at least five rows, and stops at the last whole row above the bottom
+  margin. The document window opens right of the wider of the two. It resizes
+  in both axes, and on release the grow snaps back to the whole columns and
+  rows the window shows (`paletteFit`). It is floored at one column and two
+  rows. Below the width that shows "N colors" whole, the status strip shows the
+  bare count, and below the count's own width its text empties. Arrange
+  Windows restores its placed box. While it sits at that box, a change in the
+  swatch count (an open, a document switch, a stroke) and a browser resize
+  re-fit it. Once moved or resized, it keeps its size across a browser resize,
+  and a placed Color Palette stays under the Tools palette.
 
 The Sprite Editor's placement is computed from the live raster
 (`apps/sprite-editor/layout.js`, pure). The Tools palette is at the top left
@@ -708,9 +712,9 @@ declares them at init). An edge in a band is a **strut**: its offset from that
 raster edge holds. An edge in the middle is a **spring**: its fraction of the
 middle holds. So a window against an edge stays against it, and one spanning
 the middle scales with it. Placed windoids are all struts, so a resize puts
-them where Arrange Windows would. The placed 3D View's bottom edge is not a
-strut, so it holds its placement instead: while it sits there, a resize gives
-it the placement for the new raster. A placed document window's top-left is
+them where Arrange Windows would. The placed 3D View's and Color Palette's
+bottom edges are not struts, so they hold their placements instead: while one
+sits there, a resize gives it the placement for the new raster. A placed document window's top-left is
 struts and its far edges spring. A fixed-size axis, or a resizable one below
 its minimum, resolves through an anchor rule: the left or top edge holds if
 it is a strut, else the right or bottom edge if it is a strut, else the

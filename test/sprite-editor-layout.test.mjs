@@ -71,6 +71,29 @@ test('placement: the Color Palette sits centered under the Tools palette, the st
   }
 });
 
+test('placement: the Color Palette shows every swatch, cut at the bottom margin, never shorter than with none', () => {
+  for (let h = 250; h <= 1100; h += 50) {
+    const none = initialPlacement(W, h).palette;
+    for (const count of [7, 10, 11, 24, 60, 256]) {
+      const { palette } = initialPlacement(W, h, { paletteCount: count });
+      const tag = `${count} swatches at raster height ${h}`;
+      const { columns, rows } = paletteGrid(palette.width, palette.height, 0);
+      const room = paletteFit(palette.width, h - 8 - palette.top);
+      assert.ok(palette.height >= none.height, `${tag} shorter than with none`);
+      if (columns * rows < count) {
+        assert.equal(
+          palette.height,
+          Math.max(none.height, room.height),
+          `${tag} short of the margin`
+        );
+      } else if (palette.height > none.height) {
+        assert.ok(columns * (rows - 1) < count, `${tag} a spare row`);
+        assert.ok(palette.top + palette.height <= h - 8, `${tag} past the margin`);
+      }
+    }
+  }
+});
+
 test('placement: the 3D View is square under the Full Sprite View, shortened to fit the raster down to its floor', () => {
   let squares = 0;
   let fitted = 0;
