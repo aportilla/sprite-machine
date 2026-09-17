@@ -89,9 +89,9 @@ export const spriteEditor = {
 
     /** @type {(() => void)[]} */
     const teardown = [];
-    const on = (el, type, fn) => {
-      el.addEventListener(type, fn);
-      teardown.push(() => el.removeEventListener(type, fn));
+    const on = (el, type, fn, opts) => {
+      el.addEventListener(type, fn, opts);
+      teardown.push(() => el.removeEventListener(type, fn, opts));
     };
     const menuDetail = (e) => /** @type {CustomEvent} */ (e).detail;
 
@@ -863,6 +863,31 @@ export const spriteEditor = {
       syncClipboard();
     });
     syncClipboard();
+
+    // Option held: session.option, which the Tools palette and the canvas
+    // preview read. It is set only while the Sprite Editor is front, no modal
+    // is open and no text field has focus. A press reads its own altKey. Every
+    // key and pointer event re-reads the key, since a key-up is lost when
+    // Option is released in another program.
+    const capture = { capture: true, passive: true };
+    const holdOption = (held) =>
+      session.setOption(held && shell.get().appActive && !textFocused && !modalOpen());
+    const onOptionKey = (e) =>
+      holdOption(e.key === 'Alt' ? e.type === 'keydown' : e.altKey);
+    const onOptionPointer = (e) => holdOption(e.altKey);
+    on(window, 'keydown', onOptionKey, capture);
+    on(window, 'keyup', onOptionKey, capture);
+    on(window, 'pointermove', onOptionPointer, capture);
+    on(window, 'pointerdown', onOptionPointer, capture);
+    on(window, 'blur', () => session.setOption(false));
+    on(document, 'visibilitychange', () => {
+      if (document.hidden) session.setOption(false);
+    });
+    teardown.push(
+      shell.subscribe((s) => {
+        if (!s.appActive) session.setOption(false);
+      })
+    );
 
     // Arrange Windows (⌘J). The value is "zoom" when windows.arranged() holds, else
     // "arrange". The label does not change. A window zoomed from its slot, or

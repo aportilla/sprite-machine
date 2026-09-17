@@ -144,7 +144,11 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   **pencil** `B`, **rect** `R` on top, **fill** `G`, **eraser** `E`,
   **eyedropper** `I` below. Each cell is a 1-bit PNG drawn 1:1 through `vf-img`
   (`TOOL_CELL` and `TOOL_GRID`, from which `TOOLS_BOX` derives). The selected cell inverts with a CSS `invert`, exact only for pure
-  black art. A cell picks on press, not on click.
+  black art. A cell picks on press, not on click. The inverted cell is the
+  tool the next press uses (`springTool`, `lib/tools.js`): the eyedropper
+  while Alt is held and no drag is in progress, else the chosen tool. The
+  chosen tool, the options strip and the Tools menu's checkmark don't follow
+  Alt.
 - **The options strip** is a kit band (`pattern="white" rule="bottom"`) with
   the current-ink swatch and the tool's options. It has no tool-name caption,
   and no label is dimmed. A dotted `<vf-separator vertical>` stands between
@@ -233,7 +237,13 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   a momentary erase with the pencil, rect and fill.
 - **Eyedropper** (`I`) stays selected. A click on a painted texel sets the
   ink, and a click on empty space selects the eraser. Ants ring the texel under
-  the pointer. Holding Alt samples with any tool without switching.
+  the pointer. Holding Alt samples with any tool without switching. While
+  Alt is held outside a drag, the hover preview is the eyedropper's, and a
+  drag keeps its own tool's preview until it ends. The press reads its own
+  `altKey`. `session.option` holds the key for the palette and the preview.
+  It is set only while the Sprite Editor is front, no modal is open and no
+  text field has focus, and every key and pointer event re-reads it, since a
+  key-up is lost when Alt is released in another program.
 - **The current-ink swatch** shows for every tool except the eraser and
   selection. Clicking it opens the **Colors dialog**: a 21×8 grid of 168 named
   swatches, a readout line, a preview swatch beside a hex field, and Cancel /

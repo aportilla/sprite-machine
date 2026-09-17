@@ -171,6 +171,7 @@ export class SmEditor extends LitElement {
             .onionBehind=${vm.onionBehind}
             .edgeHints=${vm.edgeHints}
             .tool=${s.tool}
+            .option=${s.option}
             .ink=${s.ink}
             .pencilSize=${s.pencilSize}
             .pencilShape=${s.pencilShape}

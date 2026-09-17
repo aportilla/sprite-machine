@@ -140,7 +140,7 @@ bar under the menu bar shows the tool's settings.
 - With the pencil, rectangle or fill, hold the right mouse button to erase
   instead.
 - Hold Option and click a pixel to pick up its color without leaving your
-  tool.
+  tool. While you hold Option, the Tools window shows the eyedropper.
 - The fill has two checkboxes. **contiguous** is on to start, so the fill
   stops at the edge of the area you click. Turn it off to recolor every
   pixel of that color on the face. The second, **on all faces**, then

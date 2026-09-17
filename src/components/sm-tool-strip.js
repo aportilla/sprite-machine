@@ -8,6 +8,9 @@
 //
 // A cell picks on pointerdown, like a classic Mac tool palette. The click
 // that follows is a no-op, and click stays the keyboard path.
+//
+// `tool` is the chosen tool and `shown` the inverted one, which differ while
+// Option is held (lib/tools.js springTool). A pick compares against `tool`.
 
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
@@ -70,16 +73,20 @@ export class SmToolStrip extends LitElement {
 
   static properties = {
     tool: {},
+    /** The inverted cell's tool, or null for `tool`. */
+    shown: {},
   };
 
   constructor() {
     super();
     this.tool = 'pencil';
+    this.shown = null;
   }
 
   render() {
+    const shown = this.shown ?? this.tool;
     const cell = (name, tool, title) => {
-      const active = this.tool === tool;
+      const active = shown === tool;
       return html`
         <button
           type="button"

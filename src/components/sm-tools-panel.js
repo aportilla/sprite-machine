@@ -1,9 +1,10 @@
 // <sm-tools-panel>: the Tools palette's body. It binds <sm-tool-strip> to the
-// session.
+// session. While Option is held the strip inverts the eyedropper.
 
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { session } from '../state/session.js';
+import { springTool } from '../lib/tools.js';
 import { StoreController } from '../state/store-controller.js';
 import { baseStyles } from './base-styles.js';
 import './sm-tool-strip.js'; // registers <sm-tool-strip>
@@ -27,9 +28,11 @@ export class SmToolsPanel extends LitElement {
   }
 
   render() {
+    const s = session.get();
     return html`
       <sm-tool-strip
-        .tool=${session.get().tool}
+        .tool=${s.tool}
+        .shown=${springTool(s.tool, s.option, s.gesture)}
         @sm-pick-tool=${(e) => session.setTool(e.detail.tool)}
       ></sm-tool-strip>
     `;

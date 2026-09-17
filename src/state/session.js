@@ -34,6 +34,10 @@ export function createSession() {
     // A canvas drag is in progress, from press to release. The layer keys wait
     // for it, since a switch would reset the canvas mid-gesture.
     gesture: false,
+    // Option (Alt) is held over the Sprite Editor. The Tools palette and the
+    // canvas's preview show the eyedropper (lib/tools.js springTool). `tool`
+    // is unchanged.
+    option: false,
   });
 
   return {
@@ -113,6 +117,11 @@ export function createSession() {
     /** @param {boolean} v */
     setGesture(v) {
       store.patch({ gesture: !!v });
+    },
+
+    /** @param {boolean} v */
+    setOption(v) {
+      store.patch({ option: !!v });
     },
   };
 }

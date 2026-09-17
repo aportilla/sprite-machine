@@ -19,6 +19,8 @@
 // - The working buffer resets when `tile`, tileW or tileH changes. `tile`
 //   compares by identity: pass the same reference only when the art is
 //   unchanged. A `tool` change cancels any gesture in flight.
+// - `option` (Option held) changes only the hover preview, to the
+//   eyedropper's, outside a drag (#sampling). A press reads its own altKey.
 //
 // Events (all bubble):
 //   sm-live               { tile, dirty }    each pixel change. tile is the
@@ -51,6 +53,7 @@ import {
 import { ANTS_PERIOD } from '../lib/ants.js';
 import { EDGE_HINT } from '../lib/edges.js';
 import { ONION_ALPHA } from '../lib/layers.js';
+import { springTool } from '../lib/tools.js';
 import {
   drawPencilPreview,
   drawFootprintAnts,
@@ -155,6 +158,8 @@ export class SmDrawCanvas extends LitElement {
     /** The edge-hint frame around the tile (lib/edges.js edgeHintFrame). */
     edgeHints: { attribute: false },
     tool: {},
+    /** Option (Alt) is held. The tool is unchanged. */
+    option: { type: Boolean },
     ink: { attribute: false },
     pencilSize: { type: Number },
     /** 'circle' | 'square' (lib/brush.js PENCIL_SHAPES). */
@@ -178,6 +183,7 @@ export class SmDrawCanvas extends LitElement {
     this.onionBehind = null;
     this.edgeHints = null;
     this.tool = 'pencil';
+    this.option = false;
     this.ink = null;
     this.pencilSize = 1;
     this.pencilShape = 'circle';
@@ -343,6 +349,7 @@ export class SmDrawCanvas extends LitElement {
 
     if (
       changed.has('tool') ||
+      changed.has('option') ||
       changed.has('pencilSize') ||
       changed.has('pencilShape') ||
       changed.has('eraserSize') ||
@@ -764,11 +771,16 @@ export class SmDrawCanvas extends LitElement {
     return this.tool === 'eraser' || this.#forceErase;
   }
 
+  // A press would sample: the eyedropper, or Option held outside a drag.
+  get #sampling() {
+    return springTool(this.tool, this.option, this.#dragging) === 'eyedropper';
+  }
+
   // Whether the cursor layer shows ants: an erasing footprint, the eyedropper's
   // target, or an erasing rect drag.
   get #cursorAntsUp() {
     if (this.#rectDragging) return this.#forceErase;
-    return !!this.#hoverTexel && (this.#erasing || this.tool === 'eyedropper');
+    return !!this.#hoverTexel && (this.#erasing || this.#sampling);
   }
 
   // Run the ticker only while some ants are up. Stopping resets the phase.
@@ -816,14 +828,15 @@ export class SmDrawCanvas extends LitElement {
     };
   }
 
-  // The cursor layer's hover preview. The pencil shows the texels it would paint
-  // in the ink. An erasing footprint and the eyedropper's target show ants.
-  // Other tools clear the layer, as does `t` null. Re-syncs the ants ticker.
+  // The cursor layer's hover preview. A press that would sample shows ants
+  // around its texel. Otherwise an erasing footprint shows ants, and the pencil
+  // shows the texels it would paint in the ink. Other tools clear the layer, as
+  // does `t` null. Re-syncs the ants ticker.
   #drawCursor(t) {
     this.#hoverTexel = t;
     const g = this.#cursorCtx;
     if (!g) return;
-    if (this.tool === 'eyedropper') {
+    if (this.#sampling) {
       drawFootprintAnts(g, this.#overlayView, t, 1, this.#antsPhase);
     } else if (this.#erasing) {
       drawFootprintAnts(
