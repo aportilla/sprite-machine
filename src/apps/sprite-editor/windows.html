@@ -38,7 +38,9 @@
 >
   <sm-stage-controls slot="header"></sm-stage-controls>
   <vf-container id="stage-well" fill-width fill-height pattern="gray-12">
-    <canvas id="viewport"></canvas>
+    <!-- The canvas is sized in whole texels by scene/stage.js, so the well's
+         box is measured here rather than on the canvas. -->
+    <div id="stage-fit"><canvas id="viewport"></canvas></div>
   </vf-container>
   <sm-status-line kind="build" slot="status"></sm-status-line>
 </vf-window>

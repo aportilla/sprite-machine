@@ -6,10 +6,14 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { toSys, sysLength, onScaleChange } from 'vintage-frames';
 import { DEFAULT_WORLD_SIZE } from 'sprite-machine';
 import { prefs } from '../state/prefs.js';
 
-const RENDER_SCALE = 0.5; // half-resolution render, upscaled by CSS
+// One rendered pixel, in system px. Whole system px keep the model's pixels in
+// register with the desktop's own, and the canvas is sized in whole texels so
+// every one of them upscales by the same count of device px.
+const SYS_PER_TEXEL = 1;
 const FAR = 100; // the camera's far plane, unless a fit needs it farther
 const FRAME_INSET = 0.05; // the framed box's least gap to an edge, over the frame's size
 
@@ -148,6 +152,10 @@ export function createStage(canvas, { cam = null } = {}) {
     controls.update();
   }
 
+  // The canvas's own box is derived, so the space to fill is the parent's
+  // (#stage-fit in apps/sprite-editor/windows.html).
+  const well = canvas.parentElement ?? canvas;
+
   /** @type {Box|null} a box waiting for a canvas size */
   let pendingFrame = null;
 
@@ -155,18 +163,21 @@ export function createStage(canvas, { cam = null } = {}) {
   let spinTarget = null;
 
   function resize() {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    const rw = Math.max(1, Math.floor(w * RENDER_SCALE));
-    const rh = Math.max(1, Math.floor(h * RENDER_SCALE));
+    const w = well.clientWidth;
+    const h = well.clientHeight;
+    // The largest whole-texel canvas the well holds. What is left over, under
+    // one texel at the right and bottom, stays the well's pattern.
+    const rw = Math.max(1, Math.floor(toSys(w, canvas) / SYS_PER_TEXEL));
+    const rh = Math.max(1, Math.floor(toSys(h, canvas) / SYS_PER_TEXEL));
     let changed = false;
+    canvas.style.width = sysLength(rw * SYS_PER_TEXEL);
+    canvas.style.height = sysLength(rh * SYS_PER_TEXEL);
     if (canvas.width !== rw || canvas.height !== rh) {
       renderer.setSize(rw, rh, false);
       changed = true;
     }
-    // Compare the CSS aspect, not the rounded buffer size, so a one-pixel
-    // resize still updates the projection.
-    const aspect = w / h;
+    // The canvas's box is the buffer's, texel for texel.
+    const aspect = rw / rh;
     if (camera.aspect !== aspect) {
       camera.aspect = aspect;
       camera.updateProjectionMatrix();
@@ -180,10 +191,13 @@ export function createStage(canvas, { cam = null } = {}) {
     if (changed) requestRender();
   }
   window.addEventListener('resize', resize);
-  // The canvas can change size without a window resize event.
+  // The well can change size without a window resize event.
   const resizeObs =
     typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => resize()) : null;
-  resizeObs?.observe(canvas);
+  resizeObs?.observe(well);
+  // A display or zoom change moves the system px under a canvas of the same
+  // CSS size.
+  const offScale = onScaleChange(resize);
 
   let rafId = 0;
   function tick() {
@@ -222,6 +236,7 @@ export function createStage(canvas, { cam = null } = {}) {
     dispose() {
       window.removeEventListener('resize', resize);
       resizeObs?.disconnect();
+      offScale();
       controls.removeEventListener('change', requestRender);
       cancelAnimationFrame(rafId);
     },

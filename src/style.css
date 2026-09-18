@@ -65,11 +65,15 @@ sm-color-picker {
   border: calc(var(--vf-scale, 1) * 1px) solid var(--sm-black);
 }
 
-/* 3D View canvas. It fills the pattern well. The renderer clears transparent
-   (scene/stage.js), so the well's pattern shows behind the model. */
-#viewport {
+/* 3D View canvas. The renderer clears transparent (scene/stage.js), so the
+   well's pattern shows behind the model, and behind the strip under one texel
+   the canvas leaves at the right and bottom. */
+#stage-fit {
   width: 100%;
   height: 100%;
+}
+
+#viewport {
   display: block;
   /* Upscales the low-res buffer crisply. Overrides the auto value the kit's
      pattern fill sets on slotted content. */
