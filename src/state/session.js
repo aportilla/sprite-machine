@@ -30,6 +30,10 @@ export function createSession() {
     // fillAllFaces.
     fillContiguous: true,
     fillAllFaces: false,
+    // The selection tool's option, on at every load. A move, flip or Delete on
+    // a marquee is read through the layer's lattice and applied to its other
+    // faces, so the faces stay in line.
+    selectAllFaces: true,
     pickerOpen: false,
     // A canvas drag is in progress, from press to release. The layer keys wait
     // for it, since a switch would reset the canvas mid-gesture.
@@ -104,6 +108,11 @@ export function createSession() {
     /** @param {boolean} v */
     setFillAllFaces(v) {
       store.patch({ fillAllFaces: !!v });
+    },
+
+    /** @param {boolean} v */
+    setSelectAllFaces(v) {
+      store.patch({ selectAllFaces: !!v });
     },
 
     openPicker() {

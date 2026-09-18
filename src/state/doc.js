@@ -8,7 +8,8 @@
 // Two channels:
 //   - subscribe: structural changes (a new atlas, a tile resize, replace all, a
 //     layer added, removed, moved or renamed).
-//   - onLive: stroke-rate edits, coalesced to one blit per animation frame.
+//   - onLive: stroke-rate edits, coalesced to one blit per animation frame and
+//     reported as one call carrying the frame's edits.
 // applyTileEdit mutates layers[layer][face] without a change notification, so
 // the underlay recomputes only on a face or layer switch or a structural change.
 //
@@ -64,7 +65,7 @@ export function createDoc(scheduler = {}) {
     sheet: 0,
   });
 
-  /** @type {Set<(s: ReturnType<typeof store.get>, edit: LiveEdit) => void>} */
+  /** @type {Set<(s: ReturnType<typeof store.get>, edits: LiveEdit[]) => void>} */
   const liveListeners = new Set();
   let liveId = /** @type {any} */ (0);
   /** @type {Map<string, LiveEdit & {tile: Tile}>} edits awaiting the frame blit, the latest per layer and face */
@@ -72,14 +73,15 @@ export function createDoc(scheduler = {}) {
 
   const inRange = (layer) => Number.isInteger(layer) && layer >= 0;
 
-  // Blit the pending edits into the sheet and notify the live listeners once per
-  // edit.
+  // Blit the pending edits into the sheet and notify the live listeners once,
+  // with every edit of the frame.
   function flushLive() {
     liveId = 0;
-    const edits = [...pending.values()];
+    const pendingEdits = [...pending.values()];
     pending.clear();
+    if (pendingEdits.length === 0) return;
     const s = store.get();
-    for (const { layer, face, tile } of edits) {
+    for (const { layer, face, tile } of pendingEdits) {
       const cell = cellOf(face);
       if (cell && s.atlasImage) {
         blitTile(
@@ -90,9 +92,8 @@ export function createDoc(scheduler = {}) {
         );
       }
     }
-    for (const { layer, face } of edits) {
-      for (const fn of liveListeners) fn(s, { layer, face });
-    }
+    const edits = pendingEdits.map(({ layer, face }) => ({ layer, face }));
+    for (const fn of liveListeners) fn(s, edits);
   }
 
   // Slice `count` layers of a sheet into a store patch. Callers merge it into a
@@ -114,8 +115,9 @@ export function createDoc(scheduler = {}) {
     get: store.get,
     subscribe: store.subscribe, // structural changes
 
-    /** Stroke-rate changes, one call per edited layer and face per animation
-     *  frame. @param {(s: object, edit: LiveEdit) => void} fn */
+    /** Stroke-rate changes, one call per animation frame carrying that frame's
+     *  edits, the latest per layer and face.
+     *  @param {(s: object, edits: LiveEdit[]) => void} fn */
     onLive(fn) {
       liveListeners.add(fn);
       return () => {
@@ -193,22 +195,38 @@ export function createDoc(scheduler = {}) {
       return true;
     },
 
-    // Restore one face of one layer (undo/redo). Blits the tile, or
-    // transparency for null, into the sheet and re-slices, so the change is
-    // structural. The tile's data is copied.
-    /** @param {number} layer  @param {string} face  @param {Tile|null} tile */
-    restoreTile(layer, face, tile) {
+    // Restore faces of one layer (undo/redo). Blits each tile, or transparency
+    // for null, into the sheet and re-slices once, so the change is structural
+    // and notifies once. The tiles' data is copied.
+    /** @param {number} layer  @param {Record<string, Tile|null>} tiles */
+    restoreTiles(layer, tiles) {
       const s = store.get();
-      const cell = cellOf(face);
-      if (!s.atlasImage || !cell || !inRange(layer) || layer >= s.layers.length) return;
+      if (!s.atlasImage || !inRange(layer) || layer >= s.layers.length) return;
+      const cells = Object.entries(tiles)
+        .map(([face, tile]) => ({ cell: cellOf(face), tile }))
+        .filter(({ cell }) => cell);
+      if (cells.length === 0) return;
       this.dropLive();
-      const t = tile ?? {
+      const blank = {
         width: s.tileW,
         height: s.tileH,
         data: new Uint8ClampedArray(s.tileW * s.tileH * 4),
       };
-      blitTile(s.atlasImage, t, cell.c * s.tileW, (s.rows * layer + cell.r) * s.tileH);
+      for (const { cell, tile } of cells) {
+        blitTile(
+          s.atlasImage,
+          tile ?? blank,
+          cell.c * s.tileW,
+          (s.rows * layer + cell.r) * s.tileH
+        );
+      }
       store.patch(slicedPatch(s.atlasImage, s.layers.length));
+    },
+
+    /** One face of restoreTiles. @param {number} layer  @param {string} face
+     *  @param {Tile|null} tile */
+    restoreTile(layer, face, tile) {
+      this.restoreTiles(layer, { [face]: tile });
     },
 
     // Restore the whole sheet and its layer names (undo/redo of a resize,

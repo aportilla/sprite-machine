@@ -2,7 +2,8 @@
 // the clamp bounds, and the session actions do the clamping. Emits
 // sm-set-pencil-size {n}, sm-set-pencil-shape {shape}, sm-set-eraser-size {n},
 // sm-set-eraser-shape {shape}, sm-set-corner-radius {n},
-// sm-set-fill-opts {contiguous?, allFaces?} and sm-flip-selection {axis}.
+// sm-set-fill-opts {contiguous?, allFaces?}, sm-set-select-opts {allFaces} and
+// sm-flip-selection {axis}.
 //
 // live() bindings re-sync the controls after typing or a rejected pick.
 // A vertical separator goes only between different things, such as the rect's
@@ -55,6 +56,10 @@ export class SmToolOptions extends LitElement {
     radiusMax: { type: Number },
     fillContiguous: { type: Boolean },
     fillAllFaces: { type: Boolean },
+    selectAllFaces: { type: Boolean },
+    /** The all-faces box is greyed once a selection's first operation has
+     *  settled it, and for a document off the drawing convention. */
+    selectAllFacesDisabled: { type: Boolean },
     /** The active window's marquee {x0,y0,x1,y1} in texels, or null. It may
      *  extend past the tile. */
     selection: { attribute: false },
@@ -75,6 +80,8 @@ export class SmToolOptions extends LitElement {
     this.radiusMax = 0;
     this.fillContiguous = true;
     this.fillAllFaces = false;
+    this.selectAllFaces = true;
+    this.selectAllFacesDisabled = false;
     this.selection = null;
     this.rectDrag = null;
   }
@@ -192,6 +199,15 @@ export class SmToolOptions extends LitElement {
           ?disabled=${!this.selection}
           @click=${() => this.#emit('sm-flip-selection', { axis: 'vertical' })}
           >Flip Vertical</vf-button
+        >
+        <vf-separator vertical></vf-separator>
+        <vf-checkbox
+          .checked=${live(this.selectAllFaces)}
+          ?disabled=${this.selectAllFacesDisabled}
+          title="move, flip and delete the selection on every face of the layer, through the model"
+          @vf-change=${(e) =>
+            this.#emit('sm-set-select-opts', { allFaces: !!e.detail.checked })}
+          >on all faces</vf-checkbox
         >
       `;
     }

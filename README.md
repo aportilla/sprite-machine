@@ -128,14 +128,14 @@ six layers.
 Pick a tool in the **Tools** window, in the Tools menu, or with its key. The
 bar under the menu bar shows the tool's settings.
 
-| Tool       | Key | What it does                                                                                 |
-| ---------- | --- | -------------------------------------------------------------------------------------------- |
-| Selection  | S   | Selects the pixels inside a box you drag. See [Selecting and moving](#selecting-and-moving). |
-| Pencil     | B   | Draws with the current color. Settings: a circle or square tip, and its size.                |
-| Rectangle  | R   | Draws a filled box as you drag. Shift keeps it square. Setting: the corner radius.           |
-| Fill       | G   | Fills the area you click with the current color.                                             |
-| Eraser     | E   | Erases. Settings: tip shape and size.                                                        |
-| Eyedropper | I   | Picks up the color of the pixel you click. On an empty spot, it switches to the eraser.      |
+| Tool       | Key | What it does                                                                                                            |
+| ---------- | --- | ----------------------------------------------------------------------------------------------------------------------- |
+| Selection  | S   | Selects the pixels inside a box you drag. Setting: **on all faces**. See [Selecting and moving](#selecting-and-moving). |
+| Pencil     | B   | Draws with the current color. Settings: a circle or square tip, and its size.                                           |
+| Rectangle  | R   | Draws a filled box as you drag. Shift keeps it square. Setting: the corner radius.                                      |
+| Fill       | G   | Fills the area you click with the current color.                                                                        |
+| Eraser     | E   | Erases. Settings: tip shape and size.                                                                                   |
+| Eyedropper | I   | Picks up the color of the pixel you click. On an empty spot, it switches to the eraser.                                 |
 
 - With the pencil, rectangle or fill, hold the right mouse button to erase
   instead.
@@ -212,8 +212,27 @@ Copy puts the pixels on the clipboard as a PNG, so you can paste them into
 another program. Paste takes an image from any program and drops it in the
 middle of the face. Partly transparent pixels become solid or clear.
 
-A move changes only the face you are on. If you move the car up in the Front
-face, move it up in the side faces too.
+### On all faces
+
+**On all faces**, in the bar under the menu bar, is on to start, so a move goes
+to all six faces at once and they stay in line. Uncheck it to change only the
+face you are on.
+
+Each face moves the way it sees the thing you selected. Drag the car's cab to
+the right in the Front face and it goes right in the Front face, left in the
+Back and Top faces, and nowhere in the side faces, since the cab has not moved
+forward or back. Flip and Delete work the same way, and one ⌘Z takes the whole
+change back.
+
+Only what you selected moves. Drag the cab back and the hood stays where it is.
+Where the part ends up behind or under something else, the face that sees both
+shows the nearer one, so a part pushed under a shelf leaves the shelf's pixels
+alone, and pulling it back out paints it in the colors the 3D View was showing.
+
+Set the box before the first drag: once a selection has moved it keeps that
+setting, and the box stays grey until you let the selection go. While it is on,
+the Full Sprite View outlines what each face will move. It is on again every
+time you open the app, and pasted pixels move on their own face only.
 
 ## Layers
 
@@ -488,7 +507,8 @@ step in one color make a slope; two colors keep the step. See
 See [The six faces](#the-six-faces).
 
 **The model sits off to one side, or floats.** The model is wherever you drew
-it. On each face, press ⌘A and drag the drawing into place.
+it. Press ⌘A on any face and drag the drawing into place; the other faces follow
+as long as **on all faces** is checked. See [On all faces](#on-all-faces).
 
 **Something on its own layer is one pixel thick.** That layer has only one
 face drawn. Give it a second face at right angles to the first.

@@ -10,9 +10,10 @@
 // - ctx.face and ctx.layer are the face and layer the window edits. They are
 //   UI state, so a switch never dirties. A structural change clamps the layer
 //   to the layer count.
-// - ctx.selection is its own store for the marquee (`bounds`) and the rect
-//   tool's drag box (`rect`). Both change at pointer-move rate, so they stay
-//   out of the workspace store.
+// - ctx.selection is its own store for the marquee (`bounds`), the rect tool's
+//   drag box (`rect`) and whether the marquee's first operation has run
+//   (`lifted`, which settles the all-faces option for its life). The first two
+//   change at pointer-move rate, so they stay out of the workspace store.
 
 import { createStore } from './store.js';
 import { createDoc } from './doc.js';
@@ -31,7 +32,7 @@ import { sheetLayers } from '../lib/sheet-shape.js';
  *   fileId: string|null,
  *   name: string,
  *   dirty: boolean,
- *   selection: ReturnType<typeof createStore<{bounds: SelectionBounds|null, rect: SelectionBounds|null}>>,
+ *   selection: ReturnType<typeof createStore<{bounds: SelectionBounds|null, rect: SelectionBounds|null, lifted: boolean}>>,
  *   ring: ReturnType<typeof createRingSettings>,
  * }} DocContext
  */
@@ -152,6 +153,7 @@ export function createWorkspace(deps = {}) {
         selection: createStore({
           bounds: /** @type {SelectionBounds|null} */ (null),
           rect: /** @type {SelectionBounds|null} */ (null),
+          lifted: false,
         }),
         ring: createRingSettings(ring),
       };
@@ -245,7 +247,20 @@ export function createWorkspace(deps = {}) {
       const ctx = byKey(key);
       if (!ctx) return;
       if (sameBounds(ctx.selection.get().bounds, bounds)) return;
-      ctx.selection.patch({ bounds: copyBounds(bounds) });
+      const patch = { bounds: copyBounds(bounds) };
+      if (!bounds) patch.lifted = false; // the option is open again
+      ctx.selection.patch(patch);
+    },
+
+    /**
+     * Mark that a selection's first operation has run, which settles the
+     * all-faces option for its life. Dropping the selection clears it.
+     * @param {string} key  @param {boolean} v
+     */
+    setSelectionLifted(key, v) {
+      const ctx = byKey(key);
+      if (!ctx || ctx.selection.get().lifted === !!v) return;
+      ctx.selection.patch({ lifted: !!v });
     },
 
     /**

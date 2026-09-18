@@ -4,6 +4,12 @@
 // layer's tile alone. The cell height follows the tile's aspect ratio. A tile
 // picks its face on pointerdown, like the Tools palette.
 //
+// While the selection tool's `on all faces` is on and a marquee is up, every
+// other cell carries the marquee's rectangle projected onto its face
+// (lib/select-faces.js), in still ants on a second canvas at system-px
+// resolution. A cell is 35 system px for a 40 px tile, so the ring lands within
+// a pixel of the texels, not on them.
+//
 // With no active document the cells keep their last pixels. The windoid is
 // hidden then.
 
@@ -11,11 +17,14 @@ import { PatternFillController, vfPatternFill } from 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { createRef, ref } from 'lit/directives/ref.js';
+import { session } from '../state/session.js';
 import { workspace, followActive } from '../state/workspace.js';
 import { StoreController } from '../state/store-controller.js';
 import { DEFAULT_ATLAS_LAYOUT } from 'sprite-machine';
+import { projectBounds } from '../lib/select-faces.js';
 import { ATLAS_GRID, FACE_ROW } from '../apps/sprite-editor/layout.js';
 import { baseStyles } from './base-styles.js';
+import { drawStillAnts } from './draw-overlays.js';
 import { parsePatternAttr } from './ui-bits.js';
 
 // Each face in row order, with its row and column in the sheet.
@@ -63,6 +72,12 @@ export class SmAtlasView extends LitElement {
         image-rendering: pixelated;
         image-rendering: crisp-edges;
       }
+      /* The projected marquee, over the tile. */
+      .atlas-ants {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
       .atlas-ring {
         position: absolute;
         inset: 0;
@@ -78,9 +93,12 @@ export class SmAtlasView extends LitElement {
 
   /** @type {Map<string, import('lit/directives/ref.js').Ref<HTMLCanvasElement>>} */
   #cellCanvas = new Map(GRID_CELLS.map(({ face }) => [face, createRef()]));
+  /** @type {Map<string, import('lit/directives/ref.js').Ref<HTMLCanvasElement>>} */
+  #cellAnts = new Map(GRID_CELLS.map(({ face }) => [face, createRef()]));
   /** @type {Map<string, import('lit/directives/ref.js').Ref<HTMLButtonElement>>} */
   #cellBox = new Map(GRID_CELLS.map(({ face }) => [face, createRef()]));
   #stopFollow = null;
+  #stopSession = null;
   #tileW = 0;
   #tileH = 0;
   #cellH = ATLAS_GRID.cell; // square until a tile sets the ratio
@@ -125,16 +143,21 @@ export class SmAtlasView extends LitElement {
       const unsubs = [
         ctx.doc.subscribe(() => this.#syncGeometry()),
         ctx.doc.onLive(() => this.#paint()),
+        // The marquee changes at pointer-move rate and never re-renders here.
+        ctx.selection.subscribe(() => this.#paintOutlines()),
       ];
       this.#syncGeometry();
       return () => unsubs.forEach((u) => u());
     });
+    this.#stopSession = session.subscribe(() => this.#paintOutlines());
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this.#stopFollow?.();
     this.#stopFollow = null;
+    this.#stopSession?.();
+    this.#stopSession = null;
   }
 
   firstUpdated() {
@@ -142,10 +165,12 @@ export class SmAtlasView extends LitElement {
     this.#syncGeometry();
   }
 
-  // A layer switch changes the workspace store only, which re-renders here.
+  // A layer switch changes the workspace store only, which re-renders here. A
+  // face switch moves which cell is left out of the outlines.
   updated() {
     const active = workspace.active();
     if (active && active.layer !== this.#paintedLayer) this.#paint();
+    this.#paintOutlines();
   }
 
   render() {
@@ -180,6 +205,7 @@ export class SmAtlasView extends LitElement {
               @click=${() => this.#pick(f)}
             >
               <canvas ${ref(this.#cellCanvas.get(f))}></canvas>
+              <canvas class="atlas-ants" ${ref(this.#cellAnts.get(f))}></canvas>
               <span class=${classMap({ 'atlas-ring': true, on: f === face })}></span>
             </button>
           `
@@ -218,6 +244,36 @@ export class SmAtlasView extends LitElement {
       this.requestUpdate();
     }
     this.#paint();
+    this.#paintOutlines();
+  }
+
+  // The marquee's rectangle on every cell but the edited face's, while the
+  // option is on and a selection is up. Bounds off the tile project off it, and
+  // the canvas clips them.
+  #paintOutlines() {
+    const active = workspace.active();
+    const bounds = active?.selection.get().bounds ?? null;
+    const on = !!bounds && session.get().selectAllFaces && this.#tileW === this.#tileH;
+    for (const { face } of GRID_CELLS) {
+      const c = this.#cellAnts.get(face).value;
+      if (!c || !(this.#tileW > 0)) continue;
+      if (c.width !== ATLAS_GRID.cell || c.height !== this.#cellH) {
+        c.width = ATLAS_GRID.cell; // resizing clears the canvas
+        c.height = this.#cellH;
+      }
+      const g = c.getContext('2d');
+      g.clearRect(0, 0, c.width, c.height);
+      if (!on || face === active.face) continue;
+      const b = projectBounds(active.face, bounds, face, this.#tileW);
+      const sx = (x) => Math.round((x * ATLAS_GRID.cell) / this.#tileW);
+      const sy = (y) => Math.round((y * this.#cellH) / this.#tileH);
+      drawStillAnts(g, {
+        x: sx(b.x0),
+        y: sy(b.y0),
+        w: sx(b.x1 + 1) - sx(b.x0),
+        h: sy(b.y1 + 1) - sy(b.y0),
+      });
+    }
   }
 
   // Each cell draws the edited layer's tile for its face. The live channel

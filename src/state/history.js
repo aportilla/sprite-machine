@@ -2,14 +2,16 @@
 //   - `tile`: one gesture on one face of one layer ({layer, face, before,
 //     after} tile snapshots), pushed by the editor when the canvas commits a
 //     gesture.
+//   - `faces`: one gesture over several faces of one layer ({layer, faces} of
+//     {face, before, after}), for a selection projected onto all of them.
 //   - `atlas`: a pair of whole-sheet {image, names} snapshots for a resize,
 //     replace all or a layer added, removed or moved, recorded by
 //     withAtlasSnapshot.
 //   - `names`: a pair of layer name lists for a rename, recorded by
 //     withNamesSnapshot.
 //
-// Entries apply through doc.restoreTile, doc.restoreAtlas and doc.setNames,
-// which are structural changes. Snapshots are copied on push and on apply, so
+// Entries apply through doc.restoreTile, doc.restoreTiles, doc.restoreAtlas and
+// doc.setNames, which are structural changes. Snapshots are copied on push and on apply, so
 // no live buffer can alter an entry. A wholesale load (a new doc sheet
 // generation) clears both stacks.
 
@@ -21,6 +23,13 @@ const copyTile = (t) =>
   t == null
     ? null
     : { width: t.width, height: t.height, data: new Uint8ClampedArray(t.data) };
+
+/** Whether a pair holds the same bytes, so it is no change. */
+const sameTile = (a, b) =>
+  !!a &&
+  !!b &&
+  a.data.length === b.data.length &&
+  a.data.every((v, i) => v === b.data[i]);
 
 /**
  * @param {ReturnType<typeof import('./doc.js').createDoc>} doc
@@ -54,7 +63,17 @@ export function createHistory(doc, { limit = HISTORY_LIMIT } = {}) {
   // Apply one side of an entry. Restores take copies because restoreAtlas
   // adopts its image by reference.
   function apply(entry, direction) {
-    const side = direction === 'undo' ? entry.before : entry.after;
+    const undoing = direction === 'undo';
+    if (entry.kind === 'faces') {
+      doc.restoreTiles(
+        entry.layer,
+        Object.fromEntries(
+          entry.faces.map((f) => [f.face, copyTile(undoing ? f.before : f.after)])
+        )
+      );
+      return;
+    }
+    const side = undoing ? entry.before : entry.after;
     if (entry.kind === 'tile') doc.restoreTile(entry.layer, entry.face, copyTile(side));
     else if (entry.kind === 'names') doc.setNames([...side]);
     else doc.restoreAtlas(copyTile(side.image), [...side.names]);
@@ -82,14 +101,7 @@ export function createHistory(doc, { limit = HISTORY_LIMIT } = {}) {
      *  @param {{width:number,height:number,data:Uint8ClampedArray}|null} before
      *  @param {{width:number,height:number,data:Uint8ClampedArray}|null} after */
     pushTile(layer, face, before, after) {
-      if (
-        before &&
-        after &&
-        before.data.length === after.data.length &&
-        before.data.every((v, i) => v === after.data[i])
-      ) {
-        return;
-      }
+      if (sameTile(before, after)) return;
       push({
         kind: 'tile',
         layer,
@@ -97,6 +109,25 @@ export function createHistory(doc, { limit = HISTORY_LIMIT } = {}) {
         before: copyTile(before),
         after: copyTile(after),
       });
+    },
+
+    /** One gesture over several faces of one layer, as one step. Pairs with
+     *  identical bytes are dropped, and an entry with none left is not
+     *  recorded. The buffers are copied.
+     *  @param {number} layer
+     *  @param {{face: string,
+     *           before: {width:number,height:number,data:Uint8ClampedArray}|null,
+     *           after: {width:number,height:number,data:Uint8ClampedArray}|null}[]} pairs */
+    pushFaces(layer, pairs) {
+      const faces = pairs
+        .filter((p) => !sameTile(p.before, p.after))
+        .map((p) => ({
+          face: p.face,
+          before: copyTile(p.before),
+          after: copyTile(p.after),
+        }));
+      if (faces.length === 0) return;
+      push({ kind: 'faces', layer, faces });
     },
 
     /** Run a whole-atlas mutation. `fn` returns whether anything changed, and

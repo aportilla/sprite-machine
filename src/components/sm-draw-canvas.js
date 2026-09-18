@@ -29,6 +29,18 @@
 //                                            working buffer, by reference.
 //   sm-commit             { before, after }  one gesture's snapshot copies
 //   sm-selection          { bounds | null }  the selection outline, on change
+//   sm-selection-op       { op, … }          a selection operation, sent before
+//                                            the canvas writes it, so a listener
+//                                            reads the faces as they stood:
+//                                            move  { bounds, dx, dy }  bounds is
+//                                                  the lift origin, dx/dy the
+//                                                  offset. Sent at the lift too.
+//                                            flip  { bounds, axis }
+//                                            clear { bounds }
+//                                            end   a gesture closed, after any
+//                                                  sm-commit
+//                                            drop  the selection is forgotten
+//                                            A pasted selection sends none.
 //   sm-rect-drag          { bounds | null }  the rect drag's box, on change
 //   sm-pick-color         { rgb }            an eyedrop on a painted texel, in
 //                                            the art or the edge-hint band
@@ -235,6 +247,7 @@ export class SmDrawCanvas extends LitElement {
   // #startMove lifts only when there is no float, so a paste is never lifted
   // again.
   #sel = null; // {x0,y0,x1,y1} | null
+  #selPasted = false; // the selection came from a paste: it reports no operations
   #selFloat = null; // {width,height,data,opaque}, lifted on the first move
   #selBase = null; // #work with the marquee cleared, fixed for the selection's life
   #selOffset = { dx: 0, dy: 0 }; // the float's offset from #sel
@@ -405,6 +418,7 @@ export class SmDrawCanvas extends LitElement {
     // The selection goes with the buffer. The ants layer is cleared here for a
     // same-size swap.
     this.#sel = null;
+    this.#selPasted = false;
     this.#selFloat = null;
     this.#selBase = null;
     this.#selOffset = { dx: 0, dy: 0 };
@@ -1024,6 +1038,13 @@ export class SmDrawCanvas extends LitElement {
     );
   }
 
+  // Report a selection operation. A pasted selection reports none: its pixels
+  // are this face's alone.
+  #emitOp(detail) {
+    if (this.#selPasted) return;
+    this.#emit('sm-selection-op', detail);
+  }
+
   // Emit sm-selection when the outline changes.
   #notifySelection() {
     const next = this.#selOutline;
@@ -1080,6 +1101,7 @@ export class SmDrawCanvas extends LitElement {
 
   #startMarquee(e, t) {
     this.#selAnchor = t;
+    this.#selPasted = false;
     this.#sel = { x0: t.px, y0: t.py, x1: t.px, y1: t.py };
     this.#selOffset = { dx: 0, dy: 0 };
     this.#selDrag = 'marquee';
@@ -1131,6 +1153,13 @@ export class SmDrawCanvas extends LitElement {
   #startMove(e, t) {
     if (!this.#selFloat) this.#liftSelection();
     this.#beginGesture();
+    // Before any write, so a listener carves the faces as they stand.
+    this.#emitOp({
+      op: 'move',
+      bounds: this.#sel,
+      dx: this.#selOffset.dx,
+      dy: this.#selOffset.dy,
+    });
     this.#selAnchor = t;
     this.#selOffsetAtGrab = { ...this.#selOffset };
     this.#selLast = t;
@@ -1152,6 +1181,7 @@ export class SmDrawCanvas extends LitElement {
     const next = { dx: g.dx + d.dx, dy: g.dy + d.dy };
     if (next.dx === this.#selOffset.dx && next.dy === this.#selOffset.dy) return;
     this.#selOffset = next;
+    this.#emitOp({ op: 'move', bounds: this.#sel, dx: next.dx, dy: next.dy });
     if (this.#selFloat.opaque > 0) {
       this.#compositeSelection();
       this.#commitPixels();
@@ -1164,6 +1194,7 @@ export class SmDrawCanvas extends LitElement {
   // offset, over the same base and float.
   #endMove() {
     this.#endGesture();
+    this.#emitOp({ op: 'end' });
     this.#releaseSelPointer();
     this.#selDrag = null;
     this.#selShift = false;
@@ -1177,12 +1208,14 @@ export class SmDrawCanvas extends LitElement {
     const g = this.#selOffsetAtGrab;
     if (this.#selOffset.dx !== g.dx || this.#selOffset.dy !== g.dy) {
       this.#selOffset = { ...g };
+      this.#emitOp({ op: 'move', bounds: this.#sel, dx: g.dx, dy: g.dy });
       if (this.#selFloat.opaque > 0) {
         this.#compositeSelection();
         this.#repaint();
         this.#notifyLive();
       }
     }
+    this.#emitOp({ op: 'end' });
     this.#gestureBefore = null;
     this.#gestureChanged = false;
     this.#releaseSelPointer();
@@ -1198,7 +1231,9 @@ export class SmDrawCanvas extends LitElement {
     if (!this.#sel) return;
     this.#cancelMarquee();
     this.#cancelMove();
+    this.#emitOp({ op: 'drop' });
     this.#sel = null;
+    this.#selPasted = false;
     this.#selFloat = null;
     this.#selBase = null;
     this.#selOffset = { dx: 0, dy: 0 };
@@ -1216,10 +1251,12 @@ export class SmDrawCanvas extends LitElement {
   // transparent. A lifted selection leaves its base, so the art under it shows.
   #clearSelection() {
     this.#beginGesture();
+    this.#emitOp({ op: 'clear', bounds: this.#sel });
     if (this.#selFloat) this.#work.set(this.#selBase);
     else clearRect(this.#work, this.tileW, this.#sel);
     this.#commitChanged();
     this.#endGesture();
+    this.#emitOp({ op: 'end' });
     this.#dropSelection();
   }
 
@@ -1292,6 +1329,7 @@ export class SmDrawCanvas extends LitElement {
   pasteFloat(float, x, y) {
     if (this.#dragging || !this.#work || !this.tileW || !this.tileH) return;
     this.#dropSelection();
+    this.#selPasted = true;
     this.#sel = { x0: x, y0: y, x1: x + float.width - 1, y1: y + float.height - 1 };
     this.#selFloat = float;
     this.#selBase = this.#work.slice();
@@ -1324,6 +1362,7 @@ export class SmDrawCanvas extends LitElement {
   flipSelection(axis) {
     if (!this.#sel || this.#dragging) return;
     this.#beginGesture();
+    this.#emitOp({ op: 'flip', bounds: this.#sel, axis });
     const f = this.#selFloat;
     if (f) {
       const whole = { x0: 0, y0: 0, x1: f.width - 1, y1: f.height - 1 };
@@ -1334,6 +1373,7 @@ export class SmDrawCanvas extends LitElement {
     }
     this.#commitChanged();
     this.#endGesture();
+    this.#emitOp({ op: 'end' });
   }
 
   // Sampling and fill

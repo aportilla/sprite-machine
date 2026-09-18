@@ -1,4 +1,4 @@
-// Stateless canvas painters for <sm-draw-canvas>'s overlay layers: the pencil
+// Stateless canvas painters for the editor's overlay layers: the pencil
 // preview, the rect drag preview and the marching ants. They draw in system px,
 // so a 1px mark is one system px. Every mark is opaque black or white except the
 // ink previews.
@@ -91,6 +91,15 @@ export function drawMarchingAnts(g, v, bounds, phase) {
       phase
     )
   );
+}
+
+// A still ring of ants around a box already in system px, for the Full Sprite
+// View's projected rectangles. The caller clears the layer, and the canvas clips
+// a box that hangs off it.
+/** @param {CanvasRenderingContext2D} g
+ *  @param {{x:number, y:number, w:number, h:number}} frame */
+export function drawStillAnts(g, frame) {
+  fillRuns(g, antsRuns(frame, 0));
 }
 
 /** @param {CanvasRenderingContext2D} g

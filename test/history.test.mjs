@@ -69,6 +69,37 @@ test('a tile entry undoes and redoes through the doc structurally', () => {
   unsub();
 });
 
+test('a faces entry undoes and redoes every face as ONE step, and drops the pairs that changed nothing', () => {
+  const { doc, history, frames } = makeWorld();
+  // The top tile is column 2, row 0; its texel (1,1) is sheet (5,1).
+  const topAlpha = () => doc.get().atlasImage.data[(1 * 6 + 5) * 4 + 3];
+  doc.applyTileEdit(0, 'front', tile([0, 0, RED]));
+  doc.applyTileEdit(0, 'top', tile([1, 1, RED]));
+  frames.frame();
+  history.pushFaces(0, [
+    { face: 'front', before: tile(null), after: tile([0, 0, RED]) },
+    { face: 'top', before: tile(null), after: tile([1, 1, RED]) },
+    { face: 'left', before: tile([0, 0, GREEN]), after: tile([0, 0, GREEN]) },
+  ]);
+
+  let structural = 0;
+  const unsub = doc.subscribe(() => structural++);
+  assert.equal(history.undo(), true);
+  assert.equal(structural, 1, 'one restore for both faces');
+  assert.deepEqual([frontAlphaAt(doc), topAlpha()], [0, 0]);
+  assert.deepEqual(history.get(), { canUndo: false, canRedo: true }, 'one entry');
+  history.redo();
+  assert.deepEqual([frontAlphaAt(doc), topAlpha()], [255, 255]);
+  unsub();
+});
+
+test('a faces entry of pairs that all match is not recorded', () => {
+  const { history } = makeWorld();
+  history.pushFaces(0, [{ face: 'front', before: tile(null), after: tile(null) }]);
+  history.pushFaces(0, []);
+  assert.equal(history.get().canUndo, false);
+});
+
 test('an identical before/after pair is dropped, not recorded', () => {
   const { history } = makeWorld();
   history.pushTile(0, 'front', tile([0, 0, RED]), tile([0, 0, RED]));

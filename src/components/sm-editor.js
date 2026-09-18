@@ -2,14 +2,20 @@
 // selection commands it forwards. apps/sprite-editor/windows.js creates one per
 // document and keeps it until the document closes, so the canvas survives hides
 // and DOM re-orders.
+//
+// With `on all faces` on, the canvas's selection operations are also applied to
+// the layer's other faces (lib/select-faces.js). The option is read at a
+// selection's first operation and holds for its life. Each closed gesture is one
+// undo step over every face it changed.
 
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
 import { maxCornerRadius } from '../lib/rect.js';
+import { createFaceSelection } from '../lib/select-faces.js';
 import { session } from '../state/session.js';
 import { workspace } from '../state/workspace.js';
-import { editorViewModel } from '../state/derive.js';
+import { editorViewModel, editorOverlays } from '../state/derive.js';
 import { StoreController } from '../state/store-controller.js';
 import './sm-draw-canvas.js'; // registers <sm-draw-canvas>
 import { baseStyles } from './base-styles.js';
@@ -183,8 +189,9 @@ export class SmEditor extends LitElement {
             .active=${this.#isActive}
             @sm-live=${this.#onLive}
             @sm-commit=${this.#onCommit}
+            @sm-selection-op=${this.#onSelectionOp}
             @sm-gesture=${(e) => session.setGesture(e.detail.active)}
-            @sm-selection=${(e) => workspace.setSelection(this.ctx.key, e.detail.bounds)}
+            @sm-selection=${this.#onSelection}
             @sm-rect-drag=${(e) => workspace.setRectDrag(this.ctx.key, e.detail.bounds)}
             @sm-pick-color=${(e) => session.pickColor(e.detail.rgb)}
             @sm-pick-transparent=${() => session.setTool('eraser')}
@@ -204,11 +211,86 @@ export class SmEditor extends LitElement {
     this.ctx.doc.applyTileEdit(layer, face, tile);
   };
 
+  // One gesture over every face it changed. The canvas commits the edited face
+  // first, so its pair leads the entry.
   #onCommit = (e) => {
     if (!this.#vmKey) return;
     const { before, after } = e.detail;
     const { layer, face } = this.#vmKey;
-    this.ctx.history.pushTile(layer, face, before, after);
+    const pairs = this.#faceSel?.takePairs() ?? [];
+    if (pairs.length)
+      this.ctx.history.pushFaces(layer, [{ face, before, after }, ...pairs]);
+    else this.ctx.history.pushTile(layer, face, before, after);
+  };
+
+  #onSelection = (e) => {
+    const { bounds } = e.detail;
+    if (!bounds) this.#dropFaceSelection();
+    workspace.setSelection(this.ctx.key, bounds);
+  };
+
+  // The selection over the layer's other faces, and whether this selection's
+  // operations have begun (which settles the option for its life).
+  /** @type {ReturnType<typeof createFaceSelection>|null} */
+  #faceSel = null;
+  #faceSelLive = false;
+
+  #dropFaceSelection() {
+    this.#faceSel = null;
+    if (!this.#faceSelLive) return;
+    this.#faceSelLive = false;
+    if (this.ctx) workspace.setSelectionLifted(this.ctx.key, false);
+  }
+
+  // Lift the layer's other faces at the marquee. A document off the drawing
+  // convention takes no part: the checkbox is greyed for it.
+  #liftFaceSelection(bounds) {
+    const d = this.ctx.doc.get();
+    const { layer, face } = this.#vmKey;
+    const views = d.layers[layer];
+    if (!bounds || !views || !d.tileW || d.tileW !== d.tileH) return null;
+    if (Object.keys(d.transforms ?? {}).length > 0) return null;
+    return createFaceSelection(views, face, bounds, d.tileW);
+  }
+
+  // A selection operation from the canvas, before it writes the edited face.
+  #onSelectionOp = (e) => {
+    if (!this.#vmKey) return;
+    const { op, bounds } = e.detail;
+    if (op === 'drop') {
+      this.#dropFaceSelection();
+      return;
+    }
+    const { layer } = this.#vmKey;
+    // An `end` with pairs still waiting is a gesture the edited face sat out.
+    if (op === 'end') {
+      const pairs = this.#faceSel?.takePairs() ?? [];
+      if (pairs.length) this.ctx.history.pushFaces(layer, pairs);
+      return;
+    }
+    if (!this.#faceSelLive) {
+      this.#faceSelLive = true;
+      workspace.setSelectionLifted(this.ctx.key, true);
+      if (session.get().selectAllFaces) this.#faceSel = this.#liftFaceSelection(bounds);
+    }
+    if (!this.#faceSel) return;
+    const changed =
+      op === 'move'
+        ? this.#faceSel.moveTo(e.detail.dx, e.detail.dy)
+        : op === 'flip'
+          ? this.#faceSel.flip(e.detail.axis)
+          : this.#faceSel.clear();
+    if (changed.length === 0) return;
+    for (const face of changed) {
+      this.ctx.doc.applyTileEdit(layer, face, this.#faceSel.tile(face));
+    }
+    // The underlay is the opposite face and the hints are the neighbours, so
+    // both follow the move. `tile` keeps its identity, which resets the canvas.
+    this.#vm = {
+      ...this.#vm,
+      ...editorOverlays(this.ctx.doc.get(), this.#vmKey.face, layer),
+    };
+    this.requestUpdate();
   };
 
   // Fill with contiguous off and all faces on: recolor the layer's six tiles

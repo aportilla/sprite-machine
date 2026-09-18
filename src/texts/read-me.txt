@@ -17,7 +17,7 @@ The editor has several windows:
   The drawing canvas for the 2D pixel art faces.
   
   TOOLS
-  Basic pixel art tools.
+  Basic pixel art tools. The selection tool's 'on all faces' option moves, flips and deletes a selection on all six faces at once, each the way it sees what you selected.
   
   COLORS
   A palette of the colors used in the document.

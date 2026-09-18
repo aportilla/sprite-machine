@@ -155,8 +155,9 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   the current-ink swatch and the tool's options. It has no tool-name caption,
   and no label is dimmed. A dotted `<vf-separator vertical>` stands between
   the swatch and the options, between the rect's radius field and its size
-  readout, and between the selection's size readout and its flip buttons. A
-  control and its own readout have no separator.
+  readout, and around the selection's flip buttons, between them and its size
+  readout and between them and its all-faces box. A control and its own readout
+  have no separator.
 - **Pencil**: a tip-shape popup (`circle` / `square`, circle at every load), a
   size slider (1 to the tile size) and an `N px` readout. The circle tip is the
   disc inscribed in the N×N box, the square the whole box. `brushRows` defines
@@ -185,10 +186,40 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   texel. One texel is the smallest selection. The options strip shows its
   `W × H`. Texels off the tile at the drop are lost (Undo restores them). A
   move gesture is one undo step, and a marquee writes nothing. A structural
-  change drops the selection, and each document window has its own. A move
-  edits only this face, which can break registration. The texels are lifted
-  once, on the first move press, and each offset composites them over the base
-  (`lib/select.js`), so a drag doesn't smear what it crosses.
+  change drops the selection, and each document window has its own. The texels
+  are lifted once, on the first move press, and each offset composites them over
+  the base (`lib/select.js`), so a drag doesn't smear what it crosses. A move
+  edits only this face unless **on all faces** is checked.
+- **On all faces** widens a move, a flip and Delete to the edited layer's other
+  five faces (`lib/select-faces.js`, on at every load). The marquee is read as
+  a box through the layer's lattice: its columns and rows, and the whole depth
+  behind it. Each image axis of another face takes the box's interval on the
+  world axis it runs along, reversed when the two faces run it the other way,
+  and the whole tile on the edited face's depth axis, all derived from
+  `VIEW_IMAGE_AXES`. So the opposite face takes the rectangle mirrored left to
+  right and the move with `dx` reversed, and a neighbour takes a full-width or
+  full-height band and moves along the shared axis alone.
+  Which texels move is settled in the carve. At the first operation the layer is
+  built once, and its solid voxels are split in two: those behind the rectangle
+  (the part) and the rest. Each face with art of its own gets a picture of each,
+  a color and a depth per texel from the nearest voxel of that class on the
+  texel's line of sight, and its strays, painted texels with no voxel behind
+  them. At each offset the part's picture moves and the face is composited by
+  depth: the nearer picture at a texel, the part on a tie, the strays where
+  neither reaches. So a part moves without cutting the body it sits on, a part
+  moved under an overhang leaves the overhang's texels alone and comes back when
+  it moves out, and ⌘A moves every painted texel of every face. A texel's color
+  is its own bytes where its voxel was the nearest before the move, else the
+  model's color for that surface (`faceColor`), else the texel's bytes. Strays
+  go with a band that moves whole, which is when the rest has no texel in it.
+  The edited face is not depth-tested: its float paints over its base as always.
+  A face with no art stays mirror-derived, another layer never holds a texel
+  back, and a paste is never projected. The Full Sprite View outlines the
+  projected rectangle on the other five cells while the box is on and a
+  selection is up. The box is read at a selection's first operation and holds
+  for its life, so it is greyed from then until the selection drops, and for a
+  document with non-square tiles or a view transform. Each closed gesture is one
+  undo step over every face it changed (`history` kind `faces`).
 - **Flip Horizontal** and **Flip Vertical** follow the selection's `W × H` in
   the options strip and are greyed while the window has no selection. The
   readout keeps room for `64 × 64`, so the buttons hold still as the size
@@ -196,10 +227,14 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   within its rectangle, left to right or top to bottom, as one undo step, and
   the selection stays up. A marquee flips its texels in place. A moved
   selection or a paste flips its whole float, off-tile texels included, and its
-  transparent texels show the art under them, as in a move.
+  transparent texels show the art under them, as in a move. Under **on all
+  faces** it also reaches the opposite face and the two neighbours that share
+  the flipped axis; the two that look along it keep their pictures, at new
+  depths.
 - **Delete or Backspace** clears the selection as one undo step and drops it.
   A marquee's texels go transparent. A moved selection or a paste removes its
-  own pixels, and the art under them shows. The key does nothing during a
+  own pixels, and the art under them shows. Under **on all faces** every face
+  shows the rest alone, and its strays. The key does nothing during a
   drag, with ⌘, ⌃ or ⌥ held, while a menu or dialog is open, or while a text
   field has focus.
 - **Copy, Paste and Select All** (Edit, ⌘C, ⌘V, ⌘A) work on the active
@@ -1175,7 +1210,8 @@ packages/core/  the engine, published as `sprite-machine`. No DOM, THREE only in
                 optional peer), the index barrel. test/, bin/ (the CLI),
                 README.md (the API).
 src/lib/        editor domain, no THREE or DOM: ring geometry, rasterizers (rect,
-                fill, select, brush, ants), edges (edge hints), layers (blocks,
+                fill, select, brush, ants), select-faces (a selection through the
+                lattice), edges (edge hints), layers (blocks,
                 names, the underlay compositor), sheet-shape (the shape rule: tile
                 and layer count), icon (document icon rules), zip, color, palette
                 (the named palettes, a document's colors), sprite-data (built-in
@@ -1244,13 +1280,15 @@ the few light-DOM rules.
 touch is a private field in `<sm-draw-canvas>`, so a pencil drag never schedules
 a render. Each document's doc slice has two channels: `subscribe` for structural
 changes (load, resize, replace all, a layer added, removed, moved or renamed, undo
-restore) and `onLive` for stroke-rate edits, coalesced per animation frame, one
-notification per edited layer and face. `applyTileEdit` stores the working
-buffer by reference without notifying `subscribe`, so the underlay recomputes
-only on a face or layer switch or a structural change. The rebuilder keeps one
-`buildVoxels` result per layer, so a stroke rebuilds its own layer and re-unions
-the rest from the cache, and a layer switch under single layer meshes from the
-cache without carving. Every consumer of the canonical atlas (save,
+restore) and `onLive` for stroke-rate edits, coalesced per animation frame: one
+notification per frame carrying that frame's edits, the latest per layer and
+face. `applyTileEdit` stores the working buffer by reference without notifying
+`subscribe`, so the underlay recomputes only on a face or layer switch, a
+structural change or a selection projected onto the other faces. The rebuilder
+keeps one `buildVoxels` result per layer, so a stroke rebuilds its own layer and
+re-unions the rest from the cache, a projected move over six faces rebuilds the
+layer once, and a layer switch under single layer meshes from the cache without
+carving. Every consumer of the canonical atlas (save,
 export, resize, replace all, an undo snapshot) calls `drain()` first. Canvas
 backing stores are sized in JS, because a template-bound width clears them.
 Editable `vf-*` values are bound with `live()`, so a re-render re-syncs after
@@ -1287,11 +1325,14 @@ release, and a layer key waits while it is set.
   (called by `scene/rebuilder.js`) to a Web Worker.
 - **Autosave.** Not planned. Save is explicit, `beforeunload` warns about unsaved
   changes, and untitled windows don't survive a reload.
-- **Selection.** A registered move: an "on all faces" checkbox, like the fill
-  tool's, that moves the matching texels on every face (a FRONT rect's columns on
-  TOP/BOTTOM, its rows on LEFT/RIGHT, its mirror on BACK), and the same for a
-  paste onto every face at once. A lasso. Cut ⌘X and an Edit → Clear item over
-  the selection. A size cap on a pasted image.
+- **Selection.** A registered paste, the other half of "on all faces": what a
+  pasted picture, which holds one face's pixels, should put on the others is its
+  own question. Every layer at once, to move a whole layered document in one
+  drag. A flip exchanging the art of the two faces that look along the flipped
+  axis, so a car flipped end for end takes its grille with it. A box with a
+  depth limit, so a marquee need not take both of a pair of wheels. A lasso.
+  Cut ⌘X and an Edit → Clear item over the selection. A size cap on a pasted
+  image.
 - **Finder.** Duplicate ⌘D for the selected icons, into their own container and
   named like a paste.
 - **Alerts.** A 32×32 1-bit caution icon in the Empty Trash, unsaved-changes and

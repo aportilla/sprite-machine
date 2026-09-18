@@ -11,18 +11,43 @@ export function mirrorImage(img, axis) {
 }
 
 /**
- * The editor's view model for one face of one layer:
- *   - `tile`: the face's own art in the layer by reference, or a fresh
- *     transparent tile. The canvas resets its working buffer only when the
- *     identity changes.
- *   - `wasDerived`: the face has no art of its own. It stays derived until a
- *     pixel changes.
+ * The editor's two registration aids for one face of one layer, which a
+ * projected selection move on the other faces changes:
  *   - `onionBehind`: the underlay, one composited tile: the layer's opposite
  *     face mirrored, then each other layer in block order, its opposite face
  *     mirrored under its art on this face, as the model colors it. Later over
  *     earlier. Null when all of those are empty.
  *   - `edgeHints`: the layer's four neighbouring faces' edge texels, one texel
  *     deep around the tile (lib/edges.js). Other layers never show there.
+ * @param {{layers: Record<string, {width:number,height:number,data:Uint8ClampedArray}|null>[],
+ *          tileW: number, tileH: number}} docState
+ * @param {string} face
+ * @param {number} layer
+ */
+export function editorOverlays(docState, face, layer) {
+  const { layers, tileW, tileH } = docState;
+  const views = layers[layer] ?? {};
+  const opposite = VIEW_OPPOSITE[face];
+  const mirrored = (art) => (art ? mirrorImage(art, MIRROR_AXIS) : null);
+  return {
+    onionBehind: compositeTiles([
+      mirrored(views[opposite]),
+      ...layers.flatMap((other, k) =>
+        k === layer ? [] : [mirrored(other[opposite]), other[face] || null]
+      ),
+    ]),
+    edgeHints: edgeHintFrame(views, tileW, tileH, face),
+  };
+}
+
+/**
+ * The editor's view model for one face of one layer:
+ *   - `tile`: the face's own art in the layer by reference, or a fresh
+ *     transparent tile. The canvas resets its working buffer only when the
+ *     identity changes.
+ *   - `wasDerived`: the face has no art of its own. It stays derived until a
+ *     pixel changes.
+ *   - `onionBehind` and `edgeHints`: editorOverlays above.
  * A stroke on this face of this layer changes none of the underlay or hints,
  * so they recompute only on a face or layer switch or a structural change.
  *
@@ -33,10 +58,7 @@ export function mirrorImage(img, axis) {
  */
 export function editorViewModel(docState, face, layer) {
   const { layers, tileW, tileH } = docState;
-  const views = layers[layer] ?? {};
-  const existing = views[face] || null;
-  const opposite = VIEW_OPPOSITE[face];
-  const mirrored = (art) => (art ? mirrorImage(art, MIRROR_AXIS) : null);
+  const existing = (layers[layer] ?? {})[face] || null;
   return {
     tile: existing || {
       width: tileW,
@@ -44,12 +66,6 @@ export function editorViewModel(docState, face, layer) {
       data: new Uint8ClampedArray(tileW * tileH * 4),
     },
     wasDerived: existing == null,
-    onionBehind: compositeTiles([
-      mirrored(views[opposite]),
-      ...layers.flatMap((other, k) =>
-        k === layer ? [] : [mirrored(other[opposite]), other[face] || null]
-      ),
-    ]),
-    edgeHints: edgeHintFrame(views, tileW, tileH, face),
+    ...editorOverlays(docState, face, layer),
   };
 }

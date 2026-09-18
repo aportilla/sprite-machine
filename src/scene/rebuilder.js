@@ -4,8 +4,8 @@
 // document the stage is emptied.
 //
 // It keeps one buildVoxels result per layer. A live flush rebuilds only the
-// layer it edited and a re-slice rebuilds every layer, then the union is
-// recomputed from the cache. A rename leaves the layers as they are and
+// layers its edits touched and a re-slice rebuilds every layer, then the union
+// is recomputed from the cache. A rename leaves the layers as they are and
 // rebuilds nothing.
 //
 // It holds two meshes: the whole model's and the one in the stage. While
@@ -103,7 +103,7 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     whole = null;
   }
 
-  /** @param {number|null} [edited]  the layer a live flush edited */
+  /** @param {import('../state/doc.js').LiveEdit[]|null} [edited]  a live flush's edits */
   function rebuild(edited = null) {
     const ctx = activeCtx;
     if (!ctx) {
@@ -120,8 +120,8 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     if (d.layers !== cachedLayers) {
       cachedLayers = d.layers;
       cache = d.layers.map(() => null);
-    } else if (edited != null) {
-      cache[edited] = null;
+    } else if (edited) {
+      for (const e of edited) cache[e.layer] = null;
     } else if (layer !== shownLayer) {
       remodel = false;
     } else {
@@ -206,7 +206,7 @@ export function initRebuilder(stage, { flat = false, diag = false, onMesh } = {}
     }
     const unsubs = [
       ctx.doc.subscribe(() => rebuild()),
-      ctx.doc.onLive((_, edit) => rebuild(edit.layer)),
+      ctx.doc.onLive((_, edits) => rebuild(edits)),
     ];
     rebuild();
     return () => unsubs.forEach((u) => u());

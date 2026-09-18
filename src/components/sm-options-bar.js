@@ -59,6 +59,16 @@ export class SmOptionsBar extends LitElement {
     return workspace.active()?.selection.get().rect ?? null;
   }
 
+  // The all-faces box is greyed once a selection's first operation has settled
+  // it, and for a document off the drawing convention, whose faces the
+  // projection can't read (only a dropped PNG carries one).
+  get #selectAllFacesDisabled() {
+    const d = this.#activeDoc;
+    if (!d || !d.tileW || d.tileW !== d.tileH) return true;
+    if (Object.keys(d.transforms ?? {}).length > 0) return true;
+    return !!workspace.active()?.selection.get().lifted;
+  }
+
   // Clamp bounds from the tile size. The session actions do the clamping.
   get #activeDoc() {
     return workspace.active()?.doc.get() ?? null;
@@ -96,6 +106,8 @@ export class SmOptionsBar extends LitElement {
         .radiusMax=${this.#radiusMax}
         .fillContiguous=${s.fillContiguous}
         .fillAllFaces=${s.fillAllFaces}
+        .selectAllFaces=${s.selectAllFaces}
+        .selectAllFacesDisabled=${this.#selectAllFacesDisabled}
         .selection=${this.#activeSelection}
         .rectDrag=${this.#activeRectDrag}
         @sm-set-pencil-size=${(e) => session.setPencilSize(e.detail.n, this.#brushMax)}
@@ -105,6 +117,7 @@ export class SmOptionsBar extends LitElement {
         @sm-set-corner-radius=${(e) =>
           session.setCornerRadius(e.detail.n, this.#radiusMax)}
         @sm-set-fill-opts=${this.#onFillOpts}
+        @sm-set-select-opts=${(e) => session.setSelectAllFaces(e.detail.allFaces)}
         @sm-flip-selection=${this.#onFlip}
       ></sm-tool-options>
     `;

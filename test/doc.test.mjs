@@ -95,23 +95,26 @@ test('applyTileEdit: silent on the change channel, view stored by reference', ()
   assert.deepEqual(getPx(doc.get().atlasImage, 3, 1), GREEN, 'the frame blits the sheet');
 });
 
-test('a tile edit blits into its own layer’s block, and edits to two layers in one frame both land', () => {
+test('a tile edit blits into its own layer’s block, and edits to two layers in one frame both land in ONE live call', () => {
   const fs = fakeScheduler();
   const doc = createDoc(fs);
   doc.loadAtlas(twoLayerSheet(), {}, { layers: 2 });
-  /** @type {object[]} */
-  const edits = [];
-  doc.onLive((_, edit) => edits.push(edit));
+  /** @type {object[][]} */
+  const calls = [];
+  doc.onLive((_, edits) => calls.push(edits));
   doc.applyTileEdit(1, 'front', workTile([1, 1, GREEN]));
   doc.applyTileEdit(0, 'top', workTile([0, 0, GREEN]));
+  doc.applyTileEdit(1, 'front', workTile([1, 1, GREEN]));
   fs.frame();
   const img = doc.get().atlasImage;
   assert.deepEqual(getPx(img, 3, 5), GREEN, 'layer 1 front (1,1)');
   assert.deepEqual(getPx(img, 3, 1), CLEAR, 'not layer 0');
   assert.deepEqual(getPx(img, 4, 0), GREEN, 'layer 0 top (0,0)');
-  assert.deepEqual(edits, [
-    { layer: 1, face: 'front' },
-    { layer: 0, face: 'top' },
+  assert.deepEqual(calls, [
+    [
+      { layer: 1, face: 'front' },
+      { layer: 0, face: 'top' },
+    ],
   ]);
 });
 
@@ -248,6 +251,22 @@ test('restoreTile addresses one layer', () => {
   assert.deepEqual(getPx(doc.get().atlasImage, 2, 4), CLEAR);
   assert.equal(doc.get().layers[1].front, null);
   assert.deepEqual(getPx(doc.get().atlasImage, 2, 0), RED, 'layer 0 untouched');
+});
+
+test('restoreTiles blits every face into the layer’s block and notifies once', () => {
+  const doc = createDoc(fakeScheduler());
+  doc.loadAtlas(twoLayerSheet(), {}, { layers: 2 });
+  let changes = 0;
+  doc.subscribe(() => changes++);
+  doc.restoreTiles(1, { front: null, top: workTile([0, 0, GREEN]) });
+  assert.equal(changes, 1, 'one re-slice for both faces');
+  const s = doc.get();
+  assert.deepEqual(getPx(s.atlasImage, 2, 4), CLEAR, 'layer 1 front cleared');
+  assert.equal(s.layers[1].front, null, 'and reverted to derived');
+  assert.deepEqual(getPx(s.atlasImage, 4, 4), GREEN, 'layer 1 top (0,0)');
+  assert.deepEqual(getPx(s.atlasImage, 2, 0), RED, 'layer 0 untouched');
+  doc.restoreTiles(1, {});
+  assert.equal(changes, 1, 'nothing to restore, nothing notified');
 });
 
 test('addLayer and removeLayer change the count without a new sheet generation, and report whether they did', () => {
