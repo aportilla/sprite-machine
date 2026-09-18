@@ -10,8 +10,7 @@ const pk = (name) => packRGBA(...C[name], 255);
 
 const F = { px: 0, nx: 1, py: 2, ny: 3, pz: 4, nz: 5 };
 
-// A single solid voxel. Every face is exposed and is the first hit from its own
-// normal, so the mirror-fill depth gate always passes.
+// A single solid voxel: every face is exposed.
 const UNIT = { nx: 1, ny: 1, nz: 1 };
 const UNIT_SOLID = new Uint8Array([1]);
 const UNIT_MASK = extractSurface(UNIT_SOLID, UNIT).surfaceMask;
@@ -50,10 +49,10 @@ test('makeSnapper maps a near-palette color to its nearest entry', () => {
 // mirror.z is on. Top's teal gives the off path a different color to relax to.
 test('mirror-fill z is gated by mirror.z (off -> relaxes to a different color)', () => {
   const gviews = { ...gv1('back', pk('B')), ...gv1('top', pk('T')) };
-  const on = colorize(UNIT_SOLID, UNIT_MASK, gviews, UNIT, {
+  const on = colorize(UNIT_MASK, gviews, UNIT, {
     mirror: { x: false, y: false, z: true },
   });
-  const off = colorize(UNIT_SOLID, UNIT_MASK, gviews, UNIT, {
+  const off = colorize(UNIT_MASK, gviews, UNIT, {
     mirror: { x: false, y: false, z: false },
   });
   assert.equal(faceC(on, 'nz'), pk('B')); // the facing view paints its own face
@@ -63,7 +62,7 @@ test('mirror-fill z is gated by mirror.z (off -> relaxes to a different color)',
 });
 
 test('mirror-fill y: absent top -> py takes the bottom view color', () => {
-  const r = colorize(UNIT_SOLID, UNIT_MASK, gv1('bottom', pk('G')), UNIT, {
+  const r = colorize(UNIT_MASK, gv1('bottom', pk('G')), UNIT, {
     mirror: { x: false, y: true, z: false },
   });
   assert.equal(faceC(r, 'ny'), pk('G')); // facing (bottom) paints ny
@@ -71,7 +70,7 @@ test('mirror-fill y: absent top -> py takes the bottom view color', () => {
 });
 
 test('mirror-fill x: absent left -> px takes the right view color', () => {
-  const r = colorize(UNIT_SOLID, UNIT_MASK, gv1('right', pk('N')), UNIT, {
+  const r = colorize(UNIT_MASK, gv1('right', pk('N')), UNIT, {
     mirror: { x: true, y: false, z: false },
   });
   assert.equal(faceC(r, 'nx'), pk('N')); // facing (right) paints nx
@@ -88,7 +87,7 @@ test('relaxation: an un-viewed face averages its colored neighbors (mirror off)'
   const Bl = packRGBA(0, 0, 240, 255);
   const P = packRGBA(120, 0, 120, 255);
   const gviews = { ...gv1('front', R), ...gv1('top', Bl), ...gv1('left', P) };
-  const r = colorize(UNIT_SOLID, UNIT_MASK, gviews, UNIT, {
+  const r = colorize(UNIT_MASK, gviews, UNIT, {
     mirror: { x: false, y: false, z: false },
   });
   // Facing faces keep their view colors.
@@ -129,7 +128,7 @@ test('dominant fallback: an isolated face takes the majority body color', () => 
       imgH: 1,
     },
   };
-  const r = colorize(sol, sm, gviews, d, { mirror: { x: false, y: false, z: false } });
+  const r = colorize(sm, gviews, d, { mirror: { x: false, y: false, z: false } });
   const co = (z, f) => r.faceColor.get(voxIndex(0, 0, z, d) * 6 + F[f]);
   assert.deepEqual([...r.palette].map((c) => c >>> 0).sort(), [Maj, Min].sort());
   assert.equal(co(0, 'px'), Min);
@@ -140,7 +139,7 @@ test('dominant fallback: an isolated face takes the majority body color', () => 
 });
 
 test('dominant fallback: no views -> neutral gray on every face', () => {
-  const r = colorize(UNIT_SOLID, UNIT_MASK, {}, UNIT, {
+  const r = colorize(UNIT_MASK, {}, UNIT, {
     mirror: { x: false, y: false, z: false },
   });
   assert.equal(r.palette.length, 0);

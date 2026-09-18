@@ -209,8 +209,10 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   neither reaches. So a part moves without cutting the body it sits on, a part
   moved under an overhang leaves the overhang's texels alone and comes back when
   it moves out, and ⌘A moves every painted texel of every face. A texel's color
-  is its own bytes where its voxel was the nearest before the move, else the
-  model's color for that surface (`faceColor`), else the texel's bytes. Strays
+  is its own bytes where its voxel was the nearest before the move, since that
+  art was its own, and its own picture's nearest color where it was hidden: the
+  texel's bytes there belong to whatever hid it, and keeping them would leave a
+  copy of the part behind when it moves away. Strays
   go with a band that moves whole, which is when the rest has no texel in it.
   The edited face is not depth-tested: its float paints over its base as always.
   A face with no art stays mirror-derived, another layer never holds a texel
@@ -1105,10 +1107,14 @@ faces and colors its surface. 1 pixel = 1 voxel = 1 cube.
    it.
 4. **Surface extract**. Keep voxels with at least one exposed face, each with a
    6-bit exposure mask.
-5. **Color**. Each exposed face takes the color of the view that sees it first
-   along its axis (depth-aware), snapped to the sprite palette. A face no view
-   sees falls back to the mirrored opposite view, then the neighbor average,
-   then the dominant body color.
+5. **Color**. Each exposed face takes the color its facing view paints at that
+   voxel, snapped to the sprite palette. A view paints every face along its
+   line, not only the first it meets, so a wall inside a notch takes the art
+   drawn in front of it. A face its own view leaves blank takes the mirrored
+   opposite view's, so the facing view wins wherever it has paint. Step 3 keeps
+   a voxel only where every plane with a view covers it, so every face whose
+   axis has a view traces back to a painted texel; the neighbor average and the
+   dominant body color are left for an axis no view observes.
 6. **Mesh**. Exposed faces merge on occupancy alone into coplanar regions
    (`regions.js`). A region is a plane's exposed faces plus the gable caps of the
    wedge blocks ending on it, traced as one lattice polygon (holes included, each

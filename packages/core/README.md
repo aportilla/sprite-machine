@@ -171,10 +171,13 @@ union's lattice and builds layer `k` alone, where it sits in the whole model.
 3. **Carve**: a voxel is solid iff it is inside every provided view's
    silhouette (a boolean AND of extruded masks).
 4. **Surface**: keep the voxels with an exposed face, as six-bit masks.
-5. **Colour**: each exposed face takes the colour of the view that sees it
-   first along its axis (depth-aware first hit), snapped to the sprite's
-   palette. Faces no view sees fall back to the mirrored opposite, then the
-   neighbour average, then the dominant body colour.
+5. **Colour**: each exposed face takes the colour its facing view paints at
+   that voxel, snapped to the sprite's palette. A view paints every face along
+   its line, not only the first, so a wall inside a notch takes the art in
+   front of it. A face its own view leaves blank falls back to the mirrored
+   opposite, then the neighbour average, then the dominant body colour. The
+   carve keeps a voxel only where every plane group covers it, so every face
+   whose axis has a view traces back to a painted texel.
 6. **Mesh**: exposed faces merge on occupancy alone into coplanar regions (holes
    included), triangulated by earcut. Wedges fill every concave notch whose
    covered faces share a material: a 45° wedge fills a one-by-one step, and

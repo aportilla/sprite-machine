@@ -39,7 +39,7 @@ export function buildVoxels(rawViews, opts = {}) {
   const gviews = gridViews(ingested, dims);
   const solid = carve(gviews, dims);
   const { surfaceMask, count, solidCount } = extractSurface(solid, dims);
-  const { faceColor, palette } = colorize(solid, surfaceMask, gviews, dims, opts);
+  const { faceColor, palette } = colorize(surfaceMask, gviews, dims, opts);
   if (palette.length === 0 && Object.keys(ingested).length > 0) {
     warnings.push('No opaque pixels found — every provided sprite is fully transparent.');
   }

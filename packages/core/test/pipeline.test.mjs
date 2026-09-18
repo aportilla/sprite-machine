@@ -33,9 +33,9 @@ test('2x1x1 slab: independent axis resolutions', () => {
   assert.equal(r.solidCount, 2);
 });
 
-// A gap in z makes two blocks share one front column. Only the front-most block
-// takes the front color.
-test('L-step: occluded +z face is not smeared with the front color', () => {
+// A gap in z makes two blocks share one front column. The front view passes
+// through the gap and paints the +z face of both.
+test('L-step: the front view paints every +z face on its line, not just the first', () => {
   const r = buildVoxels(
     {
       front: fill(1, 1, 'R'), // nx=1, ny=1
@@ -50,8 +50,23 @@ test('L-step: occluded +z face is not smeared with the front color', () => {
   assert.equal(r.solid[voxIndex(0, 0, 0, r.dims)], 1);
   assert.equal(r.solid[voxIndex(0, 0, 2, r.dims)], 1);
   assert.equal(colorOf(r, 0, 0, 2, 'pz'), pk('R'));
-  assert.notEqual(colorOf(r, 0, 0, 0, 'pz'), pk('R'));
+  assert.equal(colorOf(r, 0, 0, 0, 'pz'), pk('R'), 'the wall inside the notch too');
   assert.equal(colorOf(r, 0, 0, 2, 'py'), pk('G')); // top of front block
+});
+
+// The same notch with a back view of its own: each side takes the view that
+// faces it, and an opposite view fills only what a view leaves blank.
+test('a notch: +z faces take the front view, -z faces the back view', () => {
+  const r = buildVoxels({
+    front: fill(1, 1, 'R'),
+    back: fill(1, 1, 'M'),
+    right: fill(3, 1, 'B'),
+    top: img(['G', '.', 'T']),
+  });
+  assert.equal(colorOf(r, 0, 0, 2, 'pz'), pk('R'));
+  assert.equal(colorOf(r, 0, 0, 0, 'pz'), pk('R'), 'inside the notch');
+  assert.equal(colorOf(r, 0, 0, 0, 'nz'), pk('M'));
+  assert.equal(colorOf(r, 0, 0, 2, 'nz'), pk('M'), 'inside the notch');
 });
 
 // Top and bottom draw an outer-column protrusion one row apart. Carving unions

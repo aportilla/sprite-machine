@@ -170,17 +170,19 @@ viewer, comes out in front, and Left then shows the part.
 - Where its voxel was the nearest on that line before the move, the texel's
   own bytes. That art was its own.
 - Where its voxel was hidden behind the other picture's, the art there was
-  never its own. It takes the color the model gave that surface, which is what
-  the 3D View has been showing (`faceColor`: a palette color, from the
-  surfaces around it). A surface that was buried, with no air in front of it,
-  has no model color and takes the texel's bytes (decision 12).
+  never its own — the texel's bytes belong to whatever hid it, and keeping them
+  would leave a copy of that behind when it moves away. It takes the nearest
+  color in its own picture instead, spreading out from the texels that picture
+  owned, and keeps the bytes only where no color of its own reaches it
+  (decision 12).
 
 On Top, in the Truck example, the hood is the rest alone and is untouched. The
 roof's texels are in both pictures, with the roof nearer, so the art there is
 the part's. Drag the upper cab back by 2 and the roof's art goes 2 rows back
 with it. The 2 front rows it leaves are the lower cab's now. The lower cab's
-top was buried under the roof, so those rows keep the bytes they have, and the
-spot may want a touch-up. The silhouette is right.
+top was buried under the roof, so those rows take the color of the lower cab's
+own top nearby, and the spot may want a touch-up. The silhouette is right, and
+the roof's art is not left behind in two places.
 
 **Strays.** A stray has no voxel, so it has no depth: a part that lands on it
 covers it, and it shows again when the part moves on. A stray goes with the
@@ -512,7 +514,8 @@ Step 3, `test/select-faces.test.mjs`, on small hand-built layers:
   face moving.
 - The colors: a picture whose voxel was nearest keeps the texel's bytes; one
   whose voxel was hidden takes `faceColor` where the surface was exposed, and
-  the texel's bytes where it was buried.
+  its own picture's nearest color where it was buried, so a part that moves
+  away leaves no copy of itself behind.
 - A stray stays when the rest has a texel in its face's band, and moves when
   it has none. A part covers a stray it lands on, and the stray returns when
   the part moves on.
@@ -620,7 +623,14 @@ replacing one:
     the move, and the texel's own bytes where the surface was buried and the
     model had none. It is a palette color, written only where no art existed
     for that surface. The alternative is always the texel's bytes, which
-    paints a part that comes out in the color of what hid it.
+    paints a part that comes out in the color of what hid it. _Amended
+    2026-09-18, on the Truck: the bytes fallback left a copy of the part behind
+    wherever it sat against the body, since a hidden surface's texel holds the
+    part's own art (the hood's headlights on the Cab layer's Front face). The
+    model's color is no help either — `colorize` now paints a face from the view
+    that faces it whatever lies in front, so for a hidden surface it is that
+    same art. Every hidden surface takes the nearest color in its own picture,
+    and the bytes stand only where no color of its own reaches it._
 13. **The edited face.** Recommended: its float paints over its base with no
     depth test, as it always has. It is the face in view, and what is dragged
     there is what shows. The alternative tests it too, so a float slides

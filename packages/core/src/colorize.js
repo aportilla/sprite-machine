@@ -1,23 +1,21 @@
 // Colorize: a color for every exposed face of every surface voxel. For a face with
 // outward normal n, the first of:
-//   1. The facing view, when nothing solid lies beyond the face along n. The depth
-//      test keeps a recessed wall from taking a protruding pixel's color.
-//   2. The opposite view, under the same depth test, when mirror-fill is on for
-//      the face's axis.
+//   1. The facing view's texel for the voxel. A view paints every face it passes
+//      through, not only the first it meets, so a wall inside a notch takes the
+//      art drawn in front of it.
+//   2. The opposite view's texel, when mirror-fill is on for the face's axis. The
+//      facing view wins where it has paint of its own; the opposite fills what it
+//      leaves blank.
 //   3. The average of already-colored neighbor faces.
 //   4. The dominant body color.
+// The carve keeps a voxel only where every plane group covers it, so 1 or 2 finds
+// paint for every face whose axis has a view: every face traces back to a texel
+// someone painted. 3 and 4 are left for an axis no view observes.
 // Sampled and averaged colors snap to the nearest palette color.
 
 import { unpackRGBA, packRGBA } from './ingest.js';
 import { voxIndex, unvoxIndex } from './carve.js';
-import {
-  VIEWS,
-  FACE_KEYS,
-  FACE_NORMAL,
-  FACE_TO_VIEW,
-  FACE_OPPOSITE,
-  FACE_AXIS,
-} from './views.js';
+import { VIEWS, FACE_KEYS, FACE_TO_VIEW, FACE_OPPOSITE, FACE_AXIS } from './views.js';
 import { DEFAULT_MIRROR } from './constants.js';
 
 /** The distinct colors of all solid view texels. */
@@ -60,21 +58,6 @@ export function makeSnapper(palette) {
   };
 }
 
-/** True when no solid voxel lies beyond face faceKey of (x, y, z) along its normal. */
-function firstHitFromFace(solid, dims, x, y, z, faceKey) {
-  const [nx, ny, nz] = FACE_NORMAL[faceKey];
-  let cx = x + nx,
-    cy = y + ny,
-    cz = z + nz;
-  while (cx >= 0 && cy >= 0 && cz >= 0 && cx < dims.nx && cy < dims.ny && cz < dims.nz) {
-    if (solid[voxIndex(cx, cy, cz, dims)]) return false; // occluded
-    cx += nx;
-    cy += ny;
-    cz += nz;
-  }
-  return true;
-}
-
 // Reused projection scratch. sampleView reads it immediately.
 const _sampleP = { u: 0, v: 0 };
 function sampleView(gv, name, x, y, z, dims) {
@@ -84,7 +67,6 @@ function sampleView(gv, name, x, y, z, dims) {
 }
 
 /**
- * @param {Uint8Array} solid
  * @param {Uint8Array} surfaceMask  6-bit exposure per voxel
  * @param {Record<string,{occ,rgb,imgW,imgH}>} gviews
  * @param {{nx,ny,nz}} dims
@@ -92,7 +74,7 @@ function sampleView(gv, name, x, y, z, dims) {
  * @returns {{faceColor: Map<number, number>, palette: number[]}}
  *   faceColor key = idx*6 + faceIndex, value = packed RGBA; palette = solid colors.
  */
-export function colorize(solid, surfaceMask, gviews, dims, opts = {}) {
+export function colorize(surfaceMask, gviews, dims, opts = {}) {
   const mirror = { ...DEFAULT_MIRROR, ...(opts.mirror || {}) };
   const palette = buildPalette(gviews);
   const snap = palette.length ? makeSnapper(palette) : (c) => c;
@@ -109,23 +91,15 @@ export function colorize(solid, surfaceMask, gviews, dims, opts = {}) {
       const faceKey = FACE_KEYS[f];
       const key = idx * 6 + f;
 
-      // Memoized so the depth ray is marched at most once per face.
-      let firstHit;
-      const isFirstHit = () =>
-        (firstHit ??= firstHitFromFace(solid, dims, x, y, z, faceKey));
-
-      // 1. Facing view, depth-gated.
+      // 1. The facing view.
       const facing = FACE_TO_VIEW[faceKey];
-      let color = null;
-      if (gviews[facing] && isFirstHit()) {
-        color = sampleView(gviews[facing], facing, x, y, z, dims);
-      }
-      // 2. Mirrored opposite view.
+      let color = gviews[facing]
+        ? sampleView(gviews[facing], facing, x, y, z, dims)
+        : null;
+      // 2. The mirrored opposite view.
       if (color == null && mirror[FACE_AXIS[faceKey]]) {
         const opp = FACE_TO_VIEW[FACE_OPPOSITE[faceKey]];
-        if (gviews[opp] && isFirstHit()) {
-          color = sampleView(gviews[opp], opp, x, y, z, dims);
-        }
+        if (gviews[opp]) color = sampleView(gviews[opp], opp, x, y, z, dims);
       }
       if (color != null) faceColor.set(key, snap(color));
       else pending.push({ key, idx, x, y, z, f });

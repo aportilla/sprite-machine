@@ -14,11 +14,8 @@ import {
   VIEW_NAMES,
   VIEW_AXES,
   VIEW_OPPOSITE,
-  VIEW_TO_FACE,
-  FACE_INDEX,
   buildVoxels,
   voxIndex,
-  unpackRGBA,
 } from 'sprite-machine';
 
 const T = 4;
@@ -198,23 +195,30 @@ const stacked = () => ({
 });
 
 /**
- * Two low bars, one behind the other along z with a gap: the near one (B, z=3)
- * and the far one (A, z=0, x 0..1). The top tile's fourth column is a stray:
- * the front face cuts it away.
+ * Two bars, one behind the other along z with a gap: the near one (B, z=3, one
+ * tall) and the far one (A, z=0, two tall), so A's upper row is its own art on
+ * the front face and its lower row hides behind B. The top tile's first column
+ * is a stray: the front face cuts it away.
  */
 const bars = () => ({
-  front: tile(['....', '....', '....', 'rrr.']),
-  left: tile(['....', '....', '....', 'r..g']),
+  front: tile(['....', '....', 'gg..', 'rrr.']),
+  left: tile(['....', '....', '...g', 'r..g']),
   top: tile(['.rrr', '....', '....', 'b.gg']),
+});
+const FAR_BAR = { x0: 3, y0: 2, x1: 3, y1: 3 }; // A, on the left face
+
+/**
+ * A cab two tall across the back (y 0..1, z 0..1) with a hood against its front
+ * (y=0, z 2..3). The front face's lower row is the hood's, and the cab's own
+ * front behind it is buried.
+ */
+const hood = () => ({
+  front: tile(['....', '....', 'gggg', 'rrrr']),
+  left: tile(['....', '....', '..gg', 'rrgg']),
+  top: tile(['rrrr', 'rrrr', 'gggg', 'gggg']),
 });
 
 const modelOf = (views) => buildVoxels({ ...views });
-const faceColorAt = (m, cell, view) =>
-  unpackRGBA(
-    m.faceColor.get(
-      voxIndex(cell.x, cell.y, cell.z, m.dims) * 6 + FACE_INDEX[VIEW_TO_FACE[view]]
-    )
-  );
 
 // The lift
 
@@ -263,37 +267,53 @@ test('a part over a body: a shared texel is in both pictures, and the body’s o
   assert.deepEqual(px(moved, 3, 2), [...COLORS.g, 255], 'and where the box left it');
 });
 
-test('a part that comes out from under an overhang paints the color the model gave that surface', () => {
+test('a part with no art of its own on a face keeps the texel it sat under', () => {
+  // The box lies under the shelf at every texel, so the Top face never described
+  // its top and there is no color of its own to reach for.
   const views = stacked();
-  const m = modelOf(views);
-  // The box's top-left voxel, hidden under the shelf at the lift.
-  const want = faceColorAt(m, { x: 1, y: 0, z: 1 }, 'top');
   const sel = createFaceSelection(views, 'left', { x0: 2, y0: 3, x1: 3, y1: 3 }, T);
   sel.moveTo(-2, 0);
-  assert.deepEqual(px(sel.tile('top'), 2, 0), [want.r, want.g, want.b, 255]);
+  assert.deepEqual(px(sel.tile('top'), 2, 0), [...COLORS.g, 255]);
+});
+
+test('a part that moves away leaves the body’s color, not a copy of itself', () => {
+  const views = hood();
+  // Half the hood, on the Top face, slid across to the other half's columns.
+  const sel = createFaceSelection(views, 'top', { x0: 2, y0: 0, x1: 3, y1: 1 }, T);
+  sel.moveTo(-2, 0);
+  const front = sel.tile('front');
+  assert.deepEqual(px(front, 2, 3), [...COLORS.r, 255], 'the hood’s front moved here');
+  assert.deepEqual(
+    px(front, 0, 3),
+    [...COLORS.g, 255],
+    'and the cab behind it took its own color, not the hood’s'
+  );
+  sel.moveTo(0, 0);
+  assert.deepEqual(bytes(front), bytes(views.front), 'a move back restores the art');
 });
 
 test('a move along a face’s line of sight brings the part in front, moving no texel of that face', () => {
   const views = bars();
-  const m = modelOf(views);
-  const far = { x: 0, y: 0, z: 0 }; // bar A, behind bar B on the front face
-  const want = faceColorAt(m, far, 'front');
-  const sel = createFaceSelection(views, 'left', { x0: 3, y0: 3, x1: 3, y1: 3 }, T);
+  const sel = createFaceSelection(views, 'left', FAR_BAR, T);
   const before = bytes(sel.tile('front'));
-  sel.moveTo(-3, 0); // A onto B's cell: the part wins the tie
+  sel.moveTo(-3, 0); // A onto B's cells: the part wins the tie
   const front = sel.tile('front');
   assert.deepEqual(
     [...front.data].map((_, i) => (i % 4 === 3 ? front.data[i] : 0)),
     before.map((_, i) => (i % 4 === 3 ? before[i] : 0)),
     'the silhouette holds still'
   );
-  assert.deepEqual(px(front, 0, 3), [want.r, want.g, want.b, 255], 'the part shows');
+  assert.deepEqual(
+    px(front, 0, 3),
+    [...COLORS.g, 255],
+    'the part shows, in its own color'
+  );
   assert.deepEqual(px(front, 2, 3), [...COLORS.r, 255], 'where the part never reached');
 });
 
 test('a stray goes with a band that moves whole, and a part covers one it lands on', () => {
   const views = bars();
-  const sel = createFaceSelection(views, 'left', { x0: 3, y0: 3, x1: 3, y1: 3 }, T);
+  const sel = createFaceSelection(views, 'left', FAR_BAR, T);
   assert.deepEqual(
     px(sel.tile('top'), 0, 3),
     [...COLORS.b, 255],

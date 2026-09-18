@@ -13,8 +13,8 @@
 // gets a picture of each — the nearest voxel of that class on each texel's line
 // of sight, with its depth and color — and its strays, painted texels with no
 // voxel behind them. A texel's color is its own bytes where its voxel was the
-// nearest before the move, else the model's color for that surface, else the
-// texel's bytes.
+// nearest before the move, since that art was its own, and its picture's
+// nearest color where it was hidden (fillBuried).
 //
 // At each offset the part's picture moves and each face is composited by depth:
 // the nearer picture at a texel, the part on a tie, the strays where neither
@@ -150,17 +150,51 @@ const picture = (n) => ({
   color: new Uint32Array(n),
 });
 
+const NEIGHBORS4 = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+// A surface that was hidden has no art of its own: the texel's bytes belong to
+// whatever hid it, so keeping them would leave a copy of that behind when it
+// moves away. It takes the nearest color in its own picture instead. `own`
+// marks the texels whose art was this picture's; a clear one never spreads, and
+// a hidden texel no color reaches keeps its bytes.
+function fillBuried(pic, own, t) {
+  let ring = [];
+  for (let i = 0; i < own.length; i++) {
+    if (own[i] && pic.color[i] >>> 24 !== 0) ring.push(i);
+  }
+  while (ring.length) {
+    const next = [];
+    for (const i of ring) {
+      const x = i % t;
+      const y = (i - x) / t;
+      for (const [dx, dy] of NEIGHBORS4) {
+        const ax = x + dx;
+        const ay = y + dy;
+        if (ax < 0 || ay < 0 || ax >= t || ay >= t) continue;
+        const j = ay * t + ax;
+        if (!pic.has[j] || own[j]) continue;
+        pic.color[j] = pic.color[i];
+        own[j] = 1;
+        next.push(j);
+      }
+    }
+    ring = next;
+  }
+}
+
 // One face's two pictures, its strays and its band.
 function liftFace(onto, tile, model, box, t) {
-  const { dims, solid, selected, faceColor } = model;
+  const { dims, solid, selected } = model;
   const spec = VIEWS[onto];
   const look = lookOf(onto, dims);
   const n = t * t;
   const part = picture(n);
   const rest = picture(n);
-  // The nearest voxel per texel, per picture, for its face color.
-  const partVox = new Int32Array(n);
-  const restVox = new Int32Array(n);
   const p = { u: 0, v: 0 };
   for (let z = 0; z < dims.nz; z++) {
     for (let y = 0; y < dims.ny; y++) {
@@ -174,21 +208,17 @@ function liftFace(onto, tile, model, box, t) {
         if (pic.has[i] && d >= pic.depth[i]) continue;
         pic.has[i] = 1;
         pic.depth[i] = d;
-        (selected[idx] ? partVox : restVox)[i] = idx;
       }
     }
   }
 
+  // The art at a texel was its nearest voxel's, so only that picture owns it.
+  // The other's surface there was never drawn — the texel's bytes belong to
+  // whatever hid it — so fillBuried gives it the nearest color in its own
+  // picture.
   const origin = new Uint8ClampedArray(tile.data.subarray(0, n * 4));
-  const f = FACE_INDEX[VIEW_TO_FACE[onto]];
-  // The art at a texel was its nearest voxel's. A voxel that was hidden takes
-  // the model's color for that surface, and the texel's bytes where the surface
-  // was buried and the model had none.
-  const colorOf = (i, idx, nearest) => {
-    if (nearest) return packTexel(origin, i);
-    const c = faceColor.get(idx * 6 + f);
-    return c == null ? packTexel(origin, i) : c >>> 0;
-  };
+  const partOwn = new Uint8Array(n);
+  const restOwn = new Uint8Array(n);
   const stray = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     if (!part.has[i] && !rest.has[i]) {
@@ -199,9 +229,17 @@ function liftFace(onto, tile, model, box, t) {
       part.has[i] ? part.depth[i] : Infinity,
       rest.has[i] ? rest.depth[i] : Infinity
     );
-    if (part.has[i]) part.color[i] = colorOf(i, partVox[i], part.depth[i] === near);
-    if (rest.has[i]) rest.color[i] = colorOf(i, restVox[i], rest.depth[i] === near);
+    if (part.has[i]) {
+      part.color[i] = packTexel(origin, i);
+      if (part.depth[i] === near) partOwn[i] = 1;
+    }
+    if (rest.has[i]) {
+      rest.color[i] = packTexel(origin, i);
+      if (rest.depth[i] === near) restOwn[i] = 1;
+    }
   }
+  fillBuried(part, partOwn, t);
+  fillBuried(rest, restOwn, t);
 
   // The strays go with the band only when it moves whole, which is when the
   // rest has no texel in it.
@@ -227,7 +265,7 @@ function liftFace(onto, tile, model, box, t) {
  */
 export function liftFaces(views, view, bounds, t) {
   const raw = Object.fromEntries(VIEW_NAMES.map((n) => [n, views?.[n] || null]));
-  const { dims, solid, faceColor } = buildVoxels(raw);
+  const { dims, solid } = buildVoxels(raw);
   const box = boxOf(view, bounds, dims);
   const selected = new Uint8Array(solid.length);
   const lo = (d) => Math.max(0, box[d][0]);
@@ -240,7 +278,7 @@ export function liftFaces(views, view, bounds, t) {
       }
     }
   }
-  const model = { dims, solid, selected, faceColor };
+  const model = { dims, solid, selected };
   const faces = VIEW_NAMES.filter((n) => n !== view && views?.[n]).map((onto) =>
     liftFace(onto, views[onto], model, box, t)
   );
