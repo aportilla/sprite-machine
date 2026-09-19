@@ -2,7 +2,8 @@
 // colors (lib/palette.js documentColors) as a grid of square swatches sized to
 // the window (layout.js paletteGrid): as many columns as the width fits, and
 // empty cells in the rows the swatches leave. The ink's swatch is ringed. A
-// swatch picks its color on pointerdown, like a Tools palette cell.
+// swatch picks its color on the press, like a Tools palette cell, or on the
+// release under a finger (press-pick.js).
 //
 // The sheet is scanned on each doc notification, and the component re-renders
 // only when the list or the window's size changes. A change in the number of
@@ -18,6 +19,7 @@ import { documentColors, paletteName } from '../lib/palette.js';
 import { rgbKey, rgbToHex } from '../lib/color.js';
 import { PALETTE_CELL, paletteGrid } from '../apps/sprite-editor/layout.js';
 import { baseStyles } from './base-styles.js';
+import { pressPick } from './press-pick.js';
 
 export class SmPaletteView extends LitElement {
   static styles = [
@@ -169,8 +171,7 @@ export class SmPaletteView extends LitElement {
   }
 
   #onPress(e, color) {
-    if (e.button !== 0) return;
-    this.#pick(color);
+    pressPick(e, () => this.#pick(color));
   }
 
   // A no-op when the color is the ink and the eraser is not the tool, so the

@@ -23,6 +23,10 @@
 //   unchanged. A `tool` change cancels any gesture in flight.
 // - `option` (Option held) changes only the hover preview, to the
 //   eyedropper's, outside a drag (#sampling). A press reads its own altKey.
+// - One instrument per gesture: the stroke, the rect drag and the selection
+//   drag each hold their pointer's id, so a second finger neither joins one nor
+//   ends it. A touch press while a pen is down, or within PALM_GRACE_MS of its
+//   lift, is a resting hand and does nothing.
 //
 // Events (all bubble):
 //   sm-live               { tile, dirty }    each pixel change. tile is the
@@ -86,6 +90,10 @@ const SELECT_SLOP = 3;
 
 // The bare-letter tool shortcuts (shortcuts.js). Any of them cancels a drag.
 const TOOL_KEYS = new Set(['s', 'b', 'r', 'g', 'e', 'i']);
+
+// Palm rejection: how long after a pen lifts a touch press is still ignored,
+// so the hand resting on the glass between strokes never draws.
+const PALM_GRACE_MS = 500;
 
 // The stack's kit pattern, the 12% dither that shows through transparent texels.
 // A vf-container with no pattern paints the desktop's pattern instead.
@@ -225,8 +233,14 @@ export class SmDrawCanvas extends LitElement {
   #dirty = false; // a pixel changed since the last reset
 
   #drawing = false; // a pencil stroke is in progress
+  #strokePointer = null; // the stroke's captured pointerId
   #prev = null; // last painted texel this stroke, for line interpolation
   #forceErase = false; // right-button erase
+  // Palm rejection: the pen's pointerId while it is down, and when it lifted.
+  // -Infinity, not 0: performance.now() starts at the page load, so 0 would
+  // reject every touch for the first PALM_GRACE_MS of the session.
+  #penPointer = null;
+  #penLiftAt = -Infinity;
   #gestureNotified = false; // last state sent with sm-gesture
   // Undo capture: the bytes at gesture start and whether a pixel changed.
   #gestureBefore = null;
@@ -345,6 +359,7 @@ export class SmDrawCanvas extends LitElement {
       this.#cancelRect();
       this.#endGesture();
       this.#drawing = false;
+      this.#strokePointer = null;
       this.#prev = null;
       this.#forceErase = false;
     }
@@ -405,6 +420,7 @@ export class SmDrawCanvas extends LitElement {
     this.#gestureBefore = null;
     this.#gestureChanged = false;
     this.#drawing = false;
+    this.#strokePointer = null;
     this.#prev = null;
     this.#forceErase = false;
     this.#hoverTexel = null;
@@ -1344,6 +1360,12 @@ export class SmDrawCanvas extends LitElement {
     this.#notifySelection();
   }
 
+  /** Clear the selection's texels, what Delete does. */
+  clearSelection() {
+    if (!this.#sel || this.#dragging) return;
+    this.#clearSelection();
+  }
+
   /** Select the whole tile, not lifted. */
   selectAll() {
     if (this.#dragging || !this.#work || !this.tileW || !this.tileH) return;
@@ -1421,22 +1443,47 @@ export class SmDrawCanvas extends LitElement {
 
   // Pointer
   // A press, release or cancel can start or end a drag, so each reports it.
+  // Every path guards by pointerId: one instrument owns a gesture, and a second
+  // finger neither joins it nor ends it.
   #onPointerDown = (e) => {
+    if (this.#palmPress(e)) return;
+    if (e.pointerType === 'pen') this.#penPointer = e.pointerId;
     this.#pointerDown(e);
     this.#notifyGesture();
   };
 
   #onPointerUp = (e) => {
+    this.#penLift(e);
     this.#pointerUp(e);
     this.#notifyGesture();
   };
 
   #onPointerCancel = (e) => {
+    this.#penLift(e);
     this.#pointerCancel(e);
     this.#notifyGesture();
   };
 
+  // Palm rejection: a touch press while the pen is down, or just after it
+  // lifted, is the hand on the glass and not a gesture.
+  #palmPress(e) {
+    if (e.pointerType !== 'touch') return false;
+    if (this.#penPointer != null) return true;
+    return performance.now() - this.#penLiftAt < PALM_GRACE_MS;
+  }
+
+  #penLift(e) {
+    if (e.pointerId !== this.#penPointer) return;
+    this.#penPointer = null;
+    this.#penLiftAt = performance.now();
+  }
+
   #pointerDown(e) {
+    // One instrument per gesture: while a drag is in flight, a press is a
+    // second finger and does nothing. A stroke's shared #prev would draw a
+    // line between the two, and a second #beginGesture would overwrite the
+    // undo snapshot. The canvas is touch-action: none, so nothing pans here.
+    if (this.#dragging) return;
     const t = this.#toTexel(e);
     if (!t) return;
     e.preventDefault();
@@ -1460,8 +1507,6 @@ export class SmDrawCanvas extends LitElement {
       return;
     }
     if (this.tool === 'rect') {
-      // A drag owns one pointer, and a second pointer can't take it over.
-      if (this.#rectDragging && this.#rectPointer != null) return;
       this.#forceErase = e.button === 2;
       this.#shiftLock = e.shiftKey;
       this.#beginGesture();
@@ -1480,6 +1525,7 @@ export class SmDrawCanvas extends LitElement {
     this.#beginGesture();
     this.#drawing = true;
     this.#prev = null;
+    this.#strokePointer = e.pointerId;
     this.#canvas.value.setPointerCapture?.(e.pointerId);
     this.#stroke(t.px, t.py);
     this.#drawCursor(t); // a right press shows the erase ants at once
@@ -1511,6 +1557,9 @@ export class SmDrawCanvas extends LitElement {
       this.#drawRectPreview();
       return;
     }
+    // Only the owning pointer strokes, and no other moves the hover preview
+    // while it does.
+    if (this.#drawing && e.pointerId !== this.#strokePointer) return;
     const t = this.#toTexel(e);
     // The selection tool's cursor: the arrow inside the selection, the
     // crosshair outside.
@@ -1549,8 +1598,10 @@ export class SmDrawCanvas extends LitElement {
       this.#notifyRectDrag();
       return;
     }
+    if (this.#drawing && e.pointerId !== this.#strokePointer) return; // not the stroke's
     this.#endGesture();
     this.#drawing = false;
+    this.#strokePointer = null;
     this.#prev = null;
     this.#forceErase = false;
     this.#canvas.value.releasePointerCapture?.(e.pointerId);
@@ -1571,8 +1622,10 @@ export class SmDrawCanvas extends LitElement {
       this.#cancelRect();
       return;
     }
+    if (this.#drawing && e.pointerId !== this.#strokePointer) return; // not the stroke's
     this.#endGesture();
     this.#drawing = false;
+    this.#strokePointer = null;
     this.#prev = null;
     this.#forceErase = false;
     this.#canvas.value.releasePointerCapture?.(e.pointerId);

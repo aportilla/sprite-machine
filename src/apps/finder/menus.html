@@ -2,6 +2,9 @@
      addresses items by data-menu and value, not id. The boot disabled states
      match a fresh desktop. -->
 <vf-menu data-menu="file" label="File">
+  <!-- Open acts on the icon selection, the route a double-click or a tap pair
+       takes. Disabled with nothing selected. -->
+  <vf-menu-item value="open" shortcut="⌘O" disabled>Open</vf-menu-item>
   <!-- ⌃N: the browser takes ⌘N before the page sees it. -->
   <vf-menu-item value="new" shortcut="⌃N">New Sprite</vf-menu-item>
   <vf-menu-item value="new-folder">New Folder</vf-menu-item>

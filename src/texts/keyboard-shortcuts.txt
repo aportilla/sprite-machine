@@ -2,6 +2,7 @@ Keyboard Shortcuts
 
 FINDER
 
+⌘O — Open
 ⌃N — New Sprite
 ⌃W — Close
 ⌘C — Copy
@@ -9,7 +10,7 @@ FINDER
 ⌘A — Select All
 ⌘J — Arrange Windows
 Return — Rename
-Double-click — Open
+Double-click — Open (double-tap does the same)
 Shift-drag — Add or remove icons
 Esc — Cancel a drag
 
@@ -41,7 +42,7 @@ Option-click — Pick a color
 Right button — Erase
 Shift-drag — Square a rectangle, move in a line
 Esc — Cancel a drag, drop the selection
-Delete — Clear the selection
+Delete — Clear the selection (Edit → Clear)
 
 READER
 

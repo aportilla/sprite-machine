@@ -2,7 +2,8 @@
 // one canvas per face of the active document, in the face picker's order, each
 // at tile resolution and scaled nearest-neighbor. A cell shows the edited
 // layer's tile alone. The cell height follows the tile's aspect ratio. A tile
-// picks its face on pointerdown, like the Tools palette.
+// picks its face on the press, like the Tools palette, or on the release
+// under a finger (press-pick.js).
 //
 // While the selection tool's `on all faces` is on and a marquee is up, every
 // other cell carries the marquee's rectangle projected onto its face
@@ -25,6 +26,7 @@ import { projectBounds } from '../lib/select-faces.js';
 import { ATLAS_GRID, FACE_ROW } from '../apps/sprite-editor/layout.js';
 import { baseStyles } from './base-styles.js';
 import { drawStillAnts } from './draw-overlays.js';
+import { pressPick } from './press-pick.js';
 import { parsePatternAttr } from './ui-bits.js';
 
 // Each face in row order, with its row and column in the sheet.
@@ -215,8 +217,7 @@ export class SmAtlasView extends LitElement {
   }
 
   #onCellPress(e, f) {
-    if (e.button !== 0) return;
-    this.#pick(f);
+    pressPick(e, () => this.#pick(f));
   }
 
   // A no-op for the selected face, so the click after a pointerdown pick does

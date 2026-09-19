@@ -9,7 +9,7 @@ Sprite Machine is presented within a classic Macintosh system UI. This means you
 ––––––––––––––––––––––––––––––––––
 EDITING A FILE
 
-Double-click one of your files to open it in the editor.
+Double-click one of your files to open it in the editor. On a tablet, double-tap it, or select it and choose File → Open.
 
 The editor has several windows: 
 
@@ -55,3 +55,10 @@ Your desktop state is preserved only in localstorage and the browsers local Inde
 Special → Back Up All Files… saves your entire filesystem as one zip named for the day. Unzip it and you get your folders as folders, your files as .png images and your read-me files as plain text.
 
 To bring a backup back, drag the zip onto the page or choose Special → Restore from Backup… and pick it.
+
+––––––––––––––––––––––––––––––––––
+MOUSE, FINGER OR PEN
+
+A finger or a pen works everywhere a mouse does. A tap is a click, a double-tap opens an icon, and a drag is a drag. If you draw with a pen you can rest your hand on the glass: only the pen draws.
+
+What the keyboard does, a menu does too: Edit → Clear for the Delete key, File → Open for a double-click, and the Tools and Layer menus for the tool letters and the layer digits. The eyedropper tool stands in for Option and the eraser for the right mouse button.

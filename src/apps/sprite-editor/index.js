@@ -641,6 +641,12 @@ export const spriteEditor = {
       editor.selectAll();
     }
 
+    // Clear, the Delete key's command as a menu item.
+    function clearPixels() {
+      if (session.get().gesture) return;
+      activeEditor()?.clearSelection();
+    }
+
     // Flip Horizontal and Flip Vertical, the selection tool's buttons in the
     // options strip. They act on the active window's selection.
     on($('sm-options-bar'), 'sm-flip-selection', (e) => {
@@ -727,6 +733,9 @@ export const spriteEditor = {
           break;
         case 'select-all':
           selectAll();
+          break;
+        case 'clear':
+          clearPixels();
           break;
         case 'tile-size':
           showTileDialog();
@@ -835,15 +844,17 @@ export const spriteEditor = {
     );
     syncEdit();
 
-    // Copy, Paste and Select All are disabled during a canvas drag, and while a
-    // text control has focus so the field keeps its native keys. Focus is read
-    // from the composed path because kit fields keep their <input> in shadow
-    // DOM. Copy also needs a selection in the active window. Paste ignores the
-    // clipboard's contents, which cannot be read outside a pick. The selection's
-    // bounds change at pointer-move rate, so disabled is written only on change.
+    // Copy, Paste, Select All and Clear are disabled during a canvas drag, and
+    // while a text control has focus so the field keeps its native keys. Focus
+    // is read from the composed path because kit fields keep their <input> in
+    // shadow DOM. Copy and Clear also need a selection in the active window.
+    // Paste ignores the clipboard's contents, which cannot be read outside a
+    // pick. The selection's bounds change at pointer-move rate, so disabled is
+    // written only on change.
     const itemCopy = item(menuEdit, 'copy');
     const itemPaste = item(menuEdit, 'paste');
     const itemSelectAll = item(menuEdit, 'select-all');
+    const itemClear = item(menuEdit, 'clear');
     /** Whether the innermost focused element is a text control. */
     let textFocused = false;
     const setDisabled = (it, v) => {
@@ -851,9 +862,11 @@ export const spriteEditor = {
     };
     const syncClipboard = () => {
       const off = textFocused || session.get().gesture;
-      setDisabled(itemCopy, off || !workspace.active()?.selection.get().bounds);
+      const noSelection = !workspace.active()?.selection.get().bounds;
+      setDisabled(itemCopy, off || noSelection);
       setDisabled(itemPaste, off);
       setDisabled(itemSelectAll, off);
+      setDisabled(itemClear, off || noSelection);
     };
     teardown.push(
       followActive(workspace, (ctx) =>

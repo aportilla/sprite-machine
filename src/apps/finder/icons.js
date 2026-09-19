@@ -10,7 +10,7 @@
 // - Filing is the kit's icon drag. A drop into another container moves the
 //   model, and the reconciler re-creates the icon there.
 
-import { snapSys, systemPxQuantum } from 'vintage-frames';
+import { prefersReducedMotion, snapSys, systemPxQuantum } from 'vintage-frames';
 import folderArtUrl from '../../assets/folder.png';
 import trashArtUrl from '../../assets/trash.png';
 import trashFullArtUrl from '../../assets/trash-full.png';
@@ -33,6 +33,9 @@ import {
 } from './layout.js';
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+// The beat between opens when one command opens several icons, so their windows
+// arrive one at a time down the cascade instead of all at once.
+const OPEN_BEAT_MS = 140;
 const DOC = 'doc:';
 const FOLDER = 'folder:';
 const TEXT = 'text:';
@@ -513,6 +516,18 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
         ...st.list.map((r) => `${DOC}${r.id}`),
         ...st.texts.map((t) => `${TEXT}${t.id}`),
       ].filter((key) => lit.has(key));
+    },
+    /** Open every selected icon, the route a double-click or a tap pair takes.
+     *  Several open a beat apart, so their windows arrive down the cascade one
+     *  at a time; one opens at once, and so do all of them under reduced
+     *  motion. An icon gone by its turn is skipped.
+     *  @returns {Promise<void>} */
+    async openSelection() {
+      const beat = prefersReducedMotion() ? 0 : OPEN_BEAT_MS;
+      for (const [i, key] of this.selection().entries()) {
+        if (i && beat) await new Promise((done) => setTimeout(done, beat));
+        iconByKey(key)?.dispatchEvent(new CustomEvent('vf-open'));
+      }
     },
     /** Make `keys` the selection and clear every other icon.
      *  @param {string[]} keys */

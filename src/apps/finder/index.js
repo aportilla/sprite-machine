@@ -374,6 +374,9 @@ export const finder = {
     on(menuFile, 'vf-menu-select', (e) => {
       if (modalOpen()) return;
       switch (menuDetail(e).value) {
+        case 'open':
+          icons.openSelection();
+          break;
         case 'new':
           deps.apps[SPRITE_EDITOR]?.newDocument();
           break;
@@ -469,6 +472,7 @@ export const finder = {
     // disabled while a text control has focus. Focus is read from the composed
     // path because kit fields keep their <input> in shadow DOM. Paste ignores
     // the clipboard's contents, which cannot be read outside a pick.
+    const itemOpen = item(menuFile, 'open');
     const itemClose = item(menuFile, 'close');
     const itemNewFolder = item(menuFile, 'new-folder');
     const itemCopy = item(menuEdit, 'copy');
@@ -485,7 +489,11 @@ export const finder = {
       if (itemCleanUp.textContent !== cleanUp) itemCleanUp.textContent = cleanUp;
       itemClose.disabled = front == null;
       itemNewFolder.disabled = isTrashed(st, front);
-      itemCopy.disabled = textFocused || icons.selection().length === 0;
+      // Open takes the same selection Copy does, so the Trash is left out; a
+      // double-click or a tap pair opens it.
+      const nothingLit = textFocused || icons.selection().length === 0;
+      itemOpen.disabled = nothingLit;
+      itemCopy.disabled = nothingLit;
       itemPaste.disabled = textFocused || isTrashed(st, front);
       itemSelectAll.disabled = textFocused;
     };

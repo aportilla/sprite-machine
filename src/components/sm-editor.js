@@ -97,6 +97,11 @@ export class SmEditor extends LitElement {
     this.#canvas.value?.selectAll();
   }
 
+  /** Clear the canvas's selection. */
+  clearSelection() {
+    this.#canvas.value?.clearSelection();
+  }
+
   /** Mirror the canvas's selection.
    *  @param {'horizontal'|'vertical'} axis */
   flipSelection(axis) {

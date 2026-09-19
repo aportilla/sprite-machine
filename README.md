@@ -198,7 +198,7 @@ With the selection tool (S), drag a box around some pixels. Then:
   line. Clear pixels in the selection do not cover what is under them.
 - **Flip** them with **Flip Horizontal** and **Flip Vertical** in the bar
   under the menu bar.
-- **Delete** them with Delete or Backspace.
+- **Delete** them with Delete or Backspace, or **Edit → Clear**.
 - **Copy** (⌘C) and **Paste** (⌘V) them from the Edit menu. Pasted pixels
   arrive selected, so you can drag them into place. Paste again for another
   copy.
@@ -276,8 +276,8 @@ Cube, and click **OK**. For an empty document you set the tile size; a
 template keeps its own. The document opens, but it is not on the desktop
 until you save it.
 
-**Open.** Double-click a document's icon. Several documents can be open at
-once. There is no Open command.
+**Open.** Double-click a document's icon, or select it and choose
+**File → Open** (⌘O). Several documents can be open at once.
 
 **Save.** Choose **File → Save** (⌘S). The first save asks you to confirm the
 name, and the document's icon appears on the desktop. A document that has
@@ -421,8 +421,9 @@ document window to come back. Keys follow the front window; see
 
 ### Icons
 
-- **Open** a document, folder or read-me by double-clicking it. An open item's
-  icon is drawn hollow.
+- **Open** a document, folder or read-me by double-clicking it, or select it
+  and choose **File → Open** (⌘O). Select several and they open one after
+  another. An open item's icon is drawn hollow.
 - **Select** an icon by clicking it, or drag a box around several. Hold Shift
   while dragging to toggle icons in and out of the selection. ⌘A selects
   all.
@@ -483,6 +484,26 @@ Select text with the mouse and copy it with ⌘C;
 ⌘A selects all of it. The zoom box widens the window into a reading column,
 and ⌃W closes it.
 
+### On a tablet
+
+A finger or a pen works everywhere a mouse does. A tap is a click, a
+double-tap opens an icon, and a drag is a drag: windows move by their title
+bars, icons move around the desktop, and the canvas draws. In the 3D View one
+finger spins the model and two move it closer or further away. If you draw
+with a pen, you can rest your hand on the glass; only the pen draws.
+
+A few things still want a keyboard, and each has another route:
+
+- Delete, to clear the selected pixels — **Edit → Clear**.
+- Double-click, to open an icon — **File → Open**.
+- The tool letters and the layer digits — the **Tools** and **Layer** menus.
+- Option, to pick up a color — the eyedropper tool.
+- The right mouse button, to erase — the eraser tool.
+
+Holding Shift to square a rectangle or move in a straight line has no
+substitute yet, and neither does Esc to cancel a drag partway: lift your
+finger and press **Edit → Undo**.
+
 ## Fixing common problems
 
 **There is a hole through the model.** One face is missing a pixel there.
@@ -538,6 +559,7 @@ in front.
 | Key         | In a document           | On the desktop          | In a read-me        |
 | ----------- | ----------------------- | ----------------------- | ------------------- |
 | ⌃N          | New…                    | New Sprite              |                     |
+| ⌘O          |                         | Open the selected icons |                     |
 | ⌃W          | Close the document      | Close the folder window | Close the read-me   |
 | ⌃Q          | Quit                    |                         | Close every read-me |
 | ⌘S          | Save                    |                         |                     |
@@ -552,13 +574,13 @@ in front.
 
 | Mouse and modifiers | What they do                                                       |
 | ------------------- | ------------------------------------------------------------------ |
-| Double-click        | Open an icon                                                       |
+| Double-click        | Open an icon; a double-tap does the same                           |
 | Return              | Rename the selected icon; in a dialog, the default button          |
 | Right button        | Erase with the pencil, rectangle or fill                           |
 | Option              | Pick up a color with any tool                                      |
 | Shift               | Square a rectangle, move in a straight line, toggle icons in a box |
 | Esc                 | Cancel a drag, let go of a selection, dismiss a dialog             |
-| Delete              | Clear the selected pixels                                          |
+| Delete              | Clear the selected pixels (Edit → Clear does the same)             |
 
 ## For developers
 

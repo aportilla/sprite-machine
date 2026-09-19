@@ -6,8 +6,9 @@
 // transparency so invert(1) gives an exact selected cell, and must leave the
 // outermost pixel row clear for the focus ring.
 //
-// A cell picks on pointerdown, like a classic Mac tool palette. The click
-// that follows is a no-op, and click stays the keyboard path.
+// A cell picks on the press, like a classic Mac tool palette, or on the release
+// under a finger (press-pick.js). The click that follows is a no-op, and click
+// stays the keyboard path.
 //
 // `tool` is the chosen tool and `shown` the inverted one, which differ while
 // Option is held (lib/tools.js springTool). A pick compares against `tool`.
@@ -17,6 +18,7 @@ import { css, LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { TOOL_CELL, TOOL_GRID } from '../apps/sprite-editor/layout.js';
 import { baseStyles } from './base-styles.js';
+import { pressPick } from './press-pick.js';
 import selectUrl from '../assets/tools/select.png';
 import pencilUrl from '../assets/tools/pencil.png';
 import rectUrl from '../assets/tools/rect.png';
@@ -136,8 +138,7 @@ export class SmToolStrip extends LitElement {
   }
 
   #onCellPress(e, tool) {
-    if (e.button !== 0) return;
-    this.#pickTool(tool);
+    pressPick(e, () => this.#pickTool(tool));
   }
 
   // No-op for the current tool, so the click after a press dispatches nothing.

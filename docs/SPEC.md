@@ -146,7 +146,8 @@ Sprite View follows every stroke at frame rate, and the model rebuilds
   **pencil** `B`, **rect** `R` on top, **fill** `G`, **eraser** `E`,
   **eyedropper** `I` below. Each cell is a 1-bit PNG drawn 1:1 through `vf-img`
   (`TOOL_CELL` and `TOOL_GRID`, from which `TOOLS_BOX` derives). The selected cell inverts with a CSS `invert`, exact only for pure
-  black art. A cell picks on press, not on click. The inverted cell is the
+  black art. A cell picks on the press, not on the click, or on the release
+  under a finger (`press-pick.js`). The inverted cell is the
   tool the next press uses (`springTool`, `lib/tools.js`): the eyedropper
   while Alt is held and no drag is in progress, else the chosen tool. The
   chosen tool, the options strip and the Tools menu's checkmark don't follow
@@ -338,6 +339,49 @@ item icons (only the Trash) and no seeding. `?flat=1`,
 
 ---
 
+## Mouse, finger and pen
+
+One rule: **the instrument never changes what a control means.** A tap is a
+click, a double-tap is a double-click, a drag is a drag, and no gesture exists
+on one instrument alone. Where a key or a second button is the only route to a
+command, the answer is a menu item, not a hidden gesture: the Finder's
+_File → Open_ ⌘O for a double-click, the Sprite Editor's _Edit → Clear_ for
+Delete, the Tools and Layer menus for the letters and digits, the eyedropper
+tool for Option and the eraser for the right button.
+
+The kit classifies the gestures it owns. `vf-icon` fires `vf-open` from
+`dblclick` for a mouse and from a **tap pair** for a finger or pen: the second
+press within `TAP_PAIR_MS` (500) of the first and no further than
+`TAP_PAIR_SLOP_PX` (24 CSS px), fired on the second release. An icon's drag
+begins only past `DRAG_SLOP_PX` (4 CSS px) for a mouse, `DRAG_SLOP_COARSE_PX`
+(10) for a finger or pen, so a tap selects and leaves the icon on its cell. The
+menus, the window drag, the grow box, the rails and the drawn cursor are the
+kit's too.
+
+The app owns the rest:
+
+- **One instrument per gesture.** In `sm-draw-canvas` a press while any drag is
+  in flight does nothing, and the stroke holds a pointer id as the rect drag and
+  the selection drag do, so a second finger neither joins a stroke nor ends it.
+  A shared `#prev` would draw a line between the two, and a second
+  `#beginGesture` would overwrite the undo snapshot.
+- **Palm rejection.** A `touch` press on the pixel canvas while a `pen` pointer
+  is down, or within `PALM_GRACE_MS` (500) of its lift, does nothing. Pressure
+  and tilt are not mapped: a texel brush takes its size from the options strip.
+- **Picks inside a scroller** (`components/press-pick.js`). The Tools palette,
+  the Color Palette and the Full Sprite View pick on the press for a mouse or
+  pen, the MacPaint feel. For a finger they pick on the release, and only if it
+  landed within `TAP_PAIR_SLOP_PX` of the press and the scroller's pan did not
+  cancel it, so a pan past a swatch doesn't change the ink.
+- **The rubber band** stays a mouse and pen gesture, the kit's decision, so a
+  finger dragging a window's background pans it. _Edit → Select All_ is touch's
+  route to a multiple selection.
+
+Shift (square a rectangle, lock a move to an axis, extend an icon selection) and
+Esc mid-drag have no touch equivalent yet.
+
+---
+
 ## The desktop
 
 The shell is a System 7 virtual desktop. `index.html` is one `<vf-desktop>`
@@ -432,7 +476,13 @@ Desktop Patterns  │ Sprite Machine  File  View                             10:
 
 **The Finder's menus** (the bare desktop or a folder window front):
 
-- **File**: _New Sprite_ ⌃N opens the Sprite Editor's New box. _New Folder_
+- **File**: _Open_ ⌘O opens every selected icon, dispatching the kit's own
+  `vf-open` so it takes the route a double-click or a tap pair takes. It reads
+  the same selection Copy does, so the Trash is left out and it is greyed with
+  nothing selected. Several open one at a time, `OPEN_BEAT_MS` (140) apart, so
+  their windows arrive down the cascade in turn; one opens at once, and so do
+  all of them under reduced motion. The list is taken before the first open,
+  which deactivates the Finder and clears the selection. _New Sprite_ ⌃N opens the Sprite Editor's New box. _New Folder_
   makes _untitled folder_ in the front folder window, else on the desktop, with
   its name selected for typing. It is greyed while the front window is the Trash
   or a trashed folder. After a rule, _Close_ ⌃W closes the front folder window,
@@ -498,17 +548,20 @@ document to act on):
     normalized `pivot`.
   - Both exports work whenever a model exists, whether or not the windoid is
     shown.
-- **Edit**: _Undo_ ⌘Z, _Redo_ ⇧⌘Z; _Copy_ ⌘C, _Paste_ ⌘V, _Select All_ ⌘A;
-  _Tile Size…_, with rules between the groups. Undo and Redo act on the active
+- **Edit**: _Undo_ ⌘Z, _Redo_ ⇧⌘Z; _Copy_ ⌘C, _Paste_ ⌘V, _Select All_ ⌘A,
+  _Clear_; _Tile Size…_, with rules between the groups. Undo and Redo act on the active
   document's history and are disabled until it has a step, so ⌘Z reaches a
   focused field. Copy, Paste and Select All act on the active window's
   selection (see [Drawing editor](#drawing-editor)). Copy is greyed while the
   window has no selection. All three are greyed during a drag and while a text
   control has focus, so the field keeps native ⌘C / ⌘V / ⌘A. Otherwise Paste is
   always live, because the system clipboard can't be read before a pick, and a
-  paste with nothing to paste does nothing. _Tile Size…_ sets the active
-  document's square tile size in a dialog that applies on OK as one undo step
-  (see [Drawing editor](#drawing-editor)). No Cut or Clear.
+  paste with nothing to paste does nothing. _Clear_ clears the selection's
+  texels, what Delete does, and is greyed on the same terms as Copy. It carries
+  no key equivalent: the canvas handles Delete and Backspace itself.
+  _Tile Size…_ sets the active document's square tile size in a dialog that
+  applies on OK as one undo step (see [Drawing editor](#drawing-editor)). No
+  Cut.
 - **View**: _Arrange Windows_ ⌘J comes first. Its label is fixed and its
   command depends on the windows. If any visible window is off its placement,
   it arranges: the boot placement re-runs on the current raster and document
@@ -1046,7 +1099,9 @@ Files** adds built-ins again: it stores the built-in documents whose names and
 the text files whose keys are missing from the library, and changes nothing
 else.
 
-**Double-click** opens an icon; there is no Open command. An open document's
+**Double-click**, a **tap pair** or _File → Open_ ⌘O opens an icon; the
+Sprite Editor has no Open… dialog (see
+[Mouse, finger and pen](#mouse-finger-and-pen)). An open document's
 window comes forward. Icons deselect when an application becomes active, and
 selecting an icon deactivates the application. Every open
 item's icon shows the kit's `open` ghost.
