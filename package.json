@@ -1,7 +1,7 @@
 {
   "name": "sprite-machine-app",
   "private": true,
-  "version": "0.3.22",
+  "version": "0.3.23",
   "type": "module",
   "description": "Turn low-res pixel sprites (face views) into Three.js 3D objects — the System 7 desktop app over the sprite-machine engine.",
   "workspaces": [
