@@ -3,10 +3,20 @@ import assert from 'node:assert/strict';
 
 import { buildVoxels, unionVoxels } from '../src/pipeline.js';
 import { wedgeMesh } from '../src/wedge-mesh.js';
+import { voxIndex } from '../src/carve.js';
+import { FACE_KEYS, FACE_NORMAL } from '../src/views.js';
 import { img, fill, oddEdges } from './helpers.mjs';
 
 const wedgeCount = (views) => wedgeMesh(buildVoxels(views)).wedges;
 const EPS = 1e-4;
+
+/** Whether some vertex normal points along `n` (given unnormalized). */
+const hasNormal = ({ normal }, n) => {
+  const len = Math.hypot(...n);
+  for (let i = 0; i < normal.length; i += 3)
+    if (n.every((v, k) => Math.abs(normal[i + k] - v / len) < EPS)) return true;
+  return false;
+};
 
 // A 45° ramp of one material.
 const ramp = () => ({
@@ -378,4 +388,254 @@ test('the mesh carries its skin: uvs in [0,1]; one material samples one texel, a
     0,
     'a chart seam splits vertices, never the surface'
   );
+});
+
+// Corner fills. Where arms cap into one cell their caps leave a gap, and the
+// gap's rim takes one triangle or two on its raised diagonal.
+
+// A 2x2 block on a 4x4 slab. `wall` paints the slab's sides and `corner` the
+// four ring texels the hips hide.
+const plinth = (wall = 'T', corner = 'T') => ({
+  front: img(['.TT.', 'T'.repeat(4).replaceAll('T', wall)]),
+  right: img(['.TT.', 'T'.repeat(4).replaceAll('T', wall)]),
+  top: img([corner + 'TT' + corner, 'TTTT', 'TTTT', corner + 'TT' + corner]),
+});
+
+const pyramid = (side) => ({
+  front: img(['..T..', '.TTT.', 'TTTTT']),
+  right: img(['..T..', '.TTT.', 'TTTTT'].map((r) => r.replaceAll('T', side))),
+  top:
+    side === 'T' ? fill(5, 5, 'T') : img(['TTTTT', 'RTTTR', 'RRTRR', 'RTTTR', 'TTTTT']),
+});
+
+test('a plinth folds at each corner: four hips, no gap, and a frustum of triangles', () => {
+  const built = wedgeMesh(buildVoxels(plinth()));
+  assert.equal(built.corners, 4, 'one hip per plan corner');
+  assert.equal(built.gaps, 0, 'no end still caps into a corner');
+  assert.equal(oddEdges(built.geometry), 0);
+  // Top 2, four chamfer sides 8, the slab's walls 8, bottom 2.
+  assert.equal(built.triangles, 20);
+});
+
+test('a stepped pyramid is four flat sides, one colour or two', () => {
+  const one = wedgeMesh(buildVoxels(pyramid('T')));
+  assert.equal(one.slopes, 4, 'a side is one traced region across both levels');
+  assert.equal(one.corners, 8, 'four hips per level');
+  assert.equal(one.gaps, 0);
+  assert.equal(one.triangles, 20);
+  assert.equal(oddEdges(one.geometry), 0);
+  const two = wedgeMesh(buildVoxels(pyramid('R')));
+  assert.equal(two.slopes, 4, 'each triangle of a fold reads only its own arm');
+  assert.equal(two.corners, 8);
+  assert.equal(two.triangles, one.triangles, 'a colour edge costs no triangle');
+  assert.equal(oddEdges(two.geometry), 0);
+});
+
+test("a hip's shared solid can be a wall", () => {
+  // The plinth on its side: a 2x2 block on the +z face of a 4x4 slab.
+  const built = wedgeMesh(
+    buildVoxels({
+      front: fill(4, 4, 'T'),
+      right: img(['T.', 'TT', 'TT', 'T.']),
+      top: img(['.TT.', 'TTTT']),
+    })
+  );
+  assert.equal(built.corners, 4);
+  assert.equal(built.gaps, 0);
+  assert.equal(oddEdges(built.geometry), 0);
+});
+
+test('a hip reads the floor it hides: a chamfer ring closes only where it is painted', () => {
+  // The slab's sides are tan, so the face past the hip's floor edge never
+  // matches the chamfer. Only the hidden ring texel can carry its colour.
+  const painted = wedgeMesh(buildVoxels(plinth('N', 'T')));
+  assert.equal(painted.corners, 4, 'the ring corner carries the chamfer colour');
+  assert.equal(painted.gaps, 0);
+  assert.equal(oddEdges(painted.geometry), 0);
+  const bare = wedgeMesh(buildVoxels(plinth('N', 'N')));
+  assert.equal(bare.corners, 0, 'neither rim edge carries it, so the gap stays');
+  assert.equal(oddEdges(bare.geometry), 0);
+});
+
+test('a box vertex with three chamfers closes with one facet on the diagonal', () => {
+  // A 6-cube with the three edges at its (+x, +y, +z) vertex chamfered 1:1.
+  const rows = (hole) =>
+    Array.from({ length: 6 }, (_, v) =>
+      Array.from({ length: 6 }, (_, u) => (u === hole && v === 0 ? '.' : 'T')).join('')
+    );
+  const built = wedgeMesh(
+    buildVoxels({ front: img(rows(5)), right: img(rows(5)), top: img(rows(0)) })
+  );
+  assert.equal(built.corners, 1, 'one corner tetrahedron');
+  assert.equal(built.gaps, 0);
+  assert.ok(hasNormal(built.geometry, [1, 1, 1]), 'the facet faces the cell corner');
+  assert.equal(oddEdges(built.geometry), 0);
+});
+
+test('a pitch change along one ridge fills with a facet', () => {
+  // A 1:1 chamfer on the top +z edge and a 1:2 one on the vertical +x/+z edge.
+  // The 1:2 arm cannot reach the last cell, so a 1:1 stands there and the two
+  // cap into each other.
+  const n = 6;
+  const full = fill(n, n, 'T');
+  const built = wedgeMesh(
+    buildVoxels({
+      front: full,
+      right: img(
+        Array.from({ length: n }, (_, v) =>
+          Array.from({ length: n }, (_, u) => (v === 0 && u === n - 1 ? '.' : 'T')).join(
+            ''
+          )
+        )
+      ),
+      top: img(
+        Array.from({ length: n }, (_, v) =>
+          Array.from({ length: n }, (_, u) => (u === 0 && v < 2 ? '.' : 'T')).join('')
+        )
+      ),
+    })
+  );
+  assert.equal(built.corners, 1);
+  assert.equal(built.gaps, 0, 'the 1:1 is absorbed and neither end caps');
+  assert.equal(oddEdges(built.geometry), 0);
+});
+
+// Inside corners come only from a layer union: one view that empties a cell
+// empties its whole line, and that line holds one of the three neighbours.
+
+const floorLayer = (h, w = 6) => ({
+  front: img([...Array(h - 1).fill('.'.repeat(w)), 'T'.repeat(w)]),
+  right: img([...Array(h - 1).fill('.'.repeat(w)), 'T'.repeat(w)]),
+  top: fill(w, w, 'T'),
+});
+const lSlab = (h, w = 6, front = 'T'.repeat(w)) => ({
+  front: img([...Array(h - 1).fill(front), '.'.repeat(w)]),
+  right: img([...Array(h - 1).fill('T'.repeat(w)), '.'.repeat(w)]),
+  top: img([...Array(3).fill('TTTTTT'), ...Array(3).fill('TTT...')]),
+});
+
+test('a one-colour inside corner is a cut cube, chamfer above or not', () => {
+  for (const high of [1, 3]) {
+    const built = wedgeMesh(
+      unionVoxels([buildVoxels(floorLayer(high + 1)), buildVoxels(lSlab(high + 1))])
+    );
+    assert.equal(built.corners, 1, `${high} high: the inner corner cell`);
+    assert.equal(built.gaps, 0, `${high} high`);
+    assert.ok(
+      hasNormal(built.geometry, [-1, 1, -1]),
+      `${high} high: the cut faces the cell's open corner`
+    );
+    assert.equal(oddEdges(built.geometry), 0, `${high} high`);
+  }
+});
+
+test('an inside corner whose walls differ in colour is a valley', () => {
+  // The −z wall and the floor under the x arm are red, the rest teal, so the
+  // three faces the cut cube would need do not agree.
+  const built = wedgeMesh(
+    unionVoxels([
+      buildVoxels({
+        front: img(['......', 'TTTTTT']),
+        right: img(['......', 'TTTTTT']),
+        top: img(['TTTTTT', 'TTTTTT', 'TTTTTT', 'TTTTRR', 'TTTTTT', 'TTTTTT']),
+      }),
+      buildVoxels(lSlab(2, 6, 'RRRRRR')),
+    ])
+  );
+  assert.equal(built.corners, 1);
+  assert.equal(built.gaps, 0);
+  assert.ok(!hasNormal(built.geometry, [-1, 1, -1]), 'a valley, not a cut cube');
+  assert.equal(oddEdges(built.geometry), 0);
+});
+
+test('a slab with a bevelled plan corner closes over its floor', () => {
+  const built = wedgeMesh(
+    unionVoxels([
+      buildVoxels({
+        front: img(['.....', 'TTTTT']),
+        right: img(['.....', 'TTTTT']),
+        top: fill(5, 5, 'T'),
+      }),
+      buildVoxels({
+        front: img(['.TTT.', '.....']),
+        right: img(['.TTT.', '.....']),
+        top: img(['.....', '.TTT.', '.TTT.', '.TT..', '.....']),
+      }),
+    ])
+  );
+  assert.equal(built.gaps, 0, 'the cut cube presents ends the hips take');
+  assert.equal(oddEdges(built.geometry), 0);
+});
+
+test('the corner gates hold under the ±1 source RGB farble', () => {
+  assert.equal(wedgeMesh(buildVoxels(farble(plinth()))).corners, 4);
+  assert.equal(wedgeMesh(buildVoxels(farble(pyramid('R')))).corners, 8);
+});
+
+// A 10-cell box whose (+x, +y, +z) vertex is rounded independently in the
+// front, side and top views, each in one of nine staircase styles.
+const STYLES = [
+  [],
+  [1],
+  [2, 1],
+  [3, 2, 1],
+  [2],
+  [4, 2],
+  [1, 1],
+  [2, 2, 1, 1],
+  [4, 2, 1, 1],
+];
+const N = 12;
+
+function sweepHull(front, side, top) {
+  const dims = { nx: N, ny: N, nz: N };
+  const cuts = (style, u, v, vMax) => u > 10 - (style[vMax - v] ?? 0);
+  const solid = new Uint8Array(N * N * N);
+  for (let z = 1; z <= 10; z++)
+    for (let y = 0; y <= 9; y++)
+      for (let x = 1; x <= 10; x++)
+        if (!cuts(front, x, y, 9) && !cuts(side, z, y, 9) && !cuts(top, x, z, 10))
+          solid[voxIndex(x, y, z, dims)] = 1;
+  const surfaceMask = new Uint8Array(N * N * N);
+  for (let z = 0; z < N; z++)
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const i = voxIndex(x, y, z, dims);
+        if (!solid[i]) continue;
+        FACE_KEYS.forEach((face, f) => {
+          const [a, b, c] = FACE_NORMAL[face].map((d, k) => [x, y, z][k] + d);
+          const out = [a, b, c].some((v) => v < 0 || v >= N);
+          if (out || !solid[voxIndex(a, b, c, dims)]) surfaceMask[i] |= 1 << f;
+        });
+      }
+  return { dims, solid, surfaceMask, faceColor: new Map(), palette: [] };
+}
+
+test('every rounding of a box vertex welds watertight, in all 729 style mixes', () => {
+  let corners = 0;
+  for (const front of STYLES)
+    for (const side of STYLES)
+      for (const top of STYLES) {
+        const built = wedgeMesh(sweepHull(front, side, top), { flat: true });
+        corners += built.corners;
+        if (oddEdges(built.geometry))
+          assert.fail(`boundary edges at ${front}/${side}/${top}`);
+      }
+  assert.ok(corners > 1000, 'the sweep exercises the corner pass');
+});
+
+test('three arms over a wall face close from the gap rim', () => {
+  // Two legs of an L, one 2 cells long and one 1, with the corner bevelled in
+  // plan and both tops chamfered. The three arms have no shared vertex and the
+  // box floor is another arm's cell, so only the rim itself settles it.
+  const built = wedgeMesh(
+    buildVoxels({
+      front: img(['.....', '.....', '.RR..', '.RRR.', '.....']),
+      right: img(['.....', '.....', '.R...', '.RR..', '.....']),
+      top: img(['.....', '.....', '...R.', '.RRR.', '.....']),
+    })
+  );
+  assert.equal(built.corners, 1, 'one fill, from the caps and the wall between');
+  assert.equal(built.gaps, 0);
+  assert.equal(oddEdges(built.geometry), 0);
 });

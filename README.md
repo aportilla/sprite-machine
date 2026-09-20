@@ -110,6 +110,12 @@ glass the same color in both faces and the windshield becomes a slope. Where
 the two colors differ, the edge stays sharp, so a roof keeps a crisp edge
 against the windows as long as they are different colors.
 
+Where two slopes run into each other at a corner, the corner is filled in too,
+so a slope carries on around the turn instead of leaving a dent. A block whose
+foot slopes on every side comes out with a clean mitre at each corner, and a
+stepped pyramid comes out with four flat sides. The same color rule decides:
+give the two slopes that meet different colors and the corner stays square.
+
 ### Parts that need their own layer
 
 Carving can only remove what some face shows as empty. If a gap is hidden in

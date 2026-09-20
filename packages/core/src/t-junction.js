@@ -6,21 +6,19 @@
 // exact: split each triangle edge at every mesh vertex strictly inside it, then
 // re-triangulate the convex result with its own vertices.
 //
-// Only an edge in a coordinate plane can carry interior vertices, at the
-// lattice points along it. An edge that changes all three coordinates is a
-// triangulation chord across a slope, where a valid surface has no vertex, so
-// it is skipped.
+// An edge that changes all three coordinates is split too: a corner fill folds
+// on one, and two sides of a fold can split it at different lattice points.
+// Splitting a chord at a vertex that lies on it keeps the surface, because both
+// triangles on the chord split alike.
 //
 // UVs are computed from position after the repair (skin.js uvOfLattice).
 
 const key = (p) => p[0] + ',' + p[1] + ',' + p[2];
 const gcd = (x, y) => (y ? gcd(y, x % y) : x);
 
-// Vertices in `vset` strictly inside segment p->q, ordered p->q. Returns []
-// when p->q changes all three coordinates.
+// Vertices in `vset` strictly inside segment p->q, ordered p->q.
 function interiorPointsOnEdge(p, q, vset) {
   const d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
-  if (d[0] && d[1] && d[2]) return []; // a chord
   const n = gcd(gcd(Math.abs(d[0]), Math.abs(d[1])), Math.abs(d[2])); // lattice steps
   const out = [];
   for (let t = 1; t < n; t++) {

@@ -110,6 +110,25 @@ test('eliminateTJunctions splits a 1:2 edge at the lattice vertex inside it', ()
   assert.equal(out.filter((t) => t.color === 1).length, 2, 'the 1:2 edge was split once');
 });
 
+// A corner fill folds on an edge that changes all three coordinates, and the
+// two sides of a fold can split it at different lattice points.
+test('eliminateTJunctions splits an edge that changes all three coordinates', () => {
+  const N0 = [1, -1, 0];
+  const N1 = [0, -1, 1];
+  const tris = [
+    // the fold (0,0,0) -> (2,2,2), through the lattice point (1,1,1)
+    { a: [0, 0, 0], b: [2, 2, 2], c: [0, 0, 2], normal: N0, color: 1 },
+    // its other side, split at (1,1,1)
+    { a: [0, 0, 0], b: [2, 0, 0], c: [1, 1, 1], normal: N1, color: 2 },
+    { a: [1, 1, 1], b: [2, 0, 0], c: [2, 2, 2], normal: N1, color: 3 },
+  ];
+  assert.ok(hasTJunction(tris), 'setup: a vertex sits inside the fold');
+  const out = eliminateTJunctions(tris);
+  assert.ok(!hasTJunction(out));
+  assert.ok(Math.abs(totalArea(tris) - totalArea(out)) < 1e-9);
+  assert.equal(out.filter((t) => t.color === 1).length, 2, 'the fold was split once');
+});
+
 // Several collinear points on one edge go through ear clipping's onSeg guard.
 test('eliminateTJunctions emits no degenerate tris on a collinear-heavy edge', () => {
   const N = [0, 0, 1];

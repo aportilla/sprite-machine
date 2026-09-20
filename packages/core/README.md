@@ -182,10 +182,16 @@ union's lattice and builds layer `k` alone, where it sits in the whole model.
    included), triangulated by earcut. Wedges fill every concave notch whose
    covered faces share a material: a 45° wedge fills a one-by-one step, and
    a 1:2 wedge fills a two-by-one step, the notch and the cell beside it.
-   Each slope block is one quad, and its gable caps fold into the walls. A
-   lattice-exact T-junction repair keeps the mesh watertight. The colour is a skin: a
-   chart per multi-colour region and a swatch per colour, packed
-   deterministically onto a power-of-two texture and sampled nearest.
+   Each slope plane is traced per colour into one polygon per region, so a
+   tapered slope is one triangle or trapezoid, and its gable caps fold into the
+   walls. Where slopes meet at a corner, the gap their caps leave is filled from
+   its rim — the caps around it plus the solid faces between them: one triangle
+   for three rim points, two for four, split on the diagonal raised across the
+   gap, so the planes carry their pitch around the corner like a hip roof,
+   whatever pitches meet. A lattice-exact T-junction repair keeps the mesh
+   watertight. The colour is a skin: a chart per multi-colour region and a
+   swatch per colour, packed deterministically onto a power-of-two texture and
+   sampled nearest.
 
 With layers, steps 1 to 5 run once per layer. The union ORs the solids in the
 largest lattice, extracts its surface again, and gives each exposed face the
@@ -196,7 +202,9 @@ ramp at the corner. Painted differently, they keep the step. A staircase of
 two-cell treads, or of two-cell risers, ramps at 1:2 where all three faces of
 a step share the colour, and at 45° otherwise. A 1:2 fires on a step whose
 legs stop at two cells and one, or at the end of a run beside such a step, so
-a lone one-high ledge on a floor keeps a 45° ramp.
+a lone one-high ledge on a floor keeps a 45° ramp. A corner fill reads the same
+way: its triangle needs two rim edges of one colour and takes it, so painting
+the two slopes that meet differently keeps the corner square.
 
 ## License
 

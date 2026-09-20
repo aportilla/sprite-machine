@@ -1218,11 +1218,29 @@ cut into the object, and a shape with no staircase gets none. Every vertex is
 on the integer lattice, so the mesh welds watertight. A wedge whose end meets
 solid, such as another layer's, leaves the rest of that solid's face open.
 
-**The planar merge**. Wedges are found per notch cell and emitted per plane. A
-slope is one quad per block: the wedges of one slope plane (one orientation,
-one ratio, one intercept), greedy-merged on one color. A block's gable caps are
-traced into the region polygon of the plane they lie on. The T-junction repair
-runs after the merge and splits an edge at every lattice point on it.
+**Corners**. Where two or three slopes meet, their gable caps leave a gap. Its
+rim — the arms' end edges and the outer edges of the floor or wall between them
+— is on the integer lattice. Three rim points take one triangle, four take two
+split on the diagonal raised across the gap, so a hip roof's planes carry their
+pitch around the corner. The kinds are a hip (two arms over one shared solid,
+the usual chamfer around a block's foot or a stepped pyramid's corner), a corner
+tetrahedron (three arms at a box vertex), a cut cube and a valley (an inside
+corner, which only a layer union can make) and a facet where a 1:2 arm and a
+1:1 meet along one ridge. What those leave goes to a last pass that reads the
+rim off the gap itself — the caps facing one group of empty cells, plus those
+cells' exposed solid faces — which closes corners the kinds have no name for,
+such as three chamfers of different pitch meeting over a wall. A fill triangle
+needs two rim edges of one color and takes it, so a corner between two colors
+is a sharp color edge; a gap fills whole or not at all, and one whose rim does
+not come out at three or four points keeps its gable.
+
+**The planar merge**. Wedges are found per notch cell and emitted per plane. The
+wedges of one slope plane (one orientation, one ratio, one intercept) and the
+corner folds that land on it are traced per color into one polygon per region,
+so a tapered slope such as a pyramid's side is one triangle or trapezoid. A
+block's gable caps are traced into the region polygon of the plane they lie on.
+The T-junction repair runs after the merge and splits an edge at every lattice
+point on it, a corner's fold included.
 
 A wedge fires only when the faces it would join, the corner's riser and tread,
 are the same color within `sameMat`'s tolerance. Otherwise the corner stays a
@@ -1375,11 +1393,10 @@ release, and a layer key waits while it is set.
   `?layer=` dev hook. A Layers windoid. The layer
   count in the glb's `extras`. A versioned re-seed of the text files, so an
   existing profile reads the Layers paragraph.
-- **Low-poly scope.** A convex staircase still steps, and a 3-D corner where two
-  ridges meet degrades to a step. Steps of three or more cells ramp at 45° at
-  their corners, and a slope never crosses a color seam along its steps. Where
-  a 1:2 end meets a 45° end along the ridge, both keep their caps, which
-  overlap inside the solid instead of meeting on an exact trim.
+- **Low-poly scope.** A convex staircase still steps. Steps of three or more
+  cells ramp at 45° at their corners, and a slope never crosses a color seam
+  along its steps. A corner whose rim does not come out at three or four points
+  keeps its gable, as does a 1:2 end meeting a 45° end away from a corner.
 - **Perf.** The render loop redraws only on change, and the skin is rebaked per
   rebuild and disposed with the mesh. The carve is a synchronous O(n³) walk, so
   tiles are capped at 64 (`TILE_MAX`). To lift the cap, move `buildVoxels`
