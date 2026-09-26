@@ -141,23 +141,35 @@ export function isInside(state, id, ancestor) {
 }
 
 /**
+ * Folder `id` and the folders around it, innermost first. The desktop ends the
+ * chain, and so does a folder with no record. A looping chain stops at its
+ * first repeat.
+ * @param {FilesState} state @param {string|null|undefined} id
+ * @returns {string[]}
+ */
+export function enclosingFolders(state, id) {
+  const ids = [];
+  const seen = new Set();
+  let cur = containerOf(state, id ?? null);
+  while (cur != null && !seen.has(cur)) {
+    ids.push(cur);
+    seen.add(cur);
+    const parent = state.folders.find((f) => f.id === cur)?.parent;
+    cur = containerOf(state, parent);
+  }
+  return ids;
+}
+
+/**
  * Folder names from the root down to `id`, inclusive. The desktop is the
  * empty path.
  * @param {FilesState} state @param {string|null|undefined} id
  * @returns {string[]}
  */
 export function folderPath(state, id) {
-  const names = [];
-  const seen = new Set();
-  let cur = containerOf(state, id ?? null);
-  while (cur != null && !seen.has(cur)) {
-    const f = state.folders.find((x) => x.id === cur);
-    if (!f) break;
-    names.unshift(f.name);
-    seen.add(cur);
-    cur = containerOf(state, f.parent);
-  }
-  return names;
+  return enclosingFolders(state, id)
+    .reverse()
+    .map((f) => /** @type {FolderRow} */ (state.folders.find((x) => x.id === f)).name);
 }
 
 /**

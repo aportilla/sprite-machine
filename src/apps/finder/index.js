@@ -41,7 +41,13 @@ export const finder = {
   menus,
   init({ menus, deps }) {
     const { desktop, windows, modalOpen, showStorage } = deps;
-    const folders = initFolderWindows(desktop, windows, { savedPin: deps.windowPin });
+    // The icon layer takes the folder windows, so its calls are read at each
+    // close.
+    const folders = initFolderWindows(desktop, windows, {
+      savedPin: deps.windowPin,
+      iconBox: (key) => icons.iconBox(key),
+      holdGhost: (key, until) => icons.holdGhost(key, until),
+    });
     const icons = initIcons(desktop, {
       windows,
       folders,
@@ -566,6 +572,12 @@ export const finder = {
         pins: () => folders.pins(),
         /** Opens a folder's window, or brings it forward. */
         openFolder: (id) => folders.open(id),
+        /** The box a window showing an item closes into, or null (icons.js).
+         *  @param {string} key */
+        iconBox: (key) => icons.iconBox(key),
+        /** Keeps an item's icon drawn open until `until` settles.
+         *  @param {string} key @param {Promise<unknown>} until */
+        holdGhost: (key, until) => icons.holdGhost(key, until),
         /** Asks whether to add or replace, for a zip dropped on the page. */
         receiveArchive: (file) => receiveArchive(file),
         /** Subscribes to icon moves that end without a gesture, such as a

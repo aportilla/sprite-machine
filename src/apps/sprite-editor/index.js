@@ -16,7 +16,7 @@ import menus from './menus.html?raw';
 import { session } from '../../state/session.js';
 import { prefs } from '../../state/prefs.js';
 import { build } from '../../state/build.js';
-import { shell, SPRITE_EDITOR } from '../../state/shell.js';
+import { shell, FINDER, SPRITE_EDITOR } from '../../state/shell.js';
 import {
   ring,
   ringMetaChunks,
@@ -61,12 +61,15 @@ export const spriteEditor = {
   init({ menus, deps }) {
     const { desktop, windows, modalOpen, showStorage } = deps;
     // A document window's close box runs closeContext, which is dirty-checked.
+    // The window closes into its icon through the Finder, read at each close.
     const editorWindows = initEditorWindows(desktop, windows, {
       onDocumentClose: (key) => {
         const ctx = workspace.byKey(key);
         if (ctx) closeContext(ctx);
       },
       savedPin: deps.windowPin,
+      iconBox: (key) => deps.apps[FINDER]?.iconBox(key) ?? null,
+      holdGhost: (key, until) => deps.apps[FINDER]?.holdGhost(key, until),
     });
     const $ = (sel) => {
       const el = desktop.querySelector(sel);
@@ -288,10 +291,14 @@ export const spriteEditor = {
     }
 
     // A stored document has one window. Opening it again activates that window.
-    const openDoc = async (id) => {
+    // `from` is the box a new window grows out of. The reconciler makes the
+    // window inside openStored, in this task, so it has not painted when
+    // show() runs.
+    const openDoc = async (id, { from = null } = {}) => {
       try {
         const res = await workspace.openStored(id);
-        if (res) editorWindows.showDocument(res.ctx.key);
+        if (!res) return;
+        editorWindows.showDocument(res.ctx.key, { from: res.existed ? null : from });
       } catch (err) {
         build.setError(`Couldn't open the document: ${err.message}`);
       }

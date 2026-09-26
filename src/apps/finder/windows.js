@@ -5,6 +5,10 @@
 // A window's box persists as a nine-slice pin, keyed like the folder's icon. It
 // is kept at close() for the session and handed to desktop-state.js by pins(),
 // which also reports the open windows' depth, so the boot reopens them.
+//
+// A window opened from its icon grows out of it, and the user's close shrinks
+// it back into the icon (iconBox), which stays drawn open until the zoom rects
+// land (holdGhost). A folder that is gone closes at once.
 
 import { VfWindow } from 'vintage-frames';
 import markup from './windows.html?raw';
@@ -28,10 +32,19 @@ const keyOf = (id) => `folder:${id}`;
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
  * @param {ReturnType<typeof import('../../shell/windows.js').initWindows>} windows
- * @param {{savedPin?: (key: string) => import('../../shell/layout.js').Pin | null}} [opts]
+ * @param {{
+ *   savedPin?: (key: string) => import('../../shell/layout.js').Pin | null,
+ *   iconBox?: (key: string) => DOMRect | null,
+ *   holdGhost?: (key: string, until: Promise<unknown>) => void,
+ * }} [opts]
  *   savedPin: a saved pin by item key (desktop-state.js windowPin), or null.
+ *   iconBox, holdGhost: the icon layer's, read at each close.
  */
-export function initFolderWindows(desktop, windows, { savedPin = () => null } = {}) {
+export function initFolderWindows(
+  desktop,
+  windows,
+  { savedPin = () => null, iconBox = () => null, holdGhost = () => {} } = {}
+) {
   const tpl = /** @type {HTMLTemplateElement} */ (
     parseWindows(markup).querySelector('#tpl-folder-window')
   );
@@ -108,7 +121,10 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
   };
   desktop.addEventListener('vf-resize', onGrow);
 
-  function open(id) {
+  /** @param {string} id
+   *  @param {{from?: DOMRect | null}} [opts]  from: the box a new window grows
+   *    out of, in viewport CSS px. */
+  function open(id, { from = null } = {}) {
     const rec = files.get().folders.find((f) => f.id === id);
     if (!rec) return null;
     let win = wins.get(id);
@@ -139,20 +155,26 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
     desktop.bringToFront(win);
     count(id);
     fit(id);
+    if (from) win.show({ from });
     notify();
     return win;
   }
 
-  function close(id) {
+  /** Closes a folder's window into `to`, a viewport box, or at once without
+   *  one. */
+  function closeWindow(id, to = null) {
     const win = wins.get(id);
     if (!win) return;
     for (const fn of willClose) fn(id, fieldOf(win));
     remembered.set(id, windows.pinOf(win));
-    windows.release(win);
-    win.remove(); // the kit activates the next window
+    const landed = windows.dismiss(win, to); // the kit activates the next window
     wins.delete(id);
+    if (to) holdGhost(keyOf(id), landed);
     notify();
   }
+
+  /** The user's close: into the folder's icon. */
+  const close = (id) => closeWindow(id, iconBox(keyOf(id)));
 
   /** Size the field to the viewport, grown to hold every icon. The field's size
    *  is the scroll range. */
@@ -179,7 +201,7 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
     for (const [id, win] of [...wins]) {
       const rec = st.folders.find((f) => f.id === id);
       if (!rec) {
-        close(id);
+        closeWindow(id);
         continue;
       }
       if (win.heading !== rec.name) win.heading = rec.name;
@@ -194,6 +216,7 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
     /** Open a folder's window or bring it forward. Returns it, or null for an
      *  unknown folder. */
     open,
+    /** Close a folder's window into its icon. */
     close,
     /** @param {string} id */
     isOpen: (id) => wins.has(id),
@@ -247,7 +270,7 @@ export function initFolderWindows(desktop, windows, { savedPin = () => null } = 
       unsubscribe();
       desktop.removeEventListener('vf-close', onClose);
       desktop.removeEventListener('vf-resize', onGrow);
-      for (const id of [...wins.keys()]) close(id);
+      for (const id of [...wins.keys()]) closeWindow(id);
       changed.clear();
       willClose.clear();
     },

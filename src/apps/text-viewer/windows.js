@@ -9,6 +9,10 @@
 // nearBox reads the state at the click. The previous box is saved as a
 // nine-slice pin. Without one the window returns to its placement. `keep` holds
 // a zoomed window zoomed across a browser resize.
+//
+// A window opened from its icon grows out of it, and the user's close shrinks
+// it back into the icon through the Finder (iconBox, holdGhost). A file that
+// is gone closes at once.
 
 import { VfWindow } from 'vintage-frames';
 import markup from './windows.html?raw';
@@ -25,10 +29,19 @@ const itemOf = (id) => `text:${id}`;
 /**
  * @param {import('vintage-frames').VfDesktop} desktop
  * @param {ReturnType<typeof import('../../shell/windows.js').initWindows>} windows
- * @param {{savedPin?: (key: string) => import('../../shell/layout.js').Pin | null}} [opts]
+ * @param {{
+ *   savedPin?: (key: string) => import('../../shell/layout.js').Pin | null,
+ *   iconBox?: (key: string) => DOMRect | null,
+ *   holdGhost?: (key: string, until: Promise<unknown>) => void,
+ * }} [opts]
  *   savedPin: a saved pin by item key (desktop-state.js windowPin), or null.
+ *   iconBox, holdGhost: the Finder's, read at each close.
  */
-export function initTextWindows(desktop, windows, { savedPin = () => null } = {}) {
+export function initTextWindows(
+  desktop,
+  windows,
+  { savedPin = () => null, iconBox = () => null, holdGhost = () => {} } = {}
+) {
   const tpl = /** @type {HTMLTemplateElement} */ (
     parseWindows(markup).querySelector('#tpl-text-window')
   );
@@ -79,7 +92,10 @@ export function initTextWindows(desktop, windows, { savedPin = () => null } = {}
   };
   desktop.addEventListener('vf-zoom', onZoom);
 
-  async function open(id) {
+  /** @param {string} id
+   *  @param {{from?: DOMRect | null}} [opts]  from: the box a new window grows
+   *    out of, in viewport CSS px. */
+  async function open(id, { from = null } = {}) {
     let win = wins.get(id);
     if (win) {
       desktop.bringToFront(win);
@@ -120,17 +136,23 @@ export function initTextWindows(desktop, windows, { savedPin = () => null } = {}
     });
     remembered.delete(id);
     desktop.bringToFront(win);
+    if (from) win.show({ from });
     return win;
   }
 
-  function close(id) {
+  /** Closes a text's window into `to`, a viewport box, or at once without
+   *  one. */
+  function closeWindow(id, to = null) {
     const win = wins.get(id);
     if (!win) return;
     remembered.set(id, windows.pinOf(win));
-    windows.release(win);
-    win.remove(); // the kit picks the next active window
     wins.delete(id);
+    const landed = windows.dismiss(win, to); // the kit picks the next active window
+    if (to) holdGhost(itemOf(id), landed);
   }
+
+  /** The user's close: into the file's icon. */
+  const close = (id) => closeWindow(id, iconBox(itemOf(id)));
 
   // Follow renames, and close windows whose text file was deleted.
   const sync = () => {
@@ -138,7 +160,7 @@ export function initTextWindows(desktop, windows, { savedPin = () => null } = {}
     for (const [id, win] of [...wins]) {
       const rec = st.texts.find((t) => t.id === id);
       if (!rec) {
-        close(id);
+        closeWindow(id);
         continue;
       }
       if (win.heading !== rec.name) win.heading = rec.name;
@@ -158,7 +180,9 @@ export function initTextWindows(desktop, windows, { savedPin = () => null } = {}
     /** Opens or raises a text file's window. Resolves the window, or null
      *  if the file is gone. */
     open,
+    /** Closes a text file's window into its icon. */
     close,
+    /** Closes every window, each into its own icon. */
     closeAll() {
       for (const id of [...wins.keys()]) close(id);
     },
@@ -197,7 +221,7 @@ export function initTextWindows(desktop, windows, { savedPin = () => null } = {}
       unsubscribe();
       desktop.removeEventListener('vf-close', onClose);
       desktop.removeEventListener('vf-zoom', onZoom);
-      for (const id of [...wins.keys()]) close(id);
+      for (const id of [...wins.keys()]) closeWindow(id);
     },
   };
 }

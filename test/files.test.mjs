@@ -13,6 +13,7 @@ import {
   isInside,
   isTrashed,
   descendantsOf,
+  enclosingFolders,
   folderPath,
   nextFolderName,
   nextDocName,
@@ -316,6 +317,32 @@ test('removeFolder lifts its children into its container; an orphaned folder id 
     ['Car']
   );
   assert.deepEqual(folderPath(st, 'gone'), []);
+});
+
+test('enclosingFolders: the folder and those around it, innermost first; the desktop, a missing record or a repeat ends the chain', () => {
+  const row = (id, parent) => ({ id, name: id, parent, createdAt: 0, modifiedAt: 0 });
+  const st = {
+    available: true,
+    list: [],
+    texts: [],
+    folders: [
+      row('a', null),
+      row('b', 'a'),
+      row('c', 'b'),
+      row('d', 'gone'),
+      row('x', 'y'),
+      row('y', 'x'),
+    ],
+  };
+  assert.deepEqual(enclosingFolders(st, 'c'), ['c', 'b', 'a']);
+  assert.deepEqual(enclosingFolders(st, null), [], 'the desktop');
+  assert.deepEqual(enclosingFolders(st, 'gone'), [], 'no record reads as the desktop');
+  assert.deepEqual(enclosingFolders(st, 'd'), ['d'], 'a missing parent ends the chain');
+  assert.deepEqual(
+    enclosingFolders(st, 'x'),
+    ['x', 'y'],
+    'a loop stops at its first repeat'
+  );
 });
 
 // Trash

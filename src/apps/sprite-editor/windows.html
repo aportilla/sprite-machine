@@ -17,6 +17,7 @@
   variant="utility"
   heading="Full Sprite View"
   movable
+  outline-drag
   header-height="62"
 >
   <sm-atlas-controls slot="header"></sm-atlas-controls>
@@ -33,6 +34,7 @@
   variant="utility"
   heading="3D View"
   movable
+  outline-drag
   resizable
   header-height="24"
 >
@@ -55,6 +57,7 @@
   variant="utility"
   heading="3D Sprite Atlas"
   movable
+  outline-drag
   resizable
   scrollbars="horizontal"
   header-height="63"
@@ -71,6 +74,7 @@
   variant="utility"
   heading="Color Palette"
   movable
+  outline-drag
   resizable
   scrollbars="vertical"
 >
@@ -86,6 +90,7 @@
   variant="utility"
   heading="Tools"
   movable
+  outline-drag
   width="70"
   height="53"
 >
@@ -94,7 +99,7 @@
 
 <!-- Document window template -->
 <template id="tpl-document-window">
-  <vf-window heading="untitled" movable resizable zoomable>
+  <vf-window heading="untitled" movable outline-drag resizable zoomable>
     <sm-editor></sm-editor>
     <sm-status-line kind="tile" slot="status"></sm-status-line>
   </vf-window>

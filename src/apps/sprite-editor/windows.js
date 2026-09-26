@@ -6,8 +6,10 @@
 //   pref. Hiding keeps them mounted, so canvas identity survives. Each opens at
 //   its saved box, or at its placement without one.
 // - Document windows are reconciled from the workspace. A new context clones
-//   #tpl-document-window. A closed context removes its window, and its box is
-//   kept for the session, over the saved pin the boot restores.
+//   #tpl-document-window. A closed context closes its window into the file's
+//   icon through the Finder (iconBox, holdGhost), and its box is kept for the
+//   session, over the saved pin the boot restores. showDocument's `from` grows
+//   a window just opened out of its icon.
 // - Placement comes from layout.js on the live raster at init, on each open and
 //   on Arrange Windows.
 // - pins() reports both kinds for the desktop state, the windoids by id and the
@@ -50,14 +52,17 @@ const USER_AXES = { ring: ['width'], palette: ['width', 'height'] };
  * @param {import('vintage-frames').VfDesktop} desktop
  * @param {ReturnType<typeof import('../../shell/windows.js').initWindows>} windows
  * @param {{onDocumentClose(key: string): void,
- *          savedPin?: (key: string) => import('../../shell/layout.js').Pin | null}} opts
+ *          savedPin?: (key: string) => import('../../shell/layout.js').Pin | null,
+ *          iconBox?: (key: string) => DOMRect | null,
+ *          holdGhost?: (key: string, until: Promise<unknown>) => void}} opts
  *   onDocumentClose: the dirty-checking close for a context key.
  *   savedPin: a saved window pin by item key (desktop-state.js windowPin).
+ *   iconBox, holdGhost: the Finder's, read at each close.
  */
 export function initEditorWindows(
   desktop,
   windows,
-  { onDocumentClose, savedPin = () => null }
+  { onDocumentClose, savedPin = () => null, iconBox = () => null, holdGhost = () => {} }
 ) {
   /** @type {(() => void)[]} */
   const unsubs = [];
@@ -395,14 +400,18 @@ export function initEditorWindows(
   const syncDocs = () => {
     const contexts = workspace.get().contexts;
     const live = new Set(contexts.map((c) => c.key));
+    // A context goes only by the user's close or Quit, so its window closes
+    // into the file's icon. An untitled document has none and goes at once.
     for (const [key, win] of byKey) {
       if (!live.has(key)) {
         const fileId = docIds.get(key);
         if (fileId) remembered.set(fileId, windows.pinOf(win));
         docIds.delete(key);
-        windows.release(win);
-        win.remove(); // the kit updates the active window
         byKey.delete(key);
+        const item = fileId ? `doc:${fileId}` : null;
+        const to = item ? iconBox(item) : null;
+        const landed = windows.dismiss(win, to); // the kit updates the active window
+        if (item && to) holdGhost(item, landed);
       }
     }
     for (const ctx of contexts) {
@@ -540,10 +549,15 @@ export function initEditorWindows(
       return out;
     },
     /** Brings a document window to the front, which also activates the Sprite
-     *  Editor. */
-    showDocument(key) {
+     *  Editor. `from` grows a window made this task out of that box; a window
+     *  already on screen is only raised.
+     *  @param {string} key
+     *  @param {{from?: DOMRect | null}} [opts] */
+    showDocument(key, { from = null } = {}) {
       const win = byKey.get(key);
-      if (win) desktop.bringToFront(win);
+      if (!win) return;
+      desktop.bringToFront(win);
+      if (from) win.show({ from });
     },
     /** A document window's editor, or null.
      *  @returns {import('../../components/sm-editor.js').SmEditor|null} */
@@ -565,16 +579,10 @@ export function initEditorWindows(
       byId.palette.removeEventListener('sm-palette-count', fitPaletteLabel);
       byId.palette.removeEventListener('sm-palette-count', followPaletteCount);
       paletteObserver.disconnect();
-      // HMR: the next init rebuilds every window, so release and remove them all.
-      for (const win of byKey.values()) {
-        windows.release(win);
-        win.remove();
-      }
+      // HMR: the next init rebuilds every window, so all of them go at once.
+      for (const win of byKey.values()) windows.dismiss(win);
       byKey.clear();
-      for (const win of authored) {
-        windows.release(win);
-        win.remove();
-      }
+      for (const win of authored) windows.dismiss(win);
     },
   };
 }

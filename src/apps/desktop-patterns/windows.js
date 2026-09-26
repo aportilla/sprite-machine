@@ -42,11 +42,11 @@ export function initPatternsWindow(desktop, windows) {
     desktop.bringToFront(win);
   }
 
+  // Opened from a menu, so it has no icon to close into: it goes at once.
   function close() {
     if (!win) return;
-    windows.release(win);
     win.removeEventListener('vf-close', onClose);
-    win.remove(); // the kit picks the next active window
+    windows.dismiss(win); // the kit picks the next active window
     win = null;
   }
 

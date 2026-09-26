@@ -4,7 +4,8 @@
 //
 // - adopt() takes the window's app, placement (`place`), saved pin (`pin`),
 //   resize policy, kept box (`keep`) and catalog item (`item`). The owner
-//   appends the node, and calls release() before removing it.
+//   appends the node, and closes it with dismiss(), which releases and
+//   removes it.
 // - shell.frontApp follows the desktop's vf-activate event: the active window's
 //   app, or the Finder when none is active. beforeFront listeners run first.
 // - On a raster resize every adopted window is re-pinned with the nine-slice
@@ -243,6 +244,16 @@ export function initWindows(desktop) {
     });
   };
 
+  /** Drops a window from the manager. */
+  const release = (win) => {
+    const a = adopted.get(win);
+    if (!a) return;
+    adopted.delete(win);
+    pins.delete(win);
+    if (a.item != null) notifyWindows();
+    notifyLayout();
+  };
+
   // Gestures. A title-bar drag fires no event, so pointerup notifies layout a
   // task later, after the kit has updated. A grow ends with vf-resize
   // detail.commit.
@@ -299,14 +310,17 @@ export function initWindows(desktop) {
       if (item != null) notifyWindows();
       notifyLayout();
     },
-    /** Drops a window from the manager. The owner removes the node. */
-    release(win) {
-      const a = adopted.get(win);
-      if (!a) return;
-      adopted.delete(win);
-      pins.delete(win);
-      if (a.item != null) notifyWindows();
-      notifyLayout();
+    /** Closes a window into `to`, a viewport box, or at once without one, then
+     *  releases and removes it. hide() reads the frame, so it runs first.
+     *  Resolves when the zoom rects are done.
+     *  @param {VfWindow} win
+     *  @param {import('vintage-frames').VfViewportBox | null} [to]
+     *  @returns {Promise<boolean>} */
+    dismiss(win, to = null) {
+      const landed = win.hide({ to });
+      release(win);
+      win.remove();
+      return landed;
     },
     /** Writes a box for a gesture the owner runs itself (a zoom, a restore, its
      *  group's arrange), then notifies layout. See writeBox.

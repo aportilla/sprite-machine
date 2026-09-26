@@ -479,9 +479,10 @@ Desktop Patterns  │ Sprite Machine  File  View                             10:
 - **File**: _Open_ ⌘O opens every selected icon, dispatching the kit's own
   `vf-open` so it takes the route a double-click or a tap pair takes. It reads
   the same selection Copy does, so the Trash is left out and it is greyed with
-  nothing selected. Several open one at a time, `OPEN_BEAT_MS` (140) apart, so
-  their windows arrive down the cascade in turn; one opens at once, and so do
-  all of them under reduced motion. The list is taken before the first open,
+  nothing selected. Several open one at a time, `OPEN_BEAT_MS` apart: one run
+  of a window's zoom rects, from the kit's `WINDOW_RECT_*` (306 ms), so each
+  window draws before the next opens; one opens at once, and so do all of them
+  under reduced motion. The list is taken before the first open,
   which deactivates the Finder and clears the selection. _New Sprite_ ⌃N opens the Sprite Editor's New box. _New Folder_
   makes _untitled folder_ in the front folder window, else on the desktop, with
   its name selected for typing. It is greyed while the front window is the Trash
@@ -641,12 +642,37 @@ lifecycle and close and zoom boxes (`windows.js`), and their placement and
 sizes (`layout.js`, pure). The **window manager**, `shell/windows.js`, handles
 what applies to all of them. Every window enters through `windows.adopt` with
 its application, placement, saved pin, resize policy, a box it keeps across a
-resize, and the catalog item it shows. The front application is the active
+resize, and the catalog item it shows, and leaves through
+`windows.dismiss(win, to)`, which hides it before releasing and removing it,
+since `hide()` reads the frame. The front application is the active
 window's application. One resize rule re-pins every window. Arrange Windows
 runs each application's arrangement group, then re-applies every window's own
 placement. `shell/layout.js` holds the desktop's geometry: the menu bar and
 options strip bands, `WINDOW_ORIGIN` (where folder and read-me windows
 open), the cascade, the nearness test and the nine-slice pin.
+
+**Motion** is the kit's, and each application chooses it:
+
+- **Every movable window has `outline-drag`**, windoids included: the
+  title-bar drag moves a dotted outline and the window moves once on release.
+  Esc cancels and writes nothing.
+- **A window that shows a file** (a document, a folder, the Trash, a read-me)
+  grows out of its icon when the icon opened it: a double-click, a tap pair or
+  File → Open. The Finder reads `vf-icon.cellRect()` at the gesture and the
+  owner calls `win.show({ from })` on the new window in the same task. A
+  document window is made by the workspace reconciler inside
+  `workspace.openStored`, so `openDoc` passes the box to `showDocument` only
+  when the open made the window.
+- **The user's close** (the close box, ⌃W, Quit) closes it into the Finder's
+  `iconBox(key)`: the item's icon, else the icon of the nearest enclosing
+  folder that is rendered (`enclosingFolders` in `state/files.js`), so a
+  trashed document closes into the Trash. Null once the record is gone. The
+  icon keeps its `open` ghost until the rects land (`holdGhost`). Several
+  closes at once each go into their own icon.
+- **At once**: windoids, dialogs, Desktop Patterns, a new, duplicated or
+  dropped document, `?file=`, the session restore, a window whose file is
+  gone and an HMR rebuild. An open that finds its window on screen raises it.
+  Under reduced motion the kit shows and hides every window at once.
 
 The Sprite Editor has two tiers of window. Other applications' windows (the
 Desktop Patterns panel, folder windows, text windows) are document tier but
@@ -654,8 +680,8 @@ are not documents.
 
 - **Document windows**: one per open document, cloned from a template by
   `apps/sprite-editor/windows.js`. A window is created on open at the doc box,
-  cascaded into the first free slot, and removed on close. Each is
-  `movable resizable zoomable`, titled with the document's name. Its status
+  cascaded into the first free slot, and closed into its icon on close. Each
+  is `movable resizable zoomable`, titled with the document's name. Its status
   strip names the edited face, led by a small layer popup
   (`vf-select size="small" no-shadow`) when the document has more than one
   layer: the layers in block order with the edited one set. A pick switches
@@ -831,8 +857,9 @@ state and is restored before the desktop's first render. A value the kit's
 
 The window is fixed-size, with no zoom box, and its body is a
 `vf-stack pad="12"` because a window body has no inset. It is created on open
-and removed by its close box. Opening it again brings it forward. It is placed
-by `centeredBox`, so Arrange re-centers it. Desktop Patterns is its own
+and removed by its close box, both at once, since it has no icon. Opening it
+again brings it forward. It is placed by `centeredBox`, so Arrange re-centers
+it. Desktop Patterns is its own
 application (`apps/desktop-patterns/`): while the panel is active the menu bar
 shows its File and View menus, and File → Close or Quit closes it. See
 [Applications and the menu bar](#applications-and-the-menu-bar) and
@@ -854,10 +881,10 @@ open-ghost treatments are exact.
   toggles, Escape cancels). A press in the field makes the Finder front. One
   selection spans every container.
 - **A folder window** (`apps/finder/windows.js`) is `movable resizable
-scrollbars="both"`, created on open and removed by its close box. Its header
-  shows the item count (`N items`) over a double rule. Its body is a
-  `vf-icon-field` at the plane's origin, so `placementAt()` and the field's
-  coordinates agree. The field is sized to the viewport, grown to hold every
+scrollbars="both"`, created on open out of its icon and closed into it by its
+  close box. Its header shows the item count (`N items`) over a double rule.
+  Its body is a `vf-icon-field` at the plane's origin, so `placementAt()` and
+  the field's coordinates agree. The field is sized to the viewport, grown to hold every
   icon, which sets the scroll range. It is placed by `cascadedBox`
   (`WINDOW_ORIGIN`, stepped per open folder window).
 - **Its box persists as a nine-slice pin**, read at each desktop-state snapshot
@@ -1104,7 +1131,8 @@ Sprite Editor has no Open… dialog (see
 [Mouse, finger and pen](#mouse-finger-and-pen)). An open document's
 window comes forward. Icons deselect when an application becomes active, and
 selecting an icon deactivates the application. Every open
-item's icon shows the kit's `open` ghost.
+item's icon shows the kit's `open` ghost, held while a closing window's zoom
+rects run into it (see [Windows](#windows)).
 
 A document's icon is its model, rendered by `scene/icon-renderer.js` with the
 rules in `lib/icon.js`:

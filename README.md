@@ -429,7 +429,8 @@ document window to come back. Keys follow the front window; see
 
 - **Open** a document, folder or read-me by double-clicking it, or select it
   and choose **File → Open** (⌘O). Select several and they open one after
-  another. An open item's icon is drawn hollow.
+  another. The window grows out of the icon, and shrinks back into it when
+  you close it. An open item's icon is drawn hollow.
 - **Select** an icon by clicking it, or drag a box around several. Hold Shift
   while dragging to toggle icons in and out of the selection. ⌘A selects
   all.
@@ -458,9 +459,10 @@ A document's icon is a small picture of its model, drawn each time you save.
 
 ### Windows
 
-- Drag a window by its title bar. Most windows resize from the box at their
-  bottom-right corner; the Tools and Full Sprite View windows and the
-  Desktop Patterns panel do not.
+- Drag a window by its title bar. A dotted outline follows the pointer, and
+  the window moves there when you let go; Esc cancels. Most windows resize
+  from the box at their bottom-right corner; the Tools and Full Sprite View
+  windows and the Desktop Patterns panel do not.
 - Click the zoom box at the right end of a document window's title bar to
   grow it right and down into the free space, and again to put it back.
 - **View → Arrange Windows** (⌘J) puts every window back where it started.

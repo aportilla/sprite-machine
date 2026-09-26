@@ -4,7 +4,7 @@
 import menus from './menus.html?raw';
 import { prefs } from '../../state/prefs.js';
 import { ring } from '../../state/ring.js';
-import { TEXT_VIEWER } from '../../state/shell.js';
+import { FINDER, TEXT_VIEWER } from '../../state/shell.js';
 import { workspace } from '../../state/workspace.js';
 import { initTextWindows } from './windows.js';
 
@@ -15,7 +15,12 @@ export const textViewer = {
   menus,
   init({ menus, deps }) {
     const { desktop, windows, modalOpen } = deps;
-    const texts = initTextWindows(desktop, windows, { savedPin: deps.windowPin });
+    // A window closes into its icon through the Finder, read at each close.
+    const texts = initTextWindows(desktop, windows, {
+      savedPin: deps.windowPin,
+      iconBox: (key) => deps.apps[FINDER]?.iconBox(key) ?? null,
+      holdGhost: (key, until) => deps.apps[FINDER]?.holdGhost(key, until),
+    });
     const menu = (name) => {
       const m = menus.find((el) => el.dataset.menu === name);
       if (!m) throw new Error(`apps/text-viewer: missing menu ${name}`);
@@ -100,8 +105,9 @@ export const textViewer = {
 
     return {
       actions: {
-        /** Opens a text file's window or brings it forward. */
-        open: (id) => texts.open(id),
+        /** Opens a text file's window or brings it forward. `opts.from` is the
+         *  box a new window grows out of. */
+        open: (id, opts) => texts.open(id, opts),
         /** Window geometry by key, for the desktop state snapshot (main.js). */
         pins: () => texts.pins(),
       },

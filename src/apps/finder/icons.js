@@ -10,14 +10,28 @@
 // - Filing is the kit's icon drag. A drop into another container moves the
 //   model, and the reconciler re-creates the icon there.
 
-import { prefersReducedMotion, snapSys, systemPxQuantum } from 'vintage-frames';
+import {
+  prefersReducedMotion,
+  snapSys,
+  systemPxQuantum,
+  WINDOW_RECT_STEP_MS,
+  WINDOW_RECT_STEPS,
+  WINDOW_RECTS_VISIBLE,
+} from 'vintage-frames';
 import folderArtUrl from '../../assets/folder.png';
 import trashArtUrl from '../../assets/trash.png';
 import trashFullArtUrl from '../../assets/trash-full.png';
 import textArtUrl from '../../assets/text-file.png';
 import { genericDocIconDataUri } from '../../image-io.js';
 import { build } from '../../state/build.js';
-import { files, childrenOf, isInside, itemCount, TRASH } from '../../state/files.js';
+import {
+  files,
+  childrenOf,
+  enclosingFolders,
+  isInside,
+  itemCount,
+  TRASH,
+} from '../../state/files.js';
 import { shell, SPRITE_EDITOR, TEXT_VIEWER } from '../../state/shell.js';
 import { workspace } from '../../state/workspace.js';
 import { pinOf, pinTo, MENU_BAR } from '../../shell/layout.js';
@@ -33,9 +47,9 @@ import {
 } from './layout.js';
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
-// The beat between opens when one command opens several icons, so their windows
-// arrive one at a time down the cascade instead of all at once.
-const OPEN_BEAT_MS = 140;
+// The beat between opens when one command opens several icons: one run of a
+// window's zoom rects, so each window draws before the next opens.
+const OPEN_BEAT_MS = (WINDOW_RECT_STEPS + WINDOW_RECTS_VISIBLE) * WINDOW_RECT_STEP_MS;
 const DOC = 'doc:';
 const FOLDER = 'folder:';
 const TEXT = 'text:';
@@ -236,8 +250,11 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
     return icon;
   }
 
+  // Each open reads the icon's box at the gesture, for the window's zoom rects.
   function wireDoc(icon, id) {
-    icon.addEventListener('vf-open', () => apps[SPRITE_EDITOR]?.openDoc(id));
+    icon.addEventListener('vf-open', () =>
+      apps[SPRITE_EDITOR]?.openDoc(id, { from: icon.cellRect() })
+    );
     icon.addEventListener('vf-change', (e) => {
       const detail = /** @type {CustomEvent} */ (e).detail;
       workspace.renameStored(id, detail.label).catch(() => {
@@ -246,7 +263,7 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
     });
   }
   function wireFolder(icon, id) {
-    icon.addEventListener('vf-open', () => folders.open(id));
+    icon.addEventListener('vf-open', () => folders.open(id, { from: icon.cellRect() }));
     icon.addEventListener('vf-change', (e) => {
       const detail = /** @type {CustomEvent} */ (e).detail;
       files.renameFolder(id, detail.label).catch(() => {
@@ -255,7 +272,9 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
     });
   }
   function wireText(icon, id) {
-    icon.addEventListener('vf-open', () => apps[TEXT_VIEWER]?.open(id));
+    icon.addEventListener('vf-open', () =>
+      apps[TEXT_VIEWER]?.open(id, { from: icon.cellRect() })
+    );
     icon.addEventListener('vf-change', (e) => {
       const detail = /** @type {CustomEvent} */ (e).detail;
       files.renameText(id, detail.label).catch(() => {
@@ -267,6 +286,10 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
   // Reconciler
   // Each root holds exactly the icons of its container's items. A moved item is
   // removed and re-created in its new root if that root is open.
+  // An icon's open ghost follows its window, and stays while a closing window's
+  // zoom rects run into it (holdGhost): the count of holds by key.
+  /** @type {Map<string, number>} */
+  const ghostHolds = new Map();
   const trashArt = (st) => (itemCount(st, TRASH) ? trashFullArtUrl : trashArtUrl);
   function sync() {
     const st = files.get();
@@ -295,15 +318,16 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
           else wireFolder(icon, rec.id);
         }
         if (icon.label !== rec.name) icon.label = rec.name;
+        const held = ghostHolds.has(key);
         if (kind === 'doc') {
           setArt(icon, rec.icon ?? genericDocIconDataUri());
-          icon.open = !!workspace.byFileId(rec.id);
+          icon.open = held || !!workspace.byFileId(rec.id);
         } else if (kind === 'text') {
           setArt(icon, textArtUrl);
-          icon.open = windows.isOpen(key);
+          icon.open = held || windows.isOpen(key);
         } else {
           setArt(icon, kind === 'trash' ? trashArt(st) : folderArtUrl);
-          icon.open = folders.isOpen(rec.id);
+          icon.open = held || folders.isOpen(rec.id);
         }
       }
       // The field's size is the window's scroll range.
@@ -494,6 +518,43 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
       for (const icon of allIcons()) out[keyOf(icon)] = posOf(icon);
       return out;
     },
+    /** The box a window showing `key` closes into, in viewport CSS px: the
+     *  item's icon, else the nearest folder around it whose icon is rendered.
+     *  Null once the item's record is gone.
+     *  @param {string} key
+     *  @returns {DOMRect | null} */
+    iconBox(key) {
+      const own = iconByKey(key)?.cellRect();
+      if (own) return own;
+      const st = files.get();
+      const id = key.slice(key.indexOf(':') + 1);
+      const within = key.startsWith(FOLDER)
+        ? st.folders.find((f) => f.id === id)?.parent
+        : key.startsWith(TEXT)
+          ? st.texts.find((t) => t.id === id)?.folder
+          : st.list.find((r) => r.id === id)?.folder;
+      for (const folder of enclosingFolders(st, within)) {
+        const box = iconByKey(`${FOLDER}${folder}`)?.cellRect();
+        if (box) return box;
+      }
+      return null;
+    },
+    /** Keeps `key`'s icon drawn open until `until` settles, while a closing
+     *  window's zoom rects run into it.
+     *  @param {string} key
+     *  @param {Promise<unknown>} until */
+    holdGhost(key, until) {
+      ghostHolds.set(key, (ghostHolds.get(key) ?? 0) + 1);
+      sync();
+      const release = () => {
+        const n = ghostHolds.get(key);
+        if (n == null) return; // disposed
+        if (n > 1) ghostHolds.set(key, n - 1);
+        else ghostHolds.delete(key);
+        sync();
+      };
+      until.then(release, release);
+    },
     /** Select an item's icon and open its rename box. */
     startRename(key) {
       const icon = iconByKey(key);
@@ -518,8 +579,8 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
       ].filter((key) => lit.has(key));
     },
     /** Open every selected icon, the route a double-click or a tap pair takes.
-     *  Several open a beat apart, so their windows arrive down the cascade one
-     *  at a time; one opens at once, and so do all of them under reduced
+     *  Several open a beat apart, so each window's zoom rects finish before
+     *  the next begin; one opens at once, and so do all of them under reduced
      *  motion. An icon gone by its turn is skipped.
      *  @returns {Promise<void>} */
     async openSelection() {
@@ -582,6 +643,7 @@ export function initIcons(desktop, { windows, folders, apps, savedPos = () => nu
       for (const fn of teardown) fn();
       selectionListeners.clear();
       movedListeners.clear();
+      ghostHolds.clear();
       highlight(null);
       // Remove the icons so an HMR re-init starts without stale listeners.
       // Folder windows' icons go with folders.dispose().
