@@ -10,7 +10,7 @@
     "url": "git+https://github.com/aportilla/sprite-machine.git",
     "directory": "packages/core"
   },
-  "homepage": "https://aportilla.github.io/sprite-machine/",
+  "homepage": "https://sprite-machine.portill.io/",
   "keywords": [
     "pixel-art",
     "sprite",

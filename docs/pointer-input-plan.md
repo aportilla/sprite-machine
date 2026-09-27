@@ -121,8 +121,8 @@ an iPad's dpr 2 gives **1.5 CSS px per system px** (`scale.ts:12–39`).
 `fitWithin` then gives roughly a 776 × 640 raster in landscape on an 11" iPad
 and 536 × 1040 in portrait — the portrait raster is the compact Mac's own
 size, which should suit the desktop well. `vite.config.js` already serves on
-the LAN (`server.host: true`), so the iPad can reach a dev server, and Pages
-serves the released build.
+the LAN (`server.host: true`), so the iPad can reach a dev server, and
+sprite-machine.portill.io serves the released build.
 
 Hit targets follow from that scale: an icon cell is 96 CSS px and a tool cell
 is comfortable, but a window's close and zoom boxes are 11 system px — **16.5

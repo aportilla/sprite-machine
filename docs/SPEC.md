@@ -1363,7 +1363,7 @@ package. The app's covers its pure rules. There are no browser tests, and nothin
 asserts markup, layout numbers, copy or what vintage-frames renders. The look and
 the wiring are verified by eye. The default for a change is no new test. The
 gates (`npm test` over both packages, lint, typecheck, build) run in Node, and CI
-runs them before every deploy.
+runs them on every push.
 
 ### UI layer: Lit + a hand-rolled store
 

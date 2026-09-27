@@ -14,7 +14,7 @@
   pass/fail check.
 - The gates are `npm test`, `npm run lint`, `npm run typecheck` and
   `npm run build`. They run in Node, with no dev server. CI runs all four
-  before every Pages deploy (`.github/workflows/pages.yml`).
+  on every push and pull request (`.github/workflows/ci.yml`).
 - The default for a change is no new test. A new pure function with rules
   gets a unit test on its contract (the rules, the edge cases, the
   round-trip), not on its constants or defaults. Beyond that, ask the user

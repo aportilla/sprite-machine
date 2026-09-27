@@ -13,8 +13,8 @@ testing policy is `docs/TESTING.md`, and it is binding. The short form:
   `tools/capture.sh` takes a screenshot when one helps; it is never a
   check.
 - The gates are `npm test`, `npm run lint`, `npm run typecheck` and
-  `npm run build` — Node only, no dev server — and CI runs them before
-  every Pages deploy. No one-off verification scripts.
+  `npm run build` — Node only, no dev server — and CI runs them on every
+  push and pull request. No one-off verification scripts.
 - Commit messages and comments never report test or check counts, and
   never claim a test pins something unless it does.
 - Comments and docs are short, dry and direct. Let the code speak for
@@ -81,7 +81,7 @@ Two versions live here, and they are independent:
 
 - **The app** is the root `package.json`'s `version` — the About box shows
   it beside HEAD's commit date, and every push to `main` deploys it to
-  GitHub Pages (`.github/workflows/pages.yml`, the gates first). Its tags
+  sprite-machine.portill.io (Cloudflare builds it from the repo). Its tags
   are `vX.Y.Z`.
 - **The engine** is `packages/core/package.json`'s `version` — what
   `npm install sprite-machine` resolves. Its tags are
@@ -109,7 +109,7 @@ git add package.json package-lock.json packages/core/package.json
 git commit -m "sprite-machine 0.X.Y"
 git tag -a sprite-machine@0.X.Y -m "sprite-machine 0.X.Y"
 
-# 3. Push the branch and every annotated tag; Pages deploys on this push
+# 3. Push the branch and every annotated tag; Cloudflare deploys on this push
 git push --follow-tags
 
 # 4. Publish the engine — rehearse, then for real (a 2FA code is asked for)

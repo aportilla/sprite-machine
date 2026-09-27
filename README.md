@@ -5,7 +5,7 @@ and Sprite Machine turns the drawings into a blocky 3D model. Spin it around,
 save it for a game engine, or turn it into a sprite atlas: a sheet of the
 object seen from every angle.
 
-Use it at <https://aportilla.github.io/sprite-machine/>. It runs in your
+Use it at <https://sprite-machine.portill.io/>. It runs in your
 browser, saves your work there, and sends nothing anywhere.
 
 ![The Car sample, and the model built from its faces](docs/car.png)
@@ -340,7 +340,7 @@ Everything else works there, and Download keeps your work.
 
 ### Open a document by link
 
-`https://aportilla.github.io/sprite-machine/?file=Car` opens the saved
+`https://sprite-machine.portill.io/?file=Car` opens the saved
 document called Car. Capitals do not matter.
 
 ### The PNG in other programs
@@ -609,5 +609,6 @@ entry and a `sprite-machine build` command line.
 
 The app's behavior in full, window by window and rule by rule, is in
 [docs/SPEC.md](docs/SPEC.md). The testing policy is
-[docs/TESTING.md](docs/TESTING.md). Every push to `main` deploys the app to
-GitHub Pages after the tests, lint, typecheck and build pass.
+[docs/TESTING.md](docs/TESTING.md). CI runs the tests, lint, typecheck and
+build on every push, and every push to `main` deploys the app to
+<https://sprite-machine.portill.io/>.

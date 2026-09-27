@@ -6,7 +6,7 @@ a skin bitmap, or a glTF 2.0 binary. One pixel is one voxel. 45° and 1:2
 wedges smooth every same-colour staircase, and the colour comes from a
 nearest-sampled skin texture.
 
-This is the engine behind [Sprite Machine](https://aportilla.github.io/sprite-machine/),
+This is the engine behind [Sprite Machine](https://sprite-machine.portill.io/),
 the desktop app that draws these sheets. It runs at a build step, at a
 server's startup, or in the browser.
 
