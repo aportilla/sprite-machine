@@ -593,6 +593,7 @@ in front.
 ## For developers
 
 ```bash
+nvm use            # Node 24, from .nvmrc
 npm install
 npm run dev        # http://localhost:5173
 npm test           # unit suites, both packages

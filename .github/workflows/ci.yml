@@ -10,9 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # package.json engines: ^20.19 or >=22.12. setup-node resolves each major
-        # to its latest patch.
-        node-version: [20, 22]
+        # package.json engines: ^20.19 or >=22.12; 24 is the development version
+        # (.nvmrc). setup-node resolves each major to its latest patch.
+        node-version: [20, 22, 24]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
