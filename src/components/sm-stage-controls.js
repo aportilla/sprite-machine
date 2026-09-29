@@ -4,7 +4,7 @@
 // document has fewer than two layers. The Sprite Editor's windows.html sets the
 // header-height to STAGE_STRIP.
 //
-// The row is 185 px wide, and STAGE_MIN_WIDTH (apps/sprite-editor/layout.js) is
+// The row is 183 px wide, and STAGE_MIN_WIDTH (apps/sprite-editor/layout.js) is
 // derived from its labels. Re-measure there if a label or control changes.
 
 import 'vintage-frames';

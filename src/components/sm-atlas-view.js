@@ -118,14 +118,11 @@ export class SmAtlasView extends LitElement {
     // Re-renders the ring on a face switch or activation, and repaints on a
     // layer switch (updated). Other pixel changes come from the doc channels.
     new StoreController(this, workspace.store);
-    // One pattern fill per cell button at its declared size. The controller
-    // re-applies after every update, so a cell-height change resizes the
-    // raster.
+    // One pattern fill per cell button.
     for (const { face } of GRID_CELLS) {
       new PatternFillController(this, {
         getBox: () => this.#cellBox.get(face).value,
         getPattern: () => this.#pattern,
-        getSize: () => ({ width: ATLAS_GRID.cell, height: this.#cellH }),
       });
     }
   }
