@@ -16,6 +16,10 @@
         overflow: hidden;
         /* Hides the slack fitWithin leaves around the raster. */
         background: #000;
+        /* No pinch or double-tap zoom: the raster is already fit to the
+           screen. Every element's touches pass through this, so it holds
+           page-wide, and panning stays allowed for scrolling windows. */
+        touch-action: pan-x pan-y;
       }
       #curtain {
         position: fixed;

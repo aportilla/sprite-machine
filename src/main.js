@@ -86,6 +86,11 @@ fitDesktop();
 window.addEventListener('resize', fitDesktop);
 const offScale = onScaleChange(fitDesktop);
 const removeCursor = applyCursor();
+// index.html turns off zoom with touch-action. As a backup, this cancels
+// gesturestart, the pinch event only WebKit sends, in case Safari lets a pinch
+// through anyway.
+const onGestureStart = (/** @type {Event} */ e) => e.preventDefault();
+document.addEventListener('gesturestart', onGestureStart);
 
 // Persistence. The files slice takes its browser dependencies here so it stays
 // Node-testable. Desktop state (icon positions, folder window pins, edited
@@ -207,6 +212,7 @@ if (hot) {
     stopPersist();
     window.removeEventListener('resize', fitDesktop);
     window.removeEventListener('beforeunload', onBeforeUnload);
+    document.removeEventListener('gesturestart', onGestureStart);
     offScale();
     removeCursor();
   });
