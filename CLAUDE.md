@@ -39,32 +39,37 @@ testing policy is `docs/TESTING.md`, and it is binding. The short form:
 ## Applications and the shell
 
 The desktop is four applications — the Finder, the Sprite Editor, the Text
-Viewer and Desktop Patterns, one directory each under `src/apps/` — over
-one shell. Keep them apart:
+Viewer and Desktop Patterns, one directory each under `src/apps/` — over the
+kit's shell, `vintage-frames/shell` (experimental; its guide is the kit's
+`docs/SHELL.md`). The window manager, the menu bar, the catalog, the stock
+Finder and the saved session are the kit's; this repo holds the applications
+and the shell's configuration. Keep it that way:
 
-- **Application behavior lives in its application's directory**: its menus
-  and commands (`menus.html`, `index.js`), and its windows — their markup
-  (`windows.html`), lifecycle, adoption and what their close and zoom boxes
-  mean (`windows.js`), and their placement and sizes (`layout.js`, pure).
-  `src/shell/` holds only what every application shares: the window
-  manager's rules (`shell/windows.js` — `windows.adopt`, the
-  front-application reading, the resize rule, Arrange Windows composed from
-  each application's group) and the desktop's geometry (`shell/layout.js` —
-  the landmarks, `WINDOW_ORIGIN`, the cascade, nearness, the pin).
-- **Primitives in the shell, choices in the application.** A cascade, a
-  pin, a centered box or a nearness test may live in the shell; which box,
-  which size and what "zoomed" means belong to the application. Shell code
-  that names an application, a kind of window, or a number derived from
-  one application's art is in the wrong place — and existing code that
-  does it is debt to pay down, never a precedent to copy.
-- **The arrows point one way**: `src/apps/` imports `src/shell/`, never the
-  reverse. An application reaches the shell through generic declarations
-  (`windows.adopt`, `arrangeWith`, `setFrameBands`) and signals
-  (`onLayout`, `onWindows`, `onRaster`, `beforeFront`); the shell never
-  calls into an application through a hook the application injected.
-- **Cross-application calls** go through `deps.apps`, read at pick time,
-  never at wire-up, so the order the applications initialize in never
-  matters.
+- **Application behavior lives in its application's directory**: its
+  definition, menus and kinds (`index.js`, `menus.html`), its dialogs
+  (`dialogs.html`, held by the shell under it and asked with `ctx.ask`), and
+  its windows — their markup (`windows.html`), lifecycle, adoption and what
+  their close and zoom boxes mean (`windows.js`), and their placement and
+  sizes (`layout.js`, pure). The Finder is the stock one, configured in
+  `src/apps/finder/` with its art, its seed, and the commands and dialogs it
+  adds through `extend`. `src/apps/windows.js` holds what the applications'
+  windows and dialogs share. The shell composes no UI: every dialog is an
+  application's, and the About box is the page's (`src/about.js`).
+- **Desktop mechanics belong in the kit.** If an application needs the shell
+  to do something it doesn't, that's a kit ask for the user, not a window
+  manager or Finder rebuilt here. A bridge for a kit gap is named as one and
+  points at its ask.
+- **Primitives in the shell, choices in the application.** A cascade, a pin,
+  a centered box or a nearness test is the shell's; which box, which size and
+  what "zoomed" means belong to the application.
+- **The library's kinds are Sprite Machine's**: a document (`sprite`, its PNG
+  bytes in the sheet store, `state/sheets.js`) and a text file (`text`), each
+  with small data on its catalog item (`state/kinds.js`). The pure modules in
+  `src/state/` import only types from the kit, since its shell entry needs a
+  DOM: they restate the catalog's few ids, and the catalog itself comes in
+  through `init`.
+- **Cross-application calls** go through `ctx.apps`, read at the call, never
+  at init, so the order the applications initialize in never matters.
 - Follow-ups take the same direction: the scene beside its windoids, the
   components beside their application.
 

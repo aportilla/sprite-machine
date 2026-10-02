@@ -311,9 +311,10 @@ named after it, such as `car.png`. The file holds the drawing, its name, its
 layers and its sprite atlas settings. Download works on one document at a
 time.
 
-To bring a file back, on any computer, drag it anywhere onto the page. It
-opens in a window; press ⌘S to put it on the desktop. Drop one file at a
-time.
+To bring a file back, on any computer, drag it onto the desktop, or into an
+open folder. It lands there as a document, with its name; double-click it to
+open it. A picture copied from another program does the same when you paste
+it on the desktop (⌘V).
 
 **Special → Back Up All Files…** saves everything at once: every document,
 folder and read-me file, the Trash included, in one zip named for the day,
@@ -330,8 +331,7 @@ it:
   there. Files keep their names, so you may end up with two documents called
   Car.
 - **Replace** clears the desktop first, the Trash included, and puts the
-  backup in its place. On the computer the backup came from, the icons land
-  where they were.
+  backup in its place, each icon where it was.
 
 Cancel leaves everything alone. Nothing is changed until you answer.
 

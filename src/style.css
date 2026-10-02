@@ -23,15 +23,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Menu bar clock. The auto start margin pushes it to the bar's right end, 9px
-   in to match the first title's inset. The 20px line height matches the bar,
-   so the clock's baseline lines up with the menu titles. */
-#clock {
-  margin-inline-start: auto;
-  margin-inline-end: calc(var(--vf-scale, 1) * 9px);
-  --vf-label-line-height: 20px;
-}
-
 /* The About box link: paragraph ink, an underline and a dotted focus ring. */
 #dlg-about a {
   color: inherit;

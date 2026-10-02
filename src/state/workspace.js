@@ -1,7 +1,9 @@
 // Workspace slice: the open documents, one DocContext each. activeKey names
 // the active document window's context.
 //
-// - One context per stored document (openStored).
+// - One context per stored document (openStored). A stored document is a
+//   catalog item and its bytes (state/sheets.js). Its context's name follows
+//   the item's, so a rename in the Finder reaches the open window.
 // - activeKey mirrors the desktop's vf-activate. Only setActive writes it,
 //   from apps/sprite-editor/windows.js. Programmatic activation goes through
 //   the kit's bringToFront.
@@ -19,7 +21,9 @@ import { createStore } from './store.js';
 import { createDoc } from './doc.js';
 import { createHistory } from './history.js';
 import { createRingSettings } from './ring-settings.js';
-import { files as filesSingleton, UNTITLED, copyName } from './files.js';
+import { sheets as sheetsSingleton } from './sheets.js';
+import { SPRITE } from './kinds.js';
+import { UNTITLED } from './names.js';
 import { sheetLayers } from '../lib/sheet-shape.js';
 
 /**
@@ -47,14 +51,32 @@ const sameBounds = (a, b) =>
 const copyBounds = (b) => (b ? { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 } : null);
 
 /**
+ * What the workspace asks of the shell's catalog: its listing, an item, a
+ * rename and its change signal.
+ * @typedef {{
+ *   get(): {items: readonly {id: string, name: string, kind: string, parent: string|null}[]},
+ *   item(id: string|null|undefined): {id: string, name: string, kind: string, parent: string|null}|null,
+ *   rename(id: string, name: string): Promise<boolean>,
+ *   subscribe(fn: () => void): () => void,
+ * }} WorkspaceCatalog
+ * @typedef {(state: any, parent: string|null, name: string, kind: string) => string} CopyName
+ *   The catalog's copy-name rule (vintage-frames/shell copyName), passed in
+ *   since the kit's entry needs a DOM.
+ */
+
+/**
  * @param {{
- *   files?: ReturnType<typeof import('./files.js').createFiles>,
+ *   sheets?: ReturnType<typeof import('./sheets.js').createSheets>,
+ *   catalog?: WorkspaceCatalog|null,
+ *   copyName?: CopyName,
  *   createDoc?: () => ReturnType<typeof createDoc>,
  *   createHistory?: (doc: any) => ReturnType<typeof createHistory>,
- * }} [deps]  Overrides for tests.
+ * }} [deps]  Overrides for tests. The catalog is passed here or through init().
  */
 export function createWorkspace(deps = {}) {
-  const files = deps.files ?? filesSingleton;
+  const sheets = deps.sheets ?? sheetsSingleton;
+  let catalog = deps.catalog ?? null;
+  let copyName = deps.copyName ?? ((_state, _parent, name) => name);
   const makeDoc = deps.createDoc ?? (() => createDoc());
   const makeHistory = deps.createHistory ?? ((doc) => createHistory(doc));
 
@@ -81,25 +103,33 @@ export function createWorkspace(deps = {}) {
     touch();
   };
 
-  /** Clear the stored identity of every open context holding one of `ids`.
-   *  Each keeps its pixels and name and is marked dirty.
-   *  @param {string[]} ids */
-  const forgetStored = (ids) => {
-    const gone = new Set(ids);
+  /** Each saved context takes its item's name. */
+  const followNames = () => {
     let moved = false;
     for (const c of store.get().contexts) {
-      if (c.fileId == null || !gone.has(c.fileId)) continue;
-      c.fileId = null;
-      c.dirty = true;
-      moved = true;
+      const name = c.fileId ? catalog?.item(c.fileId)?.name : null;
+      if (name != null && c.name !== name) {
+        c.name = name;
+        moved = true;
+      }
     }
     if (moved) touch();
   };
+  let unfollow = catalog ? catalog.subscribe(followNames) : () => {};
 
   const api = {
     store,
     get: store.get,
     subscribe: store.subscribe,
+
+    /** Sets the catalog after construction, and follows its renames.
+     *  @param {WorkspaceCatalog} realCatalog  @param {{copyName: CopyName}} rules */
+    init(realCatalog, rules) {
+      unfollow();
+      catalog = realCatalog;
+      copyName = rules.copyName;
+      unfollow = catalog.subscribe(followNames);
+    },
 
     byKey,
 
@@ -187,8 +217,11 @@ export function createWorkspace(deps = {}) {
     async openStored(id) {
       const existing = this.byFileId(id);
       if (existing) return { ctx: existing, existed: true };
-      const rec = await files.load(id);
+      const rec = await sheets.load(id);
       if (!rec) return null;
+      // Another open of the same document finished during the load.
+      const raced = this.byFileId(id);
+      if (raced) return { ctx: raced, existed: true };
       const ctx = this.open({ name: rec.name, fileId: id, ring: rec.ring });
       ctx.doc.loadAtlas(rec.image, rec.transforms, {
         layers: sheetLayers(rec.image.width, rec.image.height),
@@ -276,14 +309,15 @@ export function createWorkspace(deps = {}) {
     },
 
     /**
-     * Save a context. An untitled context takes `name`. A saved one saves in
-     * place. Resolves the stored id, or null when the doc holds nothing.
+     * Save a context. An untitled context takes `name` and lands on the
+     * desktop. A saved one saves in place. Resolves the stored id, or null
+     * when the doc holds nothing.
      * @param {string} key  @param {string} [name]
      */
     async save(key, name) {
       const ctx = byKey(key);
       if (!ctx) return null;
-      const res = await files.save(ctx.doc, {
+      const res = await sheets.save(ctx.doc, {
         fileId: ctx.fileId,
         name: name ?? ctx.name,
         ring: ctx.ring.get(),
@@ -297,80 +331,56 @@ export function createWorkspace(deps = {}) {
     },
 
     /** Save a copy in the original's folder, or on the desktop for an untitled
-     *  context, named by files.js copyName ("Car copy", "Car copy 2"). The
-     *  context is unchanged. Resolves the copy's stored id. */
+     *  context, named by the catalog's copyName ("Car copy", "Car copy 2").
+     *  The context is unchanged. Resolves the copy's stored id. */
     async duplicate(key) {
       const ctx = byKey(key);
-      if (!ctx) return null;
-      const st = files.get();
-      const orig = ctx.fileId ? st.list.find((r) => r.id === ctx.fileId) : null;
-      const folder = orig?.folder ?? null;
-      const res = await files.save(ctx.doc, {
+      if (!ctx || !catalog) return null;
+      const parent = (ctx.fileId ? catalog.item(ctx.fileId)?.parent : null) ?? null;
+      const res = await sheets.save(ctx.doc, {
         fileId: null,
-        name: copyName(st, folder, `${ctx.name} copy`, 'doc'),
+        name: copyName(catalog.get(), parent, `${ctx.name} copy`, SPRITE),
         ring: ctx.ring.get(),
-        folder,
+        parent,
       });
       return res ? res.id : null;
     },
 
-    /** Rename a context. A saved one renames its stored doc (renameStored). An
-     *  untitled one takes the display name. */
+    /** Rename a context. A saved one renames its item, and every open context
+     *  holding it follows. An untitled one takes the display name. */
     async rename(key, name) {
       const ctx = byKey(key);
       if (!ctx) return;
-      if (ctx.fileId) {
-        await this.renameStored(ctx.fileId, name);
+      if (ctx.fileId && catalog) {
+        await catalog.rename(ctx.fileId, name);
+        followNames();
       } else {
         ctx.name = name;
         touch();
       }
     },
 
-    /** Rename a stored doc by id. Open contexts holding it follow. */
-    async renameStored(id, name) {
-      await files.renameById(id, name);
+    /** Clear the stored identity of every open context holding one of `ids`:
+     *  their items went (Empty Trash, a restore). Each keeps its pixels and
+     *  name and is marked dirty.
+     *  @param {Iterable<string>} ids */
+    forget(ids) {
+      const gone = new Set(ids);
       let moved = false;
       for (const c of store.get().contexts) {
-        if (c.fileId === id && c.name !== name) {
-          c.name = name;
-          moved = true;
-        }
+        if (c.fileId == null || !gone.has(c.fileId)) continue;
+        c.fileId = null;
+        c.dirty = true;
+        moved = true;
       }
       if (moved) touch();
-    },
-
-    /** Delete a stored doc. An open context holding it keeps its pixels, loses
-     *  its stored identity and is marked dirty (forgetStored). */
-    async removeStored(id) {
-      await files.remove(id);
-      forgetStored([id]);
-    },
-
-    /** Empty the Trash (files.emptyTrash). Open contexts holding a removed
-     *  document are handled as in removeStored. Resolves what was removed. */
-    async emptyTrash() {
-      const removed = await files.emptyTrash();
-      forgetStored(removed.docs);
-      return removed;
-    },
-
-    /** Restore a backup (files.importArchive). An open context whose document
-     *  the restore removed and did not bring back is handled as in
-     *  removeStored. Resolves the counts.
-     *  @param {import('./backup.js').BackupArchive} archive
-     *  @param {{mode?: 'merge'|'replace'}} [opts] */
-    async importArchive(archive, opts) {
-      const res = await files.importArchive(archive, opts);
-      if (res?.untethered.length) forgetStored(res.untethered);
-      return res;
     },
 
     /** The bytes File → Download saves for a context. */
     async exportOf(key) {
       const ctx = byKey(key);
       if (!ctx) return null;
-      return files.exportBytes(ctx.doc, {
+      return sheets.exportBytes(ctx.doc, {
         fileId: ctx.fileId,
         name: ctx.name,
         dirty: ctx.dirty,

@@ -1,23 +1,26 @@
 // The backup archive's format: the paths in it and its desktop.json manifest.
-// Pure. Special → Back Up All Files plans an archive here and
-// apps/finder/backup.js does the IO.
+// Pure. Special → Back Up All Files plans an archive here from the catalog,
+// and apps/finder/backup.js does the IO.
 //
 // Paths mirror the folder tree, so an unzipped backup reads as the desktop: a
 // document is the PNG File → Download writes, a text file is its text, a folder
 // is a directory entry, and the Trash is trash/. A segment is the item's slug
 // plus its extension, suffixed -2, -3 … inside one container, so the exact name
-// lives in the manifest alone.
+// lives in the manifest alone. A row carries its item's place in its
+// container, when it has one, so Replace puts the icons back where they were.
+// Backups from before the catalog have no places and still read.
 
-import { childrenOf, containerOf, slugOf, TRASH } from './files.js';
+import { FOLDER, SPRITE, TEXT, TRASH, textData } from './kinds.js';
+import { slugOf } from './names.js';
 
 export const MANIFEST_NAME = 'desktop.json';
 export const BACKUP_FORMAT = 'sprite-machine-desktop';
 export const BACKUP_VERSION = 1;
 
-/** @typedef {{id: string, name: string, parent: string|null, createdAt: number,
- *   modifiedAt: number, path: string}} BackupFolder
- * @typedef {{id: string, name: string, folder: string|null, createdAt: number,
- *   modifiedAt: number, path: string}} BackupDoc
+/** @typedef {{id: string, name: string, createdAt: number, modifiedAt: number,
+ *   left?: number, top?: number}} Row
+ * @typedef {Row & {parent: string|null, path: string}} BackupFolder
+ * @typedef {Row & {folder: string|null, path: string}} BackupDoc
  * @typedef {BackupDoc & {builtin: string|null}} BackupText
  * @typedef {{format: string, v: number, app: string, exportedAt: string|null,
  *   folders: BackupFolder[], docs: BackupDoc[], texts: BackupText[]}} BackupManifest
@@ -26,7 +29,25 @@ export const BACKUP_VERSION = 1;
  * @typedef {{folders: BackupFolder[], docs: (BackupDoc & {bytes: Uint8Array})[],
  *   texts: (BackupText & {text: string})[]}} BackupArchive
  *   A read archive: the manifest's rows, each paired with its entry.
+ * @typedef {{id: string, name: string, kind: string, parent: string|null,
+ *   createdAt: number, modifiedAt: number, left?: number, top?: number,
+ *   data?: unknown}} Item  A catalog item (vintage-frames/shell).
+ * @typedef {{items: readonly Item[]}} CatalogState
  */
+
+const isContainer = (kind) => kind === FOLDER || kind === TRASH;
+
+/** The container `parent` resolves to while it is listed, else the desktop
+ *  (null), as the catalog resolves it.
+ *  @param {CatalogState} state @param {string|null|undefined} parent */
+function containerOf(state, parent) {
+  const item = parent == null ? undefined : state.items.find((i) => i.id === parent);
+  return item && isContainer(item.kind) ? item.id : null;
+}
+
+/** An item's place, when it has one. */
+const placeOf = (r) =>
+  Number.isFinite(r?.left) && Number.isFinite(r?.top) ? { left: r.left, top: r.top } : {};
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -47,10 +68,12 @@ function segment(used, name, ext) {
 }
 
 /**
- * The archive for a library: its manifest and its entries, parents before
- * their children. The Trash is walked like any folder but has no manifest row,
- * so its items carry the folder id `"trash"` and come back to the Trash.
- * @param {import('./files.js').FilesState} state
+ * The archive for a catalog: its manifest and its entries, parents before
+ * their children, and in each container its folders, then its documents,
+ * then its text files. The Trash is walked like any folder but has no
+ * manifest row, so its items carry the folder id `"trash"` and come back to
+ * the Trash.
+ * @param {CatalogState} state
  * @param {{app?: string, date?: Date}} [opts]  app: the version that wrote it.
  * @returns {{manifest: BackupManifest, entries: PlanEntry[]}}
  */
@@ -70,49 +93,39 @@ export function planBackup(state, { app = '', date = new Date() } = {}) {
   const seen = new Set();
   /** @param {string|null} container @param {string} prefix */
   const walk = (container, prefix) => {
-    const kids = childrenOf(state, container);
+    const kids = state.items.filter(
+      (i) => i.id !== container && containerOf(state, i.parent) === container
+    );
     const used = new Set();
-    for (const f of kids.folders) {
+    const row = (i, path) => ({
+      id: i.id,
+      name: i.name,
+      folder: container,
+      createdAt: i.createdAt,
+      modifiedAt: i.modifiedAt,
+      ...placeOf(i),
+      path,
+    });
+    for (const f of kids.filter((i) => isContainer(i.kind))) {
       if (seen.has(f.id)) continue; // a looping chain is walked once
       seen.add(f.id);
       const path = prefix + segment(used, f.name, '/');
       entries.push({ kind: 'dir', path, id: f.id });
-      if (f.id !== TRASH) {
-        manifest.folders.push({
-          id: f.id,
-          name: f.name,
-          parent: containerOf(state, f.parent),
-          createdAt: f.createdAt,
-          modifiedAt: f.modifiedAt,
-          path,
-        });
+      if (f.kind === FOLDER) {
+        const { folder: _, ...rest } = row(f, path);
+        manifest.folders.push({ ...rest, parent: container });
       }
       walk(f.id, path);
     }
-    for (const r of kids.docs) {
-      const path = prefix + segment(used, r.name, '.png');
-      entries.push({ kind: 'doc', path, id: r.id });
-      manifest.docs.push({
-        id: r.id,
-        name: r.name,
-        folder: containerOf(state, r.folder),
-        createdAt: r.createdAt,
-        modifiedAt: r.modifiedAt,
-        path,
-      });
+    for (const d of kids.filter((i) => i.kind === SPRITE)) {
+      const path = prefix + segment(used, d.name, '.png');
+      entries.push({ kind: 'doc', path, id: d.id });
+      manifest.docs.push(row(d, path));
     }
-    for (const t of kids.texts) {
+    for (const t of kids.filter((i) => i.kind === TEXT)) {
       const path = prefix + segment(used, t.name, '.txt');
       entries.push({ kind: 'text', path, id: t.id });
-      manifest.texts.push({
-        id: t.id,
-        name: t.name,
-        folder: containerOf(state, t.folder),
-        createdAt: t.createdAt,
-        modifiedAt: t.modifiedAt,
-        builtin: t.builtin,
-        path,
-      });
+      manifest.texts.push({ ...row(t, path), builtin: textData(t).builtin });
     }
   };
   walk(null, '');
@@ -129,9 +142,8 @@ function str(v, what) {
 /** A time, or 0. @param {any} v */
 const time = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
-/** A container reference: a folder id, "trash", or null for the desktop.
- *  @param {any} v */
-const container = (v) => (typeof v === 'string' && v ? v : null);
+/** A container reference or a key: a string, or null. @param {any} v */
+const ref = (v) => (typeof v === 'string' && v ? v : null);
 
 /**
  * Validate and normalize a desktop.json. Throws an Error whose message says
@@ -160,35 +172,100 @@ export function readManifest(text) {
   for (const key of ['folders', 'docs', 'texts']) {
     if (!Array.isArray(parsed[key])) throw new Error('its desktop.json is incomplete');
   }
+  const row = (r) => ({
+    id: str(r?.id, 'id'),
+    name: str(r?.name, 'name'),
+    createdAt: time(r?.createdAt),
+    modifiedAt: time(r?.modifiedAt),
+    ...placeOf(r),
+  });
   return {
     format: BACKUP_FORMAT,
     v: parsed.v,
     app: typeof parsed.app === 'string' ? parsed.app : '',
     exportedAt: typeof parsed.exportedAt === 'string' ? parsed.exportedAt : null,
     folders: parsed.folders.map((f) => ({
-      id: str(f?.id, 'id'),
-      name: str(f?.name, 'name'),
-      parent: container(f?.parent),
-      createdAt: time(f?.createdAt),
-      modifiedAt: time(f?.modifiedAt),
+      ...row(f),
+      parent: ref(f?.parent),
       path: str(f?.path, 'path'),
     })),
     docs: parsed.docs.map((r) => ({
-      id: str(r?.id, 'id'),
-      name: str(r?.name, 'name'),
-      folder: container(r?.folder),
-      createdAt: time(r?.createdAt),
-      modifiedAt: time(r?.modifiedAt),
+      ...row(r),
+      folder: ref(r?.folder),
       path: str(r?.path, 'path'),
     })),
     texts: parsed.texts.map((t) => ({
-      id: str(t?.id, 'id'),
-      name: str(t?.name, 'name'),
-      folder: container(t?.folder),
-      createdAt: time(t?.createdAt),
-      modifiedAt: time(t?.modifiedAt),
-      builtin: container(t?.builtin),
+      ...row(t),
+      folder: ref(t?.folder),
+      builtin: ref(t?.builtin),
       path: str(t?.path, 'path'),
     })),
   };
+}
+
+/**
+ * A read backup as catalog items: its folders, then its documents, then its
+ * text files. A document takes its data (its icon and size) from `docs`, by
+ * its row's id, and one with none there is skipped and counted: its bytes
+ * didn't read as a sheet. A text keeps its built-in's key while the app still
+ * ships that text, else its words are stored, so nothing is lost. `places`
+ * keeps each row's place, for Replace; without it the items take their
+ * containers' free cells, for Add.
+ * @param {BackupArchive} archive
+ * @param {{docs: ReadonlyMap<string, {icon: string|null, size: number}>,
+ *   shipsText: (key: string) => boolean, places: boolean}} opts
+ * @returns {{items: Item[], skipped: number}}
+ */
+export function itemsOf(archive, { docs, shipsText, places }) {
+  /** @param {Row} r @param {string} kind @param {string|null} parent @returns {Item} */
+  const item = (r, kind, parent) => ({
+    id: r.id,
+    name: r.name,
+    kind,
+    parent,
+    createdAt: r.createdAt,
+    modifiedAt: r.modifiedAt,
+    ...(places ? placeOf(r) : {}),
+  });
+  /** @type {Item[]} */
+  const items = archive.folders.map((f) => item(f, FOLDER, f.parent));
+  let skipped = 0;
+  for (const r of archive.docs) {
+    const data = docs.get(r.id);
+    if (data) items.push({ ...item(r, SPRITE, r.folder), data });
+    else skipped++;
+  }
+  for (const t of archive.texts) {
+    const data =
+      t.builtin != null && shipsText(t.builtin)
+        ? { builtin: t.builtin }
+        : { text: t.text };
+    items.push({ ...item(t, TEXT, t.folder), data });
+  }
+  return { items, skipped };
+}
+
+/**
+ * The order an Add makes items in one at a time, each container before what
+ * it holds, and the archive id each item's parent maps to. Items bound for the
+ * Trash, or for a folder the archive doesn't hold, are made on the desktop;
+ * `toTrash` lists the ones that then move into the Trash, since nothing is
+ * made there.
+ * @param {Item[]} items  as itemsOf gives them
+ * @returns {{order: Item[], toTrash: string[]}}
+ */
+export function addPlan(items) {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  /** @type {Item[]} */
+  const order = [];
+  const placed = new Set();
+  const visit = (/** @type {Item} */ it, /** @type {Set<string>} */ path) => {
+    if (placed.has(it.id) || path.has(it.id)) return;
+    const parent = it.parent != null ? byId.get(it.parent) : undefined;
+    if (parent) visit(parent, new Set([...path, it.id]));
+    placed.add(it.id);
+    order.push(it);
+  };
+  for (const it of items) visit(it, new Set());
+  return { order, toTrash: items.filter((i) => i.parent === TRASH).map((i) => i.id) };
 }

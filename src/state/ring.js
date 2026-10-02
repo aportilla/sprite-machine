@@ -11,7 +11,7 @@
 // directly, outside any store, because of that rate. sheet() returns the last
 // one for late subscribers.
 
-import { SOFTWARE } from './files.js';
+import { SOFTWARE } from './sheets.js';
 import { workspace as workspaceSingleton } from './workspace.js';
 import { RING_DEFAULTS, RING_CHUNK_KEY, sameRingSettings } from './ring-settings.js';
 

@@ -14,12 +14,15 @@
 // - FRAME_BANDS: the widened left, top and right bands of the resize frame, which
 //   make every placed windoid all struts.
 
-import {
-  CASCADE_SLOTS,
-  CASCADE_STEP,
-  TOP_RESERVE,
-  WINDOW_ORIGIN,
-} from '../../shell/layout.js';
+/** The windows' area starts here: the 20px menu bar and the 36px options
+ *  strip. index.html declares it as the desktop's window-top. */
+export const WINDOW_TOP = 56;
+/** The top of the windoids and the first document window. */
+const PLACED_TOP = WINDOW_TOP + 8;
+// Documents cascade by the shell's step and slot count (vintage-frames/shell
+// CASCADE_STEP, CASCADE_SLOTS), restated since its entry needs a DOM.
+export const CASCADE_STEP = 24;
+export const CASCADE_SLOTS = 5;
 
 const EDGE = 14; // side inset of the left column and the rail
 const GAP = 8; // vertical gap between and below the rail windows
@@ -308,7 +311,7 @@ export function initialPlacement(
   desktopH,
   { ringViews = 4, ringSize = 64, ringShown = false, paletteCount = 0 } = {}
 ) {
-  const top = WINDOW_ORIGIN.top;
+  const top = PLACED_TOP;
 
   // Right rail: the Full Sprite View at its fixed size over the 3D View. The 3D
   // View is square, shortened to end above the bottom margin, down to the size
@@ -399,6 +402,6 @@ export function zoomedBox(
  *  The right band covers the rail column and its gutters. */
 export const FRAME_BANDS = {
   left: DOC_LEFT + GAP,
-  top: WINDOW_ORIGIN.top - TOP_RESERVE + spriteHeightFor(SPRITE_WIDTH) + GAP + GAP,
+  top: PLACED_TOP - WINDOW_TOP + spriteHeightFor(SPRITE_WIDTH) + GAP + GAP,
   right: EDGE + SPRITE_WIDTH + EDGE,
 };

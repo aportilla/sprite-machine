@@ -34,18 +34,17 @@ hide. The menu bar shows the front application's menus. See
 
 The first boot seeds three starter documents, Car, Truck and Cube, as ordinary
 saved files, and the built-in text files (`src/texts/`: Read Me and Keyboard
-Shortcuts) as files that always open the app's current text.
-Seeding runs once per profile, recorded by the `seeded` and `seededTexts`
-flags. `seeded` is written only after every built-in is stored, so a first boot
-cut short by a reload finishes seeding on the next load. A deleted built-in, or
-one added to the app after a profile's first boot, is stored only by the
-Finder's **Special → Restore Default Files** (see [Menu bar](#menu-bar) and
-[Desktop icons & state](#desktop-icons--state)).
+Shortcuts) as files that always open the app's current text. Seeding is the
+catalog's seed, which runs once per storage. A profile from before the shell
+has its library converted instead (see
+[Desktop icons & state](#desktop-icons--state)). A deleted built-in, or one
+added to the app after a profile's first boot, is stored only by the Finder's
+**Special → Restore Default Files** (see [Menu bar](#menu-bar)).
 
 Each load reopens the windows the last session left open — saved documents,
 folder windows and text files — deepest first, each at its saved box, and
-brings the window that was active forward (`src/boot/restore.js`). A document
-that has been deleted or moved to the Trash since is skipped. The desktop icons
+brings the window that was active forward (the shell's boot, through each
+application's `open`). A document that has been deleted since is skipped. The desktop icons
 and the windoids come back at their boxes too. With nothing to reopen, the load
 opens the About box while its **Show at startup** checkbox is checked (the
 default), and otherwise shows the bare desktop. OK or a click outside the box
@@ -331,10 +330,10 @@ layers. The edge hints outside the canvas show what the edited
 layer's art meets past each edge.
 
 **Dev hooks**, parsed in `src/boot/params.js`: `?sample=<index|name>` opens a
-built-in sample as an untitled document from memory, skipping seeding, `?file`
-and the About greeting. `?edit=<face>` picks its face. `?fresh=1` also opens
-the sample, with storage ignored: no desktop-state restore or writes, no stored
-item icons (only the Trash) and no seeding. `?flat=1`,
+built-in sample as an untitled document from memory, at once, with no session
+read or written, no `?file` and no About greeting. `?edit=<face>` picks its
+face. `?fresh=1` also opens the sample, and keeps no files either: only the
+Trash, and no seeding. `?flat=1`,
 `?diag=1` and `?cam=<preset>` are the mesh and camera debug flags.
 
 ---
@@ -384,70 +383,76 @@ Esc mid-drag have no touch equivalent yet.
 
 ## The desktop
 
-The shell is a System 7 virtual desktop. `index.html` is one `<vf-desktop>`
-skeleton fitted to the viewport at boot: the menu bar, the options strip, the
-desktop's icon field and the dialogs, under the kit's page-drawn cursor. Each
-application authors its windows in its own directory and appends them at init
-or on open (see [Windows](#windows)). The page sets layout only. All styling
-comes from the kit.
+The app is a System 7 virtual desktop on the kit's shell,
+`vintage-frames/shell` (its guide is the kit's `docs/SHELL.md`), which owns
+the window manager, the menu bar, the catalog of files and folders, the stock
+Finder and the saved session. `index.html` is one `<vf-desktop>` skeleton: the
+menu bar with the Sprite Machine menu, the options strip, the desktop's icon
+field and the About box, under the kit's page-drawn cursor. `src/main.js`
+starts the shell over it. Each application authors its windows and dialogs in
+its own directory (see [Windows](#windows)). The page sets layout only. All
+styling comes from the kit.
 
 ### Applications and the menu bar
 
 Sprite Machine is four applications, and the menu bar holds the front
 application's menus:
 
-- **The Finder**: the desktop, its icons and folder windows, dragging, the
-  rubber band, Copy / Paste, New Folder and Empty Trash….
-- **The Sprite Editor**: document windows, the four windoids, the options
-  strip, the tool keys and every command over a document.
-- **The Text Viewer**: read-me windows (see [Text files](#text-files)).
+- **The Finder**: the kit's stock Finder: the desktop, its icons and folder
+  windows, dragging, the rubber band, Copy / Paste, New Folder, Clean Up and
+  Empty Trash…, configured in `apps/finder/` with its art, its seed and the
+  commands it adds.
+- **The Sprite Editor**: document windows, the five windoids, the options
+  strip, the tool keys and every command over a document. It registers the
+  `sprite` kind, the documents.
+- **The Text Viewer**: read-me windows (see [Text files](#text-files)). It
+  registers the `text` kind.
 - **Desktop Patterns**: the control panel (see
   [Desktop Patterns](#desktop-patterns)).
 
 The front application is the application of the desktop's active window, or
-the Finder when no window is active. `shell/windows.js` writes it to
-`shell.frontApp` from the `app` each owner passes to `windows.adopt`. The same
-patch sets `appActive`, true while the Sprite Editor is front, which the
-windoids, the options strip and the tool keys read.
+the Finder when no window is active (the shell's `windows.front`). The Sprite
+Editor follows it with `ctx.onFront` into `session.front`, which the options
+strip, the tool keys and the Option key read.
 
 - **Clicking the desktop background or an icon, or activating another
   application's window**, deactivates the Sprite Editor. Document windows draw
   inactive, the windoids and the options strip hide, the bare-letter tool keys
-  stop working, and the bar swaps menus (see [Menu bar](#menu-bar)). The page
-  calls `desktop.clearActive()` on desktop and icon presses.
+  stop working, and the bar swaps menus (see [Menu bar](#menu-bar)).
 - **Clicking or opening a document window** brings the Sprite Editor forward.
-  The windoids come back where they were, serving the active document, and the
-  Finder's icon selection clears.
+  The windoids come back where they were, serving the active document. The
+  Finder's icon selection stays, and is there again when the Finder comes
+  back.
 - Closing the active window activates the topmost remaining one. With none
   left, the Finder is front over the bare desktop and the windoid arrangement
-  is kept for the next open. Nothing is active at boot, so the Finder's bar
-  shows and the windoids stay hidden until a document window opens.
-- A press on the menu bar keeps the icon selection. The kit's `vf-icon`
-  deselects on that press, and `apps/finder/icons.js` re-selects it.
+  is kept for the next open. Nothing is active at boot unless the session
+  reopens a window, so the Finder's bar shows and the windoids stay hidden
+  until a document window opens.
+- A press on the menu bar, a menu or a dialog keeps the icon selection.
 
 **Each application is one directory under `src/apps/`** (`finder`,
 `sprite-editor`, `text-viewer`, `desktop-patterns`) holding its menus
-(`menus.html`, a fragment of `vf-menu` elements), its windows and an
-`index.js` that exports an id, a name, the fragment and
-`init({ menus, deps })`. `init` binds behavior to the parsed menu nodes and
-returns the application's actions and a dispose. `src/apps/index.js` lists
-the four.
+(`menus.html`), its dialogs (`dialogs.html`), its windows and an `index.js`
+that defines it (`defineApp`): an id, a name, the fragments, its kinds and
+`init(ctx)`, which wires it and returns its actions. `src/main.js` hands the
+four to `createShell`.
 
-`shell/menu-bar.js` parses each fragment once into live nodes. On each change
-of the front application it removes the outgoing menus and inserts the
-incoming ones between the Sprite Machine menu and the clock. Nodes are moved,
-not rebuilt, so item state is kept. The kit binds an item's key equivalent on
-connect and unbinds it on disconnect, so a detached menu has no shortcuts: the
-Sprite Editor's ⌘S does nothing in the Finder, and ⌘C over a read-me copies
-the text. Menus are addressed by `data-menu` and items by `value`, within the
+The shell parses each fragment once into live nodes. On each change of the
+front application it takes the outgoing menus off the bar and puts the
+incoming ones after the Sprite Machine menu. Nodes are moved, not rebuilt, so
+item state is kept. A menu off the bar has no shortcuts: the Sprite Editor's
+⌘S does nothing in the Finder, and ⌘C over a read-me copies the text. While
+an application's dialog is open the bar shows that application's menus.
+Menus are addressed by `data-menu` and items by `value`, within the
 application's own nodes. Every application has its own `close` and `arrange`
-items, and only the front one's are connected.
+items, and only the front one's are on the bar.
 
-Cross-application calls go through `deps.apps`, read when an item is picked:
-the Finder's New Sprite calls the Sprite Editor's `newDocument`, an icon's
-double-click calls the editor's `openDoc` (a text file, the Text Viewer's
-`open`), and the Sprite Machine menu calls Desktop Patterns' `open`. The
-dialogs are in `index.html`, and their handlers are in the applications.
+Cross-application calls go through `ctx.apps`, read at the call: the Finder's
+New Sprite calls the Sprite Editor's `newDocument`, and the Finder opens an
+icon through its kind's `open`. Desktop Patterns puts its own item in the
+Sprite Machine menu (`ctx.systemItem`). Each application's dialogs are held by
+the shell under it and asked with `ctx.ask`; the About box is the page's
+(`src/about.js`).
 
 ### Documents are windows
 
@@ -474,20 +479,18 @@ Text Viewer       │ Sprite Machine  File  Edit  View                       10:
 Desktop Patterns  │ Sprite Machine  File  View                             10:42 │
 ```
 
-**The Finder's menus** (the bare desktop or a folder window front):
+**The Finder's menus** (the bare desktop or a folder window front) are the
+stock Finder's, with the commands `apps/finder/` adds through its `extend`:
 
-- **File**: _Open_ ⌘O opens every selected icon, dispatching the kit's own
-  `vf-open` so it takes the route a double-click or a tap pair takes. It reads
-  the same selection Copy does, so the Trash is left out and it is greyed with
-  nothing selected. Several open one at a time, `OPEN_BEAT_MS` apart: one run
-  of a window's zoom rects, from the kit's `WINDOW_RECT_*` (306 ms), so each
-  window draws before the next opens; one opens at once, and so do all of them
-  under reduced motion. The list is taken before the first open,
-  which deactivates the Finder and clears the selection. _New Sprite_ ⌃N opens the Sprite Editor's New box. _New Folder_
-  makes _untitled folder_ in the front folder window, else on the desktop, with
-  its name selected for typing. It is greyed while the front window is the Trash
-  or a trashed folder. After a rule, _Close_ ⌃W closes the front folder window,
-  greyed when no folder window is front. No Quit.
+- **File**: _Open_ ⌘O opens every selected icon, as a double-click or a tap
+  pair does, and is greyed with nothing selected. Several open one at a time,
+  one run of a window's zoom rects apart, so each window draws before the next
+  opens; under reduced motion they open at once. _New Sprite_ ⌃N opens the
+  Sprite Editor's New box. _New Folder_ makes _untitled folder_ in the front
+  folder window, else on the desktop, with its name selected for typing. It is
+  greyed while the front window is the Trash or a trashed folder. After a
+  rule, _Close_ ⌃W closes the front folder window, greyed when no folder
+  window is front. No Quit.
 - **Edit**: _Copy_ ⌘C, _Paste_ ⌘V and _Select All_ ⌘A act on icons (see
   [Copy and Paste](#folders)). Copy needs a selected icon other than the Trash.
   Paste needs a front container that is not the Trash or inside it. All three
@@ -510,6 +513,15 @@ Desktop Patterns  │ Sprite Machine  File  View                             10:
   [Text files](#text-files)). A document with a built-in's name and a read-me
   with a built-in's key, including one in the Trash or renamed, are left
   alone. It is greyed while nothing is missing or storage is unavailable.
+  After a rule, _Back Up All Files…_ downloads the whole library, the Trash
+  included, as one zip (`state/backup.js` owns the format: a `desktop.json`
+  manifest and the tree as paths, each document its PNG with its name as
+  Title, each read-me its text), and _Restore from Backup…_ reads one back,
+  as does a zip dropped on the page. The restore asks whether to **Add** its
+  files beside the desktop's, or **Replace** the desktop with them, the Trash
+  included. Replace keeps the backup's ids and icon places; it is greyed on an
+  empty desktop. A backup made before the shell restores too, without the
+  places.
 
 New Folder and the Special menu have no key equivalents.
 
@@ -639,17 +651,18 @@ those keys.
 
 Each application owns its windows: their markup (`windows.html`), their
 lifecycle and close and zoom boxes (`windows.js`), and their placement and
-sizes (`layout.js`, pure). The **window manager**, `shell/windows.js`, handles
-what applies to all of them. Every window enters through `windows.adopt` with
-its application, placement, saved pin, resize policy, a box it keeps across a
-resize, and the catalog item it shows, and leaves through
-`windows.dismiss(win, to)`, which hides it before releasing and removing it,
-since `hide()` reads the frame. The front application is the active
+sizes (`layout.js`, pure). The **window manager** is the kit shell's, and
+handles what applies to all of them. A window enters through `windows.open`
+(made, placed and shown out of its icon) or `windows.adopt` (made and placed
+by its application), with its application, the item it shows, its placement,
+saved pin, resize policy, a box it keeps across a resize, and what its close
+box means. It leaves through `windows.close`, which closes it into its item's
+icon, then releases and removes it. The front application is the active
 window's application. One resize rule re-pins every window. Arrange Windows
 runs each application's arrangement group, then re-applies every window's own
-placement. `shell/layout.js` holds the desktop's geometry: the menu bar and
-options strip bands, `WINDOW_ORIGIN` (where folder and read-me windows
-open), the cascade, the nearness test and the nine-slice pin.
+placement. The windows' area starts below the options strip (the desktop's
+`window-top`, 56); a folder or read-me window cascades from 40 right and 20
+down of its corner.
 
 **Motion** is the kit's, and each application chooses it:
 
@@ -658,17 +671,15 @@ open), the cascade, the nearness test and the nine-slice pin.
   Esc cancels and writes nothing.
 - **A window that shows a file** (a document, a folder, the Trash, a read-me)
   grows out of its icon when the icon opened it: a double-click, a tap pair or
-  File → Open. The Finder reads `vf-icon.cellRect()` at the gesture and the
-  owner calls `win.show({ from })` on the new window in the same task. A
-  document window is made by the workspace reconciler inside
-  `workspace.openStored`, so `openDoc` passes the box to `showDocument` only
-  when the open made the window.
-- **The user's close** (the close box, ⌃W, Quit) closes it into the Finder's
-  `iconBox(key)`: the item's icon, else the icon of the nearest enclosing
-  folder that is rendered (`enclosingFolders` in `state/files.js`), so a
-  trashed document closes into the Trash. Null once the record is gone. The
-  icon keeps its `open` ghost until the rects land (`holdGhost`). Several
-  closes at once each go into their own icon.
+  File → Open. The Finder passes the icon's `cellRect()` to the kind's `open`,
+  and the window shows out of it in the same task. A document window is made
+  by the workspace reconciler inside `workspace.openStored`, so `openDoc`
+  passes the box to `showDocument` only when the open made the window.
+- **The user's close** (the close box, ⌃W, Quit) closes it into its item's
+  icon, else the icon of the nearest enclosing folder that is rendered, so a
+  trashed document closes into the Trash: the shell's home box, which the
+  Finder answers. The icon keeps its `open` ghost until the rects land.
+  Several closes at once each go into their own icon.
 - **At once**: windoids, dialogs, Desktop Patterns, a new, duplicated or
   dropped document, `?file=`, the session restore, a window whose file is
   gone and an HMR rebuild. An open that finds its window on screen raises it.
@@ -693,9 +704,9 @@ are not documents.
   struts, so it stays zoomed across a browser resize.
 - **Utility windoids**: the Tools palette, Full Sprite View, 3D View and Color
   Palette have no close box or menu toggle and are shown whenever the Sprite
-  Editor is front. The 3D Sprite Atlas is toggleable. Windoids float above
-  document windows, never become active, and hide together when the
-  application deactivates. Their controls act on click, except the Tools
+  Editor is front. The 3D Sprite Atlas is toggleable. They are the shell's
+  palettes: they float above document windows, never become active, and hide
+  together when the application deactivates. Their controls act on click, except the Tools
   palette's cells and the Full Sprite View's face tiles, which pick on
   mouse-down. A windoid's controls sit in its window header, outside the scroll
   area. Each `header-height` in `windows.html` must match its `layout.js`
@@ -703,8 +714,7 @@ are not documents.
 - **The Full Sprite View** has the face picker in its header, over a row of
   six live canvases, one per face in the picker's order, drawn
   nearest-neighbor on `gray-12` paper. Each picker icon is centered over its
-  tile. The picker box declares `pattern="white"`, because a bare
-  `vf-container` inherits the desktop pattern. Each cell shows the edited
+  tile. Each cell shows the edited
   layer's tile alone; the faded art of other layers shows only behind the
   canvas. The row follows the active document's live channel at rAF rate and
   repaints on a layer switch. Pressing a tile selects that face, and the
@@ -812,13 +822,13 @@ windows open at the same size, cascaded down-right into the first of five
 slots no open window holds. A closed or
 moved window frees its slot, and a full cascade wraps to the first.
 
-Every window's box persists as a nine-slice pin in the desktop state, with the
-desktop icon positions: the windoids, the document windows by file id, the
+Every window's box persists as a nine-slice pin in the session, by the item
+it shows: the windoids (`windoid:<id>`), the document windows by file id, the
 folder windows and the text windows. A window opens at its saved box — at boot,
 and again when it is reopened later in the session — and View → Arrange Windows
 re-runs the placement. An untitled document has no file id and no saved box.
 
-When the browser window resizes, every window moves by one rule, the
+When the browser window resizes, every window moves by one rule, the shell's
 **nine-slice pin** (`pinOf`/`pinTo`). The open area below the options strip
 has outer bands around a middle. The bottom band is 100 system px. The others
 are wider, to hold the rail at the top and right and the left column with the
@@ -850,16 +860,16 @@ declared size, so every raster is exact.
 
 Opening seeds the pending pattern from the desktop's. Clicking a cell previews
 it in the well and rings the cell (1px black outside, 1px white inside). Only
-Set Desktop Pattern changes the desktop, through `shell.setDesktopPattern`.
-Closing the window discards the selection. The pattern persists in desktop
-state and is restored before the desktop's first render. A value the kit's
-`parsePattern` rejects is ignored. `?fresh=1` boots with the default dither.
+Set Desktop Pattern changes the desktop's `pattern`. Closing the window
+discards the selection. The shell saves the pattern with the session and
+restores it before the desktop's first render. `?fresh=1` boots with the
+default dither.
 
 The window is fixed-size, with no zoom box, and its body is a
 `vf-stack pad="12"` because a window body has no inset. It is created on open
 and removed by its close box, both at once, since it has no icon. Opening it
-again brings it forward. It is placed by `centeredBox`, so Arrange re-centers
-it. Desktop Patterns is its own
+again brings it forward. It is placed by the shell's `centeredBox`, so Arrange
+re-centers it. Desktop Patterns is its own
 application (`apps/desktop-patterns/`): while the panel is active the menu bar
 shows its File and View menus, and File → Close or Quit closes it. See
 [Applications and the menu bar](#applications-and-the-menu-bar) and
@@ -867,44 +877,41 @@ shows its File and View menus, and File → Close or Quit closes it. See
 
 ### Folders
 
-A folder is a catalog record in IndexedDB's `folders` store (id, name, parent,
-timestamps). The desktop is the root and has no record. An item's container
-is the `folder` field on its record, never a PNG chunk or localStorage.
-Folders nest, but a folder can't go into itself or a descendant. An item whose
-folder record is gone shows on the desktop. The folder icon is 32×32 1-bit art
-in a `vf-icon` with no `color`, so the kit's selection, `target` and
-open-ghost treatments are exact.
+Folders, documents and text files are items of the shell's catalog (id, name,
+kind, parent, position, timestamps, and a kind's small `data`), kept in the
+IndexedDB database `sprite-machine-catalog`. The desktop is the root and has
+no record. An item's container is its `parent`, never a PNG chunk or
+localStorage. Folders nest, but a folder can't go into itself or a
+descendant. An item whose parent is gone shows on the desktop. The Finder is
+the kit's stock one, so what follows is its behavior. The folder icon is
+32×32 1-bit art in a `vf-icon` with no `color`, so the kit's selection,
+`target` and open-ghost treatments are exact.
 
 - **The desktop's icons** sit in a `vf-icon-field` that fills the desktop and
   is not placed, so saved positions stay in raster coordinates. A drag on the
   bare desktop draws a rubber band that selects what it touches (Shift
   toggles, Escape cancels). A press in the field makes the Finder front. One
   selection spans every container.
-- **A folder window** (`apps/finder/windows.js`) is `movable resizable
-scrollbars="both"`, created on open out of its icon and closed into it by its
-  close box. Its header shows the item count (`N items`) over a double rule.
-  Its body is a `vf-icon-field` at the plane's origin, so `placementAt()` and
-  the field's coordinates agree. The field is sized to the viewport, grown to hold every
-  icon, which sets the scroll range. It is placed by `cascadedBox`
-  (`WINDOW_ORIGIN`, stepped per open folder window).
-- **Its box persists as a nine-slice pin**, read at each desktop-state snapshot
-  and kept for the session on close, under the same `folder:<id>` key as its
-  icon. An open uses this session's pin, else the saved pin (if it passes
-  `isPin`), else the cascade. The pin is re-expressed on the current raster,
-  where a browser resize would have carried the window, then clamped onto the
-  raster. Arrange Windows sends folder windows to their cascade slots. Scroll
-  position and open state don't persist. No zoom box yet.
-- **The icon layer** (`apps/finder/icons.js`) keeps each container's field in
-  sync with its items: folders, then documents, then text files, in listing
-  order. Positions persist per item in the current container's coordinates. A
-  saved position wins. A new item, or one filed without a drop point, takes
-  the container's first free cell. A closed folder window's positions are kept
-  for the session. Only desktop icons re-pin on a browser resize.
+- **A folder window** is `movable resizable scrollbars="both"`, 320 × 223,
+  created on open out of its icon and closed into it by its close box. Its
+  header shows the item count (`N items`) over a double rule. Its body is a
+  `vf-icon-field` at the plane's origin, sized to the viewport and grown to
+  hold every icon, which sets the scroll range. It cascades from the window
+  area's origin, one step per open window.
+- **Its box persists as a nine-slice pin** in the session, by the folder's
+  id, and is kept for the session on close. An open uses this session's pin,
+  else the saved pin, else the cascade. Arrange Windows sends folder windows
+  to their cascade slots. Scroll position doesn't persist. No zoom box yet.
+- **Icons** follow the catalog in each container's field, in listing order.
+  Positions are on the items, in their container's coordinates, so they
+  persist with the catalog. A saved position wins. A new item, or one filed
+  without a drop point, takes the container's next free cell. Only desktop
+  icons re-pin on a browser resize.
 - **Filing is the kit's icon drag.** A movable icon drags as a dotted outline
   over everything, with every selected icon in its field, and Escape cancels.
-  The page decides what the drop means, hit-testing with `elementsFromPoint`
-  down to the first window under the pointer, so covered icons and windows are
-  never destinations. A drop onto a folder icon files the set at its next free
+  The Finder decides what the drop means, hit-testing down to the first
+  window under the pointer, so covered icons and windows are never
+  destinations. A drop onto a folder icon files the set at its next free
   cells. A drop into a folder window the drag didn't start in, or from a window
   onto the desktop, files each item where its outline was released. Filing
   moves the model. The bytes, name and modified time don't change. A drop in
@@ -912,59 +919,57 @@ scrollbars="both"`, created on open out of its icon and closed into it by its
   application's window does nothing. The folder icon under the pointer gets
   `target` unless the drop would put a folder into itself or a descendant,
   which is refused.
-- **Copy** (⌘C) puts the selected icons (documents, folders and text files,
-  trashed ones included, never the Trash) on an in-app clipboard slice
-  (`state/clipboard.js`, session-only) as references. It writes the names to
-  the system clipboard as text, one per line, plus the stored PNG when exactly
-  one document is copied. Unsaved strokes are not included. The selection
-  stays.
+- **Copy** (⌘C) remembers the selected items (documents, folders and text
+  files, trashed ones included, never the Trash) for the session. It writes
+  their names to the system clipboard as text, one per line, plus the first
+  document's PNG, its name as its Title (the `sprite` kind's `export`).
+  Unsaved strokes are not included. The selection stays.
 - **Paste** (⌘V) reads the system clipboard at each pick and pastes into the
   Finder's front folder window, else the desktop, at the next free cells,
   selecting the result. It does nothing in the Trash or a folder inside it, or
-  when there is nothing to paste. When the clipboard text matches what the app
-  wrote, the slice's items are copied from the store with chunks intact (a PNG
-  from the system clipboard has lost its chunks). A document becomes a new
-  record with fresh times and a new `Title` and `Creation Time` spliced into
-  its bytes. A folder is copied with its whole subtree, read before any write,
-  so a folder pasted into itself nests one copy. Only the top-level item is
-  renamed: its own name if free among items of its kind, else _«name» copy_,
-  _«name» copy 2_, and so on. A reference to a record emptied from the Trash is
-  skipped. Paste is not undoable.
-- **Pasting an outside image** (an `image/png` the Finder didn't write) first
-  checks `lib/sheet-shape.js`: a `3t × 2tN` sheet of square tiles, `t` from 1 to
-  64 and N from 1 to 8 layers, stricter than the drop. A valid image is saved as
-  a new document of N layers where Paste lands, re-encoded, with its title,
-  transforms, ring settings and layer names read from its chunks. It lands
-  selected. Without a `Title` it is named _untitled_ (counted
-  per container) and opens for rename. No window opens. An invalid image shows
-  the paste alert with the rule and its dimensions. The Sprite Editor's pixel
-  copy is such an image: it shows the alert with the selection's size, or saves
-  a new document when that size is a sheet's, such as 3 × 2 or 6 × 4 texels.
+  when there is nothing to paste. While the clipboard still holds the names
+  the Finder wrote, or can't be read, the copied items are copied
+  (`catalog.copy`): a document becomes a new item with fresh times, its bytes
+  copied with a new `Title` and `Creation Time` (the kind's `copy`). A folder
+  is copied with its whole subtree, read before any write, so a folder pasted
+  into itself nests one copy. Only the top-level item is renamed: its own name
+  if free among items of its kind, else _«name» copy_, _«name» copy 2_, and so
+  on. Paste is not undoable.
+- **Pasting or dropping an outside image** offers the file to the kinds'
+  `claim`. The `sprite` kind takes an image that decodes to a `3t × 2tN` sheet
+  of square tiles (`lib/sheet-shape.js`), `t` from 1 to 64 and N from 1 to 8
+  layers, and stores its bytes as they came, as a new document where it
+  landed, selected; its chunks give it its transforms, ring settings and
+  layer names when it opens. It is named by its `Title`, else a dropped
+  file's name, else _untitled_ (counted per container) with its rename box
+  open. No window opens. Any other image gets the alert with the rule and its
+  dimensions. The Sprite Editor's pixel copy is such an image: it gets the
+  alert with the selection's size, or becomes a new document when that size
+  is a sheet's, such as 3 × 2 or 6 × 4 texels. A drop over another
+  application's window does nothing.
 - **Clipboard routes**: ⌘V and the menu pick use the Async Clipboard API.
   Chrome asks for permission once, and Safari and Firefox show a Paste button
   for content copied elsewhere. The browser's own Edit → Paste arrives as a
   `paste` event and is the only route that carries a copied file
   (`clipboardData.files`). Otherwise files come in by drop. System clipboard
-  failures are silent: Copy still fills the slice, and a paste that can't read
-  the system clipboard pastes the slice's items.
+  failures are silent: a paste that can't read the system clipboard pastes
+  what the Finder copied.
 - **Select All** (⌘A) selects every icon in the front folder window, else on
   the desktop.
 - **Duplicate** (⌘D) saves a copy in the original's folder, or on the desktop
   for an untitled document, named the same way as a paste (a second Duplicate
   of the Car is _Car copy 2_). A first Save and a dropped PNG land on the
   desktop. `?file=` finds a document by name in any folder except the Trash.
-  Not yet built: a small-icon view, a folder window zoom box, _Clean Up by
-  Name_, Cut, and the Finder's alerts for a too-long name or a
-  folder into itself (both refuse silently).
+  A name that is too long or empty gets the Finder's alert. Not yet built: a
+  small-icon view, a folder window zoom box, _Clean Up by Name_ and Cut.
 
 ### The Trash
 
-The Trash is a folder with no record. The files slice leads every listing with
-a synthetic row for it (id `trash`), even with no library, so it is always on
-the desktop. Otherwise it behaves as a folder: a document whose `folder` is
-`trash` sits in it, it opens a folder window, and it uses folder keys in the
-desktop state. Renaming, moving or removing it, and creating a folder inside
-it, are silent no-ops.
+The Trash is the catalog's volume (id `trash`): a container with no record,
+listed first even with no library, so it is always on the desktop. Otherwise
+it behaves as a folder: an item whose `parent` is `trash` sits in it, and it
+opens a folder window whose box the session keeps. It can't be renamed, moved
+or copied, and nothing is made inside it.
 
 - **Deleting** is a drag. There is no Delete key or command. An icon dragged
   onto the Trash or into its window is filed there, a folder with its subtree.
@@ -972,21 +977,22 @@ it, are silent no-ops.
   by dragging it out. The Trash itself is never filed.
 - **The icon** is 32×32 1-bit art, an empty can or a full one. It is
   `selectable movable`, not `editable`. Its default place is the raster's
-  bottom-right corner (`trashDefault`), where it stays across a resize.
+  bottom-right corner, where it stays across a resize.
 - **Its window** is a folder window (_Trash_, _N items_) whose box persists as
   a pin. A trashed folder's icon opens its own window with its contents. The
   Trash's window and every trashed folder's window show a 12×12 trash glyph at
   the head of the count line, with the count moved right.
-- **Special → Empty Trash…** opens an alert giving the item count and the K
-  they use, with Cancel and a default OK. OK removes everything under the Trash
-  from IndexedDB (`files.emptyTrash`, the app's one destructive operation): the
-  icons go, the count reads 0 items, the icon shows the empty can, and a
-  trashed folder's open window closes. The `seeded` flag stays set, so an
-  emptied starter document does not return on the next boot.
+- **Special → Empty Trash…** opens the Finder's alert giving the item count
+  and the K they use (each kind's `size`), with Cancel and a default OK. OK
+  removes everything under the Trash (`catalog.emptyTrash`, the app's one
+  destructive operation), each document's bytes with it (the `sprite` kind's
+  `onRemove`): the icons go, the count reads 0 items, the icon shows the empty
+  can, and a trashed folder's open window closes. The catalog's seed has run
+  for the storage, so an emptied starter document does not return on the next
+  boot.
 - **Open documents** can be trashed: the window stays, Save saves in place, and
   the icon shows the open ghost. Emptying the Trash reverts such a window to an
-  unsaved, dirty document with the same pixels and name, and the URL hash
-  clears.
+  unsaved, dirty document with the same pixels and name.
 - `?file=` never resolves a trashed document. Under `?fresh=1` the Trash is the
   only desktop icon. Not yet: Put Away ⌘Y.
 
@@ -996,31 +1002,26 @@ The how-to documentation lives on the desktop as **text files**: plain-text,
 read-only documents with a newspaper icon (`src/assets/text-file.png`) that
 open in a Text Viewer window.
 
-- **Storage.** A text file is a record in IndexedDB's `texts` store (id, name,
-  timestamps, `folder`) with its `text`, or with `builtin`, a built-in's key,
-  and no text. It files like a document: it drags into a
-  folder or the Trash, moves and copies with its folder, and Empty Trash…
-  counts its bytes and removes it. Its icon is `selectable movable editable`,
-  and a rename retitles an open window. Copy and Paste carry it like a
-  document (a paste makes a new file, named by the same counting); only its
-  name reaches the system clipboard. It has no `?file=`, Duplicate or Download.
+- **Storage.** A text file is a catalog item of the `text` kind (the Text
+  Viewer's), its `data` its text or `builtin`, a built-in's key, and no text
+  (`state/kinds.js`). It files like a document: it drags into a folder or the
+  Trash, moves and copies with its folder, and Empty Trash… counts its bytes
+  and removes it. Its icon is `selectable movable editable`, and a rename
+  retitles an open window. Copy and Paste carry it like a document (a paste
+  makes a new file, named by the same counting); only its name reaches the
+  system clipboard. It has no `?file=`, Duplicate or Download.
 - **The built-ins** are the `.txt` files in `src/texts/`, imported whole and
   listed in `TEXTS` with a key that never changes: **Read Me** (`read-me`), a
   tour of the app, and **Keyboard Shortcuts** (`keyboard-shortcuts`), every
-  key equivalent by application. They are seeded once under their own
-  `seededTexts` flag, skipping keys already stored. A seeded record holds the
-  key, and the files slice reads its text and size from `TEXTS`
-  (`builtinText`, passed through `files.init`), so an app update reaches every
-  profile. The user owns the name, the folder and the Trash: a rename, move,
-  copy or paste keeps the key, and so the current text. A record whose key the
-  app no longer ships is left out of the listing and stays in storage. To add
-  one, put a `.txt` in `src/texts/` and list it in `TEXTS` with a new key; an
-  existing profile gets it from **Special → Restore Default Files**.
-- **Older profiles** stored the text itself. Every boot, before seeding, a
-  record with no key whose name is a built-in's, exactly or as a copy name
-  ("Read Me copy 2"), gets that key and loses its text (`builtinLinks`,
-  `files.linkTexts`). A file renamed to another name keeps its old text. Not
-  yet: dropping or pasting a `.txt`, and editing.
+  key equivalent by application. They are seeded with the starter documents.
+  A seeded file holds the key, and its text and size come from `TEXTS`
+  (`textOf`), so an app update reaches every profile. The user owns the name,
+  the folder and the Trash: a rename, move, copy or paste keeps the key, and
+  so the current text. A file whose key the app no longer ships stays on the
+  desktop, and opening it gets an alert. To add one, put a `.txt` in
+  `src/texts/` and list it in `TEXTS` with a new key; an existing profile gets
+  it from **Special → Restore Default Files**. Not yet: dropping or pasting a
+  `.txt`, and editing.
 - **The window** (`apps/text-viewer/windows.js`, `#tpl-text-window` in its
   `windows.html`) is a 440 × 320 document-tier window with
   `movable resizable zoomable scrollbars="vertical"`. The body is the file's
@@ -1028,21 +1029,21 @@ open in a Text Viewer window.
   keeps line breaks and blank lines, wraps at the window's width, and breaks a
   word longer than the window. The inset is 4 px top and bottom and 6 px each
   side. The mouse selects and copies the text; there is no insertion point.
-  Opening loads the text first, so the window appears with its content, and a
-  second open brings it forward. The listing drives the title, and emptying the
-  file from the Trash closes the window.
-- **The Text Viewer.** The window is adopted with `app` set to the Text Viewer,
-  so while it is active the Text Viewer is the front application: the windoids
-  and options strip hide and the menu bar shows its menus. File has _Close_ ⌃W
-  (this window) and _Quit_ ⌃Q (every text window), Edit has _Copy_ ⌘C and
-  _Select All_ ⌘A, and View has _Arrange Windows_ (see
+  The window appears with its content, and a second open brings it forward.
+  The catalog drives the title, and emptying the file from the Trash closes
+  the window.
+- **The Text Viewer.** The window opens through `windows.open` with `app` set
+  to the Text Viewer, so while it is active the Text Viewer is the front
+  application: the windoids and options strip hide and the menu bar shows its
+  menus. File has _Close_ ⌃W (this window) and _Quit_ ⌃Q (every text window),
+  Edit has _Copy_ ⌘C and _Select All_ ⌘A, and View has _Arrange Windows_ (see
   [Menu bar](#menu-bar)). Closing it activates the topmost remaining window.
-  It opens on the shell's cascade from `WINDOW_ORIGIN`, one step per open text
-  window, and Arrange Windows and browser resizes treat it like every window.
-  Nothing about it persists.
-- **The zoom box** toggles a reading column: the desktop below the menu bar,
-  inset 20 px, at most 520 wide, centered, and at least 220 on each axis
-  (`expandedTextBox` in `apps/text-viewer/layout.js`). A window whose every
+  It opens on the shell's cascade, one step per open window, and Arrange
+  Windows and browser resizes treat it like every window. Its box persists
+  with the session.
+- **The zoom box** toggles a reading column: the windows' area below the
+  options strip, inset 20 px, at most 520 wide, centered, and at least 220 on
+  each axis (`expandedTextBox` in `apps/text-viewer/layout.js`). A window whose every
   edge is within 10 px of the column (`nearBox`) restores; any other expands.
   Expanding records the previous box as a nine-slice pin; with no record, the
   restore uses the window's placement. A browser resize keeps a zoomed window
@@ -1062,7 +1063,7 @@ The **Show at startup** checkbox sits at the left of the button row and is
 checked on a new profile. When it is unchecked, loads open on the bare desktop;
 Sprite Machine → About… still opens the box, and its checkbox is the only way
 to turn the greeting back on. It writes on each toggle, not on OK, since a
-click outside skips OK. The flag is the desktop state's `greet`; a blob without
+click outside skips OK. The flag is the session's `greet`; a session without
 it reads as checked.
 
 The box shows the app's 32×32 icon beside **Sprite Machine**, **version N**
@@ -1070,7 +1071,7 @@ with the build date, and **created by Adam Portilla**, over a two-paragraph
 blurb whose **Vintage Frames** link opens the kit's
 [npm page](https://www.npmjs.com/package/vintage-frames) in a new tab. The
 version and date come from the root `package.json` and HEAD's commit date via
-`vite.config.js` `define`; `shell/menu-bar.js` writes them in at wire-up.
+`vite.config.js` `define`; `src/about.js` writes them in at wire-up.
 
 A `vf-dialog` opens focused on a slotted `autofocus` element, else its first
 text field, else its default button, and Return anywhere in it fires the
@@ -1078,6 +1079,13 @@ default button (a focused link follows itself). So Return dismisses the About
 box, and a value typed into Tile Size… commits with Return. A text field is
 focused but not selected, so a seeded name in the New box or the save prompt
 waits with the caret at its end.
+
+Every other dialog is its application's, authored in its `dialogs.html` as a
+dialog-method form: the pressed button's `value` closes it, and `ctx.ask`
+resolves that value, or null for Escape. Return in a field presses the
+ringed button. While one is open the bar shows its application's menus. A
+failure (a save, an open, an export, a restore) gets its application's alert,
+which grows to fit its message.
 
 ### Documents: a document is a .png
 
@@ -1094,23 +1102,26 @@ format. Opening and saving decode and encode PNGs with the engine's
 `sprite-machine/browser` entry (`src/image-io.js`), so a document's pixels are
 the file's exactly, also in privacy browsers that perturb canvas readback. An
 image that is not a PNG decodes through a canvas. A save writes 8-bit RGBA
-with every row unfiltered and deflated. Download writes the saved bytes verbatim, a downloaded PNG dropped back
-restores losslessly, and a foreign 3×2 sheet imports as an untitled document
-with default ring settings. Stripping the chunks loses only the name,
-timestamps, ring settings and layer names. The system clipboard
-strips them, so a PNG copied out with Edit → Copy and pasted back arrives
+with every row unfiltered and deflated. Download writes the saved bytes
+verbatim with the document's current name as their `Title`, a downloaded PNG
+dropped back restores losslessly, and a foreign 3×2 sheet imports as a
+document with default ring settings. Stripping the chunks loses only the
+name, timestamps, ring settings and layer names. The system clipboard strips
+them, so a PNG copied out with Edit → Copy and pasted back arrives
 _untitled_. A copy and paste within the app keeps everything (see
 [Folders](#folders)).
 
-Storage is IndexedDB (`storage/db.js`) with three stores: `docs` (the PNG
-bytes, listing caches that defer to the chunks, and `folder`), `folders` and
-`texts`. The schema is the list of stores: a profile opens at the version it
-holds, and a missing store is added by reopening one version up. The pure
-`files` slice holds the library (listing, availability, the folder tree) and
-the storage operations. Which documents are open, and whether they are dirty,
-belongs to the workspace. Saving is explicit, and a `beforeunload` guard warns
-while any open document is dirty. Where IndexedDB is unavailable (private
-windows), Save shows an explanatory dialog and everything else works.
+A stored document is two things: its catalog item (kind `sprite`: the name,
+the folder, the position, and `data` with the icon and the PNG's byte length)
+and its bytes, kept under the item's id in the `docs` store of the IndexedDB
+database `sprite-machine` (`storage/db.js`, the sheet store). The pure
+`state/sheets.js` joins them: a save writes the bytes, then makes the item or
+updates it. The item's name is the document's; a rename in the Finder leaves
+the bytes' `Title` behind until they leave the app. Which documents are open,
+and whether they are dirty, belongs to the workspace. Saving is explicit, and
+a `beforeunload` guard warns while any open document is dirty. Where
+IndexedDB is unavailable (private windows), Save shows an explanatory dialog
+and everything else works.
 
 ### Desktop icons & state
 
@@ -1118,18 +1129,25 @@ Every saved document, folder and text file has a `vf-icon`, as does the
 **Trash**. Document icons are `selectable movable editable`: Return renames in
 place, like File → Rename…, and an open window retitles.
 
-The built-in documents are seeded at first boot through the ⌘S save path while
-the `seeded` flag is unset. The flag is written after the last one is stored,
-so an interrupted boot seeds again, skipping names already stored. Seeded
+The built-in documents are seeded at first boot through the ⌘S save path, as
+the catalog's seed, which runs once per storage (`state/defaults.js`). Seeded
 documents are ordinary documents after that. Only **Special → Restore Default
 Files** adds built-ins again: it stores the built-in documents whose names and
 the text files whose keys are missing from the library, and changes nothing
 else.
 
+**A profile from before the shell** has its library converted instead, by the
+same seed (`state/legacy.js`): every record of the old `folders`, `docs` and
+`texts` stores becomes an item with its own id, name, times and container, at
+the icon position the old desktop state held for it, so each document's bytes,
+which stay in `docs`, line up with its item. A document's item takes its
+record's cached icon and its bytes' length. The old records stay where they
+are. The old desktop state is converted into the session the same way (below).
+
 **Double-click**, a **tap pair** or _File → Open_ ⌘O opens an icon; the
 Sprite Editor has no Open… dialog (see
 [Mouse, finger and pen](#mouse-finger-and-pen)). An open document's
-window comes forward. Icons deselect when an application becomes active, and
+window comes forward. A selection survives an application switch, and
 selecting an icon deactivates the application. Every open
 item's icon shows the kit's `open` ghost, held while a closing window's zoom
 rects run into it (see [Windows](#windows)).
@@ -1147,29 +1165,33 @@ rules in `lib/icon.js`:
   surrounds the covered pixels.
 - Built with the engine's `buildModel` over every layer on an offscreen GL
   context created on the first icon, lit by `scene/rig.js`. It renders once per
-  save and is
-  cached on the record, so a document keeps its icon until it is saved again. A document with nothing
-  painted, or no WebGL, gets the generic document glyph.
+  save and is kept in the item's `data`, so a document keeps its icon until it
+  is saved again. A pasted, dropped or restored document's icon renders from
+  its bytes. A document with nothing painted, or no WebGL, gets the generic
+  document glyph.
 
 Icons use the desktop below the menu bar; the options strip reserves no space
-above them. The default lattice is a column down the right edge, 16 px below the menu bar and 16 px in, folding into columns to
-the left, with the Trash at the bottom of the first column. A saved position
-wins and is pulled on-raster at boot. On a browser resize each icon keeps its
-nine-slice pin in `ICON_FRAME` (uniform 100 px bands) without clamping, so a
-shrink-then-grow returns every icon exactly. **Special → Clean Up** moves the
-front container's icons to the nearest free lattice cells.
+above them. The default lattice is the stock Finder's: a column down the right
+edge, 16 px below the menu bar and 16 px in, folding into columns to the left,
+with the Trash in the bottom-right corner. A saved position wins and is pulled
+into the work area. On a browser resize each desktop icon keeps its nine-slice
+pin without clamping, so a shrink-then-grow returns every icon exactly.
+**Special → Clean Up** moves the front container's icons to the nearest free
+lattice cells.
 
-One versioned localStorage key (`shell/desktop-state.js`, v4) holds icon
-positions, every window's box as a nine-slice pin, the open saved documents'
-edited faces and layers, the active window, the 3D Sprite Atlas toggle, the
-desktop pattern, `greet`, and the `seeded` and `seededTexts` flags. It is
-written on change and on exit. Each application reports its own windows
-(`pins()`), and a window entry carries a `z`, its depth in the stacking order,
-only while it is open: a box with no depth is one the boot does not reopen — a
-window closed earlier, or a windoid, which the Sprite Editor places itself. A
-v3 blob keeps its folder boxes without a depth, so the first load after the
-upgrade opens nothing; v1 and v2 drop their window geometry. Untitled windows do
-not survive a reload (no autosave).
+The session is the shell's (`localStorageState`), one versioned localStorage
+key, `sprite-machine:session`: every window's box as a nine-slice pin by the
+item it shows, with its depth while it is open, the active window's item, and
+the desktop pattern, with Sprite Machine's own keys beside them: `greet`,
+`showRing` (the 3D Sprite Atlas toggle) and `docs` (each open saved
+document's edited face and layer). It is written on change and when the page
+is hidden. A box with no depth is one the boot does not reopen: a window
+closed earlier, or a windoid, which the Sprite Editor places itself. The
+first load after the shell converts the old desktop state
+(`sprite-machine:desktop`, versions 1 to 4) into the session once, leaving the
+old key: windows keep their boxes and depths, so they reopen where they were.
+A v3 blob's boxes have no depth, and v1 and v2 drop their window geometry.
+Untitled windows do not survive a reload (no autosave).
 
 ---
 
@@ -1302,8 +1324,11 @@ See the engine's `views.js` for all six projection mappings.
 ## Architecture
 
 The grid pipeline is pure typed-array code with no THREE or DOM. The app state
-(`src/state/`) and the window and icon geometry (`shell/layout.js`, each
-application's `layout.js`) are pure JS. All of it runs under Node.
+(`src/state/`) and each application's window geometry (its `layout.js`) are
+pure JS. All of it runs under Node. The desktop's mechanics (the window
+manager, the menu bar, the catalog, the Finder, the session) are the kit's
+shell, `vintage-frames/shell`, whose entry needs a DOM: pure modules here
+import only its types, and restate the few ids and numbers they need.
 
 ```
 packages/core/  the engine, published as `sprite-machine`. No DOM, THREE only in
@@ -1324,31 +1349,34 @@ src/lib/        editor domain, no THREE or DOM: ring geometry, rasterizers (rect
                 (the named palettes, a document's colors), sprite-data (built-in
                 samples)
 src/texts/      built-in text files (.txt, imported ?raw), seeded once per profile
-src/apps/       finder, sprite-editor, text-viewer, desktop-patterns, and the
-                registry (index). Each app has menus.html, index.js (menu wiring,
-                dialog flows, actions for deps.apps), windows.html and windows.js.
-                All but desktop-patterns have layout.js (pure geometry). The Finder
-                has icons.js.
+src/apps/       finder (the stock Finder configured: art, seed, New Sprite,
+                Restore Default Files, the backup IO), sprite-editor,
+                text-viewer, desktop-patterns, and windows.js (what their
+                windows and dialogs share). Each app's index.js defines it
+                (defineApp: menus, dialogs, kinds, init). Each has menus.html
+                and dialogs.html; the three with windows of their own have
+                windows.html and windows.js, and the Sprite Editor and Text
+                Viewer layout.js (pure geometry).
 src/state/      pure JS slices on store.js: doc and history (per document), workspace
-                (the open DocContexts), files (library, folders, Trash, text files),
-                clipboard, derive, session, prefs, build, shell, ring-settings
+                (the open DocContexts), sheets (a stored document: its catalog
+                item and its bytes), kinds, names, defaults (the starter files),
+                legacy (the conversion from before the shell), backup (the
+                format), clipboard, derive, session, prefs, build, ring-settings
                 (per document, read through ring). store-controller holds the Lit
                 controllers that re-render on store changes.
-src/storage/    the IndexedDB wrapper (docs, folders, texts), injected into files
+src/storage/    the IndexedDB sheet store (docs), injected into sheets, and the
+                conversion's read of the old library
 src/scene/      stage (the 3D View's renderer, camera, lights, ground, framing,
                 on-demand render loop); rebuilder (the active document's whole
                 model, out through onMesh, and the mesh the 3D View shows); ring
                 and ring-renderer (3D Sprite Atlas); model-export (glb);
                 icon-renderer (document icons); rig (lights for the offscreen
                 renderers)
-src/shell/      shared by every application: layout (desktop geometry, the cascade,
-                nearness, the nine-slice pin), windows (the window manager),
-                menu-bar (Sprite Machine menu, shared dialogs, menu swap),
-                desktop-pattern, desktop-state, clock
-src/            main (composition root), boot/ (params, curtain), loaders,
-                drop-target, shortcuts, image-io, system-clipboard (the paste
-                reads), style.css, components/ (Lit, shadow DOM except
-                sm-color-picker)
+src/            main (composition root: the shell, the scene, the boot
+                documents), about (the About box), boot/ (params, curtain),
+                loaders, drop-target (the overlay), shortcuts, image-io,
+                system-clipboard (the pixel paste reads), style.css,
+                components/ (Lit, shadow DOM except sm-color-picker)
 src/assets/     raster art at 1:1: tool icons (22×19), face cubes (21×26) and the
                 selected dither, application icon (32×32), folder, text file, the
                 Trash's cans and 12×12 indicator, the Car and Truck sheets
@@ -1368,10 +1396,10 @@ runs them on every push.
 ### UI layer: Lit + a hand-rolled store
 
 The chrome uses `lit`, which vintage-frames is also built on (one deduped copy).
-Dependencies point down only: presentation (`components/`, `scene/`, `shell/`,
-`apps/`) → app state (`state/`) → domain (the `sprite-machine` package and
-`lib/`). `storage/` is injected into the files slice, so the slice runs under
-Node.
+Dependencies point down only: presentation (`components/`, `scene/`, `apps/`)
+→ app state (`state/`) → domain (the `sprite-machine` package and `lib/`).
+`storage/` and the shell's catalog are injected into the sheet store and the
+workspace, so they run under Node.
 
 The store is a 40-line observable (`state/store.js`). Connected components read
 slices and call named actions. The editor's leaf components take props and emit

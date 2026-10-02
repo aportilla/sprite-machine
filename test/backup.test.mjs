@@ -2,51 +2,38 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  addPlan,
+  itemsOf,
   planBackup,
   readManifest,
   backupFilename,
   BACKUP_FORMAT,
   BACKUP_VERSION,
 } from '../src/state/backup.js';
-import { TRASH } from '../src/state/files.js';
 
-const doc = (id, name, folder, createdAt) => ({
+const item = (id, name, kind, parent, createdAt, extra = {}) => ({
   id,
   name,
-  folder,
+  kind,
+  parent,
   createdAt,
   modifiedAt: createdAt + 1,
-  icon: null,
-  w: 6,
-  h: 4,
-  size: 100,
+  ...extra,
 });
 
-// The Trash row leads state.folders, as the files slice always gives it.
+// The Trash volume leads the listing, as the catalog gives it.
 const state = () => ({
   available: true,
-  folders: [
-    { id: TRASH, name: 'Trash', parent: null, createdAt: 0, modifiedAt: 0 },
-    { id: 'f1', name: 'Vehicles', parent: null, createdAt: 10, modifiedAt: 10 },
-    { id: 'f2', name: 'Big Rigs', parent: 'f1', createdAt: 11, modifiedAt: 11 },
-    { id: 'f3', name: 'Gone', parent: 'nowhere', createdAt: 12, modifiedAt: 12 },
-  ],
-  list: [
-    doc('d1', 'Car', null, 1),
-    doc('d2', 'car', null, 2),
-    doc('d3', 'Truck', 'f2', 3),
-    doc('d4', 'Old Car', TRASH, 4),
-  ],
-  texts: [
-    {
-      id: 't1',
-      name: 'Read Me',
-      folder: null,
-      builtin: 'read-me',
-      createdAt: 5,
-      modifiedAt: 5,
-      size: 20,
-    },
+  items: [
+    item('trash', 'Trash', 'trash', null, 0),
+    item('d1', 'Car', 'sprite', null, 1, { left: 900, top: 36 }),
+    item('d2', 'car', 'sprite', null, 2),
+    item('d3', 'Truck', 'sprite', 'f2', 3),
+    item('d4', 'Old Car', 'sprite', 'trash', 4),
+    item('t1', 'Read Me', 'text', null, 5, { data: { builtin: 'read-me' } }),
+    item('f1', 'Vehicles', 'folder', null, 10, { left: 820, top: 36 }),
+    item('f2', 'Big Rigs', 'folder', 'f1', 11),
+    item('f3', 'Gone', 'folder', 'nowhere', 12),
   ],
 });
 
@@ -73,7 +60,7 @@ test('planBackup mirrors the tree, parents first, and slugs a collision', () => 
   );
 });
 
-test('planBackup writes every item into the manifest, the Trash by id alone', () => {
+test('planBackup writes every item into the manifest with its place, the Trash by id alone', () => {
   const { manifest } = planBackup(state(), { app: '0.3.16', date: new Date(0) });
   assert.equal(manifest.format, BACKUP_FORMAT);
   assert.equal(manifest.v, BACKUP_VERSION);
@@ -81,25 +68,28 @@ test('planBackup writes every item into the manifest, the Trash by id alone', ()
   assert.equal(manifest.exportedAt, '1970-01-01T00:00:00.000Z');
 
   assert.deepEqual(
-    manifest.folders.map((f) => [f.id, f.name, f.parent, f.path]),
+    manifest.folders.map((f) => [f.id, f.name, f.parent, f.path, f.left ?? null]),
     [
-      ['f1', 'Vehicles', null, 'vehicles/'],
-      ['f2', 'Big Rigs', 'f1', 'vehicles/big-rigs/'],
-      ['f3', 'Gone', null, 'gone/'],
+      ['f1', 'Vehicles', null, 'vehicles/', 820],
+      ['f2', 'Big Rigs', 'f1', 'vehicles/big-rigs/', null],
+      ['f3', 'Gone', null, 'gone/', null],
     ],
     'the Trash has no row of its own'
   );
   assert.deepEqual(
     manifest.docs.map((r) => [r.id, r.name, r.folder, r.path]),
     [
-      ['d4', 'Old Car', TRASH, 'trash/old-car.png'],
+      ['d4', 'Old Car', 'trash', 'trash/old-car.png'],
       ['d3', 'Truck', 'f2', 'vehicles/big-rigs/truck.png'],
       ['d1', 'Car', null, 'car.png'],
       ['d2', 'car', null, 'car-2.png'],
     ]
   );
-  assert.deepEqual(manifest.docs[0].createdAt, 4);
-  assert.deepEqual(manifest.docs[0].modifiedAt, 5);
+  assert.deepEqual(
+    [manifest.docs[2].left, manifest.docs[2].top, 'left' in manifest.docs[3]],
+    [900, 36, false]
+  );
+  assert.deepEqual([manifest.docs[0].createdAt, manifest.docs[0].modifiedAt], [4, 5]);
   assert.deepEqual(
     manifest.texts.map((t) => [t.id, t.name, t.builtin, t.path]),
     [['t1', 'Read Me', 'read-me', 'read-me.txt']]
@@ -111,22 +101,22 @@ test('readManifest round-trips a planned manifest', () => {
   assert.deepEqual(readManifest(JSON.stringify(manifest)), manifest);
 });
 
-test('readManifest normalizes what it accepts and throws on what it cannot use', () => {
+test('readManifest normalizes what it accepts, places included, and throws on what it cannot use', () => {
   const rows = { folders: [], docs: [], texts: [] };
   const read = readManifest(
     JSON.stringify({
       ...rows,
       format: BACKUP_FORMAT,
       v: 1,
-      texts: [{ id: 't1', name: 'Read Me', path: 'read-me.txt' }],
+      texts: [{ id: 't1', name: 'Read Me', path: 'read-me.txt', left: 'x', top: 3 }],
     })
   );
   assert.deepEqual(read.texts[0], {
     id: 't1',
     name: 'Read Me',
-    folder: null,
     createdAt: 0,
     modifiedAt: 0,
+    folder: null,
     builtin: null,
     path: 'read-me.txt',
   });
@@ -147,6 +137,69 @@ test('readManifest normalizes what it accepts and throws on what it cannot use',
     bad({ ...rows, format: BACKUP_FORMAT, v: 1, docs: [{ id: 'd1', name: 'Car' }] }),
     'a row with no path'
   );
+});
+
+/** A read archive of the planned state, each doc with bytes and each text with its words. */
+const archive = () => {
+  const { manifest } = planBackup(state());
+  return {
+    folders: manifest.folders,
+    docs: manifest.docs.map((r) => ({ ...r, bytes: new Uint8Array(1) })),
+    texts: manifest.texts.map((t) => ({ ...t, text: 'old words' })),
+  };
+};
+
+test('itemsOf makes the archive’s items with its ids and containers; a document reads its data or is skipped; places only for Replace', () => {
+  const docs = new Map([
+    ['d1', { icon: 'data:a', size: 10 }],
+    ['d3', { icon: null, size: 20 }],
+    ['d4', { icon: null, size: 30 }],
+  ]);
+  const replace = itemsOf(archive(), { docs, shipsText: () => true, places: true });
+  assert.equal(replace.skipped, 1, 'd2 did not read as a sheet');
+  assert.deepEqual(
+    replace.items.map((i) => [i.id, i.kind, i.parent]),
+    [
+      ['f1', 'folder', null],
+      ['f2', 'folder', 'f1'],
+      ['f3', 'folder', null],
+      ['d4', 'sprite', 'trash'],
+      ['d3', 'sprite', 'f2'],
+      ['d1', 'sprite', null],
+      ['t1', 'text', null],
+    ]
+  );
+  const car = replace.items.find((i) => i.id === 'd1');
+  assert.deepEqual(
+    [car.left, car.top, car.data],
+    [900, 36, { icon: 'data:a', size: 10 }]
+  );
+  assert.deepEqual(replace.items.at(-1).data, { builtin: 'read-me' });
+
+  const add = itemsOf(archive(), { docs, shipsText: () => false, places: false });
+  assert.equal('left' in add.items.find((i) => i.id === 'd1'), false);
+  assert.deepEqual(
+    add.items.at(-1).data,
+    { text: 'old words' },
+    'an unshipped built-in keeps its words'
+  );
+});
+
+test('addPlan makes each container before what it holds, and lists what goes into the Trash after', () => {
+  const items = [
+    item('d', 'Doc', 'sprite', 'inner', 1),
+    item('inner', 'Inner', 'folder', 'outer', 2),
+    item('outer', 'Outer', 'folder', 'trash', 3),
+    item('loose', 'Loose', 'text', 'nowhere', 4),
+    item('a', 'A', 'folder', 'b', 5),
+    item('b', 'B', 'folder', 'a', 6),
+  ];
+  const { order, toTrash } = addPlan(items);
+  assert.deepEqual(
+    order.map((i) => i.id),
+    ['outer', 'inner', 'd', 'loose', 'b', 'a']
+  );
+  assert.deepEqual(toTrash, ['outer']);
 });
 
 test('backupFilename names the day', () => {

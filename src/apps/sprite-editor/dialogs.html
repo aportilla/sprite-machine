@@ -1,0 +1,271 @@
+<!-- Sprite Editor dialogs. The shell holds them under the Sprite Editor, and
+     index.js asks them with ctx.ask: each is a dialog-method form that closes
+     with its pressed button's value. The body is width − 10 by height − 25
+     (height − 10 for frame="plain"). Content sits 16 in from the body's
+     top-left, and a button group's origin corner 16 in from the matching body
+     corner. -->
+
+<!-- New (File → New…). OK stays disabled until the name has a character. -->
+<vf-dialog data-dialog="new" heading="New" width="436" height="184">
+  <form method="dialog" novalidate>
+    <vf-stack gap="12" left="16" top="16">
+      <vf-stack direction="row" gap="8">
+        <vf-label width="80" for="new-name">Name:</vf-label>
+        <vf-text-field id="new-name" style="--vf-field-width: 200px"></vf-text-field>
+      </vf-stack>
+      <vf-fieldset legend="Settings" fill-width>
+        <vf-stack gap="12">
+          <vf-stack direction="row" gap="8">
+            <vf-label width="80" for="new-template">Template:</vf-label>
+            <vf-select id="new-template"></vf-select>
+          </vf-stack>
+          <vf-stack direction="row" gap="8">
+            <vf-label width="80" for="new-tile">Tile size:</vf-label>
+            <vf-number-field id="new-tile" min="1" max="64" step="1"></vf-number-field>
+          </vf-stack>
+        </vf-stack>
+      </vf-fieldset>
+    </vf-stack>
+    <vf-button-group
+      vertical
+      origin="top right"
+      left="410"
+      top="16"
+      style="--vf-button-group-gap: 7px"
+    >
+      <vf-button type="submit" value="ok" variant="default" data-ok>OK</vf-button>
+      <vf-button type="submit" value="cancel">Cancel</vf-button>
+    </vf-button-group>
+  </form>
+</vf-dialog>
+
+<!-- The name prompt for a first save, a rename, New Layer and Rename Layer.
+     index.js sets the label, caption and OK's text per use. -->
+<vf-dialog data-dialog="name" frame="plain" label="Save" width="340" height="96">
+  <form method="dialog" novalidate>
+    <vf-label data-caption for="name-field" left="16" top="16"
+      >Save document as:</vf-label
+    >
+    <vf-text-field
+      id="name-field"
+      value=""
+      left="16"
+      top="38"
+      style="--vf-field-width: 200px"
+    ></vf-text-field>
+    <vf-button-group
+      vertical
+      origin="top right"
+      left="314"
+      top="16"
+      style="--vf-button-group-gap: 7px"
+    >
+      <vf-button type="submit" value="ok" variant="default" data-ok disabled
+        >Save</vf-button
+      >
+      <vf-button type="submit" value="cancel">Cancel</vf-button>
+    </vf-button-group>
+  </form>
+</vf-dialog>
+
+<!-- Tile Size (Edit → Tile Size…), applied on OK only. -->
+<vf-dialog data-dialog="tile" heading="Tile Size" width="340" height="130">
+  <form method="dialog" novalidate>
+    <vf-stack width="292" gap="12" left="16" top="16">
+      <vf-stack fill-width direction="row" gap="8" place="start">
+        <vf-stack pad="4 0 0">
+          <vf-label width="80" for="tile-size">Tile size:</vf-label>
+        </vf-stack>
+        <vf-number-field id="tile-size" min="1" max="64" step="1"></vf-number-field>
+      </vf-stack>
+    </vf-stack>
+    <vf-button-group origin="bottom right" left="314" top="89">
+      <vf-button type="submit" value="cancel">Cancel</vf-button>
+      <vf-button type="submit" value="ok" variant="default">OK</vf-button>
+    </vf-button-group>
+  </form>
+</vf-dialog>
+
+<!-- Save changes before closing. Its positions are the kit's reference layout
+     (vintage-frames ex-dialog-save). -->
+<vf-dialog
+  data-dialog="save-changes"
+  frame="plain"
+  label="Save changes"
+  width="296"
+  height="140"
+>
+  <form method="dialog" novalidate>
+    <vf-paragraph
+      face="display"
+      data-message
+      width="240"
+      left="19"
+      top="16"
+    ></vf-paragraph>
+    <vf-button-group vertical left="17" top="70" style="--vf-button-group-gap: 7px">
+      <vf-button type="submit" value="save" variant="default">Yes</vf-button>
+      <vf-button type="submit" value="discard">No</vf-button>
+    </vf-button-group>
+    <vf-button type="submit" value="cancel" left="202" top="101">Cancel</vf-button>
+  </form>
+</vf-dialog>
+
+<!-- Export 3D Model (a .glb). Unlit uses KHR_materials_unlit. -->
+<vf-dialog data-dialog="export-model" heading="Export 3D Model" width="360" height="220">
+  <form method="dialog" novalidate>
+    <vf-stack width="312" gap="12" left="16" top="16">
+      <vf-stack fill-width direction="row" gap="8" place="start">
+        <vf-stack pad="4 0 0">
+          <vf-label width="80" for="model-scale">Scale:</vf-label>
+        </vf-stack>
+        <vf-number-field
+          id="model-scale"
+          min="1"
+          max="1000"
+          step="1"
+          value="10"
+        ></vf-number-field>
+        <vf-stack pad="4 0 0">
+          <vf-label>voxels per meter</vf-label>
+        </vf-stack>
+      </vf-stack>
+      <vf-stack fill-width direction="row" gap="8" place="start">
+        <vf-stack pad="4 0 0">
+          <vf-label width="80" for="model-lighting">Lighting:</vf-label>
+        </vf-stack>
+        <vf-select id="model-lighting" value="lit">
+          <vf-option value="lit" selected>Lit</vf-option>
+          <vf-option value="unlit">Unlit</vf-option>
+        </vf-select>
+      </vf-stack>
+      <vf-stack fill-width direction="row" gap="8" place="start">
+        <vf-stack pad="4 0 0">
+          <vf-label width="80">Model:</vf-label>
+        </vf-stack>
+        <vf-stack pad="4 0 0">
+          <vf-label data-stats></vf-label>
+        </vf-stack>
+      </vf-stack>
+      <vf-stack fill-width direction="row" gap="8" place="start">
+        <vf-stack pad="4 0 0">
+          <vf-label width="80">Size:</vf-label>
+        </vf-stack>
+        <vf-stack pad="4 0 0">
+          <vf-label data-size></vf-label>
+        </vf-stack>
+      </vf-stack>
+    </vf-stack>
+    <vf-button-group origin="bottom right" left="334" top="179">
+      <vf-button type="submit" value="cancel">Cancel</vf-button>
+      <vf-button type="submit" value="export" variant="default" data-ok disabled
+        >Export</vf-button
+      >
+    </vf-button-group>
+  </form>
+</vf-dialog>
+
+<!-- Export Sprite Atlas. The fields bind live to the ring slice, so Cancel does
+     not revert them. -->
+<vf-dialog
+  data-dialog="export-atlas"
+  heading="Export Sprite Atlas"
+  width="360"
+  height="266"
+>
+  <form method="dialog" novalidate>
+    <vf-stack width="312" gap="12" left="16" top="16">
+      <vf-stack fill-width direction="row" gap="8" place="start">
+        <vf-stack pad="4 0 0">
+          <vf-label width="80" for="atlas-views">Views:</vf-label>
+        </vf-stack>
+        <vf-number-field id="atlas-views" min="1" max="16" step="1"></vf-number-field>
+        <vf-stack pad="4 0 0">
+          <vf-label data-step></vf-label>
+        </vf-stack>
+      </vf-stack>
+      <vf-stack fill-width direction="row" gap="8" place="start">
+        <vf-stack pad="4 0 0">
+          <vf-label width="80" for="atlas-elevation">Elevation:</vf-label>
+        </vf-stack>
+        <vf-number-field id="atlas-elevation" min="0" max="90" step="1"></vf-number-field>
+        <vf-stack pad="4 0 0">
+          <vf-label>° above horizon</vf-label>
+        </vf-stack>
+      </vf-stack>
+      <vf-stack fill-width direction="row" gap="8" place="start">
+        <vf-stack pad="4 0 0">
+          <vf-label width="80" for="atlas-offset">First angle:</vf-label>
+        </vf-stack>
+        <vf-number-field id="atlas-offset" min="0" max="359" step="1"></vf-number-field>
+        <vf-stack pad="4 0 0">
+          <vf-label>° from front</vf-label>
+        </vf-stack>
+      </vf-stack>
+      <vf-stack fill-width direction="row" gap="8" place="start">
+        <vf-stack pad="4 0 0">
+          <vf-label width="80" for="atlas-size">Size:</vf-label>
+        </vf-stack>
+        <vf-number-field id="atlas-size" min="2" max="255" step="1"></vf-number-field>
+        <vf-stack pad="4 0 0">
+          <vf-label>px per tile</vf-label>
+        </vf-stack>
+      </vf-stack>
+      <vf-stack fill-width direction="row" gap="8" place="start">
+        <vf-stack pad="4 0 0">
+          <vf-label width="80">Sheet:</vf-label>
+        </vf-stack>
+        <vf-stack pad="4 0 0">
+          <vf-label data-dims></vf-label>
+        </vf-stack>
+      </vf-stack>
+    </vf-stack>
+    <vf-button-group origin="bottom right" left="334" top="225">
+      <vf-button type="submit" value="cancel">Cancel</vf-button>
+      <vf-button type="submit" value="export" variant="default" data-ok disabled
+        >Export</vf-button
+      >
+    </vf-button-group>
+  </form>
+</vf-dialog>
+
+<!-- Storage Unavailable: a save, Duplicate or the Finder's New Folder without
+     storage. -->
+<vf-dialog
+  data-dialog="storage-unavailable"
+  heading="Storage Unavailable"
+  closable
+  width="380"
+  height="170"
+>
+  <form method="dialog" novalidate>
+    <vf-stack width="332" gap="10" left="16" top="16">
+      <vf-paragraph>
+        Documents can’t be saved in this browser session (storage is unavailable — a
+        private window, perhaps). Everything else works; use File → Download to keep your
+        work as a .png.
+      </vf-paragraph>
+    </vf-stack>
+    <vf-button-group origin="bottom right" left="354" top="129">
+      <vf-button type="submit" value="ok" variant="default">OK</vf-button>
+    </vf-button-group>
+  </form>
+</vf-dialog>
+
+<!-- Everything else: a failure, or an image that isn't a sprite sheet. It is
+     authored at its least height; a longer message grows it
+     (../windows.js alert). -->
+<vf-dialog data-dialog="alert" frame="plain" label="Alert" width="360" height="110">
+  <form method="dialog" novalidate>
+    <vf-paragraph
+      face="display"
+      data-message
+      width="320"
+      left="19"
+      top="16"
+    ></vf-paragraph>
+    <vf-button-group origin="bottom right" left="334" top="84">
+      <vf-button type="submit" value="ok" variant="default">OK</vf-button>
+    </vf-button-group>
+  </form>
+</vf-dialog>

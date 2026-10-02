@@ -1,0 +1,17 @@
+<!-- Text Viewer dialogs. The shell holds them under the Text Viewer; index.js
+     asks them. Laid out as the Finder's alert is (../finder/dialogs.html), at
+     its least height; a longer message grows it. -->
+<vf-dialog data-dialog="alert" frame="plain" label="Alert" width="380" height="110">
+  <form method="dialog" novalidate>
+    <vf-paragraph
+      face="display"
+      data-message
+      width="340"
+      left="19"
+      top="16"
+    ></vf-paragraph>
+    <vf-button-group origin="bottom right" left="354" top="84">
+      <vf-button type="submit" value="ok" variant="default">OK</vf-button>
+    </vf-button-group>
+  </form>
+</vf-dialog>

@@ -4,14 +4,13 @@
 
 import { LAYER_MAX } from 'sprite-machine';
 import { session } from './state/session.js';
-import { shell } from './state/shell.js';
 import { workspace } from './state/workspace.js';
 
 export function initShortcuts() {
   /** @param {KeyboardEvent} e */
   const onKeyDown = (e) => {
     // Only while the Sprite Editor is front, the same gate as its menus.
-    if (!shell.get().appActive) return;
+    if (!session.get().front) return;
     if (session.get().pickerOpen) return;
     // The kit's fields put their <input> in shadow DOM, so read the composed
     // path's innermost target.

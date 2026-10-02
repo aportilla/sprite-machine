@@ -24,26 +24,98 @@ export function fakeScheduler() {
   };
 }
 
-/** An in-memory storage/db.js. Its maps are exposed for assertions. */
-export function memStorage() {
+/**
+ * What the app asks of the shell's catalog (vintage-frames/shell), over an
+ * in-memory listing with the Trash volume first and counting ids. Like the
+ * kit's: a create in the Trash is refused, a rename or update bumps
+ * modifiedAt, and a change notifies. `items` is exposed for edits.
+ */
+export function stubCatalog(...items) {
+  let n = 0;
+  let t = 1000;
+  const trash = {
+    id: 'trash',
+    name: 'Trash',
+    kind: 'trash',
+    parent: null,
+    createdAt: 0,
+    modifiedAt: 0,
+  };
+  const state = { available: true, items: [trash, ...items] };
+  const listeners = new Set();
+  const changed = () => {
+    state.items = [...state.items];
+    for (const fn of [...listeners]) fn(state);
+  };
+  const item = (id) => state.items.find((i) => i.id === id) ?? null;
+  const inTrash = (id) => {
+    for (let at = id; at != null; at = item(at)?.parent ?? null)
+      if (at === 'trash') return true;
+    return false;
+  };
+  return {
+    state,
+    get: () => state,
+    item,
+    subscribe(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    async create({
+      name = 'untitled',
+      kind = 'folder',
+      parent = null,
+      data,
+      at,
+      left,
+      top,
+    } = {}) {
+      if (inTrash(parent)) return null;
+      const time = at ?? t++;
+      const made = {
+        id: `id-${++n}`,
+        name,
+        kind,
+        parent,
+        createdAt: time,
+        modifiedAt: time,
+      };
+      if (data !== undefined) made.data = data;
+      if (left != null && top != null) Object.assign(made, { left, top });
+      state.items.push(made);
+      changed();
+      return made;
+    },
+    async update(id, data) {
+      const i = state.items.findIndex((x) => x.id === id);
+      if (i < 0) return false;
+      state.items[i] = { ...state.items[i], data, modifiedAt: t++ };
+      changed();
+      return true;
+    },
+    async rename(id, name) {
+      const i = state.items.findIndex((x) => x.id === id);
+      if (i < 0 || state.items[i].name === name) return false;
+      state.items[i] = { ...state.items[i], name, modifiedAt: t++ };
+      changed();
+      return true;
+    },
+    /** Take items out, as Empty Trash does. */
+    drop(...ids) {
+      state.items = state.items.filter((x) => !ids.includes(x.id));
+      changed();
+    },
+  };
+}
+
+/** A sheet store (state/sheets.js) over a Map, exposed as `map`. */
+export function memSheetStore() {
   const map = new Map();
-  const folders = new Map();
-  const texts = new Map();
   return {
     map,
-    folders,
-    texts,
-    list: async () => [...map.values()],
     get: async (id) => map.get(id),
     put: async (r) => map.set(r.id, r),
     remove: async (id) => map.delete(id),
-    listFolders: async () => [...folders.values()],
-    putFolder: async (r) => folders.set(r.id, r),
-    removeFolder: async (id) => folders.delete(id),
-    listTexts: async () => [...texts.values()],
-    getText: async (id) => texts.get(id),
-    putText: async (r) => texts.set(r.id, r),
-    removeText: async (id) => texts.delete(id),
   };
 }
 

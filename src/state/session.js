@@ -42,6 +42,9 @@ export function createSession() {
     // canvas's preview show the eyedropper (lib/tools.js springTool). `tool`
     // is unchanged.
     option: false,
+    // The Sprite Editor is the front application. The options strip, the tool
+    // keys and the Option key follow it.
+    front: false,
   });
 
   return {
@@ -131,6 +134,11 @@ export function createSession() {
     /** @param {boolean} v */
     setOption(v) {
       store.patch({ option: !!v });
+    },
+
+    /** @param {boolean} v  Called only by the Sprite Editor's onFront. */
+    setFront(v) {
+      if (store.get().front !== !!v) store.patch({ front: !!v });
     },
   };
 }

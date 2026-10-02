@@ -1,81 +1,52 @@
-// Desktop Patterns: the control panel application. Wires its menus to the panel
-// window (windows.js). The Sprite Machine menu opens it through actions.open.
+// Desktop Patterns: the control panel application. Its item in the Sprite
+// Machine menu opens one panel (windows.js), centered, with no icon to open out
+// of or close into. Only Set Desktop Pattern changes the desktop's pattern,
+// which the shell saves with the session; closing discards an unset choice.
 
+import { centeredBox, defineApp } from 'vintage-frames/shell';
 import menus from './menus.html?raw';
-import { prefs } from '../../state/prefs.js';
-import { ring } from '../../state/ring.js';
-import { DESKTOP_PATTERNS } from '../../state/shell.js';
-import { workspace } from '../../state/workspace.js';
-import { initPatternsWindow } from './windows.js';
+import { patternsWindow } from './windows.js';
 
-/** @type {import('../index.js').App} */
-export const desktopPatterns = {
-  id: DESKTOP_PATTERNS,
-  name: 'Desktop Patterns',
-  menus,
-  init({ menus, deps }) {
-    const { desktop, windows, modalOpen } = deps;
-    const panel = initPatternsWindow(desktop, windows);
-    const menu = (name) => {
-      const m = menus.find((el) => el.dataset.menu === name);
-      if (!m) throw new Error(`apps/desktop-patterns: missing menu ${name}`);
-      return m;
-    };
-    const item = (m, value) => {
-      const el = m.querySelector(`vf-menu-item[value="${value}"]`);
-      if (!el) throw new Error(`apps/desktop-patterns: missing item ${value}`);
-      return /** @type {any} */ (el);
-    };
-    const menuFile = menu('file');
-    const menuView = menu('view');
+const DESKTOP_PATTERNS = 'desktop-patterns';
 
-    /** @type {(() => void)[]} */
-    const teardown = [];
-    const on = (el, type, fn) => {
-      el.addEventListener(type, fn);
-      teardown.push(() => el.removeEventListener(type, fn));
-    };
-    const menuDetail = (e) => /** @type {CustomEvent} */ (e).detail;
+/** The kit's default desktop pattern, the 50% dither. */
+const DEFAULT_PATTERN = 'gray-50';
 
-    on(menuFile, 'vf-menu-select', (e) => {
-      if (modalOpen()) return;
-      switch (menuDetail(e).value) {
-        case 'close':
-        case 'quit':
-          // A pattern chosen but not set is discarded.
-          panel.close();
-          break;
-      }
-    });
+export function desktopPatterns() {
+  return defineApp({
+    id: DESKTOP_PATTERNS,
+    name: 'Desktop Patterns',
+    menus,
+    init(ctx) {
+      const { desktop, windows } = ctx;
+      /** @type {import('vintage-frames').VfWindow|null} the panel, while it is open */
+      let panel = null;
 
-    on(menuView, 'vf-menu-select', (e) => {
-      if (modalOpen()) return;
-      if (menuDetail(e).value === 'arrange') windows.arrange();
-    });
+      const open = () => {
+        if (panel?.isConnected) {
+          desktop.bringToFront(panel);
+          return;
+        }
+        const win = patternsWindow(desktop.pattern ?? DEFAULT_PATTERN, (pattern) => {
+          desktop.pattern = pattern;
+        });
+        const size = { width: win.width ?? 0, height: win.height ?? 0 };
+        panel = windows.open({
+          app: DESKTOP_PATTERNS,
+          create: () => win,
+          place: (area) => centeredBox(area, size),
+        });
+      };
+      // No ellipsis: it opens a window, not a dialog.
+      ctx.systemItem(DESKTOP_PATTERNS, 'Desktop Patterns', open);
 
-    // Arrange Windows is disabled while every window is at its placement. The
-    // subscribed stores are inputs to the placements.
-    const itemArrange = item(menuView, 'arrange');
-    const syncArrange = () => {
-      itemArrange.disabled = windows.arranged();
-    };
-    teardown.push(
-      workspace.subscribe(syncArrange),
-      prefs.subscribe(syncArrange),
-      ring.subscribe(syncArrange),
-      windows.onLayout(syncArrange)
-    );
-    syncArrange();
-
-    return {
-      actions: {
-        /** Opens the panel or brings it forward. */
-        open: () => panel.open(),
-      },
-      dispose() {
-        for (const fn of teardown) fn();
-        panel.dispose();
-      },
-    };
-  },
-};
+      ctx.onMenu((value) => {
+        if ((value === 'close' || value === 'quit') && panel?.isConnected) {
+          windows.requestClose(panel);
+        } else if (value === 'arrange') windows.arrange();
+      });
+      ctx.gate(ctx.item('arrange'), () => !windows.arranged());
+      ctx.onDispose(() => panel?.remove());
+    },
+  });
+}

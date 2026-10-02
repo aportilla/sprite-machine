@@ -1,6 +1,6 @@
 // Built-in samples and a grid-to-ImageData helper. Each sample is a sheet of
 // 3×2 atlases, one per layer: left, front, top over right, back, bottom. A
-// first boot saves each one as a stored document (loaders.js seedDefaultDocs),
+// first boot saves each one as a stored document (state/defaults.js),
 // and File → New… opens one as an untitled copy. `tile` lets the dialog show
 // the tile size without decoding.
 

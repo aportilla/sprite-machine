@@ -1,29 +1,27 @@
-// Sprite Editor windows: four utility windoids and one document window per open
-// document.
+// Sprite Editor windows: five utility windoids and one document window per open
+// document, over the kit's window manager (vintage-frames/shell).
 //
-// - The windoids come from windows.html and are appended hidden. They are shown
-//   while the Sprite Editor is front, and the 3D Sprite Atlas also needs its
-//   pref. Hiding keeps them mounted, so canvas identity survives. Each opens at
-//   its saved box, or at its placement without one.
+// - The windoids come from windows.html and are the Sprite Editor's palettes:
+//   shown while it is front, the 3D Sprite Atlas also while its pref holds.
+//   Hiding keeps them mounted, so canvas identity survives. Each is adopted
+//   with an item of its own (windoid:<id>), so the session saves its box and
+//   the next load opens it there; without one it takes its placement.
 // - Document windows are reconciled from the workspace. A new context clones
-//   #tpl-document-window. A closed context closes its window into the file's
-//   icon through the Finder (iconBox, holdGhost), and its box is kept for the
-//   session, over the saved pin the boot restores. showDocument's `from` grows
-//   a window just opened out of its icon.
+//   #tpl-document-window and is adopted with its document's catalog item, at
+//   this session's box for it, else the saved one, else the cascade. Its close
+//   box runs the dirty-checked close. A closed context's window closes into
+//   the document's icon. showDocument's `from` grows a window just opened out
+//   of its icon.
 // - Placement comes from layout.js on the live raster at init, on each open and
 //   on Arrange Windows.
-// - pins() reports both kinds for the desktop state, the windoids by id and the
-//   document windows by file id. An untitled document has no key and is not
-//   saved.
 
 import { VfWindow } from 'vintage-frames';
+import { cascadeFrom, cascadeSlot, nearBox } from 'vintage-frames/shell';
 import markup from './windows.html?raw';
-import { shell, SPRITE_EDITOR } from '../../state/shell.js';
 import { prefs } from '../../state/prefs.js';
 import { ring } from '../../state/ring.js';
 import { workspace, followActive } from '../../state/workspace.js';
-import { cascadeFrom, cascadeSlot, nearBox } from '../../shell/layout.js';
-import { cloneWindow, parseWindows } from '../../shell/windows.js';
+import { cloneWindow, parseWindows } from '../windows.js';
 import {
   FRAME_BANDS,
   initialPlacement,
@@ -40,32 +38,24 @@ import {
   zoomedBox,
 } from './layout.js';
 
-/** Windoid ids (markup id `win-<id>`). */
-const WINDOIDS = ['tools', 'sprite', 'stage', 'ring', 'palette'];
-/** The windoids the View menu toggles, each by its prefs flag. They keep their
- *  close boxes. `ring` is the 3D Sprite Atlas. */
-const TOGGLED = { ring: 'showRing' };
+/** Windoid ids (markup id `win-<id>`), in stacking order, the Tools palette
+ *  on top. */
+const WINDOIDS = ['sprite', 'stage', 'ring', 'palette', 'tools'];
 /** The axes of a windoid's size that are the user's, which arranged() ignores. */
 const USER_AXES = { ring: ['width'], palette: ['width', 'height'] };
 
+/** A box from a window area's raster: its right and bottom edges. */
+const rasterOf = (area) => ({ w: area.left + area.width, h: area.top + area.height });
+
 /**
- * @param {import('vintage-frames').VfDesktop} desktop
- * @param {ReturnType<typeof import('../../shell/windows.js').initWindows>} windows
- * @param {{onDocumentClose(key: string): void,
- *          savedPin?: (key: string) => import('../../shell/layout.js').Pin | null,
- *          iconBox?: (key: string) => DOMRect | null,
- *          holdGhost?: (key: string, until: Promise<unknown>) => void}} opts
+ * @param {import('vintage-frames/shell').AppContext} ctx
+ * @param {string} app  the Sprite Editor's id
+ * @param {{onDocumentClose(key: string): void}} opts
  *   onDocumentClose: the dirty-checking close for a context key.
- *   savedPin: a saved window pin by item key (desktop-state.js windowPin).
- *   iconBox, holdGhost: the Finder's, read at each close.
  */
-export function initEditorWindows(
-  desktop,
-  windows,
-  { onDocumentClose, savedPin = () => null, iconBox = () => null, holdGhost = () => {} }
-) {
-  /** @type {(() => void)[]} */
-  const unsubs = [];
+export function initEditorWindows(ctx, app, { onDocumentClose }) {
+  const { desktop, windows } = ctx;
+  const savedPin = (item) => ctx.state?.pin(item) ?? null;
   const host = parseWindows(markup);
   const tpl = /** @type {HTMLTemplateElement} */ (
     host.querySelector('#tpl-document-window')
@@ -77,15 +67,16 @@ export function initEditorWindows(
   // Utility windoids
   /** @type {Record<string, VfWindow>} */
   const byId = {};
-  const authored = /** @type {VfWindow[]} */ ([
+  for (const win of /** @type {VfWindow[]} */ ([
     ...host.querySelectorAll(':scope > vf-window'),
-  ]);
-  for (const win of authored) byId[win.id.slice('win-'.length)] = win;
+  ])) {
+    byId[win.id.slice('win-'.length)] = win;
+  }
   for (const id of WINDOIDS) {
-    // Hidden from the first frame. syncUtility shows them.
+    // Hidden from the first frame. The window manager shows them.
     byId[id].hidden = true;
     // closable defaults to true and markup can't set a boolean attribute false.
-    if (!TOGGLED[id]) byId[id].closable = false;
+    if (id !== 'ring') byId[id].closable = false;
   }
   // The 3D View's and the Color Palette's grow-box floors. The ring's size rect
   // is set in fitRing.
@@ -93,12 +84,11 @@ export function initEditorWindows(
   byId.stage.minHeight = STAGE_MIN_HEIGHT;
   byId.palette.minWidth = PALETTE_MIN_WIDTH;
   byId.palette.minHeight = PALETTE_MIN_HEIGHT;
-  // Markup order is stacking order. The Tools palette is last, so it is on top.
-  desktop.append(...authored);
+  desktop.append(...WINDOIDS.map((id) => byId[id]));
   // Resize policies for the re-pin. Windoids without one keep their live size.
   // Floors belong in the policy: a floor applied after the re-pin reads as a
   // touch and makes the pin drift.
-  /** @type {Record<string, (cur: {width: number, height: number}) => import('../../shell/layout.js').Policy>} */
+  /** @type {Record<string, (cur: {width: number, height: number}) => import('vintage-frames/shell').Policy>} */
   const policies = {
     stage: () => ({ min: { width: STAGE_MIN_WIDTH, height: STAGE_MIN_HEIGHT } }),
     ring: (cur) => ({ size: { height: cur.height }, min: { width: RING_MIN_WIDTH } }),
@@ -111,13 +101,18 @@ export function initEditorWindows(
   // Boxes held across a browser resize while the windoid sits at them. The 3D
   // View follows its placement, so it stays square and refits a short raster.
   // The Color Palette's rows refit the new raster's height.
-  /** @type {Record<string, (w: number, h: number) => {left: number, top: number, width: number, height: number}>} */
+  /** @type {Record<string, (area: import('vintage-frames/shell').Box) => import('vintage-frames/shell').Box>} */
   const keeps = {
-    stage: (w, h) => initialPlacement(w, h).stage,
-    palette: (w, h) =>
-      initialPlacement(w, h, { paletteCount: paletteView.count }).palette,
+    stage: (area) => {
+      const { w, h } = rasterOf(area);
+      return initialPlacement(w, h).stage;
+    },
+    palette: (area) => {
+      const { w, h } = rasterOf(area);
+      return initialPlacement(w, h, { paletteCount: paletteView.count }).palette;
+    },
   };
-  /** @type {Record<string, import('../../shell/layout.js').Pin | null>} */
+  /** @type {Record<string, import('vintage-frames/shell').Pin | null>} */
   const windoidPins = {};
   for (const id of WINDOIDS) windoidPins[id] = savedPin(`windoid:${id}`);
   // Full Sprite View: fixed size. The height fits the tile row at the active
@@ -174,25 +169,29 @@ export function initEditorWindows(
   // policy read from an undeclared size pins a saved box to its far edge.
   fitSprite();
   fitRing();
+  const ringShown = () => prefs.get().showRing;
   for (const id of WINDOIDS) {
     windows.adopt(byId[id], {
-      app: SPRITE_EDITOR,
+      app,
+      item: `windoid:${id}`,
+      palette: id === 'ring' ? ringShown : true,
       policy: policies[id] ?? null,
       keep: keeps[id] ?? null,
       pin: windoidPins[id],
+      // The 3D Sprite Atlas's close box clears its pref. It is never closed.
+      close: id === 'ring' ? () => prefs.setShowRing(false) : null,
     });
   }
   // Color Palette: a grow snaps back on release to the whole cells it shows. The
   // window hears the commit before the desktop does, so the shell's layout
   // signal reads the snapped size.
-  const onPaletteGrow = (e) => {
+  ctx.on(byId.palette, 'vf-resize', (e) => {
     if (!(/** @type {CustomEvent} */ (e).detail?.commit)) return;
     const win = byId.palette;
     const fit = paletteFit(win.width ?? 0, win.height ?? 0);
     win.width = fit.width;
     win.height = fit.height;
-  };
-  byId.palette.addEventListener('vf-resize', onPaletteGrow);
+  });
   // The status label counts the swatches, and empties below the width that shows
   // the count whole. An empty label stays slotted, so the kit keeps the strip.
   // Arrange and a browser resize write the size without a vf-resize, so the
@@ -203,14 +202,14 @@ export function initEditorWindows(
   const fitPaletteLabel = () => {
     paletteLabel.textContent = paletteStatus(byId.palette.width ?? 0, paletteView.count);
   };
-  byId.palette.addEventListener('sm-palette-count', fitPaletteLabel);
+  ctx.on(byId.palette, 'sm-palette-count', fitPaletteLabel);
   const paletteObserver = new ResizeObserver(fitPaletteLabel);
   paletteObserver.observe(byId.palette);
+  ctx.onDispose(() => paletteObserver.disconnect());
   fitPaletteLabel();
 
   // The strip's settings default to the active document's. A window being opened
   // passes its own document's, since the open activates that document.
-  const ringShown = () => prefs.get().showRing;
   /** @param {{views: number, size: number}} [r]  the strip's settings
    *  @param {number} [paletteCount]  the Color Palette's swatches */
   const smartLayout = (r = ring.get(), paletteCount = paletteView.count) =>
@@ -273,7 +272,7 @@ export function initEditorWindows(
   // The Color Palette's placed rows follow the active document's swatch count. A
   // palette near its placed box for the last count moves to the new count's.
   let paletteCount = paletteView.count;
-  const followPaletteCount = () => {
+  ctx.on(byId.palette, 'sm-palette-count', () => {
     const was = paletteCount;
     paletteCount = paletteView.count;
     const win = byId.palette;
@@ -283,24 +282,25 @@ export function initEditorWindows(
       width: win.width ?? 0,
       height: win.height ?? 0,
     };
-    if (nearBox(cur, windoidBox('palette', smartLayout(ring.get(), was)))) {
+    const placed = windoidBox('palette', smartLayout(ring.get(), was));
+    const box = { ...placed, width: placed.width ?? 0, height: placed.height ?? 0 };
+    if (nearBox(cur, box)) {
       placeWindoid('palette', smartLayout());
     }
-  };
-  byId.palette.addEventListener('sm-palette-count', followPaletteCount);
+  });
 
   // A document switch, tile resize or load can change the tile ratio. Re-fit the
   // Sprite View's height, writing only when it changes.
-  unsubs.push(
-    followActive(workspace, (ctx) => {
-      if (!ctx) return;
+  ctx.onDispose(
+    followActive(workspace, (active) => {
+      if (!active) return;
       const refit = () => {
         if ((byId.sprite.height ?? 0) !== spriteHeightFor(SPRITE_WIDTH, spriteRatio())) {
           fitSprite();
           windows.layoutChanged();
         }
       };
-      const un = ctx.doc.subscribe(refit);
+      const un = active.doc.subscribe(refit);
       refit();
       return un;
     })
@@ -308,7 +308,7 @@ export function initEditorWindows(
 
   // A tile size change moves the ring's height. A hidden strip is re-placed, so it
   // shows docked at the new height.
-  unsubs.push(
+  ctx.onDispose(
     ring.subscribe(() => {
       if ((byId.ring.height ?? 0) !== ringHeightFor(ring.get().size)) {
         if (byId.ring.hidden) placeWindoid('ring', smartLayout());
@@ -319,33 +319,18 @@ export function initEditorWindows(
     })
   );
 
-  // Windoid visibility: shown while the Sprite Editor is front. A toggled
-  // windoid also needs its pref, and comes to the front when it appears.
-  /** @type {Record<string, boolean>} */
-  const wasShown = {};
-  const syncUtility = () => {
-    const { appActive } = shell.get();
-    for (const id of WINDOIDS) {
-      const shown = appActive && (!TOGGLED[id] || prefs.get()[TOGGLED[id]]);
-      byId[id].hidden = !shown;
-    }
-    for (const id of Object.keys(TOGGLED)) {
-      const now = !byId[id].hidden;
-      if (now && !wasShown[id]) desktop.bringToFront(byId[id]);
-      wasShown[id] = now;
-    }
-    // Visibility changes arranged(), and a toggled windoid's changes the doc box.
-    windows.layoutChanged();
-  };
-  unsubs.push(shell.subscribe(syncUtility), prefs.subscribe(syncUtility));
-  syncUtility();
+  // The 3D Sprite Atlas shows and hides with its pref, which also moves the doc
+  // box, so the layout's inputs change either way.
+  ctx.onDispose(
+    prefs.subscribe(() => {
+      windows.palettesChanged();
+      windows.layoutChanged();
+    })
+  );
 
   // Document windows
   /** @type {Map<string, VfWindow>} ctx key -> window */
   const byKey = new Map();
-  /** @type {Map<string, import('../../shell/layout.js').Pin>} file id -> the pin
-   *  its window closed at this session */
-  const remembered = new Map();
   const keyOf = (win) => {
     for (const [key, w] of byKey) if (w === win) return key;
     return null;
@@ -354,15 +339,18 @@ export function initEditorWindows(
   // or null. beforeFront runs before the front application changes, so a hidden
   // strip sees a document switch first. Wired before the reconciler, whose opens
   // activate.
-  unsubs.push(windows.beforeFront((win) => workspace.setActive(win ? keyOf(win) : null)));
+  ctx.onDispose(
+    windows.beforeFront((win) => workspace.setActive(win ? keyOf(win) : null))
+  );
 
-  function createDocWindow(ctx) {
+  /** @param {import('../../state/workspace.js').DocContext} doc */
+  function createDocWindow(doc) {
     const win = cloneWindow(tpl);
-    win.id = `win-doc-${ctx.key}`;
-    win.heading = ctx.name;
+    win.id = `win-doc-${doc.key}`;
+    win.heading = doc.name;
     // The doc box for the current raster and this document's ring settings,
     // cascaded into the first free slot.
-    const d = smartLayout(ctx.ring.get()).doc;
+    const d = smartLayout(doc.ring.get()).doc;
     const occupied = [...byKey.values()].map((w) => ({
       left: w.left ?? 0,
       top: w.top ?? 0,
@@ -374,17 +362,23 @@ export function initEditorWindows(
     win.height = g.height;
     // Set ctx before the append: the components wire their document in
     // connectedCallback.
-    /** @type {any} */ (win.querySelector('sm-editor')).ctx = ctx;
-    /** @type {any} */ (win.querySelector('sm-status-line')).ctx = ctx;
+    /** @type {any} */ (win.querySelector('sm-editor')).ctx = doc;
+    /** @type {any} */ (win.querySelector('sm-status-line')).ctx = doc;
     desktop.append(win); // the kit stacks only direct vf-window children
-    byKey.set(ctx.key, win);
-    // This session's pin, else the saved one, else the cascade. adopt() writes
+    byKey.set(doc.key, win);
+    // This session's box, else the saved one, else the cascade. adopt() writes
     // a pin itself.
-    const pin = ctx.fileId
-      ? (remembered.get(ctx.fileId) ?? savedPin(`doc:${ctx.fileId}`))
-      : null;
-    windows.adopt(win, { app: SPRITE_EDITOR, pin });
-    if (ctx.fileId) remembered.delete(ctx.fileId);
+    const item = doc.fileId;
+    const pin = item ? (windows.rememberedPin(item) ?? savedPin(item)) : null;
+    windows.adopt(win, {
+      app,
+      item,
+      pin,
+      close: (w) => {
+        const key = keyOf(w);
+        if (key != null) onDocumentClose(key);
+      },
+    });
     // Clamp after the append: clamped() reads the lattice from a connected element.
     if (!pin) windows.write(win, windows.clamped(win, g));
     // Appending after the windoids leaves DOM order out of step with z-order.
@@ -393,50 +387,27 @@ export function initEditorWindows(
     desktop.bringToFront(win);
   }
 
-  /** @type {Map<string, string>} ctx key -> file id, kept up to date so a
-   *  window whose context has gone is still filed under its document. */
-  const docIds = new Map();
-
   const syncDocs = () => {
     const contexts = workspace.get().contexts;
     const live = new Set(contexts.map((c) => c.key));
     // A context goes only by the user's close or Quit, so its window closes
-    // into the file's icon. An untitled document has none and goes at once.
+    // into the document's icon. An untitled document has none and goes at once.
     for (const [key, win] of byKey) {
-      if (!live.has(key)) {
-        const fileId = docIds.get(key);
-        if (fileId) remembered.set(fileId, windows.pinOf(win));
-        docIds.delete(key);
-        byKey.delete(key);
-        const item = fileId ? `doc:${fileId}` : null;
-        const to = item ? iconBox(item) : null;
-        const landed = windows.dismiss(win, to); // the kit updates the active window
-        if (item && to) holdGhost(item, landed);
-      }
+      if (live.has(key)) continue;
+      byKey.delete(key);
+      void windows.close(win);
     }
-    for (const ctx of contexts) {
-      if (!byKey.has(ctx.key)) createDocWindow(ctx);
-      const win = byKey.get(ctx.key);
-      if (win.heading !== ctx.name) win.heading = ctx.name;
-      if (ctx.fileId) docIds.set(ctx.key, ctx.fileId);
+    for (const doc of contexts) {
+      if (!byKey.has(doc.key)) createDocWindow(doc);
+      const win = /** @type {VfWindow} */ (byKey.get(doc.key));
+      if (win.heading !== doc.name) win.heading = doc.name;
+      // A first save gives the window its item; a removed item takes it away.
+      if (windows.itemOf(win) !== doc.fileId) windows.setItem(win, doc.fileId);
     }
     windows.layoutChanged();
   };
-  unsubs.push(workspace.subscribe(syncDocs));
+  ctx.onDispose(workspace.subscribe(syncDocs));
   syncDocs(); // HMR: rebuild windows for contexts that survived the reload
-
-  // Close boxes. Dialog closes and other applications' windows are ignored.
-  const onClose = (e) => {
-    const t = e.target;
-    if (!(t instanceof VfWindow)) return;
-    if (t === byId.ring) {
-      prefs.setShowRing(false);
-      return;
-    }
-    const key = keyOf(t);
-    if (key != null) onDocumentClose(key);
-  };
-  desktop.addEventListener('vf-close', onClose);
 
   // Zoom box on document windows: toggles between zoomedBox and the recorded
   // pre-zoom size, keeping the top-left. With nothing recorded it restores the doc
@@ -469,11 +440,10 @@ export function initEditorWindows(
     }
     windows.layoutChanged();
   };
-  const onZoom = (e) => {
+  ctx.on(desktop, 'vf-zoom', (e) => {
     const win = e.target;
     if (win instanceof VfWindow && keyOf(win) != null) zoomToggle(win);
-  };
-  desktop.addEventListener('vf-zoom', onZoom);
+  });
 
   // Arrange Windows group.
   // - arrange() re-runs the placement on the current raster: the windoids,
@@ -485,17 +455,14 @@ export function initEditorWindows(
   //   doesn't unarrange them. The active document window may be zoomed from its
   //   slot, so ⌘J keeps toggling its zoom.
   /** The document windows in stacking order, bottom-most first. */
-  const docWindows = () =>
-    [...desktop.querySelectorAll(':scope > vf-window')]
-      .map((el) => /** @type {VfWindow} */ (el))
-      .filter((win) => keyOf(win) != null);
+  const docWindows = () => windows.windowsOf(app).filter((win) => keyOf(win) != null);
   /** Whether `win` matches every finite key of `g`, except those in `skip`. */
   const at = (win, g, skip = []) =>
     ['left', 'top', 'width', 'height'].every(
       (k) => skip.includes(k) || !Number.isFinite(g[k]) || (win[k] ?? 0) === g[k]
     );
-  unsubs.push(
-    windows.arrangeWith(SPRITE_EDITOR, {
+  ctx.onDispose(
+    windows.arrangeWith(app, {
       arrange() {
         placeUtility();
         let slot = 0;
@@ -534,30 +501,28 @@ export function initEditorWindows(
     })
   );
 
+  // HMR: the next init rebuilds every window, so all of them go at once.
+  ctx.onDispose(() => {
+    for (const win of byKey.values()) win.remove();
+    byKey.clear();
+    for (const id of WINDOIDS) byId[id].remove();
+  });
+
   return {
-    /** Every window's saved geometry by desktop-state key: the windoids as
-     *  boxes alone, since the application places them itself, and each saved
-     *  document's window with its depth. */
-    pins() {
-      const out = {};
-      for (const id of WINDOIDS) out[`windoid:${id}`] = { pin: windows.pinOf(byId[id]) };
-      for (const [fileId, pin] of remembered) out[`doc:${fileId}`] = { pin };
-      for (const [key, win] of byKey) {
-        const fileId = workspace.byKey(key)?.fileId;
-        if (fileId) out[`doc:${fileId}`] = windows.record(win);
-      }
-      return out;
-    },
     /** Brings a document window to the front, which also activates the Sprite
      *  Editor. `from` grows a window made this task out of that box; a window
      *  already on screen is only raised.
      *  @param {string} key
-     *  @param {{from?: DOMRect | null}} [opts] */
+     *  @param {{from?: import('vintage-frames').VfViewportBox | null}} [opts] */
     showDocument(key, { from = null } = {}) {
       const win = byKey.get(key);
       if (!win) return;
       desktop.bringToFront(win);
-      if (from) win.show({ from });
+      if (from) void win.show({ from });
+    },
+    /** A document window, or null. @param {string} key */
+    windowOf(key) {
+      return byKey.get(key) ?? null;
     },
     /** A document window's editor, or null.
      *  @returns {import('../../components/sm-editor.js').SmEditor|null} */
@@ -570,19 +535,6 @@ export function initEditorWindows(
       const key = workspace.get().activeKey;
       const win = key != null ? byKey.get(key) : null;
       if (win) zoomToggle(win);
-    },
-    dispose() {
-      for (const u of unsubs) u();
-      desktop.removeEventListener('vf-close', onClose);
-      desktop.removeEventListener('vf-zoom', onZoom);
-      byId.palette.removeEventListener('vf-resize', onPaletteGrow);
-      byId.palette.removeEventListener('sm-palette-count', fitPaletteLabel);
-      byId.palette.removeEventListener('sm-palette-count', followPaletteCount);
-      paletteObserver.disconnect();
-      // HMR: the next init rebuilds every window, so all of them go at once.
-      for (const win of byKey.values()) windows.dismiss(win);
-      byKey.clear();
-      for (const win of authored) windows.dismiss(win);
     },
   };
 }

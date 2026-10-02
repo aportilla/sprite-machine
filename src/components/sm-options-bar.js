@@ -4,14 +4,14 @@
 // from its host, where the Sprite Editor flips the active window's selection.
 //
 // The band is a 36 system px vf-container with a bottom rule inside that
-// height, so it ends at TOP_RESERVE (shell/layout.js).
+// height, so it ends at the desktop's window-top (apps/sprite-editor/layout.js
+// WINDOW_TOP).
 
 import 'vintage-frames';
 import { css, LitElement, html, nothing } from 'lit';
 import { maxCornerRadius } from '../lib/rect.js';
 import { rgbToHex } from '../lib/color.js';
 import { session } from '../state/session.js';
-import { shell } from '../state/shell.js';
 import { workspace } from '../state/workspace.js';
 import { StoreController, ActiveDocController } from '../state/store-controller.js';
 import { baseStyles } from './base-styles.js';
@@ -44,7 +44,6 @@ export class SmOptionsBar extends LitElement {
   constructor() {
     super();
     new StoreController(this, session.store);
-    new StoreController(this, shell.store);
     // Clamp bounds and readouts follow the active document. Only this host
     // opts into selection updates, which re-render on every pointer move.
     new ActiveDocController(this, workspace, { selection: true });
@@ -83,9 +82,9 @@ export class SmOptionsBar extends LitElement {
   }
 
   render() {
-    // Hidden while the desktop is focused. TOP_RESERVE still keeps its space,
-    // so windows don't move when it returns.
-    if (!shell.get().appActive) return nothing;
+    // Hidden while another application is front. The window-top still keeps
+    // its space, so windows don't move when it returns.
+    if (!session.get().front) return nothing;
     return html`<vf-container fill-width height="36" pattern="white" rule="bottom">
       <div class="strip" fill-height>${this.#content()}</div>
     </vf-container>`;

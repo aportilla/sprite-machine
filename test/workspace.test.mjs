@@ -2,30 +2,55 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createDoc } from '../src/state/doc.js';
-import { createFiles, UNTITLED, TRASH } from '../src/state/files.js';
+import { createSheets } from '../src/state/sheets.js';
+import { UNTITLED } from '../src/state/names.js';
 import { createWorkspace, followActive } from '../src/state/workspace.js';
-import { fakeScheduler, memStorage, encodeAtlas, decodeAtlas } from './helpers.mjs';
+import {
+  fakeScheduler,
+  memSheetStore,
+  stubCatalog,
+  encodeAtlas,
+  decodeAtlas,
+} from './helpers.mjs';
 
 const sheet = (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) });
 
-// Harness: the real files slice over in-memory storage.
+// Harness: the real sheet store over a stub catalog and an in-memory store.
 
 function makeWorld() {
-  const storage = memStorage();
-  let t = 1000;
-  let n = 0;
-  const files = createFiles({
-    storage,
+  const store = memSheetStore();
+  const catalog = stubCatalog({
+    id: 'f',
+    name: 'Fleet',
+    kind: 'folder',
+    parent: null,
+    createdAt: 0,
+    modifiedAt: 0,
+  });
+  const sheets = createSheets({
+    store,
+    catalog,
     encodeAtlas,
     decodeAtlas,
     makeIcon: async () => 'data:icon',
-    now: () => t++,
-    newId: () => `id-${++n}`,
   });
+  /** The copy names asked for, and a rule that counts "copy", "copy 2". */
+  const asked = [];
+  const copyName = (state, parent, name, kind) => {
+    asked.push({ parent, name, kind });
+    const used = new Set(
+      state.items.filter((i) => i.parent === parent && i.kind === kind).map((i) => i.name)
+    );
+    let next = name;
+    for (let n = 2; used.has(next); n++) next = `${name} ${n}`;
+    return next;
+  };
   /** @type {Map<any, ReturnType<typeof fakeScheduler>>} doc -> its scheduler */
   const schedulers = new Map();
   const ws = createWorkspace({
-    files,
+    sheets,
+    catalog,
+    copyName,
     createDoc: () => {
       const frames = fakeScheduler();
       const doc = createDoc(frames);
@@ -35,7 +60,7 @@ function makeWorld() {
   });
   /** Run a context's pending live frame. */
   const frame = (ctx) => schedulers.get(ctx.doc).frame();
-  return { ws, files, storage, frame };
+  return { ws, catalog, store, asked, frame };
 }
 
 /** Open a context loaded with a blank 3×2 sheet of 2×2 tiles per layer. */
@@ -179,8 +204,8 @@ test('setActive mirrors a key or null; closing the active context clears it', ()
 
 // Stored documents
 
-test('save gives an untitled context its stored identity and cleans it', async () => {
-  const { ws, frame, storage } = makeWorld();
+test('save gives an untitled context its stored identity on the desktop and cleans it', async () => {
+  const { ws, frame, store, catalog } = makeWorld();
   const ctx = openLoaded(ws);
   stroke(ctx);
   frame(ctx);
@@ -189,17 +214,19 @@ test('save gives an untitled context its stored identity and cleans it', async (
   assert.equal(ctx.fileId, 'id-1');
   assert.equal(ctx.name, 'Cargo Ship');
   assert.equal(ctx.dirty, false, 'a save cleans');
-  assert.equal(storage.map.size, 1);
+  assert.equal(store.map.size, 1);
+  assert.equal(catalog.item('id-1').parent, null);
 });
 
 test('a saved context saves silently in place', async () => {
-  const { ws, frame, storage } = makeWorld();
+  const { ws, frame, store, catalog } = makeWorld();
   const ctx = openLoaded(ws);
   await ws.save(ctx.key, 'Ship');
   stroke(ctx);
   frame(ctx);
   await ws.save(ctx.key);
-  assert.equal(storage.map.size, 1, 'no duplicate record');
+  assert.equal(store.map.size, 1, 'no duplicate record');
+  assert.equal(catalog.get().items.filter((i) => i.kind === 'sprite').length, 1);
   assert.equal(ctx.dirty, false);
 });
 
@@ -259,60 +286,57 @@ test('the ring settings are the context’s: a change dirties it, a save writes 
   assert.equal(openLoaded(ws).ring.get().views, 4, 'another context has its own');
 });
 
-test('duplicate stores "«name» copy", counts a repeat the Mac’s way, and leaves the context untouched', async () => {
-  const { ws, storage } = makeWorld();
+test('duplicate stores a copy beside the original, named by the catalog’s rule, and leaves the context untouched', async () => {
+  const { ws, catalog, asked } = makeWorld();
   const ctx = openLoaded(ws);
   await ws.save(ctx.key, 'Ship');
+  catalog.state.items.find((i) => i.id === ctx.fileId).parent = 'f';
   const copyId = await ws.duplicate(ctx.key);
-  assert.equal(copyId, 'id-2');
+  assert.deepEqual(asked, [{ parent: 'f', name: 'Ship copy', kind: 'sprite' }]);
   assert.equal(ctx.fileId, 'id-1', 'the original context keeps its identity');
-  assert.equal(storage.map.get('id-2').name, 'Ship copy');
+  assert.deepEqual(
+    [catalog.item(copyId).name, catalog.item(copyId).parent],
+    ['Ship copy', 'f']
+  );
   const again = await ws.duplicate(ctx.key);
-  assert.equal(storage.map.get(again).name, 'Ship copy 2', 'never a second "Ship copy"');
+  assert.equal(catalog.item(again).name, 'Ship copy 2');
+
+  const untitled = openLoaded(ws);
+  const loose = await ws.duplicate(untitled.key);
+  assert.equal(catalog.item(loose).parent, null, 'an untitled copy goes on the desktop');
 });
 
-test('rename: untitled takes the display name; saved rewrites the store and every open context follows', async () => {
-  const { ws, storage } = makeWorld();
+test('rename: untitled takes the display name; saved renames the item, and a rename in the Finder reaches every open context', async () => {
+  const { ws, catalog, store } = makeWorld();
   const untitled = openLoaded(ws);
   await ws.rename(untitled.key, 'Nameless');
   assert.equal(untitled.name, 'Nameless');
-  assert.equal(storage.map.size, 0);
+  assert.equal(store.map.size, 0);
 
   const saved = openLoaded(ws);
   await ws.save(saved.key, 'Old');
   await ws.rename(saved.key, 'New');
   assert.equal(saved.name, 'New');
-  assert.equal(storage.map.get('id-1').name, 'New');
+  assert.equal(catalog.item('id-1').name, 'New');
 
-  await ws.renameStored('id-1', 'Newer');
+  let notified = 0;
+  ws.subscribe(() => notified++);
+  await catalog.rename('id-1', 'Newer');
   assert.equal(saved.name, 'Newer', 'the icon rename path follows into the context');
+  assert.equal(notified, 1);
 });
 
-test('removeStored reverts an open context to an untitled identity, dirty', async () => {
-  const { ws, storage } = makeWorld();
-  const ctx = openLoaded(ws);
-  await ws.save(ctx.key, 'Doomed');
-  assert.equal(ctx.dirty, false);
-  await ws.removeStored('id-1');
-  assert.equal(storage.map.size, 0);
-  assert.equal(ctx.fileId, null);
-  assert.equal(ctx.name, 'Doomed', 'the pixels and name stay open');
-  assert.equal(ctx.dirty, true, 'and nothing stored backs them: a Close must ask');
-});
-
-test('emptyTrash removes what the Trash holds and reverts every open context holding one of them, dirty; the rest stand', async () => {
-  const { ws, files, storage } = makeWorld();
-  const trashed = openLoaded(ws);
+test('forget reverts every open context holding one of the ids to an untitled identity, dirty; the rest stand', async () => {
+  const { ws } = makeWorld();
+  const gone = openLoaded(ws);
   const kept = openLoaded(ws);
-  await ws.save(trashed.key, 'Trashed');
+  await ws.save(gone.key, 'Doomed');
   await ws.save(kept.key, 'Kept');
-  await files.moveDoc(trashed.fileId, TRASH);
-  const removed = await ws.emptyTrash();
-  assert.deepEqual(removed.docs, ['id-1']);
-  assert.deepEqual([...storage.map.keys()], ['id-2']);
-  assert.equal(trashed.fileId, null);
-  assert.equal(trashed.dirty, true);
-  assert.equal(trashed.name, 'Trashed');
+  assert.equal(gone.dirty, false);
+  ws.forget(['id-1']);
+  assert.equal(gone.fileId, null);
+  assert.equal(gone.name, 'Doomed', 'the pixels and name stay open');
+  assert.equal(gone.dirty, true, 'and nothing stored backs them: a Close must ask');
   assert.equal(kept.fileId, 'id-2');
   assert.equal(kept.dirty, false);
 });

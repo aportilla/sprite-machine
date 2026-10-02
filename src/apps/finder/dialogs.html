@@ -1,0 +1,64 @@
+<!-- The Finder's dialogs: Sprite Machine's own, held by the stock Finder and
+     asked from extend (index.js, backup.js). The body is width − 10 by
+     height − 25 (height − 10 for frame="plain"). Content sits 16 in from the
+     body's top-left, and a button group's origin corner 16 in from the
+     matching body corner. -->
+
+<!-- Storage Unavailable: New Folder, Paste, a dropped file, Back Up or Restore
+     without storage. -->
+<vf-dialog
+  data-dialog="storage-unavailable"
+  heading="Storage Unavailable"
+  closable
+  width="380"
+  height="170"
+>
+  <form method="dialog" novalidate>
+    <vf-stack width="332" gap="10" left="16" top="16">
+      <vf-paragraph>
+        Documents can’t be saved in this browser session (storage is unavailable — a
+        private window, perhaps). Everything else works; use File → Download to keep your
+        work as a .png.
+      </vf-paragraph>
+    </vf-stack>
+    <vf-button-group origin="bottom right" left="354" top="129">
+      <vf-button type="submit" value="ok" variant="default">OK</vf-button>
+    </vf-button-group>
+  </form>
+</vf-dialog>
+
+<!-- The Restore question. Replace is disabled on an empty desktop. It is
+     authored at its least height; a longer message grows it
+     (../windows.js alert). -->
+<vf-dialog data-dialog="restore" frame="plain" label="Restore" width="400" height="110">
+  <form method="dialog" novalidate>
+    <vf-paragraph
+      face="display"
+      data-message
+      width="360"
+      left="19"
+      top="16"
+    ></vf-paragraph>
+    <vf-button-group origin="bottom right" left="374" top="84">
+      <vf-button type="submit" value="cancel">Cancel</vf-button>
+      <vf-button type="submit" value="replace" data-replace>Replace</vf-button>
+      <vf-button type="submit" value="add" variant="default">Add</vf-button>
+    </vf-button-group>
+  </form>
+</vf-dialog>
+
+<!-- Everything else: a failure, or what a restore found. -->
+<vf-dialog data-dialog="alert" frame="plain" label="Alert" width="380" height="110">
+  <form method="dialog" novalidate>
+    <vf-paragraph
+      face="display"
+      data-message
+      width="340"
+      left="19"
+      top="16"
+    ></vf-paragraph>
+    <vf-button-group origin="bottom right" left="354" top="84">
+      <vf-button type="submit" value="ok" variant="default">OK</vf-button>
+    </vf-button-group>
+  </form>
+</vf-dialog>

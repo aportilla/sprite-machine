@@ -18,7 +18,7 @@ import {
 } from '../src/state/ring.js';
 import { createWorkspace } from '../src/state/workspace.js';
 import { createDoc } from '../src/state/doc.js';
-import { SOFTWARE } from '../src/state/files.js';
+import { SOFTWARE } from '../src/state/sheets.js';
 import { fakeScheduler } from './helpers.mjs';
 
 const createRing = () => createRingSettings();

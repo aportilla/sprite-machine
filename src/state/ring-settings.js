@@ -1,7 +1,7 @@
 // Per-document 3D Sprite Atlas settings (ctx.ring), saved in the document PNG
-// as a sprite-machine:ring chunk (state/files.js). The app reads the active
+// as a sprite-machine:ring chunk (state/sheets.js). The app reads the active
 // document's settings through state/ring.js. This module does not import the
-// workspace, so files.js can import it without a cycle.
+// workspace, so sheets.js can import it without a cycle.
 //
 // Every setter clamps, rounds to an integer, ignores NaN (a vf-number-field's
 // valueAsNumber is NaN mid-edit) and does nothing on an unchanged value.

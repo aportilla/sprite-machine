@@ -1,52 +1,19 @@
-// Clipboard slice: one clipboard for the app. It holds the Finder's copied item
-// references and the text/plain written to the system clipboard for them, or the
-// Sprite Editor's copied pixels and their place on the tile. A copy of either
-// kind replaces the other. The system clipboard holds only plain text and a PNG,
-// which Chrome re-encodes without its text chunks. Session-only. The references
-// are not pruned, so a paste skips removed items. The system clipboard calls
-// live in the applications and src/system-clipboard.js.
+// Clipboard slice: the Sprite Editor's copied pixels and their place on the
+// tile. The system clipboard holds only plain text and a PNG, which Chrome
+// re-encodes without its text chunks. Session-only. The Finder's Copy and
+// Paste are the kit's. The system clipboard calls live in the Sprite Editor
+// and src/system-clipboard.js.
 
 import { createStore } from './store.js';
 import { sameArt } from '../lib/select.js';
 
 /**
- * @typedef {{kind: 'doc'|'folder'|'text', id: string}} ClipboardItemRef
  * @typedef {{float: import('../lib/select.js').Float, x: number, y: number}} ClipboardPixels
  *   The copied texels and the top-left of their rectangle in tile texels, which
  *   may be off the tile.
- * @typedef {{items: ClipboardItemRef[], text: string, pixels: ClipboardPixels|null,
- *   written: boolean}} ClipboardState
- *   text: the text/plain written to the system clipboard for these items.
- *   '' when nothing is copied.
+ * @typedef {{pixels: ClipboardPixels|null, written: boolean}} ClipboardState
  *   written: whether the system clipboard write of these pixels succeeded.
- * @typedef {{text: string|null, image: unknown|null}} SystemClipboard
- *   A read of the system clipboard: its text/plain and its image/png (a Blob
- *   in the browser), each null when absent.
  */
-
-/** Normalizes line endings and trailing whitespace, which a clipboard round
- *  trip may change. */
-const norm = (s) =>
-  String(s ?? '')
-    .replace(/\r\n?/g, '\n')
-    .trimEnd();
-
-/**
- * What a paste uses. 'items' when the system clipboard's text matches the
- * slice's text, or when the system clipboard is unreadable and the slice has
- * items. 'image' when the system clipboard holds an image. Otherwise 'none'.
- * @param {ClipboardState} slice
- * @param {SystemClipboard|null} system  null: unreadable
- * @returns {'items'|'image'|'none'}
- */
-export function pasteSource(slice, system) {
-  const held = slice.items.length > 0;
-  if (system == null) return held ? 'items' : 'none';
-  if (held && system.text != null && norm(system.text) === norm(slice.text))
-    return 'items';
-  if (system.image != null) return 'image';
-  return 'none';
-}
 
 /**
  * What a pixel paste uses: 'pixels' for an image that is the slice's pixels, an
@@ -68,8 +35,6 @@ export function pixelPasteSource(slice, system) {
 export function createClipboard() {
   const store = createStore(
     /** @type {ClipboardState} */ ({
-      items: [],
-      text: '',
       pixels: null,
       written: false,
     })
@@ -79,24 +44,10 @@ export function createClipboard() {
     get: store.get,
     subscribe: store.subscribe,
 
-    /** Record a copy: the item references, in order, and the text written to
-     *  the system clipboard for them.
-     *  @param {ClipboardItemRef[]} items @param {string} text */
-    set(items, text) {
-      store.patch({
-        items: items.map((it) => ({ kind: it.kind, id: it.id })),
-        text,
-        pixels: null,
-        written: false,
-      });
-    },
-
     /** Record a pixel copy: a copy of the texels and their top-left.
      *  @param {import('../lib/select.js').Float} float @param {number} x @param {number} y */
     setPixels(float, x, y) {
       store.patch({
-        items: [],
-        text: '',
         pixels: {
           float: {
             width: float.width,
@@ -118,7 +69,7 @@ export function createClipboard() {
     },
 
     clear() {
-      store.patch({ items: [], text: '', pixels: null, written: false });
+      store.patch({ pixels: null, written: false });
     },
   };
 }

@@ -1,8 +1,5 @@
 // <sm-atlas-controls>: the Full Sprite View windoid's header strip, holding the
 // face picker for the active document.
-//
-// The picker box declares pattern="white". A bare vf-container paints the
-// desktop pattern inherited through the slot.
 
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
@@ -41,7 +38,6 @@ export class SmAtlasControls extends LitElement {
         top=${SPRITE_PICKER_AT.top}
         width=${SPRITE_PICKER.width}
         height=${SPRITE_PICKER.height}
-        pattern="white"
       >
         <sm-face-picker
           .faces=${FACE_ROW}

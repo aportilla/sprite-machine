@@ -1,11 +1,11 @@
 // <sm-desktop-patterns>: the Desktop Patterns window's body. A preview well, a
 // grid of the kit's PATTERN_NAMES and a Set Desktop Pattern button. A cell
-// click previews its pattern. Only Set Desktop Pattern commits it.
+// click previews its pattern. Only Set Desktop Pattern commits it, as
+// sm-set-pattern {pattern}.
 
 import { PATTERN_NAMES } from 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
-import { shell } from '../state/shell.js';
 import { baseStyles } from './base-styles.js';
 
 /** The preview well's box in system px, its frame rule inside. */
@@ -55,12 +55,19 @@ export class SmDesktopPatterns extends LitElement {
     `,
   ];
 
-  /** The pending pattern. The panel is created on each open, so this seeds
-   *  it from the desktop's current pattern. */
-  #pending = shell.get().desktopPattern;
+  static properties = {
+    pattern: { attribute: false },
+  };
+
+  constructor() {
+    super();
+    /** The pending pattern. The panel is made at each open, which seeds it
+     *  with the desktop's pattern. @type {string} */
+    this.pattern = 'gray-50';
+  }
 
   render() {
-    const pending = this.#pending;
+    const pending = this.pattern;
     return html`
       <vf-stack gap="10" place="center">
         <vf-container
@@ -108,13 +115,13 @@ export class SmDesktopPatterns extends LitElement {
   }
 
   #pick(name) {
-    if (name === this.#pending) return;
-    this.#pending = name;
-    this.requestUpdate();
+    this.pattern = name;
   }
 
   #set = () => {
-    shell.setDesktopPattern(this.#pending);
+    this.dispatchEvent(
+      new CustomEvent('sm-set-pattern', { detail: { pattern: this.pattern } })
+    );
   };
 }
 
