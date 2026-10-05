@@ -10,7 +10,8 @@
 // container, when it has one, so Replace puts the icons back where they were.
 // Backups from before the catalog have no places and still read.
 
-import { FOLDER, SPRITE, TEXT, TRASH, textData } from './kinds.js';
+import { FOLDER, childrenOf, isContainerKind } from 'vintage-frames/shell/pure';
+import { SPRITE, TEXT, textData } from './kinds.js';
 import { slugOf } from './names.js';
 
 export const MANIFEST_NAME = 'desktop.json';
@@ -29,21 +30,9 @@ export const BACKUP_VERSION = 1;
  * @typedef {{folders: BackupFolder[], docs: (BackupDoc & {bytes: Uint8Array})[],
  *   texts: (BackupText & {text: string})[]}} BackupArchive
  *   A read archive: the manifest's rows, each paired with its entry.
- * @typedef {{id: string, name: string, kind: string, parent: string|null,
- *   createdAt: number, modifiedAt: number, left?: number, top?: number,
- *   data?: unknown}} Item  A catalog item (vintage-frames/shell).
- * @typedef {{items: readonly Item[]}} CatalogState
+ * @typedef {import('vintage-frames/shell/pure').Item} Item
+ * @typedef {import('vintage-frames/shell/pure').CatalogState} CatalogState
  */
-
-const isContainer = (kind) => kind === FOLDER || kind === TRASH;
-
-/** The container `parent` resolves to while it is listed, else the desktop
- *  (null), as the catalog resolves it.
- *  @param {CatalogState} state @param {string|null|undefined} parent */
-function containerOf(state, parent) {
-  const item = parent == null ? undefined : state.items.find((i) => i.id === parent);
-  return item && isContainer(item.kind) ? item.id : null;
-}
 
 /** An item's place, when it has one. */
 const placeOf = (r) =>
@@ -93,9 +82,7 @@ export function planBackup(state, { app = '', date = new Date() } = {}) {
   const seen = new Set();
   /** @param {string|null} container @param {string} prefix */
   const walk = (container, prefix) => {
-    const kids = state.items.filter(
-      (i) => i.id !== container && containerOf(state, i.parent) === container
-    );
+    const kids = childrenOf(state, container);
     const used = new Set();
     const row = (i, path) => ({
       id: i.id,
@@ -106,7 +93,7 @@ export function planBackup(state, { app = '', date = new Date() } = {}) {
       ...placeOf(i),
       path,
     });
-    for (const f of kids.filter((i) => isContainer(i.kind))) {
+    for (const f of kids.filter((i) => isContainerKind(i.kind))) {
       if (seen.has(f.id)) continue; // a looping chain is walked once
       seen.add(f.id);
       const path = prefix + segment(used, f.name, '/');
@@ -243,29 +230,4 @@ export function itemsOf(archive, { docs, shipsText, places }) {
     items.push({ ...item(t, TEXT, t.folder), data });
   }
   return { items, skipped };
-}
-
-/**
- * The order an Add makes items in one at a time, each container before what
- * it holds, and the archive id each item's parent maps to. Items bound for the
- * Trash, or for a folder the archive doesn't hold, are made on the desktop;
- * `toTrash` lists the ones that then move into the Trash, since nothing is
- * made there.
- * @param {Item[]} items  as itemsOf gives them
- * @returns {{order: Item[], toTrash: string[]}}
- */
-export function addPlan(items) {
-  const byId = new Map(items.map((i) => [i.id, i]));
-  /** @type {Item[]} */
-  const order = [];
-  const placed = new Set();
-  const visit = (/** @type {Item} */ it, /** @type {Set<string>} */ path) => {
-    if (placed.has(it.id) || path.has(it.id)) return;
-    const parent = it.parent != null ? byId.get(it.parent) : undefined;
-    if (parent) visit(parent, new Set([...path, it.id]));
-    placed.add(it.id);
-    order.push(it);
-  };
-  for (const it of items) visit(it, new Set());
-  return { order, toTrash: items.filter((i) => i.parent === TRASH).map((i) => i.id) };
 }

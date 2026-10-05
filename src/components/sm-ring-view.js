@@ -1,10 +1,9 @@
 // <sm-ring-view>: the 3D Sprite Atlas window's body. A one-row vf-grid with
 // one cell per view, each size × size system px, the frame drawn at 1:1.
 //
-// - One vf-container spans the body as its paper, so the pattern stays in
-//   phase across cell edges. vf-window has no body pattern of its own.
-// - Cells are vf-stacks and the paper always declares a pattern, because a
-//   bare vf-container paints the desktop's ink.
+// - The paper is the window's pattern (apps/sprite-editor/windows.js), so it
+//   stays in phase across cell edges and runs past the last cell. The cells
+//   are bare vf-stacks over it.
 // - The window scrolls horizontally. The grid's width sets the scroll range.
 // - Pixels don't go through the store. scene/ring.js publishes each rendered
 //   sheet on ring.onSheet, and #paint copies one frame per cell.
@@ -13,7 +12,7 @@
 import 'vintage-frames';
 import { css, LitElement, html } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
-import { ring, RING_MAX_VIEWS, RING_PAPERS } from '../state/ring.js';
+import { ring, RING_MAX_VIEWS } from '../state/ring.js';
 import { StoreController } from '../state/store-controller.js';
 import { ringYaws } from '../lib/ring.js';
 import { baseStyles } from './base-styles.js';
@@ -70,36 +69,32 @@ export class SmRingView extends LitElement {
     const st = ring.get();
     const n = st.views;
     const yaws = ringYaws(n, st.offset);
-    // The slice only holds RING_PAPERS keys, so this always resolves.
-    const paper = RING_PAPERS[st.paper];
     return html`
-      <vf-container class="ring-paper" fill-width height=${st.size} pattern=${paper}>
-        <vf-grid
-          class="ring-grid"
-          columns=${n}
-          rows="1"
-          cell-width=${st.size}
-          cell-height=${st.size}
-          rules="none"
-          role="group"
-          aria-label="3D sprite atlas"
-        >
-          ${yaws.map(
-            (yaw, i) => html`
-              <vf-stack
-                class="ring-cell"
-                width=${st.size}
-                height=${st.size}
-                role="img"
-                title=${`${yaw}°`}
-                aria-label=${`view ${i + 1} of ${n}: ${yaw}° yaw`}
-              >
-                <canvas fill-width fill-height ${ref(this.#cellCanvas[i])}></canvas>
-              </vf-stack>
-            `
-          )}
-        </vf-grid>
-      </vf-container>
+      <vf-grid
+        class="ring-grid"
+        columns=${n}
+        rows="1"
+        cell-width=${st.size}
+        cell-height=${st.size}
+        rules="none"
+        role="group"
+        aria-label="3D sprite atlas"
+      >
+        ${yaws.map(
+          (yaw, i) => html`
+            <vf-stack
+              class="ring-cell"
+              width=${st.size}
+              height=${st.size}
+              role="img"
+              title=${`${yaw}°`}
+              aria-label=${`view ${i + 1} of ${n}: ${yaw}° yaw`}
+            >
+              <canvas fill-width fill-height ${ref(this.#cellCanvas[i])}></canvas>
+            </vf-stack>
+          `
+        )}
+      </vf-grid>
     `;
   }
 

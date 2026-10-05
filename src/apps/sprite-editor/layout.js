@@ -14,21 +14,19 @@
 // - FRAME_BANDS: the widened left, top and right bands of the resize frame, which
 //   make every placed windoid all struts.
 
+import { CASCADE_SLOTS, CASCADE_STEP } from 'vintage-frames/shell/pure';
+
 /** The windows' area starts here: the 20px menu bar and the 36px options
  *  strip. index.html declares it as the desktop's window-top. */
 export const WINDOW_TOP = 56;
 /** The top of the windoids and the first document window. */
 const PLACED_TOP = WINDOW_TOP + 8;
-// Documents cascade by the shell's step and slot count (vintage-frames/shell
-// CASCADE_STEP, CASCADE_SLOTS), restated since its entry needs a DOM.
-export const CASCADE_STEP = 24;
-export const CASCADE_SLOTS = 5;
 
 const EDGE = 14; // side inset of the left column and the rail
 const GAP = 8; // vertical gap between and below the rail windows
 
-// The doc box leaves room for the whole cascade at the right and bottom, so every
-// slot fits in the vacancy before the cascade wraps.
+// The doc box leaves room for the shell's whole cascade at the right and bottom,
+// so every slot fits in the vacancy before the cascade wraps.
 const CASCADE_ROOM = (CASCADE_SLOTS - 1) * CASCADE_STEP;
 const DOC_MIN = 220; // minimum doc box side
 

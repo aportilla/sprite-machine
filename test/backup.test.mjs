@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  addPlan,
   itemsOf,
   planBackup,
   readManifest,
@@ -183,23 +182,6 @@ test('itemsOf makes the archive’s items with its ids and containers; a documen
     { text: 'old words' },
     'an unshipped built-in keeps its words'
   );
-});
-
-test('addPlan makes each container before what it holds, and lists what goes into the Trash after', () => {
-  const items = [
-    item('d', 'Doc', 'sprite', 'inner', 1),
-    item('inner', 'Inner', 'folder', 'outer', 2),
-    item('outer', 'Outer', 'folder', 'trash', 3),
-    item('loose', 'Loose', 'text', 'nowhere', 4),
-    item('a', 'A', 'folder', 'b', 5),
-    item('b', 'B', 'folder', 'a', 6),
-  ];
-  const { order, toTrash } = addPlan(items);
-  assert.deepEqual(
-    order.map((i) => i.id),
-    ['outer', 'inner', 'd', 'loose', 'b', 'a']
-  );
-  assert.deepEqual(toTrash, ['outer']);
 });
 
 test('backupFilename names the day', () => {

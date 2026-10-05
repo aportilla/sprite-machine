@@ -48,9 +48,10 @@ and the shell's configuration. Keep it that way:
 - **Application behavior lives in its application's directory**: its
   definition, menus and kinds (`index.js`, `menus.html`), its dialogs
   (`dialogs.html`, held by the shell under it and asked with `ctx.ask`), and
-  its windows — their markup (`windows.html`), lifecycle, adoption and what
-  their close and zoom boxes mean (`windows.js`), and their placement and
-  sizes (`layout.js`, pure). The Finder is the stock one, configured in
+  its windows — their markup (`windows.html`, copied with `ctx.window`),
+  lifecycle, adoption and what their close boxes mean (`windows.js`), and
+  their placement, sizes and zoomed boxes (`layout.js`, pure; the window
+  manager runs the zoom box). The Finder is the stock one, configured in
   `src/apps/finder/` with its art, its seed, and the commands and dialogs it
   adds through `extend`. `src/apps/windows.js` holds what the applications'
   windows and dialogs share. The shell composes no UI: every dialog is an
@@ -65,9 +66,9 @@ and the shell's configuration. Keep it that way:
 - **The library's kinds are Sprite Machine's**: a document (`sprite`, its PNG
   bytes in the sheet store, `state/sheets.js`) and a text file (`text`), each
   with small data on its catalog item (`state/kinds.js`). The pure modules in
-  `src/state/` import only types from the kit, since its shell entry needs a
-  DOM: they restate the catalog's few ids, and the catalog itself comes in
-  through `init`.
+  `src/state/` take the catalog's ids, selectors and geometry from
+  `vintage-frames/shell/pure`, the shell's DOM-free entry, so they run under
+  Node; the catalog itself comes in through `init`.
 - **Cross-application calls** go through `ctx.apps`, read at the call, never
   at init, so the order the applications initialize in never matters.
 - Follow-ups take the same direction: the scene beside its windoids, the

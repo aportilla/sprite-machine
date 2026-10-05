@@ -1,19 +1,17 @@
-<!-- Sprite Editor windows, parsed by windows.js at init. The four windoids are
-     appended hidden. The document window is a template cloned per open
-     document. Every window must be a direct child of the desktop: the kit's
-     stacking manager sees only direct vf-window children. -->
+<!-- Sprite Editor windows, copied by windows.js: each windoid once at init,
+     appended hidden, and a document window per open document. -->
 <!-- Utility windoids -->
 <!-- Windoid geometry comes from layout.js. Only the Tools palette's size is
-     authored here. windows.js sets closable=false on every windoid but the 3D
-     Sprite Atlas. A windoid bar shows no title, so the heading only names the
-     window for assistive tech. -->
+     authored here. The 3D Sprite Atlas alone has a close box. A windoid bar
+     shows no title, so the heading only names the window for assistive
+     tech. -->
 <!-- Each windoid's controls go in slot="header". header-height includes the
      header's 1px rule and matches layout.js (STAGE_STRIP, SPRITE_STRIP,
      RING_STRIP). -->
 <!-- Full Sprite View: fixed size, set by windows.js from layout.js (SPRITE_WIDTH,
      spriteHeightFor). -->
 <vf-window
-  id="win-sprite"
+  data-window="sprite"
   variant="utility"
   heading="Full Sprite View"
   movable
@@ -30,7 +28,7 @@
      pattern. main.js builds the scene on #viewport after this window is
      appended. -->
 <vf-window
-  id="win-stage"
+  data-window="stage"
   variant="utility"
   heading="3D View"
   movable
@@ -50,12 +48,12 @@
 <!-- 3D Sprite Atlas: orthographic renders of the active document's model, one
      tile-size cell per yaw step. The empty status slot leaves the rail's corner
      cell for the grow box. windows.js sets the size rect, since the height follows
-     the tile size. sm-ring-view.js paints the body's paper with a vf-container,
-     since vf-window has no body pattern. -->
+     the tile size, and the pattern, the strip's paper setting. -->
 <vf-window
-  id="win-ring"
+  data-window="ring"
   variant="utility"
   heading="3D Sprite Atlas"
+  closable
   movable
   outline-drag
   resizable
@@ -70,7 +68,7 @@
      as many columns as the width fits. The grow box sits in the status strip.
      windows.js sets the size rect. -->
 <vf-window
-  id="win-palette"
+  data-window="palette"
   variant="utility"
   heading="Color Palette"
   movable
@@ -83,10 +81,9 @@
   <vf-label slot="status"></vf-label>
 </vf-window>
 
-<!-- Tools palette. Its size matches TOOLS_BOX in layout.js. Last in the markup,
-     so it is on top of the other windoids. -->
+<!-- Tools palette. Its size matches TOOLS_BOX in layout.js. -->
 <vf-window
-  id="win-tools"
+  data-window="tools"
   variant="utility"
   heading="Tools"
   movable
@@ -97,10 +94,16 @@
   <sm-tools-panel></sm-tools-panel>
 </vf-window>
 
-<!-- Document window template -->
-<template id="tpl-document-window">
-  <vf-window heading="untitled" movable outline-drag resizable zoomable>
-    <sm-editor></sm-editor>
-    <sm-status-line kind="tile" slot="status"></sm-status-line>
-  </vf-window>
-</template>
+<!-- Document window -->
+<vf-window
+  data-window="document"
+  heading="untitled"
+  closable
+  movable
+  outline-drag
+  resizable
+  zoomable
+>
+  <sm-editor></sm-editor>
+  <sm-status-line kind="tile" slot="status"></sm-status-line>
+</vf-window>

@@ -532,7 +532,7 @@ document to act on):
   _Download_ ⇧⌘E, _Export 3D Model…_, _Export Sprite Atlas…_; _Quit_ ⌃Q, with
   rules between the groups.
   - _New…_ opens the New box: a **Name** field, seeded with the next untitled
-    name and following the template until typed in, over a **Settings** group
+    name, selected, and following the template until typed in, over a **Settings** group
     with the template (Empty Document or a built-in) and the square tile size,
     editable for Empty Document and fixed at a template's own size. OK is greyed
     while the name is blank. The document opens unsaved under that name, which
@@ -541,8 +541,10 @@ document to act on):
   - _Close_ closes the active document, asking about unsaved changes. _Save_
     prompts for a name on a document's first save. _Download_ saves the
     document `.png` as is, with no dialog.
-  - _Quit_ closes every open document in turn, bringing each dirty one forward
-    with its unsaved-changes alert. Cancel stops the rest.
+  - _Quit_ closes every open document in turn, front to back (the window
+    manager's `closeAll`), bringing each dirty one forward with its
+    unsaved-changes alert. Cancel stops the rest. An Option-click on a
+    document window's close box does the same.
   - _Export 3D Model…_ writes one glTF 2.0 binary through the engine's
     `modelToGlb` (`gltf.js`, shared with the headless path): one primitive of
     welded positions, per-face normals, UVs and indices, the skin as an
@@ -649,16 +651,21 @@ those keys.
 
 ### Windows
 
-Each application owns its windows: their markup (`windows.html`), their
-lifecycle and close and zoom boxes (`windows.js`), and their placement and
-sizes (`layout.js`, pure). The **window manager** is the kit shell's, and
-handles what applies to all of them. A window enters through `windows.open`
-(made, placed and shown out of its icon) or `windows.adopt` (made and placed
-by its application), with its application, the item it shows, its placement,
-saved pin, resize policy, a box it keeps across a resize, and what its close
-box means. It leaves through `windows.close`, which closes it into its item's
-icon, then releases and removes it. The front application is the active
-window's application. One resize rule re-pins every window. Arrange Windows
+Each application owns its windows: their markup (`windows.html`, each window
+named by `data-window`, which the shell keeps inert and `ctx.window()`
+copies), their lifecycle and close boxes (`windows.js`), and their placement,
+sizes and zoomed boxes (`layout.js`, pure). The **window manager** is the kit
+shell's, and handles what applies to all of them. A window enters through
+`windows.open` (made, placed and shown out of its icon) or `windows.adopt`
+(made and placed by its application), with its application, the item it
+shows, its placement, saved pin, resize policy, a box it keeps across a
+resize, its zoomed box, and what its close box means. It leaves through
+`windows.close`, which closes it into its item's icon, then releases and
+removes it. An Option-click on a close box closes every window of its
+application, as Quit does. The front application is the active window's
+application. One resize rule re-pins every window. The window manager runs
+the zoom box: it takes a window to its zoomed box and back to the box it had,
+and a zoomed window stays zoomed across a browser resize. Arrange Windows
 runs each application's arrangement group, then re-applies every window's own
 placement. The windows' area starts below the options strip (the desktop's
 `window-top`, 56); a folder or read-me window cascades from 40 right and 20
@@ -689,19 +696,19 @@ The Sprite Editor has two tiers of window. Other applications' windows (the
 Desktop Patterns panel, folder windows, text windows) are document tier but
 are not documents.
 
-- **Document windows**: one per open document, cloned from a template by
-  `apps/sprite-editor/windows.js`. A window is created on open at the doc box,
+- **Document windows**: one per open document, a copy of `windows.html`'s
+  made by `apps/sprite-editor/windows.js`. A window is created on open at the doc box,
   cascaded into the first free slot, and closed into its icon on close. Each
   is `movable resizable zoomable`, titled with the document's name. Its status
   strip names the edited face, led by a small layer popup
   (`vf-select size="small" no-shadow`) when the document has more than one
   layer: the layers in block order with the edited one set. A pick switches
-  the window's layer, like the Layer menu's list. The **zoom box** toggles
-  size with the top-left held. It grows the window right and down to the
-  vacant middle's edges and records the previous size. On a window already at
-  that size it restores the recorded size, or the doc box size if none is
-  recorded. ⌘J's zoom is the same toggle. A zoomed window's far edges are
-  struts, so it stays zoomed across a browser resize.
+  the window's layer, like the Layer menu's list. The **zoomed box**
+  (`zoomedBox`) holds the top-left and grows the window right and down to the
+  vacant middle's edges. The zoom box goes there and back to the box the
+  window had. A window the session reopened zoomed has no box to go back to,
+  so its zoom box does nothing until it is moved or resized. ⌘J's zoom is the
+  same toggle.
 - **Utility windoids**: the Tools palette, Full Sprite View, 3D View and Color
   Palette have no close box or menu toggle and are shown whenever the Sprite
   Editor is front. The 3D Sprite Atlas is toggleable. They are the shell's
@@ -758,9 +765,8 @@ default row.
   antialiasing. The clear is transparent, so the margin shows paper in the
   windoid and is transparent in the file.
 - **The paper** is the ring slice's `paper` setting (`white`, `black` or
-  `gray`). No UI sets it, and the export ignores it. A `vf-container` under the
-  grid paints it across the whole body, since a window body has no pattern of
-  its own.
+  `gray`). No UI sets it, and the export ignores it. It is the window's
+  `pattern`, so it runs across the whole body and scrolls with the row.
 - **The settings belong to the document.** A change dirties the document. Save
   writes the four settings into the PNG as a `sprite-machine:ring` chunk (not
   the paper), and opening restores them. A PNG without the chunk opens at the
@@ -1022,7 +1028,7 @@ open in a Text Viewer window.
   `src/texts/` and list it in `TEXTS` with a new key; an existing profile gets
   it from **Special → Restore Default Files**. Not yet: dropping or pasting a
   `.txt`, and editing.
-- **The window** (`apps/text-viewer/windows.js`, `#tpl-text-window` in its
+- **The window** (`apps/text-viewer/windows.js`, `text` in its
   `windows.html`) is a 440 × 320 document-tier window with
   `movable resizable zoomable scrollbars="vertical"`. The body is the file's
   text, verbatim, in one kit paragraph on the body face. The `.text-body` rule
@@ -1043,12 +1049,10 @@ open in a Text Viewer window.
   with the session.
 - **The zoom box** toggles a reading column: the windows' area below the
   options strip, inset 20 px, at most 520 wide, centered, and at least 220 on
-  each axis (`expandedTextBox` in `apps/text-viewer/layout.js`). A window whose every
-  edge is within 10 px of the column (`nearBox`) restores; any other expands.
-  Expanding records the previous box as a nine-slice pin; with no record, the
-  restore uses the window's placement. A browser resize keeps a zoomed window
-  zoomed (adopt's `keep`), and Arrange Windows returns it to its placement. The
-  document window's zoom box follows different rules (see [Windows](#windows)).
+  each axis (`expandedTextBox` in `apps/text-viewer/layout.js`), the window's
+  `zoom`. A window whose every edge is within 10 px of the column restores;
+  any other expands. The restore goes back to the box the window had, else to
+  its placement. Arrange Windows returns it to its placement.
 
 ### The About box
 
@@ -1076,9 +1080,9 @@ version and date come from the root `package.json` and HEAD's commit date via
 A `vf-dialog` opens focused on a slotted `autofocus` element, else its first
 text field, else its default button, and Return anywhere in it fires the
 default button (a focused link follows itself). So Return dismisses the About
-box, and a value typed into Tile Size… commits with Return. A text field is
-focused but not selected, so a seeded name in the New box or the save prompt
-waits with the caret at its end.
+box, and a value typed into Tile Size… commits with Return. The kit selects
+no text; on its `vf-show` the New box and the name prompt select their
+seeded name, so typing replaces it.
 
 Every other dialog is its application's, authored in its `dialogs.html` as a
 dialog-method form: the pressed button's `value` closes it, and `ctx.ask`
@@ -1328,7 +1332,8 @@ The grid pipeline is pure typed-array code with no THREE or DOM. The app state
 pure JS. All of it runs under Node. The desktop's mechanics (the window
 manager, the menu bar, the catalog, the Finder, the session) are the kit's
 shell, `vintage-frames/shell`, whose entry needs a DOM: pure modules here
-import only its types, and restate the few ids and numbers they need.
+take the catalog's ids and selectors and the geometry from
+`vintage-frames/shell/pure`, its DOM-free entry.
 
 ```
 packages/core/  the engine, published as `sprite-machine`. No DOM, THREE only in
@@ -1353,7 +1358,7 @@ src/apps/       finder (the stock Finder configured: art, seed, New Sprite,
                 Restore Default Files, the backup IO), sprite-editor,
                 text-viewer, desktop-patterns, and windows.js (what their
                 windows and dialogs share). Each app's index.js defines it
-                (defineApp: menus, dialogs, kinds, init). Each has menus.html
+                (defineApp: menus, dialogs, windows, kinds, init). Each has menus.html
                 and dialogs.html; the three with windows of their own have
                 windows.html and windows.js, and the Sprite Editor and Text
                 Viewer layout.js (pure geometry).
@@ -1429,8 +1434,8 @@ backing stores are sized in JS, because a template-bound width clears them.
 Editable `vf-*` values are bound with `live()`, so a re-render re-syncs after
 typing.
 
-**One editor per document.** A document window's `<sm-editor>` is created with
-`document.importNode` and gets its DocContext before the append, because
+**One editor per document.** A document window's `<sm-editor>` comes upgraded
+with its `ctx.window()` copy and gets its DocContext before the append, because
 `connectedCallback` wires the doc subscription. It lives until the document
 closes and survives the desktop's raise-driven DOM reorders. Brush state lives in
 the session slice. The canvas resets its working buffer when `tile` (by

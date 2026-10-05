@@ -1,21 +1,20 @@
-<!-- Text Viewer window. windows.js parses this fragment and clones the
-     template for each open text file. -->
+<!-- Text Viewer window, copied for each open text file (windows.js). -->
 <!-- .text-body in style.css sets pre-wrap. The stack fills the width so lines
      wrap at the window edge. The inset is the stack's pad because a window
      body has none. 440 × 320 fits about 70 characters of Geneva 9 per line. -->
-<template id="tpl-text-window">
-  <vf-window
-    heading="untitled"
-    movable
-    outline-drag
-    resizable
-    zoomable
-    scrollbars="vertical"
-    width="440"
-    height="320"
-  >
-    <vf-stack fill-width pad="4 6">
-      <vf-paragraph fill-width class="text-body"></vf-paragraph>
-    </vf-stack>
-  </vf-window>
-</template>
+<vf-window
+  data-window="text"
+  heading="untitled"
+  closable
+  movable
+  outline-drag
+  resizable
+  zoomable
+  scrollbars="vertical"
+  width="440"
+  height="320"
+>
+  <vf-stack fill-width pad="4 6">
+    <vf-paragraph fill-width class="text-body"></vf-paragraph>
+  </vf-stack>
+</vf-window>

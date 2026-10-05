@@ -1,27 +1,24 @@
 // Sprite Editor windows: five utility windoids and one document window per open
 // document, over the kit's window manager (vintage-frames/shell).
 //
-// - The windoids come from windows.html and are the Sprite Editor's palettes:
+// - The windoids are copies of windows.html's and the Sprite Editor's palettes:
 //   shown while it is front, the 3D Sprite Atlas also while its pref holds.
 //   Hiding keeps them mounted, so canvas identity survives. Each is adopted
 //   with an item of its own (windoid:<id>), so the session saves its box and
 //   the next load opens it there; without one it takes its placement.
-// - Document windows are reconciled from the workspace. A new context clones
-//   #tpl-document-window and is adopted with its document's catalog item, at
+// - Document windows are reconciled from the workspace. A new context gets a
+//   copy of the document window, adopted with its document's catalog item, at
 //   this session's box for it, else the saved one, else the cascade. Its close
 //   box runs the dirty-checked close. A closed context's window closes into
 //   the document's icon. showDocument's `from` grows a window just opened out
-//   of its icon.
+//   of its icon. The window manager runs the zoom box (zoomedBox).
 // - Placement comes from layout.js on the live raster at init, on each open and
 //   on Arrange Windows.
 
-import { VfWindow } from 'vintage-frames';
 import { cascadeFrom, cascadeSlot, nearBox } from 'vintage-frames/shell';
-import markup from './windows.html?raw';
 import { prefs } from '../../state/prefs.js';
-import { ring } from '../../state/ring.js';
+import { ring, RING_PAPERS } from '../../state/ring.js';
 import { workspace, followActive } from '../../state/workspace.js';
-import { cloneWindow, parseWindows } from '../windows.js';
 import {
   FRAME_BANDS,
   initialPlacement,
@@ -38,8 +35,10 @@ import {
   zoomedBox,
 } from './layout.js';
 
-/** Windoid ids (markup id `win-<id>`), in stacking order, the Tools palette
- *  on top. */
+/** @typedef {import('vintage-frames').VfWindow} VfWindow */
+
+/** Windoid ids (their windows.html data-window names), in stacking order, the
+ *  Tools palette on top. */
 const WINDOIDS = ['sprite', 'stage', 'ring', 'palette', 'tools'];
 /** The axes of a windoid's size that are the user's, which arranged() ignores. */
 const USER_AXES = { ring: ['width'], palette: ['width', 'height'] };
@@ -50,16 +49,13 @@ const rasterOf = (area) => ({ w: area.left + area.width, h: area.top + area.heig
 /**
  * @param {import('vintage-frames/shell').AppContext} ctx
  * @param {string} app  the Sprite Editor's id
- * @param {{onDocumentClose(key: string): void}} opts
- *   onDocumentClose: the dirty-checking close for a context key.
+ * @param {{onDocumentClose(key: string): Promise<void>}} opts
+ *   onDocumentClose: the dirty-checking close for a context key, settled once
+ *   it has closed or been cancelled.
  */
 export function initEditorWindows(ctx, app, { onDocumentClose }) {
   const { desktop, windows } = ctx;
   const savedPin = (item) => ctx.state?.pin(item) ?? null;
-  const host = parseWindows(markup);
-  const tpl = /** @type {HTMLTemplateElement} */ (
-    host.querySelector('#tpl-document-window')
-  );
 
   // Widen the frame's bands for the docked windoids before any window re-pins.
   windows.setFrameBands(FRAME_BANDS);
@@ -67,16 +63,10 @@ export function initEditorWindows(ctx, app, { onDocumentClose }) {
   // Utility windoids
   /** @type {Record<string, VfWindow>} */
   const byId = {};
-  for (const win of /** @type {VfWindow[]} */ ([
-    ...host.querySelectorAll(':scope > vf-window'),
-  ])) {
-    byId[win.id.slice('win-'.length)] = win;
-  }
   for (const id of WINDOIDS) {
+    byId[id] = ctx.window(id);
     // Hidden from the first frame. The window manager shows them.
     byId[id].hidden = true;
-    // closable defaults to true and markup can't set a boolean attribute false.
-    if (id !== 'ring') byId[id].closable = false;
   }
   // The 3D View's and the Color Palette's grow-box floors. The ring's size rect
   // is set in fitRing.
@@ -152,6 +142,11 @@ export function initEditorWindows(ctx, app, { onDocumentClose }) {
     declareRingRect(h);
     floorRingWidth();
   };
+  // The strip's body is its paper setting, under the tiles and past the last.
+  const paintRing = () => {
+    byId.ring.pattern = RING_PAPERS[ring.get().paper];
+  };
+  paintRing();
 
   // The Color Palette's size is the user's, and its policy holds the live one
   // across a resize, so its saved size is read back from the pin before the
@@ -310,6 +305,7 @@ export function initEditorWindows(ctx, app, { onDocumentClose }) {
   // shows docked at the new height.
   ctx.onDispose(
     ring.subscribe(() => {
+      paintRing();
       if ((byId.ring.height ?? 0) !== ringHeightFor(ring.get().size)) {
         if (byId.ring.hidden) placeWindoid('ring', smartLayout());
         else fitRing();
@@ -343,9 +339,17 @@ export function initEditorWindows(ctx, app, { onDocumentClose }) {
     windows.beforeFront((win) => workspace.setActive(win ? keyOf(win) : null))
   );
 
+  /** A document window's zoomed box: its top-left kept, on the window area.
+   *  @param {import('vintage-frames/shell').Box} area
+   *  @param {{left: number, top: number}} pos */
+  const docZoom = (area, pos) => {
+    const { w, h } = rasterOf(area);
+    return zoomedBox(w, h, pos, { ringShown: ringShown(), ringSize: ring.get().size });
+  };
+
   /** @param {import('../../state/workspace.js').DocContext} doc */
   function createDocWindow(doc) {
-    const win = cloneWindow(tpl);
+    const win = ctx.window('document');
     win.id = `win-doc-${doc.key}`;
     win.heading = doc.name;
     // The doc box for the current raster and this document's ring settings,
@@ -374,9 +378,10 @@ export function initEditorWindows(ctx, app, { onDocumentClose }) {
       app,
       item,
       pin,
-      close: (w) => {
+      zoom: docZoom,
+      close: async (w) => {
         const key = keyOf(w);
-        if (key != null) onDocumentClose(key);
+        if (key != null) await onDocumentClose(key);
       },
     });
     // Clamp after the append: clamped() reads the lattice from a connected element.
@@ -408,42 +413,6 @@ export function initEditorWindows(ctx, app, { onDocumentClose }) {
   };
   ctx.onDispose(workspace.subscribe(syncDocs));
   syncDocs(); // HMR: rebuild windows for contexts that survived the reload
-
-  // Zoom box on document windows: toggles between zoomedBox and the recorded
-  // pre-zoom size, keeping the top-left. With nothing recorded it restores the doc
-  // box size. The state test survives a raster resize because the zoomed far edges
-  // are struts of the nine-slice pin. A size write fires no vf-resize. The manager
-  // reads it as a touch on the next raster resize.
-  /** Pre-zoom sizes by window. */
-  const zoomMemory = new WeakMap();
-  /** The zoomed box for `win` at its current top-left. Used by the toggle and
-   *  by arranged(). */
-  const zoomBoxFor = (win) =>
-    zoomedBox(
-      desktop.width,
-      desktop.height,
-      { left: win.left ?? 0, top: win.top ?? 0 },
-      { ringShown: ringShown(), ringSize: ring.get().size }
-    );
-  /** The zoom toggle, shared by the zoom box and ⌘J (zoomActive). */
-  const zoomToggle = (win) => {
-    const z = zoomBoxFor(win);
-    if (win.width === z.width && win.height === z.height) {
-      const back = zoomMemory.get(win) ?? smartLayout().doc;
-      zoomMemory.delete(win);
-      win.width = back.width;
-      win.height = back.height;
-    } else {
-      zoomMemory.set(win, { width: win.width, height: win.height });
-      win.width = z.width;
-      win.height = z.height;
-    }
-    windows.layoutChanged();
-  };
-  ctx.on(desktop, 'vf-zoom', (e) => {
-    const win = e.target;
-    if (win instanceof VfWindow && keyOf(win) != null) zoomToggle(win);
-  });
 
   // Arrange Windows group.
   // - arrange() re-runs the placement on the current raster: the windoids,
@@ -484,7 +453,13 @@ export function initEditorWindows(ctx, app, { onDocumentClose }) {
         const pool = docs.map((win, i) => docBox(win, smart, i));
         for (const win of docs) {
           if (win.hidden) continue;
-          const z = win === activeWin ? zoomBoxFor(win) : null;
+          const z =
+            win === activeWin
+              ? windows.clamped(
+                  win,
+                  docZoom(windows.area, { left: win.left ?? 0, top: win.top ?? 0 })
+                )
+              : null;
           const i = pool.findIndex(
             (g) =>
               g != null &&
@@ -500,13 +475,6 @@ export function initEditorWindows(ctx, app, { onDocumentClose }) {
       },
     })
   );
-
-  // HMR: the next init rebuilds every window, so all of them go at once.
-  ctx.onDispose(() => {
-    for (const win of byKey.values()) win.remove();
-    byKey.clear();
-    for (const id of WINDOIDS) byId[id].remove();
-  });
 
   return {
     /** Brings a document window to the front, which also activates the Sprite
@@ -534,7 +502,7 @@ export function initEditorWindows(ctx, app, { onDocumentClose }) {
     zoomActive() {
       const key = workspace.get().activeKey;
       const win = key != null ? byKey.get(key) : null;
-      if (win) zoomToggle(win);
+      if (win) windows.zoom(win);
     },
   };
 }

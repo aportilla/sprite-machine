@@ -8,11 +8,6 @@ export const SPRITE = 'sprite';
 /** A text file's kind, which the Text Viewer opens. */
 export const TEXT = 'text';
 
-// The catalog's own ids and kinds, restated: vintage-frames/shell's entry
-// needs a DOM, so its TRASH and FOLDER can't be imported under Node.
-export const TRASH = 'trash';
-export const FOLDER = 'folder';
-
 /**
  * A document's data: its icon, a data URI of the model render, or null, and
  * its PNG's byte length.

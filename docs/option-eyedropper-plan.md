@@ -4,8 +4,8 @@
 eye checks in step 2 are not yet confirmed. Every decision was made
 2026-09-17 as recommended (§6), on _"Let's proceed with the plan - except
 for the cursor changes - which we'll do later after a VF update. Your recs
-are good."_ Step 4 waits on kit ask #18 and a vintage-frames release. The
-ask: _"in our
+are good."_ Kit ask #18 shipped in vintage-frames 0.16.0 (`applyCursor`'s
+`kinds`), so step 4 is ready to build. The ask: _"in our
 editor view - using the option modifier allows us to temporarily be in
 eyedropper mode to pick a color. i'd like to provide visual feedback for that
 mode. can we update the 'tool' windoid active tool state to show the

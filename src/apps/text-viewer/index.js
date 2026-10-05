@@ -1,13 +1,14 @@
 // Text Viewer: the read-me application. It opens the library's text files (the
 // `text` kind), one window each (windows.js), and wires its menus. The window
 // manager places a window, opens it out of its icon and closes it back into
-// it, and retitles or closes it as its file is renamed or removed. The zoom box
-// toggles a reading column (layout.js).
+// it, retitles or closes it as its file is renamed or removed, and runs its
+// zoom box, which toggles a reading column (layout.js).
 
 import { VfWindow } from 'vintage-frames';
-import { defineApp, nearBox } from 'vintage-frames/shell';
+import { defineApp } from 'vintage-frames/shell';
 import menus from './menus.html?raw';
 import dialogs from './dialogs.html?raw';
+import windowMarkup from './windows.html?raw';
 import textArt from '../../assets/text-file.png';
 import { TEXT } from '../../state/kinds.js';
 import { textOf } from '../../texts/index.js';
@@ -29,6 +30,7 @@ export function textViewer() {
     name: 'Text Viewer',
     menus,
     dialogs,
+    windows: windowMarkup,
     kinds: {
       [TEXT]: {
         art: textArt,
@@ -53,36 +55,10 @@ export function textViewer() {
           app: TEXT_VIEWER,
           item: item.id,
           from,
-          create: () => textWindow(item.name, text),
-          keep: expandedTextBox,
+          create: () => textWindow(ctx.window('text'), item.name, text),
+          zoom: expandedTextBox,
         });
       };
-
-      // The zoom box toggles between the reading column and the box the window
-      // had before, or its placement without one. `keep` holds a zoomed window
-      // zoomed across a browser resize.
-      /** Each zoomed window's pin from before the zoom. */
-      const before = new WeakMap();
-      ctx.on(desktop, 'vf-zoom', (e) => {
-        const win = e.target;
-        if (!(win instanceof VfWindow) || windows.appOf(win) !== TEXT_VIEWER) return;
-        const cur = {
-          left: win.left ?? 0,
-          top: win.top ?? 0,
-          width: win.width ?? 0,
-          height: win.height ?? 0,
-        };
-        const column = expandedTextBox(windows.area);
-        if (nearBox(cur, column)) {
-          const pin = before.get(win);
-          before.delete(win);
-          const back = pin ? windows.fromPin(win, pin) : windows.placed(win);
-          if (back) windows.write(win, back);
-        } else {
-          before.set(win, windows.pinOf(win));
-          windows.write(win, column);
-        }
-      });
 
       /** The active window, when it is a text window. */
       const active = () => {
@@ -92,10 +68,8 @@ export function textViewer() {
 
       ctx.onMenu((value) => {
         const win = active();
-        if (value === 'close' && win) windows.requestClose(win);
-        else if (value === 'quit') {
-          for (const w of windows.windowsOf(TEXT_VIEWER)) windows.requestClose(w);
-        }
+        if (value === 'close' && win) void windows.requestClose(win);
+        else if (value === 'quit') void windows.closeAll(TEXT_VIEWER);
         // The enabled item takes ⌘C, so the browser's own copy does not run.
         else if (value === 'copy') {
           navigator.clipboard
@@ -108,9 +82,6 @@ export function textViewer() {
       // through to the browser.
       ctx.gate(ctx.item('copy'), () => selectedTextIn(windows, TEXT_VIEWER) !== '');
       ctx.gate(ctx.item('arrange'), () => !windows.arranged());
-      ctx.onDispose(() => {
-        for (const w of windows.windowsOf(TEXT_VIEWER)) w.remove();
-      });
 
       return {
         /** Opens a text file's window, or brings it forward. The boot reopens

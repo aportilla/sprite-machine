@@ -1,33 +1,52 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { frameOf, pinOf, pinTo } from 'vintage-frames/shell/pure';
 import {
   initialPlacement,
   paletteFit,
   paletteGrid,
   PALETTE_MIN_HEIGHT,
   PALETTE_MIN_WIDTH,
+  spriteHeightFor,
+  SPRITE_WIDTH,
   STAGE_MIN_HEIGHT,
+  ringHeightFor,
+  RING_MIN_WIDTH,
   TOOLS_BOX,
+  FRAME_BANDS,
   WINDOW_TOP,
   zoomedBox,
 } from '../src/apps/sprite-editor/layout.js';
 
 // The Tools palette's size. initialPlacement gives the palette a position only.
 const TOOLS = TOOLS_BOX;
+// The frame the window manager pins in: below the window area's top, its left,
+// top and right bands widened for the docked windoids.
+const WINDOW_FRAME = frameOf(WINDOW_TOP, FRAME_BANDS);
 // A typical raster (1000×850 CSS at DSF 1, minus the 10px bezel).
 const W = 980;
 const H = 830;
+const roundTrip = (b, from, to, policy) =>
+  pinTo(pinOf(b, from, WINDOW_FRAME), to, WINDOW_FRAME, policy);
 
-test('placement: a tiny raster still yields finite, usable boxes in the window area; a zero-sized one places finitely', () => {
+test('placement: a tiny raster still yields finite, usable boxes in the window area; a zero-sized one places and pins finitely', () => {
   const p = initialPlacement(300, 200, { ringShown: true });
   for (const b of [p.sprite, p.stage, p.ring, p.palette, p.doc]) {
     assert.ok(Number.isFinite(b.left) && Number.isFinite(b.top));
     assert.ok(b.width > 0 && b.height > 0);
     assert.ok(b.left >= 0 && b.top >= WINDOW_TOP);
   }
+  // On a 0×0 raster the ring box stays finite and its pin maps finitely.
   const z = initialPlacement(0, 0, { ringShown: true });
   assert.ok(Object.values(z.ring).every(Number.isFinite) && z.ring.top >= WINDOW_TOP);
+  const rp = roundTrip(
+    z.ring,
+    { width: 0, height: 0 },
+    { width: 600, height: 500 },
+    { size: { height: z.ring.height }, min: { width: RING_MIN_WIDTH } }
+  );
+  assert.ok(Object.values(rp).every(Number.isFinite));
 });
 
 test('placement: the Color Palette sits centered under the Tools palette, the strip at the bottom under the doc box; the doc box and its zoom clear both', () => {
@@ -122,6 +141,83 @@ test('paletteFit: a grow snaps back to the cells the window shows, with no spare
         assert.equal(cells({ ...fit, width: fit.width - 1 }).columns, shown.columns - 1);
       }
       assert.equal(cells({ ...fit, height: fit.height - 1 }).rows, shown.rows - 1);
+    }
+  }
+});
+
+test('pin: the placement is a fixed point — a resize lands the windoids where Arrange would', () => {
+  // The top band reaches just past the stage's top edge and the right band
+  // covers the rail column, so those edges are struts.
+  const home = initialPlacement(W, H);
+  const { bands } = WINDOW_FRAME;
+  assert.ok(
+    bands.top > home.stage.top - WINDOW_TOP &&
+      bands.top <= home.stage.top - WINDOW_TOP + 8
+  );
+  assert.ok(bands.right > W - home.stage.left && bands.right <= W - home.stage.left + 14);
+  // Every placed windoid but the 3D View re-pins onto another raster exactly
+  // where initialPlacement puts it. The 3D View holds its placement through
+  // `keep` instead. The document window's top-left is a fixed point too. Its
+  // right and bottom edges spring but stay clear of the rail and the bottom
+  // edge.
+  const rasters = [
+    { width: 980, height: 830 },
+    { width: 760, height: 620 },
+    { width: 1400, height: 1000 },
+    { width: 1001, height: 831 },
+  ];
+  const spriteSize = { width: SPRITE_WIDTH, height: spriteHeightFor(SPRITE_WIDTH) };
+  for (const r0 of rasters) {
+    const p0 = initialPlacement(r0.width, r0.height);
+    for (const r1 of rasters) {
+      const p1 = initialPlacement(r1.width, r1.height);
+      const tools0 = { ...p0.tools, ...TOOLS };
+      assert.deepEqual(
+        roundTrip(tools0, r0, r1, { size: TOOLS }),
+        { ...p1.tools, ...TOOLS },
+        `tools ${JSON.stringify([r0, r1])}`
+      );
+      assert.deepEqual(
+        roundTrip(p0.sprite, r0, r1, { size: spriteSize }),
+        p1.sprite,
+        `sprite ${JSON.stringify([r0, r1])}`
+      );
+      // The 3D Sprite Atlas strip has a fixed height and a width floored at
+      // RING_MIN_WIDTH. Its left, top and height are a fixed point under the doc
+      // box. Its width springs but stays clear of the rail. Tile sizes
+      // stay small: a tall strip's top on a short raster falls in the top band
+      // and pins near. The Palette keeps its size.
+      for (const views of [4, 16]) {
+        for (const size of [64, 128]) {
+          const opts = { ringViews: views, ringSize: size };
+          const g0 = initialPlacement(r0.width, r0.height, opts);
+          const g1 = initialPlacement(r1.width, r1.height, opts);
+          const ring = roundTrip(g0.ring, r0, r1, {
+            size: { height: ringHeightFor(size) },
+            min: { width: RING_MIN_WIDTH },
+          });
+          const tag = `ring(${views}, ${size}) ${JSON.stringify([r0, r1])}`;
+          assert.equal(ring.left, g1.ring.left, `${tag} left`);
+          assert.equal(ring.top, g1.ring.top, `${tag} top`);
+          assert.equal(ring.height, g1.ring.height, `${tag} height`);
+          assert.ok(ring.width >= RING_MIN_WIDTH, `${tag} under the floor`);
+          assert.ok(
+            ring.left + ring.width <= p1.sprite.left - 14,
+            `${tag} runs into the rail`
+          );
+          const { width, height } = g0.palette;
+          assert.deepEqual(
+            roundTrip(g0.palette, r0, r1, { size: { width, height } }),
+            g1.palette,
+            `palette ${tag}`
+          );
+        }
+      }
+      const doc = roundTrip(p0.doc, r0, r1, { min: { width: 80, height: 54 } });
+      assert.equal(doc.left, p1.doc.left, `doc left ${JSON.stringify([r0, r1])}`);
+      assert.equal(doc.top, p1.doc.top, `doc top ${JSON.stringify([r0, r1])}`);
+      assert.ok(doc.left + doc.width <= p1.sprite.left - 14, 'doc runs into the rail');
+      assert.ok(doc.top + doc.height <= r1.height - 8, 'doc runs off the bottom');
     }
   }
 });

@@ -1,15 +1,20 @@
-<!-- Desktop Patterns window. windows.js parses this fragment and clones the
-     template at each open. -->
+<!-- Desktop Patterns window, copied at each open (windows.js). -->
 <!-- Fixed size, 248 × 304. The body is a 222-wide column: the 222×160 preview
      well, the 13×3 chooser of 16px cells (52 tall with rules and frame) and
      the default button (28 with its ring), with 10px gaps. Add the stack's
      12px pad, the 18px title bar and the 1px borders. The inset is the
      stack's pad because a window body has none. sm-desktop-patterns.js sets
      the well and grid sizes. -->
-<template id="tpl-patterns-window">
-  <vf-window heading="Desktop Patterns" movable outline-drag width="248" height="304">
-    <vf-stack pad="12">
-      <sm-desktop-patterns></sm-desktop-patterns>
-    </vf-stack>
-  </vf-window>
-</template>
+<vf-window
+  data-window="patterns"
+  heading="Desktop Patterns"
+  closable
+  movable
+  outline-drag
+  width="248"
+  height="304"
+>
+  <vf-stack pad="12">
+    <sm-desktop-patterns></sm-desktop-patterns>
+  </vf-stack>
+</vf-window>

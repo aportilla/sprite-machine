@@ -2,7 +2,9 @@
 
 **Status:** drafted 2026-10-01. Decisions 1 to 4 taken (§8). Steps 1 to 5
 landed 2026-10-01 and shipped as app v0.4.0 on 2026-10-02; the engine is
-unchanged. The eye checks (§7) are open. Delete this plan when they close.
+unchanged. vintage-frames 0.16.0 (2026-10-04) resolves the four kit asks
+(§5), and their bridges are gone. The eye checks (§7) are open. Delete this
+plan when they close.
 The ask: _"please update to the latest Vintage Frames npm version, converting
 to use the new shell. you can see the ../vintage-frames source for recent
 commits and you may also observe this same upgrade having been done to
@@ -257,6 +259,12 @@ functions in `state/legacy.js`, run once:
 
 ## 5. Kit asks
 
+All four resolved in vintage-frames 0.16.0: `vintage-frames/shell/pure` (1),
+`catalog.import()` resolving its id map (2), a Replace import announcing once
+(3), and the pattern saved on its own (4). Add is a merge import, and before
+a Replace the Sprite Editor detaches only the documents the backup doesn't
+hold.
+
 1. **Pure modules under Node.** `vintage-frames/shell` imports the elements,
    so a site's pure modules can't import the geometry (`pinOf`, `pinTo`,
    `frameOf`) or the catalog's selectors in a Node test. Ask: a DOM-free
@@ -346,8 +354,7 @@ By `docs/TESTING.md`:
   9. **Resize and zoom**: a browser resize carries windows and icons and
      growing back restores them; the read-me column now starts below the
      options strip.
-  10. **Desktop Patterns**: Set, then reload. KNOWN-BUGS #6: the pattern is
-      written with the next window change or when the tab hides.
+  10. **Desktop Patterns**: Set, then reload at once; the pattern holds.
 
 ## 8. Decisions
 
@@ -367,7 +374,6 @@ Taken by Adam, 2026-10-01:
 
 ## 9. Follow-ups
 
-- The tests dropped by kit ask 1, once the kit has a DOM-free entry.
 - Removing the old `folders` and `texts` stores once every profile has
   converted.
 

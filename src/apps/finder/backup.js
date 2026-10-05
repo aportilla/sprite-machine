@@ -8,7 +8,6 @@
 import { TRASH, isVolume, itemCount } from 'vintage-frames/shell';
 import {
   MANIFEST_NAME,
-  addPlan,
   backupFilename,
   itemsOf,
   planBackup,
@@ -147,11 +146,6 @@ export function initBackup(finder, ctx) {
 
   /** Everything stored, the Trash's included: every item but the volumes. */
   const libraryCount = () => catalog.get().items.filter((i) => !isVolume(i.id)).length;
-  const storageReady = () => {
-    if (catalog.get().available) return true;
-    void ctx.ask(ctx.dialog('storage-unavailable'));
-    return false;
-  };
 
   function restoreQuestion(name, archive, here) {
     const when = archive.exportedAt ? new Date(archive.exportedAt) : null;
@@ -169,49 +163,36 @@ export function initBackup(finder, ctx) {
   }
 
   /** Replace the catalog with the backup's items, their bytes written first
-   *  under their ids. Bytes no item holds after go. */
+   *  under their ids. A document it doesn't bring back loses its bytes, and
+   *  its open window stays as an untitled, unsaved document. */
   async function replaceWith(items, bytesOf) {
-    const before = catalog
+    const kept = new Set(items.map((i) => i.id));
+    const dropped = catalog
       .get()
-      .items.filter((i) => i.kind === SPRITE)
+      .items.filter((i) => i.kind === SPRITE && !kept.has(i.id))
       .map((i) => i.id);
     for (const it of items) {
       if (it.kind === SPRITE) await sheets.putBytes(it.id, bytesOf.get(it.id));
     }
-    const editor = ctx.apps['sprite-editor'];
-    const run = () => catalog.import({ items }, { mode: 'replace' });
-    await (editor ? editor.whileReplacing(run) : run());
-    for (const id of before)
-      if (!catalog.item(id)) await sheets.remove(id).catch(() => {});
+    ctx.apps['sprite-editor']?.detach(dropped);
+    await catalog.import({ items }, { mode: 'replace' });
+    for (const id of dropped) await sheets.remove(id).catch(() => {});
   }
 
-  /** Add the backup's items beside the desktop's, one at a time, so each
-   *  document's bytes go under its new id. */
+  /** Add the backup's items beside the desktop's, under new ids, each
+   *  document's bytes under its new item's. */
   async function addAll(items, bytesOf) {
-    const { order, toTrash } = addPlan(items);
-    /** @type {Map<string, string>} the backup's id -> the item made for it */
-    const made = new Map();
-    for (const it of order) {
-      const parent =
-        it.parent == null || it.parent === TRASH ? null : (made.get(it.parent) ?? null);
-      const item = await catalog.create({
-        kind: it.kind,
-        name: it.name,
-        parent,
-        data: it.data,
-        at: it.createdAt,
-      });
-      if (!item) continue;
-      made.set(it.id, item.id);
-      if (it.kind === SPRITE) await sheets.putBytes(item.id, bytesOf.get(it.id));
+    const made = await catalog.import({ items }, { mode: 'merge' });
+    for (const [id, item] of made) {
+      if (item.kind === SPRITE) await sheets.putBytes(item.id, bytesOf.get(id));
     }
-    const trashed = toTrash.map((id) => made.get(id)).filter((id) => id != null);
-    if (trashed.length) await catalog.move(/** @type {string[]} */ (trashed), TRASH);
   }
 
   /** A dropped zip or a picked one. @param {File} file */
   async function restore(file) {
-    if (ctx.modalOpen() || !storageReady()) return;
+    // Without storage, the stock Finder's Storage Unavailable, answered with
+    // this app's own (index.js).
+    if (ctx.modalOpen() || !finder.storageReady()) return;
     let archive;
     try {
       archive = await readBackup(file);
@@ -266,7 +247,7 @@ export function initBackup(finder, ctx) {
     label: 'Back Up All Files…',
     separator: true,
     run: () => {
-      if (!storageReady()) return;
+      if (!finder.storageReady()) return;
       downloadBackup(catalog.get(), { app: __APP_VERSION__ }).catch((err) =>
         say(`Back Up All Files failed: ${err.message}.`)
       );

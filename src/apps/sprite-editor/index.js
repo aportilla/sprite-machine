@@ -16,9 +16,10 @@
 // - Each saved document's face and layer, and whether the 3D Sprite Atlas
 //   shows, are kept with the session (its `docs` and `showRing` extras).
 
-import { childrenOf, copyName, defineApp } from 'vintage-frames/shell';
+import { childrenOf, defineApp } from 'vintage-frames/shell';
 import menus from './menus.html?raw';
 import dialogs from './dialogs.html?raw';
+import windowMarkup from './windows.html?raw';
 import { session } from '../../state/session.js';
 import { prefs } from '../../state/prefs.js';
 import { build } from '../../state/build.js';
@@ -83,6 +84,7 @@ export function spriteEditor({ sheetStore, icons }) {
     name: 'Sprite Editor',
     menus,
     dialogs,
+    windows: windowMarkup,
     kinds: {
       [SPRITE]: {
         art: (item) => spriteData(item).icon ?? genericDocIconDataUri(),
@@ -117,7 +119,7 @@ export function spriteEditor({ sheetStore, icons }) {
             sheetLayers(image.width, image.height)
           ),
       });
-      workspace.init(catalog, { copyName });
+      workspace.init(catalog);
 
       // The session's extras: each saved document's face and layer as the last
       // session left them, read once here; and the 3D Sprite Atlas, shown before
@@ -138,9 +140,9 @@ export function spriteEditor({ sheetStore, icons }) {
 
       // A document window's close box runs closeContext, which is dirty-checked.
       const editorWindows = initEditorWindows(ctx, SPRITE_EDITOR, {
-        onDocumentClose: (key) => {
+        onDocumentClose: async (key) => {
           const doc = workspace.byKey(key);
-          if (doc) closeContext(doc);
+          if (doc) await closeContext(doc);
         },
       });
       /** An element the page or a held dialog holds. */
@@ -224,9 +226,10 @@ export function spriteEditor({ sheetStore, icons }) {
 
       // The name prompt for a first save, a rename, a new layer or a layer
       // rename. It resolves to the trimmed name, or to null on Cancel or
-      // Escape. Return presses OK, which stays disabled while the name is
-      // empty. The plain frame draws no heading, so the per-use text goes in
-      // the caption and the label.
+      // Escape. The name opens selected, so typing replaces it. Return presses
+      // OK, which stays disabled while the name is empty. The plain frame
+      // draws no heading, so the per-use text goes in the caption and the
+      // label.
       const nameField = $(dlgName, '#name-field');
       const nameCaption = $(dlgName, '[data-caption]');
       const btnNameOk = $(dlgName, '[data-ok]');
@@ -249,13 +252,12 @@ export function spriteEditor({ sheetStore, icons }) {
         btnNameOk.textContent = p.ok;
         nameField.value = initial;
         syncNameOk();
-        const answer = ctx.ask(dlgName);
-        nameField.focus();
-        return (await answer) === 'ok' && nameValid()
+        return (await ctx.ask(dlgName)) === 'ok' && nameValid()
           ? String(nameField.value).trim()
           : null;
       }
       on(nameField, 'vf-input', syncNameOk);
+      on(dlgName, 'vf-show', () => nameField.select());
 
       // Save Changes, asked over its document's window.
       const unsavedMsg = $(dlgUnsaved, '[data-message]');
@@ -272,7 +274,7 @@ export function spriteEditor({ sheetStore, icons }) {
         unsavedMsg.textContent = `Save changes to “${doc.name}” before closing?`;
         const answer = await ctx.ask(dlgUnsaved);
         if (answer === 'discard') next();
-        else if (answer === 'save') saveThen(doc, next);
+        else if (answer === 'save') await saveThen(doc, next);
       }
 
       // Save and open
@@ -351,23 +353,13 @@ export function spriteEditor({ sheetStore, icons }) {
         })
       );
 
-      // Close one document, dirty-checked. Its window closes with the context.
+      // Close one document, dirty-checked. Its window closes with the context,
+      // and the promise settles once it has or the user cancelled, so Quit
+      // (windows.closeAll) stops at a Cancel.
       const closeContext = (doc) =>
         confirmDiscard(doc, () => {
           workspace.close(doc.key);
         });
-
-      // Close every open document in turn, asking about each dirty one. Cancel
-      // stops the rest.
-      const quit = () => {
-        const docs = workspace.get().contexts;
-        if (!docs.length) return;
-        const doc = workspace.active() ?? docs[docs.length - 1];
-        confirmDiscard(doc, () => {
-          workspace.close(doc.key);
-          quit();
-        });
-      };
 
       // The kind's hooks.
       /** The first free "untitled", "untitled 2", … among the documents in
@@ -392,17 +384,23 @@ export function spriteEditor({ sheetStore, icons }) {
           `${3 * TILE_MIN} × ${2 * TILE_MIN} to ${3 * TILE_MAX} × ${2 * TILE_MAX} pixels.`;
         say(image ? `${rule} This image is ${image.width} × ${image.height}.` : rule);
       }
+      // Documents whose items are going: each open one keeps its window and
+      // pixels as an untitled, unsaved document. Off its item first, so the
+      // shell doesn't close the window when the item goes.
+      /** @param {string[]} ids */
+      const detach = (ids) => {
+        for (const id of ids) {
+          const doc = workspace.byFileId(id);
+          const win = doc ? editorWindows.windowOf(doc.key) : null;
+          if (win) windows.setItem(win, null);
+        }
+        workspace.forget(ids);
+      };
       live = {
         openDoc,
-        /** Empty Trash removed a document: an open window keeps its pixels as
-         *  an untitled, unsaved document, and its bytes go. */
+        /** Empty Trash removed a document: its bytes go too. */
         async removed(it) {
-          const doc = workspace.byFileId(it.id);
-          if (doc) {
-            const win = editorWindows.windowOf(doc.key);
-            if (win) windows.setItem(win, null);
-            workspace.forget([it.id]);
-          }
+          detach([it.id]);
           await sheets.remove(it.id).catch(() => {});
         },
         /** A pasted or dropped image, stored where it landed if it is a sheet:
@@ -435,9 +433,9 @@ export function spriteEditor({ sheetStore, icons }) {
       });
 
       // New dialog
-      // The name follows the template until the user types in it. The document
-      // opens unsaved. A template shows its native tile size, disabled, because
-      // a retile crops or pads the art.
+      // The name opens selected and follows the template until the user types
+      // in it. The document opens unsaved. A template shows its native tile
+      // size, disabled, because a retile crops or pads the art.
       const newName = $(dlgNew, '#new-name');
       const newTemplate = $(dlgNew, '#new-template');
       const newTile = $(dlgNew, '#new-tile');
@@ -512,11 +510,12 @@ export function spriteEditor({ sheetStore, icons }) {
         syncNewForm();
       });
       on(newTile, 'vf-change', syncNewForm);
+      on(dlgNew, 'vf-show', () => newName.select());
 
       // Tile Size dialog
       // Seeded from the active document on show and applied on OK only. The kit's
-      // number field clamps only on its own commit, so OK reads the raw text and
-      // clamps it here.
+      // number field commits before OK submits but keeps text that isn't a
+      // number, so OK checks and clamps it here.
       const tileField = $(dlgTile, '#tile-size');
       tileField.min = TILE_MIN;
       tileField.max = TILE_MAX;
@@ -805,7 +804,7 @@ export function spriteEditor({ sheetStore, icons }) {
             showRingDialog();
             break;
           case 'quit':
-            quit();
+            void windows.closeAll(SPRITE_EDITOR);
             break;
           // Edit
           case 'undo':
@@ -1127,29 +1126,9 @@ export function spriteEditor({ sheetStore, icons }) {
         newDocument,
         /** Brings an open document's window forward. @param {string} key */
         showDocument: (key) => editorWindows.showDocument(key),
-        /** Takes every document window off its item while a restore replaces
-         *  the catalog, so the shell keeps them open, and puts each back after:
-         *  on its item if it came back, else as an untitled, unsaved document. */
-        async whileReplacing(/** @type {() => Promise<unknown>} */ run) {
-          const held = [];
-          for (const doc of workspace.get().contexts) {
-            const win = editorWindows.windowOf(doc.key);
-            if (doc.fileId && win) {
-              held.push({ doc, win, id: doc.fileId });
-              windows.setItem(win, null);
-            }
-          }
-          try {
-            return await run();
-          } finally {
-            const gone = [];
-            for (const { win, id } of held) {
-              if (catalog.item(id)) windows.setItem(win, id);
-              else gone.push(id);
-            }
-            workspace.forget(gone);
-          }
-        },
+        /** Before a restore replaces the catalog: the documents it won't bring
+         *  back stay open, untitled and unsaved. */
+        detach,
       };
     },
   });

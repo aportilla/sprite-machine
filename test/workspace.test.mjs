@@ -34,23 +34,11 @@ function makeWorld() {
     decodeAtlas,
     makeIcon: async () => 'data:icon',
   });
-  /** The copy names asked for, and a rule that counts "copy", "copy 2". */
-  const asked = [];
-  const copyName = (state, parent, name, kind) => {
-    asked.push({ parent, name, kind });
-    const used = new Set(
-      state.items.filter((i) => i.parent === parent && i.kind === kind).map((i) => i.name)
-    );
-    let next = name;
-    for (let n = 2; used.has(next); n++) next = `${name} ${n}`;
-    return next;
-  };
   /** @type {Map<any, ReturnType<typeof fakeScheduler>>} doc -> its scheduler */
   const schedulers = new Map();
   const ws = createWorkspace({
     sheets,
     catalog,
-    copyName,
     createDoc: () => {
       const frames = fakeScheduler();
       const doc = createDoc(frames);
@@ -60,7 +48,7 @@ function makeWorld() {
   });
   /** Run a context's pending live frame. */
   const frame = (ctx) => schedulers.get(ctx.doc).frame();
-  return { ws, catalog, store, asked, frame };
+  return { ws, catalog, store, frame };
 }
 
 /** Open a context loaded with a blank 3×2 sheet of 2×2 tiles per layer. */
@@ -287,12 +275,11 @@ test('the ring settings are the context’s: a change dirties it, a save writes 
 });
 
 test('duplicate stores a copy beside the original, named by the catalog’s rule, and leaves the context untouched', async () => {
-  const { ws, catalog, asked } = makeWorld();
+  const { ws, catalog } = makeWorld();
   const ctx = openLoaded(ws);
   await ws.save(ctx.key, 'Ship');
   catalog.state.items.find((i) => i.id === ctx.fileId).parent = 'f';
   const copyId = await ws.duplicate(ctx.key);
-  assert.deepEqual(asked, [{ parent: 'f', name: 'Ship copy', kind: 'sprite' }]);
   assert.equal(ctx.fileId, 'id-1', 'the original context keeps its identity');
   assert.deepEqual(
     [catalog.item(copyId).name, catalog.item(copyId).parent],

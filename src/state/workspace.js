@@ -17,6 +17,7 @@
 //   (`lifted`, which settles the all-faces option for its life). The first two
 //   change at pointer-move rate, so they stay out of the workspace store.
 
+import { copyName } from 'vintage-frames/shell/pure';
 import { createStore } from './store.js';
 import { createDoc } from './doc.js';
 import { createHistory } from './history.js';
@@ -54,21 +55,17 @@ const copyBounds = (b) => (b ? { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 } : null
  * What the workspace asks of the shell's catalog: its listing, an item, a
  * rename and its change signal.
  * @typedef {{
- *   get(): {items: readonly {id: string, name: string, kind: string, parent: string|null}[]},
- *   item(id: string|null|undefined): {id: string, name: string, kind: string, parent: string|null}|null,
+ *   get(): import('vintage-frames/shell/pure').CatalogState,
+ *   item(id: string|null|undefined): import('vintage-frames/shell/pure').Item|null,
  *   rename(id: string, name: string): Promise<boolean>,
  *   subscribe(fn: () => void): () => void,
  * }} WorkspaceCatalog
- * @typedef {(state: any, parent: string|null, name: string, kind: string) => string} CopyName
- *   The catalog's copy-name rule (vintage-frames/shell copyName), passed in
- *   since the kit's entry needs a DOM.
  */
 
 /**
  * @param {{
  *   sheets?: ReturnType<typeof import('./sheets.js').createSheets>,
  *   catalog?: WorkspaceCatalog|null,
- *   copyName?: CopyName,
  *   createDoc?: () => ReturnType<typeof createDoc>,
  *   createHistory?: (doc: any) => ReturnType<typeof createHistory>,
  * }} [deps]  Overrides for tests. The catalog is passed here or through init().
@@ -76,7 +73,6 @@ const copyBounds = (b) => (b ? { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 } : null
 export function createWorkspace(deps = {}) {
   const sheets = deps.sheets ?? sheetsSingleton;
   let catalog = deps.catalog ?? null;
-  let copyName = deps.copyName ?? ((_state, _parent, name) => name);
   const makeDoc = deps.createDoc ?? (() => createDoc());
   const makeHistory = deps.createHistory ?? ((doc) => createHistory(doc));
 
@@ -123,11 +119,10 @@ export function createWorkspace(deps = {}) {
     subscribe: store.subscribe,
 
     /** Sets the catalog after construction, and follows its renames.
-     *  @param {WorkspaceCatalog} realCatalog  @param {{copyName: CopyName}} rules */
-    init(realCatalog, rules) {
+     *  @param {WorkspaceCatalog} realCatalog */
+    init(realCatalog) {
       unfollow();
       catalog = realCatalog;
-      copyName = rules.copyName;
       unfollow = catalog.subscribe(followNames);
     },
 

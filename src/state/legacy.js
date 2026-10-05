@@ -9,7 +9,8 @@
 //   4) becomes the shell's saved session under the session's own key. Its
 //   icon positions go onto the items.
 
-import { FOLDER, SPRITE, TEXT, TRASH } from './kinds.js';
+import { FOLDER, TRASH, isPin } from 'vintage-frames/shell/pure';
+import { SPRITE, TEXT } from './kinds.js';
 import { UNTITLED } from './names.js';
 
 /** The old desktop state's localStorage key. */
@@ -22,16 +23,6 @@ const APPS = {
   text: 'text-viewer',
   windoid: 'sprite-editor',
 };
-
-/** Whether `p` has a nine-slice pin's shape. */
-function isPin(p) {
-  const edge = (e) =>
-    !!e &&
-    (e.kind === 'near' || e.kind === 'far' || e.kind === 'spring') &&
-    Number.isFinite(e.v);
-  const axis = (a) => Array.isArray(a) && a.length === 2 && edge(a[0]) && edge(a[1]);
-  return !!p && typeof p === 'object' && axis(p.x) && axis(p.y);
-}
 
 /** An old key ("doc:<id>") as its kind and id, or null. @param {unknown} key */
 function parseKey(key) {
