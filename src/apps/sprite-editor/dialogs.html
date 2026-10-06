@@ -11,7 +11,11 @@
     <vf-stack gap="12" left="16" top="16">
       <vf-stack direction="row" gap="8">
         <vf-label width="80" for="new-name">Name:</vf-label>
-        <vf-text-field id="new-name" style="--vf-field-width: 200px"></vf-text-field>
+        <vf-text-field
+          id="new-name"
+          autoselect
+          style="--vf-field-width: 200px"
+        ></vf-text-field>
       </vf-stack>
       <vf-fieldset legend="Settings" fill-width>
         <vf-stack gap="12">
@@ -48,6 +52,7 @@
     >
     <vf-text-field
       id="name-field"
+      autoselect
       value=""
       left="16"
       top="38"

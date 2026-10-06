@@ -257,7 +257,6 @@ export function spriteEditor({ sheetStore, icons }) {
           : null;
       }
       on(nameField, 'vf-input', syncNameOk);
-      on(dlgName, 'vf-show', () => nameField.select());
 
       // Save Changes, asked over its document's window.
       const unsavedMsg = $(dlgUnsaved, '[data-message]');
@@ -510,7 +509,6 @@ export function spriteEditor({ sheetStore, icons }) {
         syncNewForm();
       });
       on(newTile, 'vf-change', syncNewForm);
-      on(dlgNew, 'vf-show', () => newName.select());
 
       // Tile Size dialog
       // Seeded from the active document on show and applied on OK only. The kit's

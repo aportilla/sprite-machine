@@ -1077,12 +1077,12 @@ blurb whose **Vintage Frames** link opens the kit's
 version and date come from the root `package.json` and HEAD's commit date via
 `vite.config.js` `define`; `src/about.js` writes them in at wire-up.
 
-A `vf-dialog` opens focused on a slotted `autofocus` element, else its first
-text field, else its default button, and Return anywhere in it fires the
-default button (a focused link follows itself). So Return dismisses the About
-box, and a value typed into Tile Size… commits with Return. The kit selects
-no text; on its `vf-show` the New box and the name prompt select their
-seeded name, so typing replaces it.
+A `vf-dialog` opens focused on a slotted `autofocus` or `autoselect` element,
+else its first text field, else its default button, and Return anywhere in it
+fires the default button (a focused link follows itself). So Return dismisses
+the About box, and a value typed into Tile Size… commits with Return. The New
+box's and the name prompt's name fields are `autoselect`: each opens with its
+seeded name selected, so typing replaces it.
 
 Every other dialog is its application's, authored in its `dialogs.html` as a
 dialog-method form: the pressed button's `value` closes it, and `ctx.ask`
